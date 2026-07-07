@@ -37,12 +37,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Criar ambiente Python de produção (antenv)
+      - name: Instalar dependências no artefato de deploy
         working-directory: backend
         run: |
-          python -m venv antenv
-          ./antenv/bin/pip install --upgrade pip
-          ./antenv/bin/pip install -r requirements.txt
+          pip install -r requirements.txt --target .python_packages/lib/site-packages
 
       - name: Copiar build do frontend para dentro do backend
         run: |
@@ -53,7 +51,8 @@ jobs:
         working-directory: backend
         env:
           DJANGO_SECRET_KEY: build-time-only-not-used-em-producao
-        run: ./antenv/bin/python manage.py collectstatic --noinput
+          PYTHONPATH: .python_packages/lib/site-packages
+        run: python manage.py collectstatic --noinput
 
       - name: Empacotar artefato de deploy
         run: |

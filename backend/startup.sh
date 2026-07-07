@@ -8,34 +8,26 @@
 # e o gunicorn em foreground (processo observado pelo App Service).
 set -e
 
-# Usa o venv empacotado no deploy (antenv); cria se ausente (ex.: deploy antigo).
-if [ ! -x "./antenv/bin/python" ]; then
-  echo "== TccConex ERP: antenv ausente, instalando dependências =="
-  python -m venv antenv
-  ./antenv/bin/pip install --upgrade pip
-  ./antenv/bin/pip install -r requirements.txt
+PACKAGES_DIR="$(pwd)/.python_packages/lib/site-packages"
+
+if [ ! -d "$PACKAGES_DIR" ] || [ ! -f "$PACKAGES_DIR/django/__init__.py" ]; then
+  echo "== TccConex ERP: instalando dependências Python =="
+  mkdir -p "$PACKAGES_DIR"
+  pip install -r requirements.txt --target "$PACKAGES_DIR"
 fi
 
-if [ -x "./antenv/bin/python" ]; then
-  PYTHON="./antenv/bin/python"
-  GUNICORN="./antenv/bin/gunicorn"
-  CELERY="./antenv/bin/celery"
-else
-  PYTHON="python"
-  GUNICORN="gunicorn"
-  CELERY="celery"
-fi
+export PYTHONPATH="${PACKAGES_DIR}:${PYTHONPATH:-}"
 
 echo "== TccConex ERP: aplicando migrations =="
-"$PYTHON" manage.py migrate --noinput
+python manage.py migrate --noinput
 
 if [ "$USE_CELERY" = "True" ]; then
   echo "== TccConex ERP: iniciando worker Celery em background =="
-  "$CELERY" -A prothon worker -l info --concurrency=2 &
+  python -m celery -A prothon worker -l info --concurrency=2 &
 fi
 
 echo "== TccConex ERP: iniciando gunicorn =="
-exec "$GUNICORN" prothon.wsgi:application \
+exec python -m gunicorn prothon.wsgi:application \
   --bind=0.0.0.0:8000 \
   --timeout 600 \
   --workers 3
