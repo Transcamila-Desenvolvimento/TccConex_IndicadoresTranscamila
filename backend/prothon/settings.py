@@ -169,10 +169,15 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Build do React (frontend/dist). Quando existir, o WhiteNoise serve os arquivos
-# (index.html, assets/*) diretamente na raiz do domínio — ver prothon/urls.py para
-# o fallback de SPA (React Router) e apps/rh para uploads em MEDIA_ROOT.
-FRONTEND_DIST_DIR = BASE_DIR.parent / 'frontend' / 'dist'
+# Build do React. Quando existir, o WhiteNoise serve os arquivos (index.html,
+# assets/*) diretamente na raiz do domínio — ver prothon/urls.py para o fallback
+# de SPA (React Router) e apps/rh para uploads em MEDIA_ROOT.
+# Em dev, o build fica em frontend/dist (sibling de backend/). No pacote de deploy
+# (ver .github/workflows/deploy-azure.yml), o build é copiado para backend/frontend_dist/
+# para que o zip enviado ao App Service tenha requirements.txt/manage.py na raiz.
+FRONTEND_DIST_DIR = BASE_DIR / 'frontend_dist'
+if not FRONTEND_DIST_DIR.exists():
+    FRONTEND_DIST_DIR = BASE_DIR.parent / 'frontend' / 'dist'
 if FRONTEND_DIST_DIR.exists():
     WHITENOISE_ROOT = FRONTEND_DIST_DIR
 
