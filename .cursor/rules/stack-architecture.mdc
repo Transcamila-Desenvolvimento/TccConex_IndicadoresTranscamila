@@ -1,0 +1,137 @@
+---
+
+description: Stack oficial e decisões de arquitetura do TccConex ERP
+
+alwaysApply: true
+
+---
+
+
+
+# Stack TccConex ERP
+
+
+
+## Tecnologias aprovadas
+
+
+
+**Frontend:** React 19, TypeScript, Vite, React Router v7, Axios, TanStack Query v5, Chart.js + react-chartjs-2, Bootstrap 5 (somente grid e utilitários), CSS próprio (`src/styles/style.css`).
+
+
+
+**Backend:** Django 5, Django REST Framework, JWT (PyJWT customizado), Celery + Redis (importações assíncronas com `USE_CELERY=True`).
+
+
+
+**Banco de dados:** SQLite (dev local) → PostgreSQL (produção/hospedagem). Driver: `psycopg2-binary`.
+
+
+
+## Banco de dados
+
+
+
+### O que já está no banco (Django ORM)
+
+- **Auth e usuários** — app `accounts` (inclui papéis/roles)
+
+- **Auditoria** — app `audit` (logs de ações do sistema)
+
+- **Financeiro** — app `financeiro` (lotes, contas a pagar/receber, aging, faturamento, ajustes de caixa, saldos bancários)
+
+- **Indicadores** — app `indicadores` (KPIs e desempenho por filial)
+
+- Arquivo local dev: `backend/db.sqlite3` (gerado após `migrate`)
+
+
+
+### O que ainda NÃO está no banco
+
+_(Nenhum domínio pendente de migração mock→API)_
+
+### Melhorias e itens adiados
+
+| Item | Status |
+|---|---|
+| Exportação de relatórios (catálogo + `/api/fs/*`) | Adiado — sem UI de exportação ativa |
+| Gráficos Chart.js em Indicadores | Opcional — dependência instalada, KPIs em cards |
+| Celery + Redis | Opcional em dev — síncrono por padrão; recomendado em produção |
+| PostgreSQL | Somente na implantação — dev usa SQLite |
+| Testes automatizados | `manage.py test apps.accounts apps.financeiro` |
+
+
+
+### Ambientes
+
+
+
+| Ambiente | Engine | Configuração |
+
+|---|---|---|
+
+| **Dev local** | SQLite | Padrão — sem variáveis de ambiente de DB |
+
+| **Produção** | PostgreSQL | `USE_POSTGRES=True` ou `DB_HOST` definido no `.env`/servidor |
+
+
+
+Variáveis PostgreSQL (quando aplicável): `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`.
+
+
+
+Lógica em `backend/prothon/settings.py`: se `USE_POSTGRES=True` **ou** `DB_HOST` estiver definido → PostgreSQL; senão → SQLite.
+
+
+
+## Regras de arquitetura
+
+
+
+### Fase atual: mock → API gradual (concluída para domínios de negócio)
+
+- Auth e usuários → **Django API** via `apiService.ts`
+
+- Financeiro (relatórios paginados, faturamento, ajustes, saldos) → **Django API** (`apps/financeiro/`)
+
+- Indicadores → **Django API** (`apps/indicadores/`)
+
+- Filesystem de exportação → **Django API** (`apps/filesystem/` — `/api/fs/*`)
+
+- Permissões por ambiente/filial → headers `X-Prothon-Environment` / `X-Prothon-Filial` + `ModuleAccessPermission`
+
+- Nunca misture real e mock no mesmo recurso
+
+### Celery (importações assíncronas)
+
+- Ativar: `USE_CELERY=True` + Redis + worker `celery -A prothon worker -l info -P solo`
+- Import retorna `202 { taskId }`; frontend faz polling em `/api/financeiro/tasks/<id>/`
+- Sem Celery: importações síncronas (dev padrão)
+
+### Adicionando um novo endpoint
+
+1. Criar endpoint no Django (`apps/<modulo>/views.py`)
+
+2. Adicionar método em `apiService.ts`
+
+3. Criar hook em `src/hooks/use<Recurso>.ts` usando `useQuery`/`useMutation`
+
+4. Substituir qualquer mock legado no workspace
+
+
+
+### Proibido
+
+- `fetch()` direto nos componentes (use `apiService` + TanStack Query)
+
+- Salvar objeto user completo no `localStorage` (só o JWT token)
+
+- Importar Bootstrap bundle completo (`bootstrap.min.css`)
+
+- Lógica de negócio dentro do mock (deve ficar no backend)
+
+- Usar `dbMockService` para domínios já migrados ao Django
+
+- Importar tipos de `src/services/dbMockData.ts` (usar `src/types/domain.ts`)
+
+

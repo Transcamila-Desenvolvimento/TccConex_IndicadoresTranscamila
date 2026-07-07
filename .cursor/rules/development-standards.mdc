@@ -1,0 +1,41 @@
+---
+description: Regra geral — seguir padrões do projeto e evitar gambiarras
+alwaysApply: true
+---
+
+# Padrões de desenvolvimento — TccConex ERP
+
+Antes de implementar qualquer alteração, consulte e siga **todos** os documentos em `.cursor/rules/`:
+
+- `stack-architecture.mdc` — stack, arquitetura mock→API, proibições globais
+- `frontend-patterns.mdc` — apiService, hooks, TanStack Query, tipos em `domain.ts`
+- `backend-patterns.mdc` — DRF, permissões, paginação, seeds, testes
+
+## Princípios obrigatórios
+
+1. **Respeitar a arquitetura existente** — reutilizar abstrações, convenções e fluxos já documentados.
+2. **Escopo mínimo** — alterar só o necessário; não refatorar código não relacionado.
+3. **Lógica de negócio no backend** — nunca no frontend, mock ou componente.
+4. **Consistência de contrato** — serializers camelCase, tipos em `domain.ts`, paginação `{ count, results }` quando aplicável.
+5. **Testes após mudanças de backend** — rodar `manage.py test apps.accounts apps.financeiro` quando tocar views, permissões ou serializers.
+6. **Estados remotos explícitos** — telas com `useQuery` devem usar `QueryDataPanel` e `useAsyncQueryState` conforme `frontend-patterns.mdc` (seção *Estados de loading*).
+
+## Proibido (gambiarra)
+
+- `fetch()` direto em componentes; bypass de `apiService` + hooks
+- Duplicar constantes/tipos que já existem no backend ou em `domain.ts`
+- Paginar ou filtrar no cliente dados que vêm da API paginada
+- Hardcode de valores de negócio (limites, ambientes, filiais) fora dos locais oficiais
+- Atalhos que “funcionam agora” mas ignoram permissões, auditoria ou padrão de endpoint
+- Misturar mock e API real no mesmo recurso
+- `useEffect` + `useState` para buscar dados remotos (usar TanStack Query)
+- Exibir empty state (*“Nenhum registro”*) enquanto a query ainda está carregando ou refetching
+
+## Fluxo ao adicionar funcionalidade
+
+1. Endpoint Django em `apps/<modulo>/views.py`
+2. Método em `apiService.ts`
+3. Hook em `src/hooks/use<Recurso>.ts`
+4. Componente consome o hook com `QueryDataPanel` / `useAsyncQueryState` — sem lógica de fetch inline
+
+Se não houver padrão documentado, **proponha uma solução alinhada** aos existentes antes de inventar uma abordagem paralela.

@@ -1,0 +1,78 @@
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+
+const QUICK_LINKS = [
+  {
+    title: 'Movimentações',
+    description: 'Importe planilhas de ativos, acompanhe admissões, desligamentos e alterações salariais por filial.',
+    path: '/rh/movimentacoes',
+    badge: 'Movimentação de Pessoal',
+    icon: (
+      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+      </svg>
+    ),
+  },
+] as const;
+
+const RHHome: React.FC = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const firstName = user?.name?.split(' ')[0] ?? 'Usuário';
+
+  return (
+    <section id="rh-home-view" className="view active" style={{ display: 'block', padding: '4px' }}>
+      <div className="welcome-banner">
+        <h2>Olá, {firstName}!</h2>
+        <p>
+          Bem-vindo ao ambiente de Recursos Humanos (RH).
+        </p>
+      </div>
+
+      <div className="quick-access-bar" style={{ marginTop: '24px' }}>
+        <h3 className="quick-access-title">Acesso rápido</h3>
+      </div>
+
+      <div className="quick-access-grid">
+        {QUICK_LINKS.map((link) => (
+          <button
+            key={link.path}
+            type="button"
+            className="quick-access-card"
+            style={{ width: '100%', textAlign: 'left' }}
+            onClick={() => navigate(link.path)}
+          >
+            <div className="card-header-row">
+              <div className="card-icon-wrapper">{link.icon}</div>
+              <span
+                className="card-badge"
+                style={{ background: 'rgba(0, 118, 206, 0.08)', color: 'var(--primary-color)' }}
+              >
+                {link.badge}
+              </span>
+            </div>
+            <h4>{link.title}</h4>
+            <p>{link.description}</p>
+          </button>
+        ))}
+      </div>
+
+      <div style={{
+        marginTop: '20px',
+        padding: '20px 24px',
+        background: '#ffffff',
+        borderRadius: '8px',
+        border: '1px solid #e2e8f0',
+        color: '#64748b',
+        fontSize: '13px',
+        lineHeight: '1.6'
+      }}>
+        <p style={{ margin: 0 }}>Este é o painel principal do ambiente de Recursos Humanos (RH) da Transcamila.</p>
+        <p style={{ marginTop: '8px', marginBottom: 0 }}>Use o menu lateral ou o card acima para acessar as Movimentações de RH.</p>
+      </div>
+    </section>
+  );
+};
+
+export default RHHome;

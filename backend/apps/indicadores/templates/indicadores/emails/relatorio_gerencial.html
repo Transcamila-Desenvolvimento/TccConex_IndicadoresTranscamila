@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório Gerencial - TccConex</title>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f4f7f9;
+            color: #2d3436;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .wrapper {
+            background-color: #f4f7f9;
+            padding: 20px 10px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Header */
+        .header {
+            background-color: #118CC4;
+            padding: 30px 40px;
+            color: #ffffff;
+            text-align: left;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            text-transform: uppercase;
+        }
+
+        .header p {
+            margin: 8px 0 0;
+            font-size: 14px;
+            opacity: 0.9;
+            font-weight: 400;
+        }
+
+        .header-btn {
+            display: inline-block;
+            padding: 8px 18px;
+            border: 1.5px solid #ffffff;
+            border-radius: 25px;
+            color: #ffffff !important;
+            text-decoration: none !important;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: none;
+            white-space: nowrap;
+        }
+
+        .content {
+            padding: 30px 40px;
+        }
+
+        /* Section styling */
+        .section-header {
+            font-size: 12px;
+            font-weight: 700;
+            color: #b2bec3;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #f1f3f5;
+            padding-bottom: 8px;
+        }
+
+        .kpi-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 25px;
+        }
+
+        .kpi-row td {
+            padding: 12px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+
+        .kpi-row:last-child td {
+            border-bottom: none;
+        }
+
+        .label {
+            font-size: 14px;
+            color: #636e72;
+            font-weight: 500;
+        }
+
+        .value {
+            font-size: 15px;
+            color: #2d3436;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        /* Specialized Colors */
+        .text-blue {
+            color: #118CC4;
+        }
+
+        .text-green {
+            color: #00b894;
+        }
+
+        .text-orange {
+            color: #e17055;
+        }
+
+        .text-red {
+            color: #d63031;
+        }
+
+        .text-yellow {
+            color: #f59e0b;
+        }
+
+        /* Cards & Highlights */
+        .posicao-gerencial-box {
+            background-color: #118CC4;
+            border-radius: 8px;
+            padding: 20px;
+            color: #ffffff;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(17, 140, 196, 0.2);
+        }
+
+        .posicao-gerencial-box .label {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .posicao-gerencial-box .value {
+            color: #ffffff;
+            font-size: 28px;
+            text-align: left;
+            margin-top: 5px;
+        }
+
+        .recebiveis-box {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .recebiveis-grid {
+            width: 100%;
+        }
+
+        .recebiveis-card {
+            width: 50%;
+            padding: 0 10px;
+            display: inline-block;
+            box-sizing: border-box;
+        }
+
+        .recebiveis-card .title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #94a3b8;
+            text-transform: uppercase;
+        }
+
+        .recebiveis-card .amount {
+            font-size: 18px;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+
+        /* Detail Table */
+        .detail-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #2d3436;
+            margin: 25px 0 10px;
+        }
+
+        .detail-table {
+            width: 100%;
+            font-size: 12px;
+        }
+
+        .detail-table td {
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f3f5;
+            color: #636e72;
+        }
+
+        .detail-table .client-name {
+            font-weight: 500;
+        }
+
+        .detail-table .client-val {
+            font-weight: 600;
+            text-align: right;
+            color: #2d3436;
+        }
+
+        .footer {
+            background-color: #ffffff;
+            padding: 30px 40px;
+            text-align: center;
+            border-top: 1px solid #f1f3f5;
+        }
+
+        .footer p {
+            margin: 0;
+            font-size: 12px;
+            color: #b2bec3;
+            line-height: 1.5;
+        }
+
+        .divider {
+            height: 1px;
+            background-color: #f1f3f5;
+            margin: 25px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrapper">
+        <div class="container">
+            <div class="header">
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                        <td align="left" valign="middle">
+                            <h1 style="font-size: 22px; line-height: 1.2; margin-bottom: 0;">RELATÓRIO GERENCIAL - FLUXO DE CAIXA</h1>
+                            <p style="margin: 5px 0 0 0; padding: 0;">{{ ref_date|date:"d/m/Y" }} &bull; Lote {{ batch_label }}</p>
+                        </td>
+                        <td align="right" valign="bottom" style="padding-bottom: 2px;">
+                            <a href="{{ dashboard_url }}" class="header-btn" style="color: #ffffff; text-decoration: none;">Abrir Dashboard</a>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="content">
+                <!-- FATURAMENTO -->
+                <div class="section-header">Faturamento Agregado</div>
+                <table class="kpi-table">
+                    <tr class="kpi-row">
+                        <td class="label">Faturamento do Dia ({{ fat_dia_date }})</td>
+                        <td class="value text-blue">{{ fat_dia }}</td>
+                    </tr>
+                    <tr class="kpi-row">
+                        <td class="label">Faturamento do Mês</td>
+                        <td class="value text-blue">{{ fat_mes }}</td>
+                    </tr>
+                    <tr class="kpi-row">
+                        <td class="label">Faturamento do Ano</td>
+                        <td class="value text-blue">{{ fat_ano }}</td>
+                    </tr>
+                </table>
+
+                <div class="section-header">Fluxo de Caixa / Disponível</div>
+                <table class="kpi-table">
+                    <tr class="kpi-row">
+                        <td class="label">Saldo em Bancos</td>
+                        <td class="value">{{ saldo_banco }}</td>
+                    </tr>
+                    <tr class="kpi-row">
+                        <td class="label">Faturas à receber</td>
+                        <td class="value">{{ duplicatas_a_receber }}</td>
+                    </tr>
+                    <tr class="kpi-row">
+                        <td class="label">Faturas Vencidas</td>
+                        <td class="value text-red">{{ contas_receber_atrasadas }}</td>
+                    </tr>
+                    <tr class="kpi-row">
+                        <td class="label">CTEs a faturar</td>
+                        <td class="value">{{ ctes_emitidos }}</td>
+                    </tr>
+                    <tr class="kpi-row">
+                        <td class="label bold">Á DISPONIBILIZAR</td>
+                        <td class="value text-green">{{ total_a_disponibilizar }}</td>
+                    </tr>
+                </table>
+
+                <div class="section-header">Saídas Previstas</div>
+                <table class="kpi-table">
+                    <tr class="kpi-row">
+                        <td class="label">Contas a Pagar (até {{ date_limit|date:"d/m" }})</td>
+                        <td class="value text-red">{{ contas_pagar_ate }}</td>
+                    </tr>
+                    <tr class="kpi-row">
+                        <td class="label">Contas a Pagar Atrasadas</td>
+                        <td class="value text-red">{{ contas_pagar_atrasadas }}</td>
+                    </tr>
+                    <tr class="kpi-row">
+                        <td class="label bold">SAÍDAS PREVISTAS</td>
+                        <td class="value text-red">{{ total_saidas_previstas }}</td>
+                    </tr>
+                </table>
+
+                <!-- POSICAO GERENCIAL DESTAQUE -->
+                <div class="posicao-gerencial-box">
+                    <div class="label">Posição Gerencial</div>
+                    <div class="value">{{ posicao_gerencial }}</div>
+                    <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 13px;">
+                        <span style="color: rgba(255,255,255,0.8); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">Caixa Positivo até:</span> 
+                        <strong style="margin-left: 5px;">{{ last_positive_day }}</strong>
+                    </div>
+                </div>
+
+                <!-- DETALHAMENTO -->
+                {% if overdue_list or today_list %}
+                <div class="divider"></div>
+                <div class="section-header">Detalhamento por Cliente</div>
+
+                {% if overdue_list %}
+                <div class="detail-title text-red">Faturas Vencidas</div>
+                <table class="detail-table">
+                    {% for item in overdue_list %}
+                    <tr>
+                        <td class="client-name">{{ item.client }}</td>
+                        <td class="client-val">{{ item.value }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr style="border-top: 2px solid #f1f3f5;">
+                        <td class="client-name" style="font-weight: 700; color: #2d3436; padding-top: 12px; font-size: 13px;">TOTAL VENCIDO</td>
+                        <td class="client-val" style="font-weight: 700; color: #d63031; padding-top: 12px; font-size: 13px;">{{ total_vencido }}</td>
+                    </tr>
+                </table>
+                {% endif %}
+
+                {% if today_list %}
+                <div class="detail-title text-blue">Recebimentos para Hoje</div>
+                <table class="detail-table">
+                    {% for item in today_list %}
+                    <tr>
+                        <td class="client-name">{{ item.client }}</td>
+                        <td class="client-val">{{ item.value }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr style="border-top: 2px solid #f1f3f5;">
+                        <td class="client-name" style="font-weight: 700; color: #2d3436; padding-top: 12px; font-size: 13px;">TOTAL A RECEBER</td>
+                        <td class="client-val" style="font-weight: 700; color: #118CC4; padding-top: 12px; font-size: 13px;">{{ total_hoje }}</td>
+                    </tr>
+                </table>
+                {% endif %}
+                {% endif %}
+            </div>
+
+            <div class="footer">
+                <p>Envio automático de relatório - TccConex &copy; 2026 Transcamila Cargas e Armazéns Gerais Ltda</p>
+                <p style="margin-top: 10px; font-size: 10px;">Este e-mail é de uso exclusivo e confidencial.</p>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

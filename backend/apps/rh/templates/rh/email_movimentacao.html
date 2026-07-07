@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Movimentação RH - Transcamila</title>
+    <style>
+        /* Fiel ao design system do TccConex (frontend/src/styles/style.css):
+           - Barra azul quadrada (sem raio) ao lado de títulos
+           - Estrutura (meta-bar, tabelas) com cantos retos e bordas 1px sólidas
+           - Cards (rh-filial-card) com raio 10px
+           - Badges em pill sutil (bg claro + texto colorido)
+           - Azul primário: #118CC4 */
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #eef2f6;
+            color: #0f172a;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .wrapper {
+            background-color: #eef2f6;
+            padding: 24px 10px;
+        }
+
+        .container {
+            max-width: 620px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        /* Cabeçalho — barra azul quadrada + título, igual ao topo das telas do sistema */
+        .header {
+            background-color: #ffffff;
+            padding: 26px 32px 20px;
+        }
+
+        .header-title-row {
+            display: table;
+            width: 100%;
+        }
+
+        .header-bar {
+            display: table-cell;
+            width: 12px;
+            vertical-align: middle;
+        }
+
+        .header-bar span {
+            display: inline-block;
+            width: 6px;
+            height: 24px;
+            background-color: #118CC4;
+        }
+
+        .header-titles {
+            display: table-cell;
+            vertical-align: middle;
+            padding-left: 10px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 21px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        /* Barra de metadados — igual ao .reports-meta-bar (cantos retos, borda 1px sólida) */
+        .meta-bar {
+            margin: 16px 32px 0;
+            padding: 9px 16px;
+            background-color: #ffffff;
+            border: 1px solid #cbd5e1;
+            font-size: 12px;
+            color: #475569;
+        }
+
+        .meta-bar span + span {
+            margin-left: 18px;
+        }
+
+        .meta-bar strong {
+            color: #1e293b;
+        }
+
+        .content {
+            padding: 26px 32px 28px;
+        }
+
+        /* Rótulo de seção — barra azul quadrada pequena + texto, mesma linguagem do cabeçalho */
+        .section-header {
+            display: table;
+            width: 100%;
+            margin: 26px 0 14px;
+        }
+
+        .section-header:first-child {
+            margin-top: 0;
+        }
+
+        .section-header-bar {
+            display: table-cell;
+            width: 8px;
+            vertical-align: middle;
+        }
+
+        .section-header-bar span {
+            display: inline-block;
+            width: 4px;
+            height: 13px;
+            background-color: #118CC4;
+        }
+
+        .section-header-text {
+            display: table-cell;
+            vertical-align: middle;
+            padding-left: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #334155;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        /* Card padrão — igual ao .rh-filial-card do sistema */
+        .panel {
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 15px 18px;
+            margin-bottom: 12px;
+        }
+
+        .panel:last-child {
+            margin-bottom: 0;
+        }
+
+        .chart-panel {
+            padding: 10px 8px 6px;
+            text-align: center;
+        }
+
+        .panel-title {
+            margin: 0 0 8px;
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #0f172a;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .row {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .row td {
+            padding: 3px 0;
+            font-size: 12.5px;
+        }
+
+        .row .label {
+            color: #64748b;
+        }
+
+        .row .value {
+            color: #1e293b;
+            font-weight: 700;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .text-blue { color: #118CC4; }
+        .text-green { color: #059669; }
+        .text-red { color: #dc2626; }
+
+        /* Consolidado Geral — igual ao .rh-filial-card--total (variante destaque) */
+        .panel-highlight {
+            background-color: #f0f9ff;
+            border: 1px solid #118CC4;
+        }
+
+        .panel-highlight .panel-title {
+            color: #0D709D;
+        }
+
+        .payroll-total {
+            border-top: 1px solid #cfe9f7;
+            margin-top: 8px;
+            padding-top: 10px;
+            text-align: center;
+        }
+
+        .payroll-total .label {
+            font-size: 10.5px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .payroll-total .value {
+            font-size: 22px;
+            font-weight: 700;
+            color: #118CC4;
+            margin-top: 3px;
+        }
+
+        /* Quadro de pessoal — números lado a lado, sem caixa, cores semânticas do sistema */
+        .personnel-grid {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .personnel-grid td {
+            width: 33.33%;
+            text-align: center;
+            padding: 2px 6px;
+            border-left: 1px solid #eef2f6;
+        }
+
+        .personnel-grid td:first-child {
+            border-left: none;
+        }
+
+        .personnel-value {
+            font-size: 19px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .personnel-label {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-top: 3px;
+        }
+
+        /* Linhas de colaborador */
+        .person-row {
+            border-bottom: 1px solid #f1f5f9;
+            padding: 10px 0;
+        }
+
+        .person-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .person-name {
+            font-weight: 700;
+            color: #0f172a;
+            font-size: 13px;
+        }
+
+        .person-sub {
+            color: #94a3b8;
+            font-size: 11px;
+            margin-top: 2px;
+        }
+
+        .person-role {
+            font-weight: 500;
+            font-size: 12px;
+            color: #475569;
+            margin-top: 1px;
+        }
+
+        /* Badges em pill sutil — iguais ao .rh-cat-badge/.status-badge do sistema */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            vertical-align: middle;
+        }
+        .badge-success { background-color: #ecfdf5; color: #059669; }
+        .badge-danger { background-color: #fef2f2; color: #dc2626; }
+
+        .filial-tag {
+            display: inline-block;
+            font-size: 10.5px;
+            font-weight: 700;
+            color: #118CC4;
+            background-color: #eaf6fc;
+            border: 1px solid #bfe4f3;
+            padding: 3px 10px;
+            border-radius: 9999px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+        }
+
+        .footer {
+            background-color: #ffffff;
+            padding: 18px 32px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .footer p {
+            margin: 0;
+            font-size: 11.5px;
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrapper">
+        <div class="container">
+            <div class="header">
+                <div class="header-title-row">
+                    <div class="header-bar"><span></span></div>
+                    <div class="header-titles">
+                        <h1>Relatório de Movimentação de Pessoal</h1>
+                    </div>
+                </div>
+            </div>
+
+            <div class="meta-bar">
+                <span>Período: <strong>{{ mes_nome }}/{{ ano }}</strong></span>
+            </div>
+
+            <div class="content">
+                <!-- CONSOLIDADO GERAL -->
+                <div class="panel panel-highlight">
+                    <div class="panel-title">Consolidado Geral</div>
+                    <table class="row">
+                        <tr>
+                            <td class="label">Total de Colaboradores</td>
+                            <td class="value">{{ geral.total_colabs }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Média de Idade</td>
+                            <td class="value">{{ geral.avg_age }} anos</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Tempo Médio de Empresa</td>
+                            <td class="value">{{ geral.avg_tenure_str }}</td>
+                        </tr>
+                    </table>
+                    <div class="payroll-total">
+                        <div class="label">Folha de Pagamento Bruta Total</div>
+                        <div class="value">{{ geral.total_folha_str }}</div>
+                    </div>
+                </div>
+
+                {% if tem_grafico_folha %}
+                <div class="section-header">
+                    <div class="section-header-bar"><span></span></div>
+                    <div class="section-header-text">Evolução da Folha Salarial</div>
+                </div>
+                <div class="panel chart-panel">
+                    <img src="cid:grafico_folha" width="600" alt="Evolução da folha salarial" style="display: block; width: 100%; max-width: 600px; height: auto; margin: 0 auto;" />
+                </div>
+                {% endif %}
+
+                <div class="section-header">
+                    <div class="section-header-bar"><span></span></div>
+                    <div class="section-header-text">Quadro de Pessoal</div>
+                </div>
+                <div class="panel">
+                    <table class="personnel-grid">
+                        <tr>
+                            <td>
+                                <div class="personnel-value text-blue">{{ geral.total_adm_oper }}</div>
+                                <div class="personnel-label">Adm/Operacional</div>
+                            </td>
+                            <td>
+                                <div class="personnel-value text-green">{{ geral.total_mot_ativos }}</div>
+                                <div class="personnel-label">Motoristas Ativos</div>
+                            </td>
+                            <td>
+                                <div class="personnel-value text-red">{{ geral.total_mot_afastados }}</div>
+                                <div class="personnel-label">Motoristas Afastados</div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="section-header">
+                    <div class="section-header-bar"><span></span></div>
+                    <div class="section-header-text">Resumo por Filial</div>
+                </div>
+                {% for item in relatorio %}
+                <div class="panel">
+                    <div class="panel-title">{{ item.nome }}</div>
+                    <table class="row">
+                        <tr>
+                            <td class="label">Colaboradores</td>
+                            <td class="value">{{ item.qty }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Folha da Filial</td>
+                            <td class="value">{{ item.total_payroll_str }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Média de Idade</td>
+                            <td class="value">{{ item.avg_age }} anos</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Tempo Médio de Empresa</td>
+                            <td class="value">{{ item.avg_tenure_str }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Novos / Desligados</td>
+                            <td class="value">
+                                <span class="text-green">+{{ item.novos }}</span> / <span class="text-red">-{{ item.desligados }}</span>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                {% endfor %}
+
+                {% if novos_detalhes %}
+                <div class="section-header">
+                    <div class="section-header-bar"><span></span></div>
+                    <div class="section-header-text">Novos Funcionários</div>
+                </div>
+                <div class="panel">
+                    {% for n in novos_detalhes %}
+                    <div class="person-row">
+                        <span class="person-name">{{ n.nome }}</span>
+                        <span class="badge badge-success">Novo</span>
+                        <div class="person-sub">{{ n.filial }}</div>
+                        <div class="person-role">{{ n.cargo }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if desligados_detalhes %}
+                <div class="section-header">
+                    <div class="section-header-bar"><span></span></div>
+                    <div class="section-header-text">Colaboradores Desligados</div>
+                </div>
+                <div class="panel">
+                    {% for d in desligados_detalhes %}
+                    <div class="person-row">
+                        <span class="person-name">{{ d.nome }}</span>
+                        <span class="badge badge-danger">Desligado</span>
+                        <div class="person-sub">{{ d.filial }}</div>
+                        <div class="person-role">{{ d.cargo }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if afastados_por_filial %}
+                <div class="section-header">
+                    <div class="section-header-bar"><span></span></div>
+                    <div class="section-header-text">Colaboradores Afastados por Filial</div>
+                </div>
+                {% for filial, colabs in afastados_por_filial.items %}
+                <div class="filial-tag">{{ filial }} ({{ colabs|length }})</div>
+                <div class="panel">
+                    {% for a in colabs %}
+                    <div class="person-row">
+                        <span class="person-name">{{ a.nome }}</span>
+                        <div class="person-role">{{ a.cargo }}</div>
+                        <div class="person-sub">{{ a.situacao }}{% if a.tempo_afastado_str %} &middot; há {{ a.tempo_afastado_str }}{% endif %}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+                {% endif %}
+
+                {% if alteracoes %}
+                <div class="section-header">
+                    <div class="section-header-bar"><span></span></div>
+                    <div class="section-header-text">Relatório de Alterações</div>
+                </div>
+                <div class="panel">
+                    <p style="margin: 0; font-weight: 600; color: #1e293b; font-size: 13px;">
+                        Foram identificadas {{ alteracoes|length }} alteração(ões) de colaboradores neste período.
+                    </p>
+                    <p style="margin: 8px 0 0 0; line-height: 1.6; font-size: 13px; color: #64748b;">
+                        Os detalhes completos (cargos, salários e justificativas) foram anexados a este e-mail no arquivo Excel: <strong class="text-blue">Relatorio_Alteracoes_{{ lote.mes|stringformat:"02d" }}_{{ lote.ano }}.xlsx</strong>.
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="footer">
+                <p>Powered by TccConex &bull; Envio automático de relatório &copy; {{ ano }} Transcamila Cargas e Armazéns Gerais Ltda</p>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

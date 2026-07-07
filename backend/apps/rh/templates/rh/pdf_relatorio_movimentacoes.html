@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    @page {
+        size: A4 portrait;
+        margin: 1.8cm 1.4cm 2cm 1.4cm;
+        @frame footer_frame {
+            -pdf-frame-content: footer_content;
+            bottom: 0.6cm;
+            margin-left: 1.4cm;
+            margin-right: 1.4cm;
+            height: 1.2cm;
+        }
+    }
+    body {
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 9pt;
+        color: #334155;
+        line-height: 1.35;
+    }
+
+    .company-name {
+        font-size: 8pt;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        margin: 0 0 12px 0;
+    }
+
+    /* Título — barra azul + texto, igual ao cabeçalho das telas do sistema.
+       Usa border-left em vez de célula de tabela com vertical-align: a barra
+       fica sempre com a altura exata do texto, sem risco de desalinhamento. */
+    .title-text {
+        border-left: 4px solid #118CC4;
+        padding-left: 11px;
+        margin: 0 0 14px 0;
+        font-size: 16pt;
+        font-weight: bold;
+        color: #0f172a;
+    }
+
+    /* Faixa de informações do documento — sem caixa, só um filete inferior sutil */
+    table.doc-info {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+        padding-bottom: 9px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    table.doc-info td {
+        font-size: 8.5pt;
+        color: #94a3b8;
+        padding: 0;
+    }
+    table.doc-info strong {
+        color: #334155;
+        font-weight: bold;
+    }
+
+    /* Título de seção — barra azul fina + texto, sem moldura (mesma técnica
+       de border-left do título principal, para altura sempre correta) */
+    .section-text {
+        border-left: 4px solid #118CC4;
+        padding-left: 8px;
+        margin: 20px 0 10px 0;
+        font-size: 9.5pt;
+        font-weight: bold;
+        color: #334155;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        -pdf-keep-with-next: true;
+    }
+
+    /* Tabelas de dados — sem grade/moldura; linhas separadas por espaçamento
+       e alternância sutil de fundo (mesma linguagem visual das telas do
+       sistema, que não usam bordas verticais nem caixas fechadas). */
+    table.report-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    table.report-table thead th {
+        background-color: #f8fafc;
+        color: #64748b;
+        font-size: 7.5pt;
+        font-weight: bold;
+        padding: 8px 10px;
+        text-align: left;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    table.report-table tbody td {
+        font-size: 8.5pt;
+        padding: 8px 10px;
+        vertical-align: top;
+        background-color: #ffffff;
+    }
+    table.report-table tbody tr.row-even td {
+        background-color: #f8fafc;
+    }
+    /* Evita que palavras longas de cargo (ex.: "ADMINISTRATIVO") ultrapassem a
+       largura da célula e "vazem" por cima da coluna vizinha — o xhtml2pdf só
+       quebra linha nos espaços por padrão, nunca no meio da palavra. Aplicado
+       só nas colunas de valor/cargo, para não afetar nomes, CPF e datas. */
+    .wrap-anywhere {
+        font-size: 7.5pt;
+    }
+    table.report-table tfoot td {
+        font-size: 8.5pt;
+        font-weight: bold;
+        padding: 9px 10px;
+        background-color: #eff8ff;
+        color: #0f172a;
+    }
+
+    /* Cards de KPI — sem moldura, só um bloco de cor suave (o xhtml2pdf não
+       renderiza border-radius/box-shadow, então a separação visual vem do
+       espaçamento entre células e do contraste de fundo, não de bordas). */
+    table.kpi-table {
+        width: 100%;
+    }
+    table.kpi-table td {
+        width: 25%;
+        padding: 14px 12px;
+        text-align: left;
+        background-color: #f8fafc;
+    }
+    .kpi-label {
+        font-size: 7.5pt;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 4px;
+    }
+    .kpi-value {
+        font-size: 15pt;
+        font-weight: bold;
+        color: #0f172a;
+    }
+
+    .empty-msg {
+        font-size: 8.5pt;
+        color: #94a3b8;
+        font-style: italic;
+        padding: 10px 10px;
+        background-color: #f8fafc;
+    }
+
+    /* Rodapé */
+    #footer_content {
+        border-top: 1px solid #e2e8f0;
+        padding-top: 5px;
+    }
+    table.footer-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    table.footer-table td {
+        font-size: 7pt;
+        color: #94a3b8;
+        vertical-align: middle;
+    }
+    #footer_content img {
+        height: 11px;
+        margin-left: 4px;
+        vertical-align: middle;
+    }
+    .footer-page {
+        text-align: right;
+    }
+</style>
+</head>
+<body>
+
+<div id="footer_content">
+    <table class="footer-table">
+        <tr>
+            <td>Documento gerado automaticamente em {{ gerado_em }}.</td>
+            <td class="footer-page">Powered by TccConex <img src="data:image/png;base64,{{ logo_base64 }}" /> &nbsp;|&nbsp; Página <pdf:pagenumber /> de <pdf:pagecount /></td>
+        </tr>
+    </table>
+</div>
+
+<p class="company-name">TccConex ERP &mdash; Transcamila Cargas e Armazéns Gerais Ltda</p>
+<p class="title-text">Relatório de Movimentações de Recursos Humanos</p>
+<table class="doc-info">
+    <tr>
+        <td>Período de referência: <strong>{{ mes_nome }}/{{ ano }}</strong></td>
+        <td>Emitido em: <strong>{{ gerado_em }}</strong></td>
+    </tr>
+</table>
+
+<p class="section-text">Resumo Geral</p>
+<table class="kpi-table" cellspacing="8">
+    <tr>
+        <td><div class="kpi-label">Colaboradores</div><div class="kpi-value">{{ geral.total_colabs }}</div></td>
+        <td><div class="kpi-label">Folha Total</div><div class="kpi-value">{{ geral.total_folha_str }}</div></td>
+        <td><div class="kpi-label">Média de Idade</div><div class="kpi-value">{{ geral.avg_age }} anos</div></td>
+        <td><div class="kpi-label">Tempo Médio de Empresa</div><div class="kpi-value">{{ geral.avg_tenure_str }}</div></td>
+    </tr>
+</table>
+
+<p class="section-text">Resumo por Filial</p>
+<table class="report-table" repeat="1" cellspacing="2">
+    <thead>
+        <tr>
+            <th style="width: 26%;">Filial</th>
+            <th style="width: 12%;">Funcionários</th>
+            <th style="width: 9%;">Novos</th>
+            <th style="width: 11%;">Desligados</th>
+            <th style="width: 12%;">Média Idade</th>
+            <th style="width: 14%;">Tempo Médio</th>
+            <th style="width: 16%;">Folha</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for f in relatorio %}
+        <tr class="{% cycle 'row-odd' 'row-even' %}">
+            <td>{{ f.nome }}</td>
+            <td>{{ f.qty }}</td>
+            <td>{{ f.novos }}</td>
+            <td>{{ f.desligados }}</td>
+            <td>{{ f.avg_age }} anos</td>
+            <td>{{ f.avg_tenure_str }}</td>
+            <td>{{ f.total_payroll_str }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr>
+            <td>Total Geral</td>
+            <td>{{ geral.total_colabs }}</td>
+            <td colspan="4"></td>
+            <td>{{ geral.total_folha_str }}</td>
+        </tr>
+    </tfoot>
+</table>
+
+<p class="section-text">Novos Colaboradores ({{ novos_detalhes|length }})</p>
+{% if novos_detalhes %}
+<table class="report-table" repeat="1" cellspacing="2">
+    <thead>
+        <tr><th style="width: 40%;">Nome</th><th style="width: 30%;">Filial</th><th style="width: 30%;">Cargo</th></tr>
+    </thead>
+    <tbody>
+    {% for n in novos_detalhes %}
+        <tr class="{% cycle 'row-odd' 'row-even' %}"><td>{{ n.nome }}</td><td>{{ n.filial }}</td><td>{{ n.cargo }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty-msg">Nenhuma contratação no período.</p>
+{% endif %}
+
+<p class="section-text">Desligamentos ({{ desligados_detalhes|length }})</p>
+{% if desligados_detalhes %}
+<table class="report-table" repeat="1" cellspacing="2">
+    <thead>
+        <tr><th style="width: 40%;">Nome</th><th style="width: 30%;">Filial</th><th style="width: 30%;">Cargo</th></tr>
+    </thead>
+    <tbody>
+    {% for d in desligados_detalhes %}
+        <tr class="{% cycle 'row-odd' 'row-even' %}"><td>{{ d.nome }}</td><td>{{ d.filial }}</td><td>{{ d.cargo }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty-msg">Nenhum desligamento no período.</p>
+{% endif %}
+
+<p class="section-text">Alterações de Cargo/Salário ({{ alteracoes|length }})</p>
+{% if alteracoes %}
+<table class="report-table" repeat="1" cellspacing="2">
+    <thead>
+        <tr>
+            <th style="width: 18%;">Funcionário</th>
+            <th style="width: 13%;">CPF</th>
+            <th style="width: 11%;">Tipo</th>
+            <th style="width: 19%;">Valor Anterior</th>
+            <th style="width: 19%;">Valor Atual</th>
+            <th style="width: 20%;">Justificativa</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for a in alteracoes %}
+        <tr class="{% cycle 'row-odd' 'row-even' %}">
+            <td>{{ a.nome }}</td>
+            <td>{{ a.cpf }}</td>
+            <td>{{ a.get_tipo_display }}</td>
+            <td class="wrap-anywhere">{{ a.valor_anterior|default:"-" }}</td>
+            <td class="wrap-anywhere">{{ a.valor_atual|default:"-" }}</td>
+            <td>{{ a.justificativa|default:"-" }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty-msg">Nenhuma alteração registrada no período.</p>
+{% endif %}
+
+</body>
+</html>

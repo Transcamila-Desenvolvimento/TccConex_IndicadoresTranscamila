@@ -1,0 +1,460 @@
+---
+
+
+
+description: Padrões obrigatórios para componentes e chamadas de API no frontend
+
+
+
+globs: frontend/src/**/*.{ts,tsx}
+
+
+
+alwaysApply: false
+
+
+
+---
+
+
+
+
+
+
+
+# Padrões Frontend — TccConex ERP
+
+
+
+
+
+
+
+## Checklist de conformidade (sempre verificar)
+
+
+
+
+
+
+
+Antes de concluir qualquer alteração no frontend, confirmar:
+
+
+
+
+
+
+
+- [ ] Chamadas remotas via `apiService` + hook em `src/hooks/` (`useQuery`/`useMutation`)
+
+
+
+- [ ] Nenhum `fetch()` direto em componentes
+
+
+
+- [ ] Domínios de negócio usam API Django (não mock local)
+
+
+
+- [ ] Apenas JWT no `localStorage` (nunca objeto user completo)
+
+
+
+- [ ] Workspaces com lazy loading em `AppRoutes.tsx`
+
+
+
+- [ ] Listagens paginadas consomem `{ results, count }` da API (não paginar no cliente dados remotos)
+
+
+
+- [ ] Contexto de sessão enviado via headers (`X-Prothon-Environment`, `X-Prothon-Filial`) — automático no interceptor do `apiService`
+
+
+
+- [ ] Estados remotos tratados com `QueryDataPanel` + `useAsyncQueryState` (loading, refetch, erro, empty)
+
+
+
+
+
+
+
+## Contexto de ambiente/filial
+
+
+
+O `apiService` envia automaticamente os headers de sessão (gravados na seleção de ambiente):
+
+
+
+- `X-Prothon-Environment` — ex.: `Financeiro`, `Indicadores`
+
+- `X-Prothon-Filial` — omitido em ambientes globais (`Administração`, `Financeiro`)
+
+
+
+Ambientes globais não exigem filial na tela de seleção (`SelectionPage`).
+
+
+
+
+
+
+
+Toda chamada à API Django deve usar `useQuery` ou `useMutation`. Nunca use `useEffect` + `useState` para buscar dados remotos.
+
+
+
+
+
+
+
+```tsx
+
+
+
+// ❌ ERRADO
+
+
+
+useEffect(() => {
+
+
+
+  apiService.getUsers().then(setUsers);
+
+
+
+}, []);
+
+
+
+
+
+
+
+// ✅ CORRETO — criar hook em src/hooks/useUsers.ts
+
+
+
+export function useUsers() {
+
+
+
+  return useQuery({ queryKey: ['users'], queryFn: apiService.getUsers });
+
+
+
+}
+
+
+
+
+
+
+
+// ✅ CORRETO — mutação
+
+
+
+export function useCreateUser() {
+
+
+
+  const qc = useQueryClient();
+
+
+
+  return useMutation({
+
+
+
+    mutationFn: apiService.createUser,
+
+
+
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+
+
+
+  });
+
+
+
+}
+
+
+
+```
+
+
+
+
+
+
+
+## Relatórios financeiros paginados
+
+
+
+
+
+
+
+```tsx
+
+
+
+// ✅ CORRETO — page/filtros na queryKey, dados da página atual em results
+
+
+
+const params = { page: currentPage, pageSize: 10, search, filial, party, tipo };
+
+
+
+const { data } = usePagarReport(params, activeTab === 'pagar');
+
+
+
+const rows = data?.results ?? [];
+
+
+
+const total = data?.count ?? 0;
+
+
+
+```
+
+
+
+
+
+
+
+Facets para selects de filtro: `useReportFacets('pagar' | 'receber' | 'aging')`.
+
+
+
+
+
+
+
+## Estados de loading (TanStack Query)
+
+
+
+Componentes oficiais:
+
+
+
+| Artefato | Caminho | Uso |
+
+|---|---|---|
+
+| `QueryDataPanel` | `src/components/QueryDataPanel.tsx` | Envolve tabela, KPIs ou bloco principal |
+
+| `useAsyncQueryState` | `src/hooks/useAsyncQueryState.ts` | Deriva flags (`canShowEmpty`, etc.) |
+
+
+
+### Comportamento esperado
+
+
+
+| Situação | O que o usuário vê |
+
+|---|---|
+
+| **Primeira carga** (`isLoading && !data`) | Loader com spinner + mensagem |
+
+| **Refetch** (`isFetching && data`) | Conteúdo anterior visível + faixa *Atualizando...* |
+
+| **Erro sem cache** (`isError && !data`) | Mensagem de erro explícita |
+
+| **Lista vazia após resposta** | Empty state (*Nenhum registro*) — **nunca** durante loading |
+
+
+
+### Implementação padrão (listagens)
+
+
+
+```tsx
+
+const listQuery = useBillingRecords(params);
+
+const listState = useAsyncQueryState(listQuery);
+
+
+
+<QueryDataPanel
+
+  query={listQuery}
+
+  loadingMessage="Carregando faturamento..."
+
+  refreshingMessage="Atualizando faturamento..."
+
+  errorMessage="Não foi possível carregar o faturamento. Tente novamente."
+
+>
+
+  <table>
+
+    <tbody>
+
+      {listState.canShowEmpty && rows.length === 0 ? (
+
+        <EmptyRow message="Nenhum registro encontrado." />
+
+      ) : (
+
+        rows.map(renderRow)
+
+      )}
+
+    </tbody>
+
+  </table>
+
+</QueryDataPanel>
+
+```
+
+
+
+### Modais e áreas compactas
+
+
+
+Use `variant="compact"` no `QueryDataPanel`.
+
+
+
+### Mutations
+
+
+
+- Desabilitar botões com `isPending`.
+
+- Feedback textual (*Enviando...*, *Salvando...*).
+
+- Invalidar `queryKey` no `onSuccess` — o refetch usa o fluxo acima.
+
+
+
+### Anti-padrões (proibido)
+
+
+
+- Exibir *“Nenhum registro”* enquanto `isLoading` ou `isFetching`.
+
+- Tratar só `isLoading` e ignorar `isFetching` em telas com filtros/paginação.
+
+- `useEffect` que altera params da query só para sincronizar campos de UI (causa **double-fetch**).
+
+- Loader customizado por tela quando `QueryDataPanel` se aplica.
+
+
+
+### Filtros e queryKey
+
+
+
+- Params de filtro entram na `queryKey` do hook — **desde o primeiro render**.
+
+- Se o backend define defaults (ex.: período padrão), **não** reenviar os mesmos params via `useEffect` após a primeira resposta.
+
+- Marcar alteração manual do usuário (ex.: `userAdjustedPeriod`) antes de incluir datas na query.
+
+
+
+### Exceções documentadas
+
+
+
+- **Lazy route** (`AppRoutes.tsx`): `PageLoader` no `Suspense`.
+
+- **Auth bootstrap** (`AuthContext`): loader global até perfil JWT.
+
+
+
+
+
+
+
+## Workspaces e rotas
+
+
+
+
+
+
+
+- Todo workspace em `src/workspaces/` deve ter lazy loading em `AppRoutes.tsx`
+
+
+
+- Hooks de dados em `src/hooks/` (um arquivo por recurso)
+
+
+
+- Nunca colocar lógica de busca diretamente no componente
+
+
+
+
+
+
+
+## Gráficos
+
+
+
+
+
+
+
+Use sempre `react-chartjs-2`. Registre apenas os componentes necessários:
+
+
+
+
+
+
+
+```tsx
+
+
+
+import { Chart as ChartJS, LineElement, ... } from 'chart.js';
+
+
+
+ChartJS.register(LineElement, ...);
+
+
+
+```
+
+
+
+
+
+
+
+## Tipos
+
+
+
+Tipos de domínio ficam em `src/types/domain.ts`. Importe sempre desse arquivo — nunca duplique interfaces nos workspaces.
+
+
+
+
+

@@ -1,0 +1,243 @@
+---
+
+description: Padrões obrigatórios para apps Django e DRF no backend
+
+globs: backend/**/*.py
+
+alwaysApply: false
+
+---
+
+
+
+# Padrões Backend — TccConex ERP
+
+
+
+## Estrutura de apps
+
+
+
+Cada domínio de negócio é um app Django em `backend/apps/<modulo>/`:
+
+```
+
+apps/
+
+  accounts/      ← usuários e auth
+
+  financeiro/    ← relatórios, faturamento, ajustes, saldos
+
+  indicadores/   ← KPIs e desempenho por filial
+
+  filesystem/    ← listagem/gravação de arquivos para exportação (Relatórios)
+
+  audit/         ← logs de auditoria do sistema
+
+```
+
+
+
+## Banco de dados
+
+
+
+### Dev local (SQLite — padrão)
+
+
+
+```powershell
+
+cd backend
+
+.\venv\Scripts\python.exe manage.py migrate
+
+.\venv\Scripts\python.exe manage.py seed_users
+
+.\venv\Scripts\python.exe manage.py seed_roles
+
+.\venv\Scripts\python.exe manage.py seed_audit
+
+.\venv\Scripts\python.exe manage.py seed_financeiro --demo
+
+.\venv\Scripts\python.exe manage.py seed_indicadores
+
+.\venv\Scripts\python.exe manage.py cleanup_legacy_envs
+
+```
+
+
+
+Gera `backend/db.sqlite3`. Credenciais de teste: `admin` / `admin123`.
+
+
+
+### Produção (PostgreSQL)
+
+
+
+Definir no `.env` do servidor (nunca commitar senhas):
+
+
+
+```env
+
+USE_POSTGRES=True
+
+DB_NAME=prothon_db
+
+DB_USER=postgres
+
+DB_PASSWORD=<senha>
+
+DB_HOST=<host>
+
+DB_PORT=5432
+
+```
+
+
+
+Depois: `migrate` + seeds no ambiente de produção.
+
+
+
+### Ao adicionar um novo domínio
+
+
+
+1. Criar app em `apps/<modulo>/` com models
+
+2. `makemigrations` + `migrate`
+
+3. Seed via management command (não fixtures com senhas)
+
+4. Testar localmente com SQLite; em produção usa o mesmo código com PostgreSQL
+
+
+
+## Serializers
+
+
+
+- Sempre use aliases camelCase para o frontend: `roleId = CharField(source='role_id')`
+
+- Constantes de ambientes/filiais ficam em `serializers.py` do app (não duplicar em views)
+
+- Nunca liste ambientes hardcoded fora de `ADMIN_ENVS` / `ADMIN_FILIAIS`
+
+
+
+## Views e permissões
+
+Views de negócio usam `ModuleScopedViewMixin` + `permission_module` (ver `apps/accounts/permissions.py`).
+
+Headers enviados pelo frontend: `X-Prothon-Environment`, `X-Prothon-Filial`.
+
+**Ambientes globais** (sem filial na sessão, ver `GLOBAL_ENVIRONMENTS` em `apps/accounts/permissions.py`): `Administração`, `Financeiro`, `RH`, `Compras` — filtram pela união das filiais autorizadas ao usuário no módulo (`apply_filial_scope`).
+
+**Ambientes por filial**: `Indicadores` — exige filial na sessão; queryset filtrado quando o model tem campo `filial`
+
+```python
+class IndicadorViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):
+    permission_module = 'Indicadores'
+```
+
+Admin-only (legado):
+
+```python
+# ✅ CORRETO — verificar role na view
+
+class MinhaView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        if not request.user.is_admin:
+
+            return Response(status=403)
+
+```
+
+
+
+## Paginação de relatórios
+
+
+
+Relatórios financeiros (pagar/receber/aging) usam `ReportPagination` em `apps/financeiro/pagination.py`:
+
+- Query params: `page`, `page_size`, `search`, `filial`, `party`, `tipo`
+
+- Facets para filtros: `GET /api/financeiro/reports/<tipo>/facets/`
+
+
+
+## Celery (tarefas assíncronas)
+
+Importações de relatórios (xlsx) e faturamento (XML) usam Celery quando `USE_CELERY=True`.
+
+### Setup
+
+```powershell
+cd backend
+.\venv\Scripts\pip.exe install -r requirements.txt
+```
+
+Redis local: Memurai ou Docker `redis:7`.
+
+`.env`:
+
+```env
+USE_CELERY=True
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+```
+
+Sem `USE_CELERY`, importações rodam **síncronas** (padrão dev).
+
+### Worker (Windows)
+
+```powershell
+cd backend
+.\venv\Scripts\celery.exe -A prothon worker -l info -P solo
+```
+
+### Tasks
+
+| Nome | Função |
+|------|--------|
+| `financeiro.import_report` | Import pagar/receber/aging |
+| `financeiro.import_billing_xml` | Import XML faturamento |
+
+Status: `GET /api/financeiro/tasks/<taskId>/`
+
+Novas tasks em `apps/financeiro/tasks.py`. Nunca execute I/O longo na view quando Celery estiver habilitado.
+
+
+
+## Migrations e seed
+
+
+
+- `makemigrations` + `migrate` sempre que alterar models
+
+- Dados iniciais via management command em `apps/<modulo>/management/commands/seed_<modulo>.py`
+
+- Nunca use fixtures para dados sensíveis (senhas)
+
+
+
+## Testes automatizados
+
+Após alterar views, permissões ou serializers, rodar:
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe manage.py test apps.accounts apps.financeiro
+```
+
+Cobertura mínima esperada: login JWT, 403 por módulo/filial, paginação `{ count, results }`, auditoria em mutações financeiras.
+
+
