@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+concurrency:
+  group: deploy-azure-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   AZURE_WEBAPP_NAME: tccconex-erp # nome do App Service na Azure (msdeploySite do publish profile)
   NODE_VERSION: '20'
@@ -37,10 +41,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Instalar dependências no artefato de deploy
+      - name: Instalar dependências para build (collectstatic)
         working-directory: backend
-        run: |
-          pip install -r requirements.txt --target .python_packages/lib/site-packages
+        run: pip install -r requirements.txt
 
       - name: Copiar build do frontend para dentro do backend
         run: |
@@ -51,15 +54,16 @@ jobs:
         working-directory: backend
         env:
           DJANGO_SECRET_KEY: build-time-only-not-used-em-producao
-          PYTHONPATH: .python_packages/lib/site-packages
         run: python manage.py collectstatic --noinput
 
       - name: Empacotar artefato de deploy
         run: |
           cd backend
           zip -r ../release.zip . \
-            -x "venv/*" -x "venv_local/*" -x "antenv/*" -x "__pycache__/*" -x "*/__pycache__/*" \
+            -x "venv/*" -x "venv_local/*" -x "antenv/*" \
+            -x ".python_packages/*" -x "__pycache__/*" -x "*/__pycache__/*" \
             -x "tmp/*" -x "media/*" -x "scratch/*" -x "*.bak" -x "db.sqlite3"
+          ls -lh ../release.zip
 
       - name: Deploy no Azure App Service
         uses: azure/webapps-deploy@v3
@@ -67,3 +71,4 @@ jobs:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: release.zip
+          clean: true
