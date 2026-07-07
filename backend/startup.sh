@@ -8,16 +8,27 @@
 # e o gunicorn em foreground (processo observado pelo App Service).
 set -e
 
+# Usa o venv empacotado no deploy (antenv); fallback para o Python do container.
+if [ -x "./antenv/bin/python" ]; then
+  PYTHON="./antenv/bin/python"
+  GUNICORN="./antenv/bin/gunicorn"
+  CELERY="./antenv/bin/celery"
+else
+  PYTHON="python"
+  GUNICORN="gunicorn"
+  CELERY="celery"
+fi
+
 echo "== TccConex ERP: aplicando migrations =="
-python manage.py migrate --noinput
+"$PYTHON" manage.py migrate --noinput
 
 if [ "$USE_CELERY" = "True" ]; then
   echo "== TccConex ERP: iniciando worker Celery em background =="
-  celery -A prothon worker -l info --concurrency=2 &
+  "$CELERY" -A prothon worker -l info --concurrency=2 &
 fi
 
 echo "== TccConex ERP: iniciando gunicorn =="
-exec gunicorn prothon.wsgi:application \
+exec "$GUNICORN" prothon.wsgi:application \
   --bind=0.0.0.0:8000 \
   --timeout 600 \
   --workers 3
