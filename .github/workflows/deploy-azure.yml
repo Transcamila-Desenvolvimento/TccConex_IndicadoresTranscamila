@@ -6,7 +6,7 @@ on:
   workflow_dispatch: {}
 
 env:
-  AZURE_WEBAPP_NAME: tccconex-erp # ajuste para o nome real do App Service criado na Azure
+  AZURE_WEBAPP_NAME: tcconex-erp-dqfcgjfpfuejhffu # nome real do App Service na Azure
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
 

@@ -8,7 +8,14 @@
 # e o gunicorn em foreground (processo observado pelo App Service).
 set -e
 
-# Usa o venv empacotado no deploy (antenv); fallback para o Python do container.
+# Usa o venv empacotado no deploy (antenv); cria se ausente (ex.: deploy antigo).
+if [ ! -x "./antenv/bin/python" ]; then
+  echo "== TccConex ERP: antenv ausente, instalando dependências =="
+  python -m venv antenv
+  ./antenv/bin/pip install --upgrade pip
+  ./antenv/bin/pip install -r requirements.txt
+fi
+
 if [ -x "./antenv/bin/python" ]; then
   PYTHON="./antenv/bin/python"
   GUNICORN="./antenv/bin/gunicorn"
