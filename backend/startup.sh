@@ -2,18 +2,19 @@
 # Comando de inicialização do Azure App Service (Linux, runtime Python).
 # Configurar em: App Service > Configuration > General settings > Startup Command
 #   bash startup.sh
-#
-# Roda o worker do Celery em background (mesmo container/filesystem do web,
-# necessário porque as importações usam arquivos temporários em backend/tmp/imports)
-# e o gunicorn em foreground (processo observado pelo App Service).
 set -e
+
+# Venv antigo (antenv) gerado no CI quebra no container Azure (GLIBC/symlinks).
+rm -rf "$(pwd)/antenv" 2>/dev/null || true
+unset VIRTUAL_ENV
+export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
 
 PACKAGES_DIR="$(pwd)/.python_packages/lib/site-packages"
 
 if [ ! -d "$PACKAGES_DIR" ] || [ ! -f "$PACKAGES_DIR/django/__init__.py" ]; then
   echo "== TccConex ERP: instalando dependências Python =="
   mkdir -p "$PACKAGES_DIR"
-  pip install -r requirements.txt --target "$PACKAGES_DIR"
+  python -m pip install -r requirements.txt --target "$PACKAGES_DIR"
 fi
 
 export PYTHONPATH="${PACKAGES_DIR}:${PYTHONPATH:-}"

@@ -58,7 +58,7 @@ jobs:
         run: |
           cd backend
           zip -r ../release.zip . \
-            -x "venv/*" -x "venv_local/*" -x "__pycache__/*" -x "*/__pycache__/*" \
+            -x "venv/*" -x "venv_local/*" -x "antenv/*" -x "__pycache__/*" -x "*/__pycache__/*" \
             -x "tmp/*" -x "media/*" -x "scratch/*" -x "*.bak" -x "db.sqlite3"
 
       - name: Deploy no Azure App Service
