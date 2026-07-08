@@ -6,6 +6,8 @@ from apps.accounts.permissions import ModuleAccessPermission
 class ModuleScopedViewMixin:
     """Mixin para viewsets/APIViews de domínio de negócio."""
     permission_module: str = ''
+    # None = padrão do módulo (global vs filial). False = visão consolidada sem filial na sessão.
+    permission_requires_filial: bool | None = None
     permission_classes = [IsAuthenticated, ModuleAccessPermission]
 
     def scope_queryset(self, qs, filial_field: str | None = None):

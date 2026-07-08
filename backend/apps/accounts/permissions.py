@@ -57,7 +57,13 @@ def user_has_filial_access(user, module: str, filial: str) -> bool:
     return filial in allowed_filiais_for_module(user, module)
 
 
-def check_module_request_access(user, request, module: str) -> bool:
+def check_module_request_access(
+    user,
+    request,
+    module: str,
+    *,
+    require_filial: bool | None = None,
+) -> bool:
     if not user_has_module_access(user, module):
         return False
 
@@ -65,7 +71,7 @@ def check_module_request_access(user, request, module: str) -> bool:
     if env and normalize_environment(env) != normalize_environment(module):
         return False
 
-    if module in GLOBAL_ENVIRONMENTS:
+    if require_filial is False or module in GLOBAL_ENVIRONMENTS:
         return True
 
     if not filial:
@@ -112,4 +118,10 @@ class ModuleAccessPermission(BasePermission):
         module = getattr(view, 'permission_module', None)
         if not module:
             return True
-        return check_module_request_access(request.user, request, module)
+        require_filial = getattr(view, 'permission_requires_filial', None)
+        return check_module_request_access(
+            request.user,
+            request,
+            module,
+            require_filial=require_filial,
+        )

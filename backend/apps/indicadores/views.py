@@ -52,6 +52,7 @@ class SendGerencialEmailView(ModuleScopedViewMixin, APIView):
 
 class CashFlowDayDetailView(ModuleScopedViewMixin, APIView):
     permission_module = 'Indicadores'
+    permission_requires_filial = False
 
     def get(self, request):
         try:
@@ -69,6 +70,7 @@ class CashFlowActivityView(ModuleScopedViewMixin, APIView):
     """
 
     permission_module = 'Indicadores'
+    permission_requires_filial = False
 
     def get(self, request):
         return Response({'version': get_financeiro_activity_version()})
@@ -76,6 +78,7 @@ class CashFlowActivityView(ModuleScopedViewMixin, APIView):
 
 class CashFlowView(ModuleScopedViewMixin, APIView):
     permission_module = 'Indicadores'
+    permission_requires_filial = False
 
     def get(self, request):
         try:

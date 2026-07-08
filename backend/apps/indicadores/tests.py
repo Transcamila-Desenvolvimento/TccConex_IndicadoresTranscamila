@@ -130,6 +130,15 @@ class IndicadoresCashflowTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_cashflow_works_without_session_filial(self):
+        """Fluxo de caixa é consolidado — não exige filial na sessão."""
+        response = self.client.get(
+            '/api/indicadores/fluxo-caixa/?start=2026-06-10&end=2026-06-12',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['meta']['batchLabel'], '##CF1')
+
     def test_launch_resets_saldo_inicial_on_new_day(self):
         BalanceHistoryEntry.objects.create(
             account=self.account,

@@ -12,7 +12,7 @@ import {
 } from '../constants/environments';
 import logoImg from '../assets/Logo_TccConex.png';
 
-const GLOBAL_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Financeiro', 'Compras'];
+const GLOBAL_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH'];
 
 const NOTION_PROJECT_URL =
   'https://transcamila-miguel.notion.site/ebd//37322feb02fe8012ba34da103c4ef203';
