@@ -18,6 +18,13 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 _allowed_hosts_env = os.environ.get('DJANGO_ALLOWED_HOSTS', '')
 ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()] or ['*']
 
+# App Service: hostname real + subdomínios .azurewebsites.net
+_website_hostname = os.environ.get('WEBSITE_HOSTNAME', '')
+if _website_hostname and _website_hostname not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_website_hostname)
+if os.environ.get('WEBSITE_SITE_NAME') and '.azurewebsites.net' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('.azurewebsites.net')
+
 # App Service (e a maioria dos PaaS) fica atrás de um proxy que termina o TLS;
 # sem isso, request.is_secure() e os redirects de segurança ficam incorretos.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -55,6 +62,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # CorsMiddleware must be as high as possible
+    'prothon.middleware.azure_health_host.AzureHealthHostMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # serve estáticos/SPA em produção
     'django.contrib.sessions.middleware.SessionMiddleware',

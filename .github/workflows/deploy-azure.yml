@@ -41,11 +41,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Instalar dependências Python (vendor no pacote — boot sem pip no Azure)
+      - name: Instalar dependências para collectstatic (somente no CI, não vai no zip)
         working-directory: backend
-        run: |
-          rm -rf vendor
-          python -m pip install --no-cache-dir -r requirements.txt --target vendor/site-packages
+        run: pip install -r requirements.txt
 
       - name: Copiar build do frontend para dentro do backend
         run: |
@@ -56,7 +54,6 @@ jobs:
         working-directory: backend
         env:
           DJANGO_SECRET_KEY: build-time-only-not-used-em-producao
-          PYTHONPATH: vendor/site-packages
         run: python manage.py collectstatic --noinput
 
       - name: Empacotar artefato de deploy
@@ -65,7 +62,8 @@ jobs:
           zip -r ../release.zip . \
             -x "venv/*" -x "venv_local/*" -x "antenv/*" \
             -x ".python_packages/*" -x "__pycache__/*" -x "*/__pycache__/*" \
-            -x "tmp/*" -x "media/*" -x "scratch/*" -x "*.bak" -x "db.sqlite3"
+            -x "tmp/*" -x "media/*" -x "scratch/*" -x "*.bak" -x "db.sqlite3" \
+            -x "vendor/*"
           ls -lh ../release.zip
 
       - name: Deploy no Azure App Service
