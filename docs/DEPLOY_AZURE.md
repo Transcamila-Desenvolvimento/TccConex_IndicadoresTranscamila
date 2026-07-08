@@ -254,18 +254,42 @@ nenhum comando de seed/demo deve rodar contra este banco.
 
 ## 5. Atualizar o Google OAuth
 
+URL de produção atual:
+
+`https://tccconex-erp-dqfccjfpfuejhffu.brazilsouth-01.azurewebsites.net`
+
+### 5.1 App Service (variáveis)
+
+No Portal **Configuration → Application settings**, ou via script:
+
+```powershell
+az login
+.\scripts\azure-set-google-oauth.ps1
+```
+
+Variáveis obrigatórias:
+
+| Variável | Valor |
+|---|---|
+| `GOOGLE_OAUTH_CLIENT_ID` | mesmo Client ID do `.env` local |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | mesmo Client Secret do `.env` local |
+| `GOOGLE_OAUTH_REDIRECT_URI` | `https://tccconex-erp-dqfccjfpfuejhffu.brazilsouth-01.azurewebsites.net/auth/google/callback` |
+| `GOOGLE_OAUTH_HD` | `transcamila.com.br` |
+| `FRONTEND_BASE_URL` | `https://tccconex-erp-dqfccjfpfuejhffu.brazilsouth-01.azurewebsites.net` |
+
+### 5.2 Google Cloud Console
+
 No [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
 no client OAuth já usado pelo sistema:
 
 - **Authorized JavaScript origins**: adicione
-  `https://tccconex-erp.azurewebsites.net`
+  `https://tccconex-erp-dqfccjfpfuejhffu.brazilsouth-01.azurewebsites.net`
 - **Authorized redirect URIs**: adicione
-  `https://tccconex-erp.azurewebsites.net/auth/google/callback`
-- Mantenha as entradas de `http://localhost:5173` para continuar
-  desenvolvendo localmente.
+  `https://tccconex-erp-dqfccjfpfuejhffu.brazilsouth-01.azurewebsites.net/auth/google/callback`
+- Mantenha `http://localhost:5173` e `http://127.0.0.1:8001` para dev local.
+- Em **APIs & Services → Library**, ative **Google People API** (contatos).
 
-Confirme que a variável `GOOGLE_OAUTH_REDIRECT_URI` no App Service (seção 2)
-é exatamente igual à URI cadastrada aqui.
+A URI em `GOOGLE_OAUTH_REDIRECT_URI` deve ser **idêntica** à cadastrada no Console.
 
 ---
 

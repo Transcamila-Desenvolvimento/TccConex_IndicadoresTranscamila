@@ -210,7 +210,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # JWT Configuration
 JWT_SETTINGS = {
-    'ACCESS_TOKEN_LIFETIME_MINUTES': 60,
+    'ACCESS_TOKEN_LIFETIME_MINUTES': int(os.environ.get('ACCESS_TOKEN_LIFETIME_MINUTES', '480')),
     'ALGORITHM': 'HS256',
 }
 

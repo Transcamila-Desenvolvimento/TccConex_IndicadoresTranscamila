@@ -223,14 +223,16 @@ class CeleryTaskStatusView(ModuleScopedViewMixin, APIView):
 
 class BillingRecordViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     permission_module = 'Financeiro'
+    # Faturamento é consolidado — todas as filiais de billing (incl. Barueri, Armazém)
+    # ficam visíveis para qualquer usuário com acesso ao módulo Financeiro.
+    permission_requires_filial = False
     serializer_class = BillingRecordSerializer
     queryset = BillingRecord.objects.all()
     pagination_class = ReportPagination
     http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        qs = self.scope_queryset(BillingRecord.objects.all(), 'branch')
-        return filter_billing_queryset(qs, self.request.query_params)
+        return filter_billing_queryset(BillingRecord.objects.all(), self.request.query_params)
 
     def paginate_queryset(self, queryset):
         if self.request.query_params.get('export') == 'true' or self.request.query_params.get('pagination') == 'none':

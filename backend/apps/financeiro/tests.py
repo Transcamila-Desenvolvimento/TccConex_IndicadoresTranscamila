@@ -239,10 +239,8 @@ class FinanceiroReportTests(TestCase):
         self.assertEqual(len(response.data['results']), 10)
 
 
-class BillingFilialScopeTests(TestCase):
-    """Garante que o escopo de filial (permissions.apply_filial_scope) filtra
-    corretamente os registros de faturamento por usuário, mesmo com o módulo
-    Financeiro sendo um ambiente global (sem filial obrigatória na sessão)."""
+class BillingGlobalAccessTests(TestCase):
+    """Faturamento é consolidado: operadores veem todas as filiais de billing."""
 
     def setUp(self):
         self.client = APIClient()
@@ -260,17 +258,23 @@ class BillingFilialScopeTests(TestCase):
         BillingRecord.objects.create(
             reference_date=date(2026, 6, 1), branch='Rondonópolis', value=Decimal('2000'), notes_count=2,
         )
+        BillingRecord.objects.create(
+            reference_date=date(2026, 6, 1), branch='Barueri', value=Decimal('3000'), notes_count=3,
+        )
+        BillingRecord.objects.create(
+            reference_date=date(2026, 6, 1), branch='Armazém', value=Decimal('4000'), notes_count=4,
+        )
 
-    def test_user_only_sees_records_from_allowed_filial(self):
+    def test_operator_sees_all_billing_branches(self):
         response = self.client.get(
             '/api/financeiro/billing/?pagination=none',
             **auth_headers(self.user, 'Financeiro'),
         )
         self.assertEqual(response.status_code, 200)
         branches = {row['branch'] for row in response.data}
-        self.assertEqual(branches, {'Ibiporã'})
+        self.assertEqual(branches, {'Ibiporã', 'Rondonópolis', 'Barueri', 'Armazém'})
 
-    def test_admin_sees_records_from_all_filiais(self):
+    def test_admin_sees_all_billing_branches(self):
         admin = User.objects.create_user(
             username='fin_admin_scope',
             password='admin123',
@@ -284,7 +288,7 @@ class BillingFilialScopeTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         branches = {row['branch'] for row in response.data}
-        self.assertEqual(branches, {'Ibiporã', 'Rondonópolis'})
+        self.assertEqual(branches, {'Ibiporã', 'Rondonópolis', 'Barueri', 'Armazém'})
 
 
 class PrAnalysisTests(TestCase):
