@@ -4,7 +4,13 @@ from django.http import HttpResponse, HttpResponseNotFound
 from django.urls import include, path, re_path
 from django.views.static import serve as static_serve
 
+
+def health_check(_request):
+    return HttpResponse('ok', content_type='text/plain')
+
+
 urlpatterns = [
+    path('health/', health_check),
     path('admin/', admin.site.urls),
     path('api/auth/', include('apps.accounts.urls')),
     path('api/financeiro/', include('apps.financeiro.urls')),

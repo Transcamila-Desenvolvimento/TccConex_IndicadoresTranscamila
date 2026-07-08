@@ -41,9 +41,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Instalar dependências para build (collectstatic)
+      - name: Instalar dependências Python (vendor no pacote — boot sem pip no Azure)
         working-directory: backend
-        run: pip install -r requirements.txt
+        run: |
+          rm -rf vendor
+          python -m pip install --no-cache-dir -r requirements.txt --target vendor/site-packages
 
       - name: Copiar build do frontend para dentro do backend
         run: |
@@ -54,6 +56,7 @@ jobs:
         working-directory: backend
         env:
           DJANGO_SECRET_KEY: build-time-only-not-used-em-producao
+          PYTHONPATH: vendor/site-packages
         run: python manage.py collectstatic --noinput
 
       - name: Empacotar artefato de deploy

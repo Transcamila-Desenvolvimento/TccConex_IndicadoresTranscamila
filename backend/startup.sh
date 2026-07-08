@@ -1,80 +1,60 @@
 #!/bin/bash
-# Comando de inicialização do Azure App Service (Linux, runtime Python).
-# Configurar em: App Service > Configuration > General settings > Startup Command
-#   bash startup.sh
+# Azure App Service (Linux) — boot rápido e estável.
+# Portal: Configuration > General settings > Startup Command = bash startup.sh
 set -e
 
 export PYTHONUNBUFFERED=1
+cd "$(dirname "$0")"
 
-# Venv antigo (antenv) gerado no CI quebra no container Azure (GLIBC/symlinks).
-rm -rf "$(pwd)/antenv" 2>/dev/null || true
-# Oryx/deploys antigos deixam pacotes quebrados aqui — remover sempre.
-rm -rf "$(pwd)/.python_packages" 2>/dev/null || true
-unset VIRTUAL_ENV
-unset PYTHONPATH
+rm -rf "$(pwd)/antenv" "$(pwd)/.python_packages" 2>/dev/null || true
+unset VIRTUAL_ENV PYTHONPATH
 export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
 
-# Fora do wwwroot: sobrevive a zip deploy com clean:true (só wwwroot é substituído).
-PACKAGES_ROOT="/home/site/python_packages"
-PACKAGES_DIR="${PACKAGES_ROOT}/lib/site-packages"
-DEPS_MARKER="${PACKAGES_ROOT}/.deps_ok"
-REQ_HASH_FILE="${PACKAGES_ROOT}/.requirements_sha256"
-MIGRATIONS_MARKER="/home/site/.migrations_ok"
+VENDOR_DIR="$(pwd)/vendor/site-packages"
+CACHE_DIR="/home/site/python_packages/lib/site-packages"
 
-python_deps_ok() {
-  [ -f "$DEPS_MARKER" ] || return 1
-  PYTHONPATH="$PACKAGES_DIR" python -c "import django, asgiref, gunicorn, rest_framework" 2>/dev/null
+pick_pythonpath() {
+  if [ -d "$VENDOR_DIR" ] && PYTHONPATH="$VENDOR_DIR" python -c "import django, asgiref, gunicorn, rest_framework" 2>/dev/null; then
+    export PYTHONPATH="$VENDOR_DIR"
+    echo "== TccConex ERP: deps do pacote (vendor) =="
+    return 0
+  fi
+  if [ -d "$CACHE_DIR" ] && PYTHONPATH="$CACHE_DIR" python -c "import django, asgiref, gunicorn, rest_framework" 2>/dev/null; then
+    export PYTHONPATH="$CACHE_DIR"
+    echo "== TccConex ERP: deps em cache (/home/site/python_packages) =="
+    return 0
+  fi
+  return 1
 }
 
-requirements_changed() {
-  [ ! -f "$REQ_HASH_FILE" ] && return 0
-  local current
-  current=$(sha256sum requirements.txt | awk '{print $1}')
-  [ "$(cat "$REQ_HASH_FILE")" != "$current" ]
-}
-
-if ! python_deps_ok || requirements_changed; then
-  echo "== TccConex ERP: instalando dependências Python =="
-  rm -rf "$PACKAGES_ROOT" "$(pwd)/.python_packages"
-  mkdir -p "$PACKAGES_DIR"
-  python -m pip install --no-cache-dir -r requirements.txt --target "$PACKAGES_DIR"
-  PYTHONPATH="$PACKAGES_DIR" python -c "import django, asgiref, gunicorn, rest_framework"
-  sha256sum requirements.txt | awk '{print $1}' > "$REQ_HASH_FILE"
-  touch "$DEPS_MARKER"
-  echo "== TccConex ERP: dependências Python OK =="
-else
-  echo "== TccConex ERP: dependências Python em cache =="
+if ! pick_pythonpath; then
+  echo "== TccConex ERP: fallback — instalando deps (1ª vez ou pacote incompleto) =="
+  mkdir -p "$CACHE_DIR"
+  python -m pip install --no-cache-dir -r requirements.txt --target "$CACHE_DIR"
+  export PYTHONPATH="$CACHE_DIR"
+  PYTHONPATH="$CACHE_DIR" python -c "import django, asgiref, gunicorn, rest_framework"
+  echo "== TccConex ERP: deps instaladas em cache =="
 fi
-
-# Nunca herdar PYTHONPATH do Oryx (aponta para wwwroot/.python_packages quebrado).
-unset PYTHONPATH
-export PYTHONPATH="$PACKAGES_DIR"
 
 echo "== TccConex ERP: PYTHONPATH=$PYTHONPATH =="
 
-# migrate bloqueia o gunicorn. No Azure o schema já foi aplicado via SSH;
-# pule com SKIP_STARTUP_MIGRATE=True ou deixe o marker após a 1ª execução bem-sucedida.
-if [ "$SKIP_STARTUP_MIGRATE" = "True" ] || [ -f "$MIGRATIONS_MARKER" ]; then
-  echo "== TccConex ERP: migrate ignorado (schema já aplicado) =="
-else
+# Schema já aplicado no Postgres via SSH. Só rode migrate manualmente quando houver migration nova.
+if [ "$RUN_STARTUP_MIGRATE" = "True" ]; then
   echo "== TccConex ERP: aplicando migrations =="
-  if python manage.py migrate --noinput; then
-    touch "$MIGRATIONS_MARKER"
-    echo "== TccConex ERP: migrations OK =="
-  else
-    echo "== TccConex ERP: AVISO — migrate falhou; subindo gunicorn mesmo assim =="
-  fi
+  python manage.py migrate --noinput || echo "== AVISO: migrate falhou; seguindo com gunicorn =="
+else
+  echo "== TccConex ERP: migrate ignorado (padrão produção) =="
 fi
 
 if [ "$USE_CELERY" = "True" ]; then
-  echo "== TccConex ERP: iniciando worker Celery em background =="
-  python -m celery -A prothon worker -l info --concurrency=2 &
+  echo "== TccConex ERP: worker Celery em background =="
+  python -m celery -A prothon worker -l warning --concurrency=1 &
 fi
 
 echo "== TccConex ERP: iniciando gunicorn =="
 exec python -m gunicorn prothon.wsgi:application \
   --bind=0.0.0.0:8000 \
   --timeout 600 \
-  --workers 2 \
+  --workers 1 \
   --access-logfile - \
   --error-logfile -

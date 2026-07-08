@@ -12,6 +12,7 @@ backend/tmp/
 backend/media/
 backend/scratch/
 backend/frontend_dist/
+backend/vendor/
 backend/.env
 backend/client_secret.json
 *.egg-info/

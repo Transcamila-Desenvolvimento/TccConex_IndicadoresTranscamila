@@ -156,10 +156,12 @@ application setting** (uma por linha). Via CLI, use
 | `DEFAULT_FROM_EMAIL` | `digitalmidia@transcamila.com.br` | |
 | `SCM_DO_BUILD_DURING_DEPLOYMENT` | `false` | o build (frontend + deps) já acontece no GitHub Actions |
 | `WEBSITES_PORT` | `8000` | porta que o gunicorn expõe (ver `startup.sh`) |
+| `WEBSITES_CONTAINER_START_TIME_LIMIT` | `600` | boot rápido com deps no pacote; 600s é suficiente |
+| `SKIP_STARTUP_MIGRATE` | *(não usar)* | substituído: migrate só roda se `RUN_STARTUP_MIGRATE=True` |
 
 Depois de salvar, em **Configuration → General settings**:
 
-- **Startup Command**: `bash startup.sh`
+- **Startup Command**: `bash startup.sh` (**não** use comando `bash -c` longo no portal)
 - **Always On**: `Ligado` (necessário para o worker do Celery não ser
   suspenso por inatividade)
 
