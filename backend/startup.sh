@@ -3,6 +3,7 @@
 # Portal: Configuration > General settings > Startup Command = bash startup.sh
 set -e
 
+echo "== TccConex ERP startup.sh v3 (vendor, sem pip/migrate no boot) =="
 export PYTHONUNBUFFERED=1
 cd "$(dirname "$0")"
 
