@@ -11,10 +11,19 @@ export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
 
 PACKAGES_DIR="$(pwd)/.python_packages/lib/site-packages"
 
-if [ ! -d "$PACKAGES_DIR" ] || [ ! -f "$PACKAGES_DIR/django/__init__.py" ]; then
+python_deps_ok() {
+  local dir="$1"
+  [ -f "$dir/django/__init__.py" ] \
+    && [ -d "$dir/asgiref" ] \
+    && [ -d "$dir/gunicorn" ] \
+    && [ -d "$dir/rest_framework" ]
+}
+
+if ! python_deps_ok "$PACKAGES_DIR"; then
   echo "== TccConex ERP: instalando dependências Python =="
+  rm -rf "$(pwd)/.python_packages"
   mkdir -p "$PACKAGES_DIR"
-  python -m pip install -r requirements.txt --target "$PACKAGES_DIR"
+  python -m pip install --no-cache-dir -r requirements.txt --target "$PACKAGES_DIR"
 fi
 
 export PYTHONPATH="${PACKAGES_DIR}:${PYTHONPATH:-}"
