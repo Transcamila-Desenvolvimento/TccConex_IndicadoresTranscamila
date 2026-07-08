@@ -6,9 +6,10 @@ set -e
 
 # Venv antigo (antenv) gerado no CI quebra no container Azure (GLIBC/symlinks).
 rm -rf "$(pwd)/antenv" 2>/dev/null || true
-# Instalação legada dentro do wwwroot — deploy (clean) pode corromper; não usar mais.
+# Oryx/deploys antigos deixam pacotes quebrados aqui — remover sempre.
 rm -rf "$(pwd)/.python_packages" 2>/dev/null || true
 unset VIRTUAL_ENV
+unset PYTHONPATH
 export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
 
 # Fora do wwwroot: sobrevive a zip deploy com clean:true (só wwwroot é substituído).
@@ -31,7 +32,7 @@ requirements_changed() {
 
 if ! python_deps_ok || requirements_changed; then
   echo "== TccConex ERP: instalando dependências Python =="
-  rm -rf "$PACKAGES_ROOT"
+  rm -rf "$PACKAGES_ROOT" "$(pwd)/.python_packages"
   mkdir -p "$PACKAGES_DIR"
   python -m pip install --no-cache-dir -r requirements.txt --target "$PACKAGES_DIR"
   PYTHONPATH="$PACKAGES_DIR" python -c "import django, asgiref, gunicorn, rest_framework"
@@ -40,8 +41,11 @@ if ! python_deps_ok || requirements_changed; then
   echo "== TccConex ERP: dependências Python OK =="
 fi
 
-export PYTHONPATH="${PACKAGES_DIR}:${PYTHONPATH:-}"
+# Nunca herdar PYTHONPATH do Oryx (aponta para wwwroot/.python_packages quebrado).
+unset PYTHONPATH
+export PYTHONPATH="$PACKAGES_DIR"
 
+echo "== TccConex ERP: PYTHONPATH=$PYTHONPATH =="
 echo "== TccConex ERP: aplicando migrations =="
 python manage.py migrate --noinput
 
@@ -54,4 +58,4 @@ echo "== TccConex ERP: iniciando gunicorn =="
 exec python -m gunicorn prothon.wsgi:application \
   --bind=0.0.0.0:8000 \
   --timeout 600 \
-  --workers 3
+  --workers 2
