@@ -105,7 +105,11 @@ if os.environ.get('USE_POSTGRES') == 'True' or 'DB_HOST' in os.environ:
             'PORT': DB_PORT,
             # Azure Database for PostgreSQL exige SSL; 'prefer' negocia SSL quando
             # disponível sem quebrar um Postgres local sem TLS configurado.
-            'OPTIONS': {'sslmode': os.environ.get('DB_SSLMODE', 'prefer')},
+            'OPTIONS': {
+                'sslmode': os.environ.get('DB_SSLMODE', 'prefer'),
+                # Evita boot travado minutos se o Postgres estiver inacessível.
+                'connect_timeout': int(os.environ.get('DB_CONNECT_TIMEOUT', '15')),
+            },
         }
     }
 else:
