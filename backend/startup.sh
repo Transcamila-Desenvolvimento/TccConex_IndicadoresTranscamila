@@ -10,20 +10,21 @@ unset VIRTUAL_ENV
 export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
 
 PACKAGES_DIR="$(pwd)/.python_packages/lib/site-packages"
+DEPS_MARKER="$(pwd)/.python_packages/.deps_ok"
 
 python_deps_ok() {
-  local dir="$1"
-  [ -f "$dir/django/__init__.py" ] \
-    && [ -d "$dir/asgiref" ] \
-    && [ -d "$dir/gunicorn" ] \
-    && [ -d "$dir/rest_framework" ]
+  [ -f "$DEPS_MARKER" ] || return 1
+  PYTHONPATH="$PACKAGES_DIR" python -c "import django, asgiref, gunicorn, rest_framework" 2>/dev/null
 }
 
-if ! python_deps_ok "$PACKAGES_DIR"; then
+if ! python_deps_ok; then
   echo "== TccConex ERP: instalando dependências Python =="
   rm -rf "$(pwd)/.python_packages"
   mkdir -p "$PACKAGES_DIR"
   python -m pip install --no-cache-dir -r requirements.txt --target "$PACKAGES_DIR"
+  PYTHONPATH="$PACKAGES_DIR" python -c "import django, asgiref, gunicorn, rest_framework"
+  touch "$DEPS_MARKER"
+  echo "== TccConex ERP: dependências Python OK =="
 fi
 
 export PYTHONPATH="${PACKAGES_DIR}:${PYTHONPATH:-}"
