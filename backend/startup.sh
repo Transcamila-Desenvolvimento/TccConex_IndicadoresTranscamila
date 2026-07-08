@@ -1,12 +1,14 @@
 #!/bin/bash
-# Azure App Service (Linux) — deps instaladas NO container (GLIBC compatível).
-# Portal: Startup Command = bash startup.sh
+# Azure App Service (Linux) — deps no container (GLIBC compatível), cache persistente.
+# Portal / CLI: Startup Command = bash startup.sh
+# NÃO use bash -c longo no portal — este script já faz tudo.
 set -e
 
-echo "== TccConex ERP startup.sh v4 (cache no container, sem vendor do CI) =="
+echo "== TccConex ERP startup.sh v5 =="
 export PYTHONUNBUFFERED=1
 cd "$(dirname "$0")"
 
+# Pacotes do CI (vendor) quebram no Azure (GLIBC). Oryx também polui estes paths.
 rm -rf "$(pwd)/antenv" "$(pwd)/.python_packages" "$(pwd)/vendor" 2>/dev/null || true
 unset VIRTUAL_ENV PYTHONPATH
 export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
@@ -17,7 +19,10 @@ REQ_HASH_FILE="${CACHE_ROOT}/.requirements_sha256"
 
 python_deps_ok() {
   [ -d "$CACHE_DIR" ] || return 1
-  PYTHONPATH="$CACHE_DIR" python -c "import django, asgiref, gunicorn, rest_framework, cryptography" 2>/dev/null
+  PYTHONPATH="$CACHE_DIR" python -c "
+import django, asgiref, gunicorn, rest_framework, cryptography
+from cryptography.hazmat.bindings._rust import exceptions  # noqa: F401
+" 2>/dev/null
 }
 
 requirements_changed() {
@@ -30,10 +35,14 @@ requirements_changed() {
 if python_deps_ok && ! requirements_changed; then
   echo "== TccConex ERP: deps em cache (/home/site/python_packages) =="
 else
-  echo "== TccConex ERP: instalando deps no container (compatível com GLIBC do Azure) =="
+  echo "== TccConex ERP: instalando deps no container (GLIBC do Azure) =="
+  rm -rf "$CACHE_ROOT"
   mkdir -p "$CACHE_DIR"
   python -m pip install --no-cache-dir -r requirements.txt --target "$CACHE_DIR"
-  PYTHONPATH="$CACHE_DIR" python -c "import django, asgiref, gunicorn, rest_framework, cryptography"
+  PYTHONPATH="$CACHE_DIR" python -c "
+import django, asgiref, gunicorn, rest_framework, cryptography
+from cryptography.hazmat.bindings._rust import exceptions  # noqa: F401
+"
   sha256sum requirements.txt | awk '{print $1}' > "$REQ_HASH_FILE"
   echo "== TccConex ERP: deps instaladas em cache =="
 fi
@@ -41,6 +50,7 @@ fi
 export PYTHONPATH="$CACHE_DIR"
 echo "== TccConex ERP: PYTHONPATH=$PYTHONPATH =="
 
+# Schema já no Postgres. Novas migrations: RUN_STARTUP_MIGRATE=True ou SSH manual.
 if [ "$RUN_STARTUP_MIGRATE" = "True" ]; then
   echo "== TccConex ERP: aplicando migrations =="
   python manage.py migrate --noinput || echo "== AVISO: migrate falhou; seguindo com gunicorn =="

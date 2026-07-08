@@ -10,7 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  AZURE_WEBAPP_NAME: tccconex-erp # nome do App Service na Azure (msdeploySite do publish profile)
+  AZURE_WEBAPP_NAME: tccconex-erp # nome do App Service (publish profile)
+  AZURE_RESOURCE_GROUP: tccconex-erp # Resource Group real no portal (NAO usar rg-tccconex-erp)
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
 
@@ -59,12 +60,31 @@ jobs:
       - name: Empacotar artefato de deploy
         run: |
           cd backend
+          rm -rf vendor antenv .python_packages
           zip -r ../release.zip . \
             -x "venv/*" -x "venv_local/*" -x "antenv/*" \
             -x ".python_packages/*" -x "__pycache__/*" -x "*/__pycache__/*" \
             -x "tmp/*" -x "media/*" -x "scratch/*" -x "*.bak" -x "db.sqlite3" \
             -x "vendor/*"
           ls -lh ../release.zip
+
+      - name: Validar zip (sem vendor/deps — evita GLIBC quebrado no Azure)
+        run: |
+          set -e
+          unzip -l release.zip | tee /tmp/zip-list.txt
+          if grep -qE ' vendor/' /tmp/zip-list.txt; then
+            echo "::error::vendor/ no zip — pacotes do CI quebram no Azure (GLIBC). Remova vendor/."
+            exit 1
+          fi
+          if grep -qE ' antenv/' /tmp/zip-list.txt; then
+            echo "::error::antenv/ no zip — venv do CI quebra no container."
+            exit 1
+          fi
+          if ! grep -qE ' startup\.sh$' /tmp/zip-list.txt; then
+            echo "::error::startup.sh ausente no zip."
+            exit 1
+          fi
+          echo "Zip OK: sem vendor/antenv, startup.sh presente."
 
       - name: Deploy no Azure App Service
         uses: azure/webapps-deploy@v3
