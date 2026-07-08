@@ -45,11 +45,12 @@ Write-Host "  OK (Oryx build off, porta 8000, timeout boot 900s)." -ForegroundCo
 
 Write-Host ""
 Write-Host "[4/5] Health check -> /health/" -ForegroundColor Yellow
-az webapp config set --resource-group $ResourceGroup --name $AppName `
-    --generic-configurations '{"healthCheckPath": "/health/"}' 2>$null
-if ($LASTEXITCODE -eq 0) {
+try {
+    az rest --method PATCH `
+        --uri "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$AppName/config/web?api-version=2022-03-01" `
+        --body '{"properties":{"healthCheckPath":"/health/"}}' | Out-Null
     Write-Host "  OK." -ForegroundColor Green
-} else {
+} catch {
     Write-Host "  Configure manualmente: Monitoring -> Health check -> /health/" -ForegroundColor DarkYellow
 }
 
