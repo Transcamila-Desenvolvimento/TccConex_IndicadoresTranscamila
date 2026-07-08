@@ -6,23 +6,36 @@ set -e
 
 # Venv antigo (antenv) gerado no CI quebra no container Azure (GLIBC/symlinks).
 rm -rf "$(pwd)/antenv" 2>/dev/null || true
+# Instalação legada dentro do wwwroot — deploy (clean) pode corromper; não usar mais.
+rm -rf "$(pwd)/.python_packages" 2>/dev/null || true
 unset VIRTUAL_ENV
 export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
 
-PACKAGES_DIR="$(pwd)/.python_packages/lib/site-packages"
-DEPS_MARKER="$(pwd)/.python_packages/.deps_ok"
+# Fora do wwwroot: sobrevive a zip deploy com clean:true (só wwwroot é substituído).
+PACKAGES_ROOT="/home/site/python_packages"
+PACKAGES_DIR="${PACKAGES_ROOT}/lib/site-packages"
+DEPS_MARKER="${PACKAGES_ROOT}/.deps_ok"
+REQ_HASH_FILE="${PACKAGES_ROOT}/.requirements_sha256"
 
 python_deps_ok() {
   [ -f "$DEPS_MARKER" ] || return 1
   PYTHONPATH="$PACKAGES_DIR" python -c "import django, asgiref, gunicorn, rest_framework" 2>/dev/null
 }
 
-if ! python_deps_ok; then
+requirements_changed() {
+  [ ! -f "$REQ_HASH_FILE" ] && return 0
+  local current
+  current=$(sha256sum requirements.txt | awk '{print $1}')
+  [ "$(cat "$REQ_HASH_FILE")" != "$current" ]
+}
+
+if ! python_deps_ok || requirements_changed; then
   echo "== TccConex ERP: instalando dependências Python =="
-  rm -rf "$(pwd)/.python_packages"
+  rm -rf "$PACKAGES_ROOT"
   mkdir -p "$PACKAGES_DIR"
   python -m pip install --no-cache-dir -r requirements.txt --target "$PACKAGES_DIR"
   PYTHONPATH="$PACKAGES_DIR" python -c "import django, asgiref, gunicorn, rest_framework"
+  sha256sum requirements.txt | awk '{print $1}' > "$REQ_HASH_FILE"
   touch "$DEPS_MARKER"
   echo "== TccConex ERP: dependências Python OK =="
 fi
