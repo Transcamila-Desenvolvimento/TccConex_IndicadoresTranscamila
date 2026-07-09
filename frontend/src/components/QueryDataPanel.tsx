@@ -22,6 +22,11 @@ interface QueryDataPanelProps {
    * diferentes em sequência. Por padrão, segue `variant !== 'compact'`.
    */
   fullPageLoader?: boolean;
+  /**
+   * `inline` — faixa acima do conteúdo (padrão legado).
+   * `overlay` — sobrepõe o conteúdo sem deslocar o layout.
+   */
+  refreshVariant?: 'inline' | 'overlay';
   children: React.ReactNode;
 }
 
@@ -37,6 +42,7 @@ const QueryDataPanel: React.FC<QueryDataPanelProps> = ({
   className,
   variant = 'page',
   fullPageLoader,
+  refreshVariant = 'inline',
   children,
 }) => {
   const { showInitialLoader, showRefreshing, showError } = useAsyncQueryState(query);
@@ -71,16 +77,31 @@ const QueryDataPanel: React.FC<QueryDataPanelProps> = ({
       className={[
         className,
         variant === 'page' ? 'async-query-content--page' : '',
-        showRefreshing ? 'async-query-content async-query-content--refreshing' : 'async-query-content',
+        refreshVariant === 'overlay' ? 'async-query-content--overlay-host' : '',
+        showRefreshing && refreshVariant === 'overlay'
+          ? 'async-query-content async-query-content--refreshing-overlay'
+          : showRefreshing
+            ? 'async-query-content async-query-content--refreshing'
+            : 'async-query-content',
       ].filter(Boolean).join(' ')}
     >
-      {showRefreshing && (
+      {showRefreshing && refreshVariant === 'overlay' && (
+        <div className="async-query-refresh-overlay" role="status" aria-live="polite" aria-busy="true">
+          <div className="async-query-refresh-card">
+            <AsyncQuerySpinner />
+            <span>{refreshingMessage}</span>
+          </div>
+        </div>
+      )}
+      {showRefreshing && refreshVariant === 'inline' && (
         <div className="async-query-loading async-query-loading--inline" role="status" aria-live="polite">
           <AsyncQuerySpinner />
           <span>{refreshingMessage}</span>
         </div>
       )}
-      {children}
+      <div className={showRefreshing && refreshVariant === 'overlay' ? 'async-query-content-body--dimmed' : undefined}>
+        {children}
+      </div>
     </div>
   );
 };

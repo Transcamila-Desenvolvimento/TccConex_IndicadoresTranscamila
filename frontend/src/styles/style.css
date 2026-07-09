@@ -4767,6 +4767,69 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   pointer-events: none;
 }
 
+.async-query-content--overlay-host {
+  position: relative;
+  min-height: 220px;
+}
+
+.async-query-content--refreshing-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.async-query-refresh-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(248, 250, 252, 0.55);
+  backdrop-filter: blur(2px);
+  border-radius: 12px;
+  animation: async-query-overlay-in 0.18s ease;
+}
+
+.async-query-refresh-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.1);
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.async-query-refresh-card .async-query-spinner {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
+.async-query-content-body--dimmed {
+  transition: opacity 0.18s ease, filter 0.18s ease;
+}
+
+.async-query-content--refreshing-overlay .async-query-content-body--dimmed {
+  opacity: 0.38;
+  filter: saturate(0.85);
+  pointer-events: none;
+  user-select: none;
+}
+
+@keyframes async-query-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* Variante "page": preserva a cadeia flex do container pai para que a
    tabela role internamente e a barra de paginação permaneça visível,
    mesmo com muitos registros carregados. */

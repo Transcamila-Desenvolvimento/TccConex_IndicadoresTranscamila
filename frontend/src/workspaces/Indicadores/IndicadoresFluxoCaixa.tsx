@@ -459,6 +459,7 @@ const IndicadoresFluxoCaixa: React.FC = () => {
         query={cashflowQuery}
         variant="compact"
         fullPageLoader
+        refreshVariant="overlay"
         loadingMessage="Carregando projeção de caixa..."
         refreshingMessage="Atualizando projeção..."
         errorMessage="Não foi possível carregar o fluxo de caixa. Tente novamente."
