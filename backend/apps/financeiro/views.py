@@ -239,10 +239,12 @@ class BillingRecordViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             return None
         return super().paginate_queryset(queryset)
 
-    def create(self, request, *args, **kwargs):
-        return Response(
-            {'detail': 'Criação manual não permitida. Use importação de relatório.'},
-            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+    def perform_create(self, serializer):
+        record = serializer.save()
+        record_audit(
+            self.request.user,
+            'financeiro.faturamento.criado',
+            f'Faturamento #{record.pk} ({record.branch}, {record.reference_date}) — R$ {record.value}.',
         )
 
     def perform_update(self, serializer):

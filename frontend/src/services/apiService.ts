@@ -671,6 +671,9 @@ export const apiService = {
     const response = await api.post('/api/financeiro/billing/import_xml/', form, {
       timeout: 120000,
       validateStatus: (s) => s === 200 || s === 202 || s === 400,
+      headers: {
+        'X-Prothon-Environment': 'Financeiro',
+      },
     });
     const { data, status: httpStatus } = response;
     if (httpStatus === 202 && data.taskId) {
@@ -679,13 +682,30 @@ export const apiService = {
     return data;
   },
 
+  async createBillingRecord(payload: Omit<BillingRecord, 'id' | 'trend'>): Promise<BillingRecord> {
+    const { data } = await api.post('/api/financeiro/billing/', payload, {
+      headers: {
+        'X-Prothon-Environment': 'Financeiro',
+      },
+    });
+    return normalizeBillingRecord(data);
+  },
+
   async updateBillingRecord(id: number, payload: Partial<Omit<BillingRecord, 'id'>>): Promise<BillingRecord> {
-    const { data } = await api.patch(`/api/financeiro/billing/${id}/`, payload);
+    const { data } = await api.patch(`/api/financeiro/billing/${id}/`, payload, {
+      headers: {
+        'X-Prothon-Environment': 'Financeiro',
+      },
+    });
     return normalizeBillingRecord(data);
   },
 
   async deleteBillingRecord(id: number): Promise<void> {
-    await api.delete(`/api/financeiro/billing/${id}/`);
+    await api.delete(`/api/financeiro/billing/${id}/`, {
+      headers: {
+        'X-Prothon-Environment': 'Financeiro',
+      },
+    });
   },
 
   async getCashAdjustments(params: AdjustmentQueryParams = {}): Promise<PaginatedResponse<CashAdjustment>> {

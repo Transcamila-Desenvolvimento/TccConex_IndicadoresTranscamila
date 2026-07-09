@@ -5,6 +5,7 @@ import {
   useBillingRecords,
   useExportBillingRecords,
   useImportBillingXml,
+  useCreateBillingRecord,
   useUpdateBillingRecord,
   useDeleteBillingRecord,
 } from '../../hooks/useFinanceiroBilling';
@@ -16,6 +17,7 @@ const BRANCH_OPTIONS = ['Ibiporã', 'Rondonópolis', 'Barueri', 'Paranaguá', 'A
 
 const FinanceiroBilling: React.FC = () => {
   const importBillingXml = useImportBillingXml();
+  const createBillingRecord = useCreateBillingRecord();
   const updateBillingRecord = useUpdateBillingRecord();
   const deleteBillingRecord = useDeleteBillingRecord();
   const exportBillingRecords = useExportBillingRecords();
@@ -61,13 +63,13 @@ const FinanceiroBilling: React.FC = () => {
   const [importSuccess, setImportSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Edit Modal States
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  // Form Modal States (criar / editar)
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<BillingRecord | null>(null);
-  const [editDate, setEditDate] = useState('');
-  const [editBranch, setEditBranch] = useState('');
-  const [editValue, setEditValue] = useState('');
-  const [editNotesCount, setEditNotesCount] = useState('');
+  const [formDate, setFormDate] = useState('');
+  const [formBranch, setFormBranch] = useState(BRANCH_OPTIONS[0]);
+  const [formValue, setFormValue] = useState('');
+  const [formNotesCount, setFormNotesCount] = useState('');
 
 
   // Close modal when clicking on backdrop
@@ -146,38 +148,57 @@ const FinanceiroBilling: React.FC = () => {
   };
 
 
-  const handleOpenEditModal = (record: BillingRecord) => {
-    setEditingRecord(record);
-    setEditDate(record.date);
-    setEditBranch(record.branch);
-    setEditValue(record.value.toString());
-    setEditNotesCount(record.notesCount.toString());
-    setIsEditModalOpen(true);
+  const handleOpenCreateModal = () => {
+    setEditingRecord(null);
+    setFormDate(new Date().toISOString().slice(0, 10));
+    setFormBranch(BRANCH_OPTIONS[0]);
+    setFormValue('');
+    setFormNotesCount('0');
+    setIsFormModalOpen(true);
   };
 
-  const handleSubmitEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingRecord) return;
+  const handleOpenEditModal = (record: BillingRecord) => {
+    setEditingRecord(record);
+    setFormDate(record.date);
+    setFormBranch(record.branch);
+    setFormValue(record.value.toString());
+    setFormNotesCount(record.notesCount.toString());
+    setIsFormModalOpen(true);
+  };
 
-    updateBillingRecord.mutate(
-      {
-        id: editingRecord.id,
-        payload: {
-          date: editDate,
-          branch: editBranch,
-          value: parseFloat(editValue) || 0,
-          notesCount: parseInt(editNotesCount, 10) || 0,
-        },
+  const handleSubmitForm = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const payload = {
+      date: formDate,
+      branch: formBranch,
+      value: parseFloat(formValue) || 0,
+      notesCount: parseInt(formNotesCount, 10) || 0,
+    };
+
+    if (editingRecord) {
+      updateBillingRecord.mutate(
+        { id: editingRecord.id, payload },
+        {
+          onSuccess: () => {
+            setIsFormModalOpen(false);
+            setEditingRecord(null);
+            alert('Registro de faturamento atualizado com sucesso!');
+          },
+          onError: () => alert('Erro ao atualizar registro. Verifique se já existe faturamento para esta filial e data.'),
+        }
+      );
+      return;
+    }
+
+    createBillingRecord.mutate(payload, {
+      onSuccess: () => {
+        setIsFormModalOpen(false);
+        setCurrentPage(1);
+        alert('Faturamento incluído manualmente com sucesso!');
       },
-      {
-        onSuccess: () => {
-          setIsEditModalOpen(false);
-          setEditingRecord(null);
-          alert('Registro de faturamento atualizado com sucesso!');
-        },
-        onError: () => alert('Erro ao atualizar registro. Verifique se já existe faturamento para esta filial e data.'),
-      }
-    );
+      onError: () => alert('Erro ao incluir faturamento. Verifique se já existe registro para esta filial e data.'),
+    });
   };
 
   const handleDelete = (id: number) => {
@@ -409,11 +430,22 @@ const FinanceiroBilling: React.FC = () => {
               </>
             )}
           </button>
+          <button
+            type="button"
+            className="reports-action-btn primary"
+            style={{ backgroundColor: '#118CC4', borderColor: '#118CC4', display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+            onClick={handleOpenCreateModal}
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            <span>Incluir Faturamento</span>
+          </button>
           <button 
             type="button"
-            className="reports-action-btn primary" 
+            className="reports-action-btn secondary" 
             id="btn-billing-import" 
-            style={{ backgroundColor: '#118CC4', borderColor: '#118CC4', display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
             onClick={() => setIsImportModalOpen(true)}
           >
             <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -803,42 +835,44 @@ const FinanceiroBilling: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL: EDITAR FATURAMENTO */}
-      {isEditModalOpen && editingRecord && (
+      {/* MODAL: INCLUIR / EDITAR FATURAMENTO */}
+      {isFormModalOpen && (
         <div
           className="search-backdrop"
-          id="billing-edit-modal"
+          id="billing-form-modal"
           style={{ display: 'flex', zIndex: 3000 }}
           onClick={(e) => {
-            if (e.target === e.currentTarget) setIsEditModalOpen(false);
+            if (e.target === e.currentTarget) setIsFormModalOpen(false);
           }}
         >
           <div className="search-modal-card" style={{ width: '500px' }}>
             <div className="search-input-wrapper" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#1e293b' }}>Editar Faturamento</h3>
-              <span className="search-close-key" style={{ cursor: 'pointer', fontSize: '12px' }} onClick={() => setIsEditModalOpen(false)}>Fechar (X)</span>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#1e293b' }}>
+                {editingRecord ? 'Editar Faturamento' : 'Incluir Faturamento Manual'}
+              </h3>
+              <span className="search-close-key" style={{ cursor: 'pointer', fontSize: '12px' }} onClick={() => setIsFormModalOpen(false)}>Fechar (X)</span>
             </div>
 
-            <form style={{ padding: '20px 24px 24px 24px' }} onSubmit={handleSubmitEdit}>
+            <form style={{ padding: '20px 24px 24px 24px' }} onSubmit={handleSubmitForm}>
               <div style={{ display: 'flex', gap: '15px', marginBottom: '14px' }}>
                 <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="billing-edit-date">Data</label>
+                  <label htmlFor="billing-form-date">Data</label>
                   <input
                     type="date"
-                    id="billing-edit-date"
+                    id="billing-form-date"
                     required
-                    value={editDate}
-                    onChange={(e) => setEditDate(e.target.value)}
+                    value={formDate}
+                    onChange={(e) => setFormDate(e.target.value)}
                     style={{ background: '#f8fafc' }}
                   />
                 </div>
                 <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="billing-edit-branch">Filial</label>
+                  <label htmlFor="billing-form-branch">Filial</label>
                   <select
-                    id="billing-edit-branch"
+                    id="billing-form-branch"
                     required
-                    value={editBranch}
-                    onChange={(e) => setEditBranch(e.target.value)}
+                    value={formBranch}
+                    onChange={(e) => setFormBranch(e.target.value)}
                   >
                     {BRANCH_OPTIONS.map((branch) => (
                       <option key={branch} value={branch}>{branch}</option>
@@ -849,28 +883,28 @@ const FinanceiroBilling: React.FC = () => {
 
               <div style={{ display: 'flex', gap: '15px', marginBottom: '14px' }}>
                 <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="billing-edit-value">Valor Faturado (R$)</label>
+                  <label htmlFor="billing-form-value">Valor Faturado (R$)</label>
                   <input
                     type="number"
-                    id="billing-edit-value"
+                    id="billing-form-value"
                     step="0.01"
                     min="0"
                     required
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
+                    value={formValue}
+                    onChange={(e) => setFormValue(e.target.value)}
                     autoComplete="off"
                   />
                 </div>
                 <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="billing-edit-notes">Qtd. Doctos.</label>
+                  <label htmlFor="billing-form-notes">Qtd. Doctos.</label>
                   <input
                     type="number"
-                    id="billing-edit-notes"
+                    id="billing-form-notes"
                     min="0"
                     step="1"
                     required
-                    value={editNotesCount}
-                    onChange={(e) => setEditNotesCount(e.target.value)}
+                    value={formNotesCount}
+                    onChange={(e) => setFormNotesCount(e.target.value)}
                     autoComplete="off"
                   />
                 </div>
@@ -880,7 +914,7 @@ const FinanceiroBilling: React.FC = () => {
                 <button
                   type="button"
                   className="reports-action-btn secondary"
-                  onClick={() => setIsEditModalOpen(false)}
+                  onClick={() => setIsFormModalOpen(false)}
                   style={{ fontSize: '12.5px', height: '36px', borderColor: '#cbd5e1' }}
                 >
                   Cancelar
@@ -888,9 +922,10 @@ const FinanceiroBilling: React.FC = () => {
                 <button
                   type="submit"
                   className="reports-action-btn primary"
+                  disabled={createBillingRecord.isPending || updateBillingRecord.isPending}
                   style={{ backgroundColor: '#118CC4', borderColor: '#118CC4', fontSize: '12.5px', height: '36px' }}
                 >
-                  Salvar Alterações
+                  {editingRecord ? 'Salvar Alterações' : 'Incluir Faturamento'}
                 </button>
               </div>
             </form>

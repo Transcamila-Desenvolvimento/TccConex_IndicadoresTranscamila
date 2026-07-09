@@ -141,6 +141,43 @@ class FinanceiroReportTests(TestCase):
         self.assertEqual(len(response.data['results']), 10)
         self.assertIn('trend', response.data['results'][0])
 
+    def test_billing_manual_create(self):
+        response = self.client.post(
+            '/api/financeiro/billing/',
+            {
+                'date': '2026-07-09',
+                'branch': 'Ibiporã',
+                'value': '1500.50',
+                'notesCount': 12,
+            },
+            format='json',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['branch'], 'Ibiporã')
+        self.assertTrue(AuditLog.objects.filter(action='financeiro.faturamento.criado').exists())
+
+    def test_billing_manual_create_rejects_duplicate_branch_date(self):
+        from apps.financeiro.models import BillingRecord
+        BillingRecord.objects.create(
+            reference_date=date(2026, 7, 9),
+            branch='Barueri',
+            value=Decimal('100'),
+            notes_count=1,
+        )
+        response = self.client.post(
+            '/api/financeiro/billing/',
+            {
+                'date': '2026-07-09',
+                'branch': 'Barueri',
+                'value': '200',
+                'notesCount': 2,
+            },
+            format='json',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_normalize_filial_preserves_code(self):
         self.assertEqual(_normalize_filial(1), '01')
         self.assertEqual(_normalize_filial('03'), '03')

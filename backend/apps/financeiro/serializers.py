@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from .billing_import_service import BILLING_BRANCHES
 from .models import (
     AgingTitulo,
     BalanceHistoryEntry,
@@ -86,6 +87,10 @@ class BillingRecordSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         ref_date = attrs.get('reference_date') or getattr(self.instance, 'reference_date', None)
         branch = attrs.get('branch') or getattr(self.instance, 'branch', None)
+        if branch and branch not in BILLING_BRANCHES:
+            raise serializers.ValidationError(
+                {'branch': f'Filial inválida. Use uma de: {", ".join(BILLING_BRANCHES)}.'}
+            )
         if ref_date and branch:
             qs = BillingRecord.objects.filter(reference_date=ref_date, branch=branch)
             if self.instance:

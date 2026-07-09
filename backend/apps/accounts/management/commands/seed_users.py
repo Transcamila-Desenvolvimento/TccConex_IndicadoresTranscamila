@@ -28,7 +28,7 @@ INITIAL_USERS = [
         'environments': ['Administração', 'Financeiro', 'Indicadores', 'Compras', 'RH'],
         'filiais': ADMIN_FILIAIS,
         'is_staff': True,
-        'is_superuser': False,
+        'is_superuser': True,
     },
     {
         'username': 'ana.operador',
