@@ -4,7 +4,7 @@
 # NÃO use bash -c longo no portal — este script já faz tudo.
 set -e
 
-echo "== TccConex ERP startup.sh v5 =="
+echo "== TccConex ERP startup.sh v6 =="
 export PYTHONUNBUFFERED=1
 cd "$(dirname "$0")"
 
@@ -20,7 +20,7 @@ REQ_HASH_FILE="${CACHE_ROOT}/.requirements_sha256"
 python_deps_ok() {
   [ -d "$CACHE_DIR" ] || return 1
   PYTHONPATH="$CACHE_DIR" python -c "
-import django, asgiref, gunicorn, rest_framework, cryptography
+import django, asgiref, gunicorn, rest_framework, cryptography, xlrd
 from cryptography.hazmat.bindings._rust import exceptions  # noqa: F401
 " 2>/dev/null
 }
@@ -36,11 +36,14 @@ if python_deps_ok && ! requirements_changed; then
   echo "== TccConex ERP: deps em cache (/home/site/python_packages) =="
 else
   echo "== TccConex ERP: instalando deps no container (GLIBC do Azure) =="
-  rm -rf "$CACHE_ROOT"
+  if [ -d "$CACHE_ROOT" ]; then
+    chmod -R u+w "$CACHE_ROOT" 2>/dev/null || true
+    rm -rf "$CACHE_ROOT" 2>/dev/null || true
+  fi
   mkdir -p "$CACHE_DIR"
   python -m pip install --no-cache-dir -r requirements.txt --target "$CACHE_DIR"
   PYTHONPATH="$CACHE_DIR" python -c "
-import django, asgiref, gunicorn, rest_framework, cryptography
+import django, asgiref, gunicorn, rest_framework, cryptography, xlrd
 from cryptography.hazmat.bindings._rust import exceptions  # noqa: F401
 "
   sha256sum requirements.txt | awk '{print $1}' > "$REQ_HASH_FILE"

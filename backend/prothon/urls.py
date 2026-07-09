@@ -26,8 +26,8 @@ urlpatterns = [
 
 def spa_index(request, *args, **kwargs):
     """Fallback de SPA: devolve o index.html do build do React para as rotas
-    do React Router (ex.: /financeiro/reports). Não afeta /api/, /admin/ ou /media/,
-    que são resolvidas pelas rotas acima antes desta."""
+    do React Router (ex.: /financeiro/reports). Não afeta /api/, /admin/, /media/
+    ou /assets/, que são resolvidas pelas rotas acima antes desta."""
     index_path = settings.FRONTEND_DIST_DIR / 'index.html'
     if not index_path.exists():
         return HttpResponseNotFound(
@@ -37,5 +37,10 @@ def spa_index(request, *args, **kwargs):
 
 
 urlpatterns += [
-    re_path(r'^(?!api/|admin/|media/|static/).*$', spa_index),
+    re_path(
+        r'^assets/(?P<path>.*)$',
+        static_serve,
+        {'document_root': settings.FRONTEND_DIST_DIR / 'assets'},
+    ),
+    re_path(r'^(?!api/|admin/|media/|static/|assets/).*$', spa_index),
 ]
