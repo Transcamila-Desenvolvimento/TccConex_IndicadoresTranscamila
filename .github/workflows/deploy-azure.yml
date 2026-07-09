@@ -57,6 +57,10 @@ jobs:
           DJANGO_SECRET_KEY: build-time-only-not-used-em-producao
         run: python manage.py collectstatic --noinput
 
+      - name: Validar startup.sh (sintaxe bash)
+        working-directory: backend
+        run: bash -n startup.sh
+
       - name: Empacotar artefato de deploy
         run: |
           cd backend
