@@ -14,7 +14,7 @@ from .async_imports import celery_enabled, save_upload
 
 from .batch_service import create_import_batch
 from .constants import MAX_REPORT_BATCHES
-from .billing_import_service import import_billing_xml
+from .billing_import_service import import_billing_file
 from .import_service import import_report_file
 from .models import (
     AgingTitulo,
@@ -280,12 +280,12 @@ class BillingRecordViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             )
             return Response({'async': True, 'taskId': task.id}, status=status.HTTP_202_ACCEPTED)
 
-        result = import_billing_xml(file_bytes)
+        result = import_billing_file(file_bytes, upload.name)
         if result['success']:
             record_audit(
                 request.user,
                 'financeiro.faturamento.importado',
-                f'Importação XML ({upload.name}) — R$ {result["totalValue"]:.2f} em {result["totalNotes"]} nota(s).',
+                f'Importação de faturamento ({upload.name}) — R$ {result["totalValue"]:.2f} em {result["totalNotes"]} nota(s).',
             )
         status_code = status.HTTP_200_OK if result['success'] else status.HTTP_400_BAD_REQUEST
         return Response(result, status=status_code)

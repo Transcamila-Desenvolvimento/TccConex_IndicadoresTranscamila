@@ -737,6 +737,28 @@ class BillingImportBranchTests(TestCase):
         )
         self.assertEqual(parsed['10/06/2026']['Armazém']['count'], 1)
 
+    def test_parse_billing_html_table_uses_valor_frete_and_transportadora(self):
+        from apps.financeiro.billing_import_service import import_billing_file
+
+        html = (
+            '<html><table><tr>'
+            '<th>Transportadora</th><th>Valor Frete</th><th>Emissão CT-e</th><th>Coleta</th><th>Usuário cadastro</th>'
+            '</tr><tr>'
+            '<td>09 - TRANSCAMILA - BARUERI</td><td>1.000,50</td><td>10/06/2026</td><td>09/06/2026</td><td>OPERADOR</td>'
+            '</tr><tr>'
+            '<td>10 - TRANSCAMILA - RONDONOPOLIS</td><td>500,00</td><td></td><td>10/06/2026</td><td>OPERADOR</td>'
+            '</tr></table></html>'
+        )
+        parsed = import_billing_file(html.encode('latin-1'), 'relatorio.xls')
+        self.assertTrue(parsed['success'])
+        self.assertEqual(parsed['totalNotes'], 2)
+        self.assertEqual(parsed['totalValue'], 1500.5)
+        from apps.financeiro.models import BillingRecord
+        barueri = BillingRecord.objects.get(reference_date=date(2026, 6, 10), branch='Barueri')
+        armazem = BillingRecord.objects.get(reference_date=date(2026, 6, 10), branch='Armazém')
+        self.assertEqual(barueri.value, Decimal('1000.50'))
+        self.assertEqual(armazem.value, Decimal('500.00'))
+
 
 class CeleryImportTaskTests(TestCase):
     """As tasks são importadas em views.py e devem executar (via broker ou

@@ -38,7 +38,7 @@ const QUICK_LINKS = [
   },
   {
     title: 'Faturamento',
-    description: 'Acompanhe faturamento diário por filial, inclua manualmente ou importe XML.',
+    description: 'Acompanhe faturamento diário por filial, inclua manualmente ou importe Excel/XML.',
     path: '/financeiro/billing',
     badge: 'Fluxo de Caixa',
     icon: (
