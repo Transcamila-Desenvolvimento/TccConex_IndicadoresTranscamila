@@ -157,7 +157,8 @@ def _resolve_billing_columns(headers: list[str]) -> dict[str, int | None]:
 
 
 def _resolve_row_date(cells: list[str], columns: dict[str, int | None]) -> str:
-    for key in ('emissao', 'data_coleta', 'data_cadastro'):
+    # Faturamento diário segue a data de Coleta (como no ERP); Emissão CT-e é fallback.
+    for key in ('data_coleta', 'emissao', 'data_cadastro'):
         index = columns.get(key)
         if index is None or index >= len(cells):
             continue
@@ -200,7 +201,7 @@ def _parse_billing_tabular_rows(headers: list[str], rows: list[list]) -> dict[st
         )
     if columns.get('emissao') is None and columns.get('data_coleta') is None and columns.get('data_cadastro') is None:
         raise ValueError(
-            'Nenhuma coluna de data encontrada. Informe Emissão CT-e, Coleta ou Data cadastro.'
+            'Nenhuma coluna de data encontrada. Informe Coleta, Emissão CT-e ou Data cadastro.'
         )
 
     results: dict[str, dict[str, dict[str, Decimal | int]]] = {}
@@ -288,11 +289,15 @@ def parse_billing_xml(xml_text: str) -> dict[str, dict[str, dict[str, Decimal | 
     row_regex = re.compile(r'<Row>([\s\S]*?)</Row>', re.IGNORECASE)
 
     for row_content in row_regex.findall(xml_text):
+        coleta_match = re.search(r'<Coleta>(.*?)</Coleta>', row_content, re.IGNORECASE)
+        coleta_str = coleta_match.group(1).strip() if coleta_match else ''
+
         date_match = (
             re.search(r'<Emissão_x0020_CT_x002d_e>(.*?)</Emissão_x0020_CT_x002d_e>', row_content, re.IGNORECASE)
             or re.search(r'<Emiss.*_x002d_e>(.*?)</Emiss.*_x002d_e>', row_content, re.IGNORECASE)
         )
-        date_str = date_match.group(1).strip() if date_match else ''
+        emissao_str = date_match.group(1).strip() if date_match else ''
+        date_str = coleta_str or emissao_str
         if not date_str:
             continue
 

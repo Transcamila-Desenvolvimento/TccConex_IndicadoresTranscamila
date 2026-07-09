@@ -744,7 +744,7 @@ class BillingImportBranchTests(TestCase):
             '<html><table><tr>'
             '<th>Transportadora</th><th>Valor Frete</th><th>Emissão CT-e</th><th>Coleta</th><th>Usuário cadastro</th>'
             '</tr><tr>'
-            '<td>09 - TRANSCAMILA - BARUERI</td><td>1.000,50</td><td>10/06/2026</td><td>09/06/2026</td><td>OPERADOR</td>'
+            '<td>09 - TRANSCAMILA - BARUERI</td><td>1.000,50</td><td>10/06/2026</td><td>10/06/2026</td><td>OPERADOR</td>'
             '</tr><tr>'
             '<td>10 - TRANSCAMILA - RONDONOPOLIS</td><td>500,00</td><td></td><td>10/06/2026</td><td>OPERADOR</td>'
             '</tr></table></html>'
@@ -758,6 +758,38 @@ class BillingImportBranchTests(TestCase):
         armazem = BillingRecord.objects.get(reference_date=date(2026, 6, 10), branch='Armazém')
         self.assertEqual(barueri.value, Decimal('1000.50'))
         self.assertEqual(armazem.value, Decimal('500.00'))
+
+    def test_coleta_date_takes_priority_over_emissao_cte(self):
+        from apps.financeiro.billing_import_service import parse_billing_file
+
+        html = (
+            '<html><table><tr>'
+            '<th>Transportadora</th><th>Valor Frete</th><th>Coleta</th><th>Emissão CT-e</th>'
+            '</tr><tr>'
+            '<td>09 - TRANSCAMILA - BARUERI</td><td>100,00</td><td>07/07/2026</td><td>08/07/2026</td>'
+            '</tr></table></html>'
+        )
+        parsed = parse_billing_file(html.encode('latin-1'), 'relatorio.xls')
+        self.assertEqual(parsed['07/07/2026']['Barueri']['value'], Decimal('100'))
+        self.assertNotIn('08/07/2026', parsed)
+
+    def test_import_teste_xls_matches_erp_coleta_totals_for_08_07(self):
+        from pathlib import Path
+
+        from apps.financeiro.billing_import_service import parse_billing_file
+
+        sample = Path(r'S:\teste.xls')
+        if not sample.exists():
+            self.skipTest('S:\\teste.xls ausente neste ambiente')
+
+        parsed = parse_billing_file(sample.read_bytes(), 'teste.xls')
+        day = parsed['08/07/2026']
+        total_value = sum(day[branch]['value'] for branch in day)
+        total_notes = sum(day[branch]['count'] for branch in day)
+        self.assertEqual(total_notes, 25)
+        self.assertEqual(total_value, Decimal('215021.34'))
+        self.assertEqual(day['Paranaguá']['value'], Decimal('40831.12'))
+        self.assertEqual(day['Barueri']['count'], 22)
 
 
 class CeleryImportTaskTests(TestCase):

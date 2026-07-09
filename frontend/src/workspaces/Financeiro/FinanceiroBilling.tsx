@@ -726,7 +726,7 @@ const FinanceiroBilling: React.FC = () => {
                   Arraste seu relatório Excel (.xls, .xlsx) ou XML aqui
                 </p>
                 <p style={{ margin: '4px 0 0 0', fontSize: '11.5px', color: '#94a3b8' }}>
-                  O sistema usa a coluna <strong>Valor Frete</strong> e identifica a filial pela <strong>Transportadora</strong>
+                  O sistema usa a coluna <strong>Valor Frete</strong>, agrupa por <strong>Coleta</strong> e identifica a filial pela <strong>Transportadora</strong>
                 </p>
                 <input 
                   type="file" 
