@@ -67,7 +67,7 @@ const FinanceiroBilling: React.FC = () => {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<BillingRecord | null>(null);
   const [formDate, setFormDate] = useState('');
-  const [formBranch, setFormBranch] = useState(BRANCH_OPTIONS[0]);
+  const [formBranch, setFormBranch] = useState<string>(BRANCH_OPTIONS[0]);
   const [formValue, setFormValue] = useState('');
   const [formNotesCount, setFormNotesCount] = useState('');
 
