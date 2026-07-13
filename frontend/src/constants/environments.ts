@@ -3,7 +3,7 @@ export const ADMIN_ENVIRONMENT = 'Administração/Manutenção' as const;
 export const LEGACY_ADMIN_ENVIRONMENT = 'Administração' as const;
 
 /** Ordem canônica dos ambientes, crescente pelo código oficial (ver ENVIRONMENT_CODES). */
-export const ACTIVE_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Indicadores', 'Financeiro', 'Compras', 'RH'] as const;
+export const ACTIVE_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Indicadores', 'Financeiro', 'Compras', 'RH', 'Faturamento'] as const;
 
 export type ActiveEnvironment = (typeof ACTIVE_ENVIRONMENTS)[number];
 
@@ -14,6 +14,7 @@ export const ENVIRONMENT_CODES: Record<ActiveEnvironment, string> = {
   Financeiro: '02',
   Compras: '03',
   RH: '04',
+  Faturamento: '05',
 };
 
 export function normalizeEnvironment(env: string): string {

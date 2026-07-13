@@ -686,3 +686,120 @@ export interface RegistrarSaidaPayload {
   linhas: Array<{ itemId: string; quantidade: number }>;
 }
 
+// --- FATURAMENTO (Protocolos de envio de NF) TYPES ---
+
+export const PROTOCOLO_EXPEDICAO_OPTIONS = [
+  'Transcamila Ibiporã',
+  'Transcamila Barueri',
+  'Transcamila Paranaguá',
+  'Transcamila Rondonópolis',
+] as const;
+
+export type ProtocoloExpedicao = (typeof PROTOCOLO_EXPEDICAO_OPTIONS)[number];
+
+/** Quantidade máxima de expedições que podem ser combinadas em um único protocolo. */
+export const MAX_EXPEDICOES_POR_PROTOCOLO = 2;
+
+export interface FilialClienteProtocolo {
+  id: string;
+  nome: string;
+}
+
+export interface ClienteProtocolo {
+  id: string;
+  nome: string;
+  cnpj: string | null;
+  requerExpedicao: boolean;
+  exigeFilial: boolean;
+  filiais: FilialClienteProtocolo[];
+  emailsEnvio: string | null;
+  emailsCopia: string | null;
+  dataCriacao?: string;
+}
+
+export interface ProtocoloEnvio {
+  id: string;
+  protocoloNumero: string;
+  data: string;
+  clienteId?: string;
+  clienteNome: string;
+  clienteCnpj: string | null;
+  notaFiscal: string;
+  notasFiscais: string[];
+  notasFiliais: Record<string, string>;
+  /** Valor final combinado (ex.: "Transcamila Barueri/Ibiporã"), usado para exibição. */
+  expedicao: string | null;
+  /** Expedições selecionadas individualmente (até MAX_EXPEDICOES_POR_PROTOCOLO), para edição. */
+  expedicoes: ProtocoloExpedicao[];
+  usuarioNome: string;
+  dataCriacao?: string;
+  dataAtualizacao?: string;
+}
+
+export type ProtocoloOrdering = 'protocolo_asc' | 'protocolo_desc' | 'data_asc' | 'data_desc';
+
+export interface ProtocoloQueryParams extends ListQueryParams {
+  cliente?: string;
+  data?: string;
+  protocoloId?: string;
+  notaFiscal?: string;
+  usuario?: string;
+  ordering?: ProtocoloOrdering;
+}
+
+export interface CreateProtocoloPayload {
+  data: string;
+  clienteId: string;
+  notaFiscal: string;
+  notasFiliais?: Record<string, string>;
+  /** Até MAX_EXPEDICOES_POR_PROTOCOLO expedições selecionadas. */
+  expedicoes?: ProtocoloExpedicao[];
+}
+
+export interface UpdateProtocoloPayload {
+  data?: string;
+  clienteId?: string;
+  notaFiscal?: string;
+  notasFiliais?: Record<string, string>;
+  /** Até MAX_EXPEDICOES_POR_PROTOCOLO expedições selecionadas. */
+  expedicoes?: ProtocoloExpedicao[];
+}
+
+export interface ClienteProtocoloPayload {
+  nome: string;
+  cnpj?: string | null;
+  requerExpedicao?: boolean;
+  exigeFilial?: boolean;
+  emailsEnvio?: string | null;
+  emailsCopia?: string | null;
+  /** Usado apenas na criação: nomes de filiais a cadastrar junto com o cliente. */
+  filiaisIniciais?: string[];
+}
+
+export interface ProtocoloImportIssue {
+  label: string;
+  message: string;
+}
+
+export interface ProtocoloImportResult {
+  success: boolean;
+  dryRun: boolean;
+  fileName: string;
+  clienteId: number;
+  clienteNome: string;
+  sheetName?: string;
+  groupingMode?: 'grouped' | 'row_by_row';
+  created: number;
+  ignored: number;
+  warnings: ProtocoloImportIssue[];
+  errors: ProtocoloImportIssue[];
+  detail?: string;
+}
+
+export interface ProtocoloImportParams {
+  file: File;
+  clienteId: string;
+  dryRun?: boolean;
+  skipDuplicatas?: boolean;
+}
+

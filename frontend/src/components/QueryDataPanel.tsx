@@ -99,7 +99,12 @@ const QueryDataPanel: React.FC<QueryDataPanelProps> = ({
           <span>{refreshingMessage}</span>
         </div>
       )}
-      <div className={showRefreshing && refreshVariant === 'overlay' ? 'async-query-content-body--dimmed' : undefined}>
+      <div
+        className={[
+          variant === 'page' ? 'async-query-content-body--page' : undefined,
+          showRefreshing && refreshVariant === 'overlay' ? 'async-query-content-body--dimmed' : undefined,
+        ].filter(Boolean).join(' ') || undefined}
+      >
         {children}
       </div>
     </div>

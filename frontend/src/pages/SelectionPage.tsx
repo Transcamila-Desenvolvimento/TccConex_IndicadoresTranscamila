@@ -12,7 +12,7 @@ import {
 } from '../constants/environments';
 import logoImg from '../assets/Logo_TccConex.png';
 
-const GLOBAL_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH'];
+const GLOBAL_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento'];
 
 const NOTION_PROJECT_URL =
   'https://transcamila-miguel.notion.site/ebd//37322feb02fe8012ba34da103c4ef203';
@@ -27,6 +27,7 @@ const ENV_META: Record<string, { code: string; color: string; text: string }> = 
   Financeiro: { code: ENVIRONMENT_CODES.Financeiro, color: ENV_BADGE_COLOR, text: 'Módulo Financeiro' },
   Compras: { code: ENVIRONMENT_CODES.Compras, color: ENV_BADGE_COLOR, text: 'Módulo de Compras' },
   RH: { code: ENVIRONMENT_CODES.RH, color: ENV_BADGE_COLOR, text: 'Recursos Humanos' },
+  Faturamento: { code: ENVIRONMENT_CODES.Faturamento, color: ENV_BADGE_COLOR, text: 'Módulo de Faturamento' },
 };
 
 const formatLastLogin = (value: string | null) => {

@@ -5,7 +5,7 @@ from apps.accounts.constants import ALL_BRANCHES
 
 User = get_user_model()
 
-ADMIN_FILIAIS = {env: list(ALL_BRANCHES) for env in ['Financeiro', 'Indicadores', 'Compras', 'RH']}
+ADMIN_FILIAIS = {env: list(ALL_BRANCHES) for env in ['Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento']}
 
 INITIAL_USERS = [
     {
@@ -14,7 +14,7 @@ INITIAL_USERS = [
         'name': 'Administrador Geral',
         'role_id': '1',
         'status': 'ativo',
-        'environments': ['Administração', 'Financeiro', 'Indicadores', 'Compras', 'RH'],
+        'environments': ['Administração', 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento'],
         'filiais': ADMIN_FILIAIS,
         'is_staff': True,
         'is_superuser': True,
@@ -25,7 +25,7 @@ INITIAL_USERS = [
         'name': 'Miguel Ribeiro',
         'role_id': '1',
         'status': 'ativo',
-        'environments': ['Administração', 'Financeiro', 'Indicadores', 'Compras', 'RH'],
+        'environments': ['Administração', 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento'],
         'filiais': ADMIN_FILIAIS,
         'is_staff': True,
         'is_superuser': True,
@@ -36,11 +36,12 @@ INITIAL_USERS = [
         'name': 'Ana Silva',
         'role_id': '2',
         'status': 'ativo',
-        'environments': ['Financeiro', 'Indicadores', 'Compras', 'RH'],
+        'environments': ['Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento'],
         'filiais': {
             'Financeiro': ['Ibiporã (Matriz)'],
             'Indicadores': ['Ibiporã (Matriz)'],
             'Compras': ['Ibiporã (Matriz)'],
+            'Faturamento': ['Ibiporã (Matriz)'],
             'RH': ['Ibiporã (Matriz)'],
         },
         'is_staff': False,
@@ -52,11 +53,12 @@ INITIAL_USERS = [
         'name': 'João Souza',
         'role_id': '2',
         'status': 'ativo',
-        'environments': ['Financeiro', 'Indicadores', 'Compras', 'RH'],
+        'environments': ['Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento'],
         'filiais': {
             'Financeiro': ['Rondonópolis'],
             'Indicadores': ['Rondonópolis', 'Paranaguá'],
             'Compras': ['Rondonópolis', 'Paranaguá'],
+            'Faturamento': ['Rondonópolis', 'Paranaguá'],
             'RH': ['Rondonópolis', 'Paranaguá'],
         },
         'is_staff': False,

@@ -223,8 +223,10 @@ class CeleryTaskStatusView(ModuleScopedViewMixin, APIView):
 
 class BillingRecordViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     permission_module = 'Financeiro'
-    # Faturamento é consolidado — todas as filiais de billing (incl. Barueri, Armazém)
-    # ficam visíveis para qualquer usuário com acesso ao módulo Financeiro.
+    # Faturamento diário (billing) permanece no módulo Financeiro.
+    # Protocolos de envio de NF ficam no app/módulo Faturamento.
+    # Consolidado: todas as filiais de billing (incl. Barueri, Armazém) ficam
+    # visíveis para qualquer usuário com acesso ao módulo Financeiro.
     permission_requires_filial = False
     serializer_class = BillingRecordSerializer
     queryset = BillingRecord.objects.all()

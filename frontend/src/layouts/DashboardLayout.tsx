@@ -109,7 +109,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/'),
-        show: selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras'
+        show: selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'Faturamento'
       },
       {
         title: "Home Admin",
@@ -187,6 +187,28 @@ const DashboardLayout: React.FC = () => {
         ),
         action: () => navigate('/financeiro/billing'),
         show: selectedEnvironment === 'Financeiro'
+      },
+      {
+        title: "Home Faturamento",
+        path: "Faturamento / Home",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+          </svg>
+        ),
+        action: () => navigate('/faturamento'),
+        show: selectedEnvironment === 'Faturamento'
+      },
+      {
+        title: "Protocolos de envio",
+        path: "Faturamento / Protocolos de envio",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        ),
+        action: () => navigate('/faturamento/protocolos'),
+        show: selectedEnvironment === 'Faturamento'
       },
       {
         title: "Home Indicadores",
@@ -319,6 +341,8 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/financeiro/balances')) return `${env} / Fluxo de Caixa / Saldos Bancários`;
     if (path.startsWith('/financeiro/adjustments')) return `${env} / Fluxo de Caixa / Ajustes de Caixa`;
     if (path.startsWith('/financeiro/billing')) return `${env} / Fluxo de Caixa / Faturamento`;
+    if (path.startsWith('/faturamento/protocolos')) return `${env} / Protocolos de envio`;
+    if (path.startsWith('/faturamento')) return `${env} / Home`;
     if (path.startsWith('/indicadores/logistica/meta-faturamento')) return `${env} / Logística / Meta de faturamento`;
     if (path.startsWith('/indicadores/fluxo-de-caixa')) return `${env} / Financeiro / Fluxo de Caixa`;
     if (path.startsWith('/indicadores')) return `${env} / Home Indicadores`;
@@ -337,7 +361,7 @@ const DashboardLayout: React.FC = () => {
         
         <nav className="sidebar-nav">
           {/* General Home/Dashboard — oculto nos ambientes com home própria */}
-          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && !isAdminEnvironment(selectedEnvironment) && (
+          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && selectedEnvironment !== 'Faturamento' && !isAdminEnvironment(selectedEnvironment) && (
             <Link 
               to="/" 
               className={`nav-btn ${isRouteActive('/') ? 'active' : ''}`} 
@@ -546,6 +570,31 @@ const DashboardLayout: React.FC = () => {
                 </div>
               </div>
 
+              </div>
+            )}
+
+            {selectedEnvironment === 'Faturamento' && (
+              <div id="sidebar-faturamento-group" style={{ width: '100%' }}>
+                <Link
+                  to="/faturamento"
+                  className={`nav-btn ${location.pathname === '/faturamento' || location.pathname === '/faturamento/' ? 'active' : ''}`}
+                  data-tooltip="Home Faturamento"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="house" />
+                    <span className="nav-text">Home Faturamento</span>
+                  </div>
+                </Link>
+                <Link
+                  to="/faturamento/protocolos"
+                  className={`nav-btn ${isRouteActive('/faturamento/protocolos') ? 'active' : ''}`}
+                  data-tooltip="Protocolos de envio"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="file-earmark-text" />
+                    <span className="nav-text">Protocolos de envio</span>
+                  </div>
+                </Link>
               </div>
             )}
 

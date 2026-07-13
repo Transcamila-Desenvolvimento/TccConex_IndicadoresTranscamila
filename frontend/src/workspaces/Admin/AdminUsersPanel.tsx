@@ -22,6 +22,7 @@ const BRANCHES = ['Ibiporã (Matriz)', 'Rondonópolis', 'Paranaguá'] as const;
 
 const MODULE_ACCESS_GROUPS = [
   { module: 'Financeiro', label: 'Financeiro', colorKey: 'financeiro' },
+  { module: 'Faturamento', label: 'Faturamento', colorKey: 'faturamento' },
   { module: 'Indicadores', label: 'Indicadores', colorKey: 'indicadores' },
   { module: 'Compras', label: 'Compras', colorKey: 'compras' },
   { module: 'RH', label: 'RH', colorKey: 'rh' },

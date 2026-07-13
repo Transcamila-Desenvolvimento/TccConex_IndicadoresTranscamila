@@ -21,7 +21,7 @@ const RelatoriosWorkspace = lazyWithMinDuration(() => import('../workspaces/Rela
 const IndicadoresWorkspace = lazyWithMinDuration(() => import('../workspaces/Indicadores/IndicadoresWorkspace'));
 const ComprasWorkspace = lazyWithMinDuration(() => import('../workspaces/Compras/ComprasWorkspace'));
 const RHWorkspace = lazyWithMinDuration(() => import('../workspaces/RH/RHWorkspace'));
-
+const FaturamentoWorkspace = lazyWithMinDuration(() => import('../workspaces/Faturamento/FaturamentoWorkspace'));
 // Route Guard: Requires authentication
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -63,6 +63,9 @@ const DashboardIndexRedirect: React.FC = () => {
   if (selectedEnvironment === 'RH') {
     return <Navigate to="/rh" replace />;
   }
+  if (selectedEnvironment === 'Faturamento') {
+    return <Navigate to="/faturamento" replace />;
+  }
   
   return (
     <Suspense fallback={<PageLoader />}>
@@ -76,7 +79,6 @@ const AppRoutes: React.FC = () => {
     <Router>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-
         <Route
           path="/auth/google/callback"
           element={
@@ -141,6 +143,12 @@ const AppRoutes: React.FC = () => {
           <Route path="rh/*" element={
             <Suspense fallback={<PageLoader />}>
               <RHWorkspace />
+            </Suspense>
+          } />
+
+          <Route path="faturamento/*" element={
+            <Suspense fallback={<PageLoader />}>
+              <FaturamentoWorkspace />
             </Suspense>
           } />
 

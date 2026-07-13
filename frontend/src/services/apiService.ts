@@ -19,6 +19,9 @@ import type {
   Colaborador, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, RHDashboardSummaryResponse, RHComparisonResponse,
   UnidadeMedida, Setor, ColaboradorCompras, Fornecedor, ItemEstoque, EntradaEstoque, SaidaEstoque,
   RegistrarCompraPayload, RegistrarSaidaPayload,
+  ClienteProtocolo, ProtocoloEnvio,
+  ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
+  ProtocoloImportParams, ProtocoloImportResult,
 } from '../types/domain';
 import { filterActiveEnvironments, ACTIVE_ENVIRONMENTS } from '../constants/environments';
 
@@ -144,6 +147,103 @@ function normalizeBillingRecord(raw: any): BillingRecord {
     notesCount: Number(raw.notesCount ?? raw.notes_count ?? 0),
     trend: raw.trend ?? 'none',
   };
+}
+
+function normalizeClienteProtocolo(raw: any): ClienteProtocolo {
+  return {
+    id: String(raw.id),
+    nome: raw.nome,
+    cnpj: raw.cnpj ?? null,
+    requerExpedicao: Boolean(raw.requerExpedicao ?? raw.requer_expedicao),
+    exigeFilial: Boolean(raw.exigeFilial ?? raw.exige_filial),
+    filiais: Array.isArray(raw.filiais) ? raw.filiais.map((f: any) => ({ id: String(f.id), nome: f.nome })) : [],
+    emailsEnvio: raw.emailsEnvio ?? raw.emails_envio ?? null,
+    emailsCopia: raw.emailsCopia ?? raw.emails_copia ?? null,
+    dataCriacao: raw.dataCriacao ?? raw.data_criacao,
+  };
+}
+
+function normalizeProtocoloEnvio(raw: any): ProtocoloEnvio {
+  return {
+    id: String(raw.id),
+    protocoloNumero: raw.protocoloNumero ?? raw.protocolo_numero ?? '',
+    data: raw.data,
+    clienteId: raw.clienteIdReadOnly != null ? String(raw.clienteIdReadOnly) : (raw.clienteId != null ? String(raw.clienteId) : undefined),
+    clienteNome: raw.clienteNome ?? raw.cliente_nome ?? '',
+    clienteCnpj: raw.clienteCnpj ?? raw.cliente_cnpj ?? null,
+    notaFiscal: raw.notaFiscal ?? raw.nota_fiscal ?? '',
+    notasFiscais: raw.notasFiscais ?? raw.notas_fiscais ?? [],
+    notasFiliais: raw.notasFiliais ?? raw.notas_filiais ?? {},
+    expedicao: raw.expedicao ?? null,
+    expedicoes: Array.isArray(raw.expedicoes) ? raw.expedicoes : [],
+    usuarioNome: raw.usuarioNome ?? raw.usuario_nome ?? '',
+    dataCriacao: raw.dataCriacao ?? raw.data_criacao,
+    dataAtualizacao: raw.dataAtualizacao ?? raw.data_atualizacao,
+  };
+}
+
+async function readBlobErrorMessage(
+  blob: Blob,
+  fallback = 'Não foi possível concluir a operação.',
+): Promise<string> {
+  try {
+    const text = await blob.text();
+    try {
+      const json = JSON.parse(text) as { detail?: string; error?: string };
+      if (typeof json.detail === 'string' && json.detail) return json.detail;
+      if (typeof json.error === 'string' && json.error) return json.error;
+    } catch {
+      if (text.trim()) return text.trim().slice(0, 240);
+    }
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+/** Garante que a resposta blob é PDF; se for JSON de erro, propaga a mensagem. */
+async function assertPdfBlob(data: Blob, headers?: Record<string, unknown>): Promise<Blob> {
+  const contentType = String(
+    (headers?.['content-type'] as string | undefined)
+      ?? (headers?.['Content-Type'] as string | undefined)
+      ?? data.type
+      ?? '',
+  ).toLowerCase();
+
+  if (contentType.includes('application/json') || contentType.includes('text/html') || data.size < 5) {
+    throw new Error(await readBlobErrorMessage(data, 'Não foi possível gerar o PDF do protocolo.'));
+  }
+
+  const head = await data.slice(0, 4).text();
+  if (head !== '%PDF') {
+    throw new Error(await readBlobErrorMessage(data, 'Não foi possível gerar o PDF do protocolo.'));
+  }
+
+  return data.type === 'application/pdf' ? data : new Blob([data], { type: 'application/pdf' });
+}
+
+/** Garante que a resposta blob é planilha .xlsx (ZIP/PK); se for JSON de erro, propaga a mensagem. */
+async function assertSpreadsheetBlob(data: Blob, headers?: Record<string, unknown>): Promise<Blob> {
+  const contentType = String(
+    (headers?.['content-type'] as string | undefined)
+      ?? (headers?.['Content-Type'] as string | undefined)
+      ?? data.type
+      ?? '',
+  ).toLowerCase();
+  const fallback = 'Não foi possível baixar a planilha de referência.';
+
+  if (contentType.includes('application/json') || contentType.includes('text/html') || data.size < 4) {
+    throw new Error(await readBlobErrorMessage(data, fallback));
+  }
+
+  const headBytes = new Uint8Array(await data.slice(0, 2).arrayBuffer());
+  // .xlsx é um ZIP: assinatura PK
+  if (headBytes[0] !== 0x50 || headBytes[1] !== 0x4b) {
+    throw new Error(await readBlobErrorMessage(data, fallback));
+  }
+
+  const mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  return data.type === mime ? data : new Blob([data], { type: mime });
 }
 
 function normalizeCashAdjustment(raw: any): CashAdjustment {
@@ -411,6 +511,19 @@ function buildBalanceHistoryQueryParams(params: BalanceHistoryQueryParams = {}) 
   return query;
 }
 
+function buildProtocoloQueryParams(params: ProtocoloQueryParams = {}) {
+  const query: Record<string, string | number> = {};
+  if (params.page) query.page = params.page;
+  if (params.pageSize) query.page_size = params.pageSize;
+  if (params.cliente) query.cliente = params.cliente;
+  if (params.data) query.data = params.data;
+  if (params.protocoloId) query.protocoloId = params.protocoloId;
+  if (params.notaFiscal) query.notaFiscal = params.notaFiscal;
+  if (params.usuario) query.usuario = params.usuario;
+  if (params.ordering) query.ordering = params.ordering;
+  return query;
+}
+
 function paginatedFromResponse<T>(data: unknown, normalizer: (raw: any) => T): PaginatedResponse<T> {
   if (Array.isArray(data)) {
     const results = data.map(normalizer);
@@ -646,14 +759,8 @@ export const apiService = {
   // ─── Financeiro — Faturamento, Ajustes, Saldos (Django API) ─────────────────
 
   async getBillingRecords(params: BillingQueryParams = {}): Promise<PaginatedResponse<BillingRecord>> {
-    // Header forçado propositalmente: o endpoint de faturamento exige o
-    // módulo "Financeiro" independentemente do ambiente ativo na sessão,
-    // então não pode depender só do header padrão enviado pelo interceptor.
     const { data } = await api.get('/api/financeiro/billing/', {
       params: buildBillingQueryParams(params),
-      headers: {
-        'X-Prothon-Environment': 'Financeiro',
-      },
     });
     return paginatedFromResponse(data, normalizeBillingRecord);
   },
@@ -671,9 +778,6 @@ export const apiService = {
     const response = await api.post('/api/financeiro/billing/import_xml/', form, {
       timeout: 120000,
       validateStatus: (s) => s === 200 || s === 202 || s === 400,
-      headers: {
-        'X-Prothon-Environment': 'Financeiro',
-      },
     });
     const { data, status: httpStatus } = response;
     if (httpStatus === 202 && data.taskId) {
@@ -683,29 +787,17 @@ export const apiService = {
   },
 
   async createBillingRecord(payload: Omit<BillingRecord, 'id' | 'trend'>): Promise<BillingRecord> {
-    const { data } = await api.post('/api/financeiro/billing/', payload, {
-      headers: {
-        'X-Prothon-Environment': 'Financeiro',
-      },
-    });
+    const { data } = await api.post('/api/financeiro/billing/', payload);
     return normalizeBillingRecord(data);
   },
 
   async updateBillingRecord(id: number, payload: Partial<Omit<BillingRecord, 'id'>>): Promise<BillingRecord> {
-    const { data } = await api.patch(`/api/financeiro/billing/${id}/`, payload, {
-      headers: {
-        'X-Prothon-Environment': 'Financeiro',
-      },
-    });
+    const { data } = await api.patch(`/api/financeiro/billing/${id}/`, payload);
     return normalizeBillingRecord(data);
   },
 
   async deleteBillingRecord(id: number): Promise<void> {
-    await api.delete(`/api/financeiro/billing/${id}/`, {
-      headers: {
-        'X-Prothon-Environment': 'Financeiro',
-      },
-    });
+    await api.delete(`/api/financeiro/billing/${id}/`);
   },
 
   async getCashAdjustments(params: AdjustmentQueryParams = {}): Promise<PaginatedResponse<CashAdjustment>> {
@@ -1130,6 +1222,105 @@ export const apiService = {
   async registrarSaida(payload: RegistrarSaidaPayload): Promise<SaidaEstoque[]> {
     const { data } = await api.post('/api/compras/saidas/registrar_saida/', payload);
     return data;
+  },
+
+  // ─── Faturamento — Protocolos de envio de NF ────────────────────────────────
+
+  async getProtocoloClientes(): Promise<ClienteProtocolo[]> {
+    const { data } = await api.get('/api/faturamento/protocolo-clientes/');
+    return Array.isArray(data) ? data.map(normalizeClienteProtocolo) : data.results?.map(normalizeClienteProtocolo) ?? [];
+  },
+
+  async createProtocoloCliente(payload: ClienteProtocoloPayload): Promise<ClienteProtocolo> {
+    const { data } = await api.post('/api/faturamento/protocolo-clientes/', payload);
+    return normalizeClienteProtocolo(data);
+  },
+
+  async updateProtocoloCliente(id: string, payload: Partial<ClienteProtocoloPayload>): Promise<ClienteProtocolo> {
+    const { data } = await api.patch(`/api/faturamento/protocolo-clientes/${id}/`, payload);
+    return normalizeClienteProtocolo(data);
+  },
+
+  async deleteProtocoloCliente(id: string): Promise<void> {
+    await api.delete(`/api/faturamento/protocolo-clientes/${id}/`);
+  },
+
+  async getFiliais(clienteId: string): Promise<{ id: string; nome: string }[]> {
+    const { data } = await api.get(`/api/faturamento/protocolo-clientes/${clienteId}/filiais/`);
+    return (Array.isArray(data) ? data : data.results ?? []).map((f: any) => ({ id: String(f.id), nome: f.nome }));
+  },
+
+  async createFilial(clienteId: string, nome: string): Promise<{ id: string; nome: string }> {
+    const { data } = await api.post(`/api/faturamento/protocolo-clientes/${clienteId}/filiais/`, { nome });
+    return { id: String(data.id), nome: data.nome };
+  },
+
+  async deleteFilial(clienteId: string, filialId: string): Promise<void> {
+    await api.delete(`/api/faturamento/protocolo-clientes/${clienteId}/filiais/${filialId}/`);
+  },
+
+  async getProtocolosEnvio(params: ProtocoloQueryParams = {}): Promise<PaginatedResponse<ProtocoloEnvio>> {
+    const { data } = await api.get('/api/faturamento/protocolos/', { params: buildProtocoloQueryParams(params) });
+    return paginatedFromResponse(data, normalizeProtocoloEnvio);
+  },
+
+  async createProtocoloEnvio(payload: CreateProtocoloPayload): Promise<ProtocoloEnvio> {
+    const { data } = await api.post('/api/faturamento/protocolos/', payload);
+    return normalizeProtocoloEnvio(data);
+  },
+
+  async updateProtocoloEnvio(id: string, payload: UpdateProtocoloPayload): Promise<ProtocoloEnvio> {
+    const { data } = await api.patch(`/api/faturamento/protocolos/${id}/`, payload);
+    return normalizeProtocoloEnvio(data);
+  },
+
+  async deleteProtocoloEnvio(id: string): Promise<void> {
+    await api.delete(`/api/faturamento/protocolos/${id}/`);
+  },
+
+  async bulkDeleteProtocolos(ids: number[]): Promise<{ deleted: number }> {
+    const { data } = await api.post('/api/faturamento/protocolos/bulk_delete/', { ids });
+    return data;
+  },
+
+  async downloadProtocoloPdf(id: string): Promise<Blob> {
+    const { data, headers } = await api.get(`/api/faturamento/protocolos/${id}/print_pdf/`, {
+      responseType: 'blob',
+    });
+    return assertPdfBlob(data, headers);
+  },
+
+  async downloadProtocolosBulkPdf(ids: number[]): Promise<Blob> {
+    const { data, headers } = await api.get('/api/faturamento/protocolos/bulk_print/', {
+      params: { ids: ids.join(',') },
+      responseType: 'blob',
+    });
+    return assertPdfBlob(data, headers);
+  },
+
+  async importProtocolosSpreadsheet(params: ProtocoloImportParams): Promise<ProtocoloImportResult> {
+    const form = new FormData();
+    form.append('file', params.file);
+    form.append('clienteId', params.clienteId);
+    if (params.dryRun) form.append('dryRun', 'true');
+    if (params.skipDuplicatas) form.append('skipDuplicatas', 'true');
+    const { data } = await api.post('/api/faturamento/protocolos/import_spreadsheet/', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+      validateStatus: (s) => s === 200 || s === 400,
+    });
+    return data as ProtocoloImportResult;
+  },
+
+  async exportarModeloProtocolos(): Promise<Blob> {
+    const { data, headers, status } = await api.get('/api/faturamento/protocolos/exportar_modelo/', {
+      responseType: 'blob',
+      validateStatus: () => true,
+    });
+    if (status < 200 || status >= 300) {
+      throw new Error(await readBlobErrorMessage(data, 'Não foi possível baixar a planilha de referência.'));
+    }
+    return assertSpreadsheetBlob(data, headers);
   },
 };
 

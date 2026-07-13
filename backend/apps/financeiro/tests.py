@@ -20,8 +20,11 @@ class FinanceiroReportTests(TestCase):
             username='fin_reports',
             password='fin123',
             role_id='2',
-            environments=['Financeiro'],
-            filiais={'Financeiro': ['Ibiporã (Matriz)', 'Rondonópolis']},
+            environments=['Financeiro', 'Faturamento'],
+            filiais={
+                'Financeiro': ['Ibiporã (Matriz)', 'Rondonópolis'],
+                'Faturamento': ['Ibiporã (Matriz)', 'Rondonópolis'],
+            },
         )
         self.batch = ReportBatch.objects.create(
             label='##T01',
@@ -277,13 +280,13 @@ class FinanceiroReportTests(TestCase):
 
 
 class BillingGlobalAccessTests(TestCase):
-    """Faturamento é consolidado: operadores veem todas as filiais de billing."""
+    """Faturamento diário é consolidado: operadores veem todas as filiais de billing."""
 
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user(
-            username='fin_scoped',
-            password='fin123',
+            username='fat_scoped',
+            password='fat123',
             role_id='2',
             environments=['Financeiro'],
             filiais={'Financeiro': ['Ibiporã (Matriz)']},
@@ -313,7 +316,7 @@ class BillingGlobalAccessTests(TestCase):
 
     def test_admin_sees_all_billing_branches(self):
         admin = User.objects.create_user(
-            username='fin_admin_scope',
+            username='fat_admin_scope',
             password='admin123',
             role_id='1',
             environments=['Administração/Manutenção', 'Financeiro'],

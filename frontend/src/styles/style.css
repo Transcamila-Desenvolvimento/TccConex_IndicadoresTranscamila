@@ -639,7 +639,7 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 }
 
 .data-table th, .data-table td {
-  padding: 16px 20px;
+  padding: 10px 20px;
   border-bottom: 1px solid var(--border-color);
   font-size: 14px;
 }
@@ -648,6 +648,10 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   color: var(--text-secondary);
   font-weight: 600;
   background-color: #f8fafc;
+}
+
+.data-table tbody tr:hover td {
+  background-color: #f1f5f9;
 }
 
 .empty-state td {
@@ -2596,6 +2600,40 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   font-size: 12px;
 }
 
+.erp-pagination-page-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+}
+
+.erp-pagination-page-size label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.erp-pagination-page-size select {
+  height: 28px;
+  padding: 0 22px 0 8px;
+  font-size: 12.5px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--text-primary);
+  outline: none;
+  cursor: pointer;
+  font-family: inherit;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 6px center !important;
+  background-size: 12px !important;
+}
+
+.erp-pagination-page-size select:focus {
+  border-color: var(--border-focus);
+}
+
 .erp-form-card {
   position: sticky;
   top: 20px;
@@ -3181,6 +3219,13 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 }
 
 /* Estado Ativo: RH (Amber / Laranja) */
+.permission-chip.active-faturamento {
+  background: #1d6f42;
+  border-color: #1d6f42;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(29, 111, 66, 0.15);
+}
+
 .permission-chip.active-rh {
   background: #f59e0b;
   border-color: #f59e0b;
@@ -3320,6 +3365,13 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   color: #ffffff;
 }
 
+.module-access-name.active-faturamento,
+.module-access-branch-chip.active-faturamento {
+  background: #1d6f42;
+  border-color: #1d6f42;
+  color: #ffffff;
+}
+
 .module-access-name.active-rh,
 .module-access-branch-chip.active-rh {
   background: #f59e0b;
@@ -3354,6 +3406,18 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   font-size: 13px;
 }
 
+
+/* Campos compactos no formulário de clientes de protocolo */
+#cliente-protocolo-form .login-group label {
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+#cliente-protocolo-form .login-group input,
+#cliente-protocolo-form .login-group textarea {
+  padding: 9px 12px;
+  font-size: 13px;
+}
 
 /* Custom Styles for Financeiro Módulo */
 
@@ -4841,6 +4905,16 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   overflow: hidden;
 }
 
+/* Wrapper interno do body na variante "page": propaga a cadeia flex para
+   que os filhos diretos (erp-card, table-container) sejam corretamente
+   dimensionados e o scroll ocorra dentro da tabela, não na página inteira. */
+.async-query-content-body--page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 
 .cashflow-detail-action-cell {
   text-align: right;
@@ -6261,5 +6335,156 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 .rh-compare-result-item span {
   font-size: 11px;
   color: #94a3b8;
+}
+
+/* ── Padrão de Modal genérico (usado em Faturamento e outros módulos) ─────── */
+.modal-card {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.18);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  flex-shrink: 0;
+  animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 4px;
+}
+
+/* Form input/select padrão para modais */
+.form-input {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #0f172a;
+  background: #ffffff;
+  margin-top: 4px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+
+.form-input:focus {
+  border-color: #0f85c1;
+  box-shadow: 0 0 0 3px rgba(15, 133, 193, 0.12);
+}
+
+textarea.form-input {
+  resize: vertical;
+  min-height: 60px;
+}
+
+/* Grade de campos de formulário em duas colunas */
+.form-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.form-grid.two-cols {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Botões de ícone pequenos para ações em linha */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn-icon:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.btn-icon-danger {
+  border-color: #fca5a5;
+  color: #ef4444;
+  background: #fff5f5;
+}
+
+.btn-icon-danger:hover {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+/* Tags / chips de notas fiscais */
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(15, 133, 193, 0.1);
+  color: #0c6a99;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tag-chip button {
+  background: none;
+  border: none;
+  color: #0c6a99;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  font-weight: 700;
+}
+
+.tag-chip button:hover {
+  color: #ef4444;
+}
+
+/* Texto auxiliar / muted */
+.text-muted {
+  color: #94a3b8;
+  font-size: 12px;
 }
 
