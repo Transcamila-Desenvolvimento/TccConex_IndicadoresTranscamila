@@ -140,12 +140,10 @@ const ImportarProtocolosModal: React.FC<ImportarProtocolosModalProps> = ({ onClo
         {progress === -1 && (
           <>
             <p style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.6, marginTop: 0 }}>
-              Importe protocolos a partir de um arquivo <strong>.xlsx</strong>. Colunas detectadas
-              automaticamente: <strong>Data</strong>, <strong>Nota fiscal</strong>; opcionais:{' '}
-              <strong>Expedição</strong>, <strong>Filial</strong>, e{' '}
-              <strong>Ano</strong> + <strong>Número protocolo</strong> (agrupa NFs no mesmo protocolo).
-              Expedição e filial não são obrigatórias na importação — se o cliente exigir e a
-              coluna faltar, o sistema grava mesmo assim e gera avisos.
+              Use o formato: <strong>Ano</strong>, <strong>Numero Protocolo</strong>,{' '}
+              <strong>Expedição</strong>, <strong>Data de envio</strong>, <strong>Cliente</strong>,{' '}
+              <strong>Nota Fiscal</strong>. Expedição e Filial são opcionais (podem ficar em branco
+              ou ausentes). Linhas com o mesmo Ano + Numero Protocolo são agrupadas em um protocolo.
             </p>
 
             <button

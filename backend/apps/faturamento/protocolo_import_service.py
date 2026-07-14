@@ -22,7 +22,9 @@ from apps.faturamento.services import (
     parse_notas_fiscais,
 )
 
-_CANDIDATOS_DATA = ['data', 'date', 'data de envio', 'data envio', 'dt envio', 'dt']
+_CANDIDATOS_DATA = [
+    'data de envio', 'data envio', 'data', 'date', 'dt envio', 'dt',
+]
 _CANDIDATOS_NF = [
     'nota fiscal', 'nota(s) fiscal(is)', 'notas fiscais', 'nf', 'nfs',
     'numero nf', 'numero nota', 'notas',
@@ -34,9 +36,10 @@ _CANDIDATOS_FILIAL = [
 ]
 _CANDIDATOS_ANO = ['ano', 'year', 'ano protocolo']
 _CANDIDATOS_NUMERO = [
-    'numero protocolo', 'nº protocolo', 'n protocol', 'numero',
-    'protocolo', 'num protocolo', 'nr protocolo',
+    'numero protocolo', 'nº protocolo', 'n protocol', 'num protocolo',
+    'nr protocolo', 'numero', 'protocolo',
 ]
+_CANDIDATOS_CLIENTE = ['cliente', 'nome cliente', 'razao social', 'razão social']
 
 
 class ProtocoloImportError(Exception):
@@ -397,23 +400,24 @@ def _parse_raw_rows(ws, headers_row: list[str], header_row_num: int, mapping: di
 
 
 def build_protocolo_import_template() -> bytes:
-    """Gera planilha de referência (.xlsx) com exemplos e instruções de preenchimento."""
+    """Gera planilha de referência (.xlsx) no formato oficial de importação."""
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
 
     wb = openpyxl.Workbook()
 
-    # ── Aba Exemplos ──────────────────────────────────────────────────────────
+    # ── Aba Importação (formato oficial) ──────────────────────────────────────
     ws = wb.active
-    ws.title = 'Exemplos'
+    ws.title = 'Importação'
 
+    # Ordem alinhada ao modelo operacional usado pela equipe.
     headers = [
-        'Data',
-        'Nota Fiscal',
-        'Expedição',
-        'Filial',
         'Ano',
-        'Número protocolo',
+        'Numero Protocolo',
+        'Expedição',
+        'Data de envio',
+        'Cliente',
+        'Nota Fiscal',
     ]
     header_fill = PatternFill(fill_type='solid', fgColor='118CC4')
     header_font = Font(bold=True, color='FFFFFF')
@@ -426,27 +430,14 @@ def build_protocolo_import_template() -> bytes:
         cell.fill = header_fill
         cell.font = header_font
 
-    # Exemplos cobrindo os casos mais comuns (incluindo expedição dupla e filial).
+    # Exemplos: Expedição pode ficar vazia; mesmo Ano+Numero = mesmo protocolo.
     exemplos = [
-        # Linha a linha — NF única, uma expedição, uma filial
-        ('10/07/2026', '1001', 'Transcamila Ibiporã', 'Matriz SP', '', ''),
-        # Duas expedições na mesma célula (até 2)
-        ('11/07/2026', '1002', 'Transcamila Barueri/Ibiporã', 'Filial RJ', '', ''),
-        # Várias NFs na mesma linha + uma filial para todas
-        ('12/07/2026', '1003, 1004', 'Transcamila Paranaguá', 'Matriz SP', '', ''),
-        # Várias NFs + filiais na mesma ordem (vírgula)
-        (
-            '13/07/2026',
-            '1005, 1006',
-            'Transcamila Rondonópolis',
-            'Matriz SP, Filial RJ',
-            '',
-            '',
-        ),
-        # Modo agrupado: mesmo Ano+Número = mesmo protocolo (filial por linha/NF)
-        ('14/07/2026', '2001', 'Transcamila Ibiporã', 'Matriz SP', 2026, 1),
-        ('14/07/2026', '2002', 'Transcamila Ibiporã', 'Filial RJ', 2026, 1),
-        ('15/07/2026', '2003', 'Transcamila Barueri', 'Matriz SP', 2026, 2),
+        (2025, 1, '', '04/02/2025', 'Ascenza brasil ltda.', '44'),
+        (2025, 1, '', '04/02/2025', 'Ascenza brasil ltda.', '34'),
+        (2025, 1, '', '04/02/2025', 'Ascenza brasil ltda.', '36'),
+        (2025, 2, 'Transcamila Ibiporã', '10/02/2025', 'Ascenza brasil ltda.', '100'),
+        (2026, 1, '', '15/01/2026', 'Cliente Exemplo', '2001'),
+        (2026, 1, '', '15/01/2026', 'Cliente Exemplo', '2002'),
     ]
     for row in exemplos:
         ws.append(list(row))
@@ -456,13 +447,14 @@ def build_protocolo_import_template() -> bytes:
     ws.append([])
     ws.append([
         'Os exemplos acima são apenas referência — apague-os e preencha com os dados reais '
-        'antes de importar. Colunas Expedição, Filial, Ano e Número protocolo são opcionais.'
+        'antes de importar. Expedição é opcional (pode ficar em branco). Filial também é '
+        'opcional: se precisar, adicione uma coluna "Filial".'
     ])
     ws.merge_cells(start_row=ws.max_row, start_column=1, end_row=ws.max_row, end_column=6)
     ws.cell(ws.max_row, 1).font = note_font
     ws.cell(ws.max_row, 1).alignment = Alignment(wrap_text=True)
 
-    widths = [12, 18, 32, 24, 8, 18]
+    widths = [8, 18, 24, 14, 28, 14]
     for i, width in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = width
 
@@ -474,48 +466,52 @@ def build_protocolo_import_template() -> bytes:
 
     instrucoes = [
         ('', ''),
-        ('Colunas obrigatórias', ''),
-        ('Data', 'Data de envio. Formatos aceitos: DD/MM/AAAA, AAAA-MM-DD, DD-MM-AAAA.'),
+        ('Colunas do modelo', ''),
+        ('Ano', 'Ano do protocolo (ex.: 2025). Usado com "Numero Protocolo" para agrupar NFs.'),
         (
-            'Nota Fiscal',
-            'Uma ou mais NFs separadas por vírgula (ex.: 1001, 1002). Máximo de 72 por protocolo.',
+            'Numero Protocolo',
+            'Número sequencial do protocolo. Linhas com o mesmo Ano + Numero Protocolo '
+            'viram um único protocolo (várias NFs).',
         ),
-        ('', ''),
-        ('Colunas opcionais', ''),
         (
             'Expedição',
-            'Valores reconhecidos: Transcamila Ibiporã, Transcamila Barueri, '
-            'Transcamila Paranaguá, Transcamila Rondonópolis.',
+            'Opcional. Pode ficar em branco. Valores reconhecidos quando informados: '
+            'Transcamila Ibiporã, Transcamila Barueri, Transcamila Paranaguá, '
+            'Transcamila Rondonópolis.',
         ),
         (
-            'Expedição (duas)',
-            'Até 2 expedições por protocolo. Escreva as duas na mesma célula, por exemplo: '
-            '"Transcamila Barueri/Ibiporã" ou "Transcamila Barueri Transcamila Ibiporã".',
+            'Data de envio',
+            'Obrigatória. Formatos aceitos: DD/MM/AAAA, AAAA-MM-DD, DD-MM-AAAA '
+            '(ou data nativa do Excel).',
         ),
+        (
+            'Cliente',
+            'Informativo na planilha. Na tela de importação, selecione o cliente no sistema '
+            '(a coluna não substitui essa seleção).',
+        ),
+        (
+            'Nota Fiscal',
+            'Obrigatória. Uma NF por linha (recomendado) ou várias separadas por vírgula. '
+            'Máximo de 72 por protocolo.',
+        ),
+        ('', ''),
+        ('Coluna extra opcional', ''),
         (
             'Filial',
-            'Nome da filial do cliente (deve existir no cadastro do cliente, se possível). '
-            'Uma filial na célula = aplica a todas as NFs da linha. '
-            'Várias filiais separadas por vírgula = associa na ordem das NFs '
-            '(ex.: NFs "1005, 1006" e Filial "Matriz SP, Filial RJ").',
-        ),
-        (
-            'Ano + Número protocolo',
-            'Se ambas existirem, linhas com o mesmo Ano e Número são agrupadas em um único '
-            'protocolo (útil para várias NFs, cada uma com sua filial em linhas separadas). '
-            'Sem essas colunas, cada linha vira um protocolo (número gerado automaticamente).',
+            'Opcional. Só use se o cliente tiver filiais cadastradas. Pode ficar ausente '
+            'ou em branco — a importação não exige filial.',
         ),
         ('', ''),
         ('Dicas', ''),
         (
-            'Cliente com exigência',
-            'Se o cliente "requer expedição" ou "exige filial", a importação ainda grava '
-            'mesmo sem a coluna — mas gera avisos para você revisar depois.',
+            'Expedição / Filial',
+            'Nunca são obrigatórias na importação. Se o cliente estiver marcado como '
+            '"requer expedição" ou "exige filial", a falta gera apenas aviso.',
         ),
         (
-            'Nomes de coluna',
-            'O sistema detecta automaticamente variações (Data, Nota Fiscal, NF, Expedição, '
-            'Transportadora, Filial, Filial do cliente, Ano, Número protocolo, etc.).',
+            'Agrupamento',
+            'Com Ano + Numero Protocolo preenchidos, várias linhas do mesmo grupo '
+            'formam um protocolo. Sem essas colunas, cada linha vira um protocolo.',
         ),
         (
             'Dry-run',
@@ -554,6 +550,7 @@ def inspect_protocolo_workbook(file_bytes: bytes, *, sheet: str = '') -> dict:
         'filial': _detectar_coluna(headers_row, _CANDIDATOS_FILIAL),
         'ano': _detectar_coluna(headers_row, _CANDIDATOS_ANO),
         'numero': _detectar_coluna(headers_row, _CANDIDATOS_NUMERO),
+        'cliente': _detectar_coluna(headers_row, _CANDIDATOS_CLIENTE),
     }
     grouping_mode = (
         'grouped' if mapping['ano'] and mapping['numero'] else 'row_by_row'

@@ -507,6 +507,45 @@ class FaturamentoProtocoloImportTests(TestCase):
         self.assertIsNone(protocolo.expedicao)
         self.assertEqual(protocolo.notas_filiais, {})
 
+    def test_importa_formato_oficial_sem_expedicao(self):
+        """Formato Ano | Numero Protocolo | Expedição | Data de envio | Cliente | Nota Fiscal."""
+        response = self.api.post(
+            '/api/faturamento/protocolos/import_spreadsheet/',
+            {
+                'file': self._xlsx_file(
+                    [
+                        (2025, 1, None, '04/02/2025', 'Ascenza brasil ltda.', '44'),
+                        (2025, 1, None, '04/02/2025', 'Ascenza brasil ltda.', '34'),
+                        (2025, 2, '', '10/02/2025', 'Ascenza brasil ltda.', '100'),
+                    ],
+                    headers=(
+                        'Ano',
+                        'Numero Protocolo',
+                        'Expedição',
+                        'Data de envio',
+                        'Cliente',
+                        'Nota Fiscal',
+                    ),
+                ),
+                'clienteId': str(self.cliente.pk),
+            },
+            format='multipart',
+            **auth_headers(self.admin, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['created'], 2)
+        self.assertEqual(response.data['groupingMode'], 'grouped')
+
+        p1 = ProtocoloEnvio.objects.get(cliente=self.cliente, numero_sequencial=1)
+        self.assertEqual(p1.nota_fiscal, '44, 34')
+        self.assertIsNone(p1.expedicao)
+        self.assertEqual(p1.notas_filiais, {})
+
+        p2 = ProtocoloEnvio.objects.get(cliente=self.cliente, numero_sequencial=2)
+        self.assertEqual(p2.nota_fiscal, '100')
+        self.assertIsNone(p2.expedicao)
+
     def test_operador_nao_pode_baixar_modelo(self):
         response = self.api.get(
             '/api/faturamento/protocolos/exportar_modelo/',
@@ -532,10 +571,17 @@ class FaturamentoProtocoloImportTests(TestCase):
             response['Content-Disposition'],
         )
         wb = openpyxl.load_workbook(BytesIO(response.content))
-        self.assertIn('Exemplos', wb.sheetnames)
+        self.assertIn('Importação', wb.sheetnames)
         self.assertIn('Instruções', wb.sheetnames)
-        headers = [c.value for c in wb['Exemplos'][1]]
+        headers = [c.value for c in wb['Importação'][1]]
         self.assertEqual(
-            headers[:4],
-            ['Data', 'Nota Fiscal', 'Expedição', 'Filial'],
+            headers,
+            [
+                'Ano',
+                'Numero Protocolo',
+                'Expedição',
+                'Data de envio',
+                'Cliente',
+                'Nota Fiscal',
+            ],
         )
