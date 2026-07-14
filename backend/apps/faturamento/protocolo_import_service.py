@@ -581,11 +581,13 @@ def import_protocolos_from_workbook(
     """Importa protocolos a partir dos bytes de um .xlsx.
 
     Expedição e filial são opcionais: se houver colunas na planilha, são gravadas.
-    Mesmo com cliente.requer_expedicao / exige_filial, a ausência gera aviso (não erro).
+    NFs/números já existentes são ignorados com aviso (não derrubam o lote).
+    Flags ``cliente.requer_expedicao`` / ``exige_filial`` não bloqueiam a importação.
 
     Retorna dict camelCase pronto para a API. Em falha estrutural, levanta
     ProtocoloImportError. Em falha de negócio com rollback, `success=False`.
     """
+    _ = skip_duplicatas  # mantido por compatibilidade da API; duplicatas sempre são ignoradas
     ws = _load_worksheet(file_bytes, sheet)
     headers_row, header_row_num = _read_headers(ws)
     mapping = _resolve_columns(
@@ -608,22 +610,9 @@ def import_protocolos_from_workbook(
     max_numero = cliente.ultimo_numero_protocolo
     filiais_por_norm = _filiais_index(cliente)
 
-    if cliente.requer_expedicao and not mapping.get('expedicao'):
-        avisos.append({
-            'label': 'planilha',
-            'message': (
-                f'Cliente "{cliente.nome}" requer expedição, mas a planilha não tem '
-                'coluna de expedição — protocolos serão importados sem expedição.'
-            ),
-        })
-    if cliente.exige_filial and not mapping.get('filial'):
-        avisos.append({
-            'label': 'planilha',
-            'message': (
-                f'Cliente "{cliente.nome}" exige filial por NF, mas a planilha não tem '
-                'coluna de filial — protocolos serão importados sem filiais.'
-            ),
-        })
+    # Expedição e filial são sempre opcionais na importação — sem avisos de
+    # "cliente requer…". O cadastro manual no formulário continua respeitando
+    # os flags do cliente.
 
     with transaction.atomic():
         for proto in protocolos:
@@ -650,19 +639,20 @@ def import_protocolos_from_workbook(
                     f'NFs já cadastradas para "{cliente.nome}": '
                     f'{", ".join(duplicadas)}'
                 )
-                if skip_duplicatas:
-                    notas = [nf for nf in notas if nf not in set(duplicadas)]
-                    avisos.append({'label': label, 'message': f'{msg} — removidas do protocolo'})
-                    if not notas:
-                        avisos.append({
-                            'label': label,
-                            'message': 'nenhuma NF restante após remover duplicatas',
-                        })
-                        ignorados += 1
-                        continue
-                else:
-                    erros.append({'label': label, 'message': msg})
+                # Duplicatas nunca derrubam o lote: remove NFs repetidas ou
+                # ignora o protocolo se não sobrar nenhuma.
+                notas = [nf for nf in notas if nf not in set(duplicadas)]
+                if not notas:
+                    avisos.append({
+                        'label': label,
+                        'message': f'ignorado — {msg}',
+                    })
+                    ignorados += 1
                     continue
+                avisos.append({
+                    'label': label,
+                    'message': f'{msg} — removidas do protocolo',
+                })
 
             # ── Expedição (opcional) ──────────────────────────────────────────
             expedicoes: list[str] = []
@@ -673,11 +663,6 @@ def import_protocolos_from_workbook(
                         'label': label,
                         'message': f'expedição "{proto["exp_raw"]}" não reconhecida — ignorada',
                     })
-            elif cliente.requer_expedicao:
-                avisos.append({
-                    'label': label,
-                    'message': 'cliente requer expedição, mas nenhuma foi informada na planilha',
-                })
             expedicao_combinada = combinar_expedicoes(expedicoes) if expedicoes else None
 
             # ── Filiais por NF (opcional) ─────────────────────────────────────
@@ -701,17 +686,6 @@ def import_protocolos_from_workbook(
                 for msg in build_avisos:
                     avisos.append({'label': label, 'message': msg})
 
-            if cliente.exige_filial:
-                sem_filial = [nf for nf in notas if nf not in notas_filiais]
-                if sem_filial:
-                    avisos.append({
-                        'label': label,
-                        'message': (
-                            'cliente exige filial; NFs sem filial associada: '
-                            f'{", ".join(sem_filial)}'
-                        ),
-                    })
-
             nota_normalizada = ', '.join(notas)
             numero_seq = proto['numero']
 
@@ -720,11 +694,8 @@ def import_protocolos_from_workbook(
                     cliente=cliente, numero_sequencial=numero_seq,
                 ).exists():
                     msg = f'número sequencial {numero_seq} já existe para "{cliente.nome}"'
-                    if skip_duplicatas:
-                        avisos.append({'label': label, 'message': f'ignorado — {msg}'})
-                        ignorados += 1
-                        continue
-                    erros.append({'label': label, 'message': msg})
+                    avisos.append({'label': label, 'message': f'ignorado — {msg}'})
+                    ignorados += 1
                     continue
 
             if not dry_run:
@@ -751,14 +722,13 @@ def import_protocolos_from_workbook(
             cliente.ultimo_numero_protocolo = max_numero
             cliente.save(update_fields=['ultimo_numero_protocolo'])
 
-        rolled_back = bool(erros and not skip_duplicatas and not dry_run)
+        # Só erros estruturais (data/NF inválida) fazem rollback do lote.
+        rolled_back = bool(erros and not dry_run)
         if rolled_back:
             transaction.set_rollback(True)
             criados = 0
 
-    # Sem skip: qualquer erro bloqueia o sucesso (e faz rollback se não for dry-run).
-    # Com skip: importação parcial é considerada sucesso.
-    success = not erros or skip_duplicatas
+    success = not erros
 
     result = {
         'success': success,
@@ -776,7 +746,7 @@ def import_protocolos_from_workbook(
     }
     if not success and not dry_run:
         result['detail'] = (
-            'Nenhum protocolo foi importado. '
-            'Ative "Ignorar duplicatas" para importar parcialmente.'
+            'Nenhum protocolo foi importado por erros na planilha. '
+            'Corrija datas/NFs inválidas e tente novamente.'
         )
     return result

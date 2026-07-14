@@ -397,7 +397,7 @@ class FaturamentoProtocoloImportTests(TestCase):
         self.assertEqual(response.data['created'], 1)
         self.assertEqual(ProtocoloEnvio.objects.count(), 0)
 
-    def test_duplicatas_sem_skip_faz_rollback(self):
+    def test_duplicatas_sao_ignoradas_e_lote_continua(self):
         ProtocoloEnvio.objects.create(
             data='2026-07-01',
             cliente=self.cliente,
@@ -417,9 +417,14 @@ class FaturamentoProtocoloImportTests(TestCase):
             format='multipart',
             **auth_headers(self.admin, 'Faturamento'),
         )
-        self.assertEqual(response.status_code, 400, response.data)
-        self.assertFalse(response.data['success'])
-        self.assertEqual(ProtocoloEnvio.objects.filter(cliente=self.cliente).count(), 1)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['created'], 1)
+        self.assertEqual(response.data['ignored'], 1)
+        self.assertEqual(ProtocoloEnvio.objects.filter(cliente=self.cliente).count(), 2)
+        self.assertTrue(
+            ProtocoloEnvio.objects.filter(cliente=self.cliente, nota_fiscal='9002').exists()
+        )
 
     def test_duplicatas_com_skip_importa_parcial(self):
         ProtocoloEnvio.objects.create(
@@ -484,7 +489,7 @@ class FaturamentoProtocoloImportTests(TestCase):
         self.assertEqual(p2.expedicao, 'Transcamila Barueri')
         self.assertEqual(p2.notas_filiais, {'8002': 'Filial RJ'})
 
-    def test_sem_expedicao_filial_ainda_importa_com_aviso(self):
+    def test_sem_expedicao_filial_ainda_importa_sem_aviso_de_obrigatoriedade(self):
         self.cliente.requer_expedicao = True
         self.cliente.exige_filial = True
         self.cliente.save(update_fields=['requer_expedicao', 'exige_filial'])
@@ -501,7 +506,8 @@ class FaturamentoProtocoloImportTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertTrue(response.data['success'])
         self.assertEqual(response.data['created'], 1)
-        self.assertGreaterEqual(len(response.data['warnings']), 1)
+        # Importação não exige expedição/filial — sem avisos de obrigatoriedade.
+        self.assertEqual(response.data['warnings'], [])
 
         protocolo = ProtocoloEnvio.objects.get(cliente=self.cliente, nota_fiscal='8100')
         self.assertIsNone(protocolo.expedicao)

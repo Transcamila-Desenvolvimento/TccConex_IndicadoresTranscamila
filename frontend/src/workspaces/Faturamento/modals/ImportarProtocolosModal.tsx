@@ -19,7 +19,6 @@ const ImportarProtocolosModal: React.FC<ImportarProtocolosModalProps> = ({ onClo
   const [clienteId, setClienteId] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dryRun, setDryRun] = useState(false);
-  const [skipDuplicatas, setSkipDuplicatas] = useState(false);
   const [progress, setProgress] = useState(-1);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [result, setResult] = useState<ProtocoloImportResult | null>(null);
@@ -73,7 +72,7 @@ const ImportarProtocolosModal: React.FC<ImportarProtocolosModalProps> = ({ onClo
         file: selectedFile,
         clienteId,
         dryRun,
-        skipDuplicatas,
+        skipDuplicatas: true,
       })
       .then((res) => {
         clearInterval(fakeInterval);
@@ -273,14 +272,10 @@ const ImportarProtocolosModal: React.FC<ImportarProtocolosModalProps> = ({ onClo
                 <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
                 Simular importação (dry-run) — não grava no banco
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#475569', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={skipDuplicatas}
-                  onChange={(e) => setSkipDuplicatas(e.target.checked)}
-                />
-                Ignorar duplicatas (NFs ou nº de protocolo já existentes)
-              </label>
+              <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>
+                NFs ou números de protocolo já existentes são ignorados automaticamente.
+                Expedição e filial são opcionais.
+              </p>
             </div>
 
             {errorMsg && (
