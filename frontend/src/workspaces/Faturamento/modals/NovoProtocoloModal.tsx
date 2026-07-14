@@ -169,7 +169,7 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
           {selectedCliente?.requerExpedicao && (
             <div style={{ marginTop: '12px' }}>
               <label>Expedição (selecione até {MAX_EXPEDICOES_POR_PROTOCOLO})</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
+              <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '6px', marginTop: '6px', width: '100%' }}>
                 {PROTOCOLO_EXPEDICAO_OPTIONS.map((option) => {
                   const checked = expedicoes.includes(option);
                   const disabled = !checked && expedicoes.length >= MAX_EXPEDICOES_POR_PROTOCOLO;
@@ -182,11 +182,15 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '6px',
-                        padding: '7px 14px',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        flex: '1 1 0',
+                        minWidth: 0,
+                        padding: '7px 8px',
                         borderRadius: '20px',
-                        fontSize: '12.5px',
+                        fontSize: '12px',
                         fontWeight: 600,
+                        whiteSpace: 'nowrap',
                         border: checked ? '1px solid #118CC4' : '1px solid #cbd5e1',
                         background: checked ? '#118CC4' : '#fff',
                         color: checked ? '#fff' : '#475569',

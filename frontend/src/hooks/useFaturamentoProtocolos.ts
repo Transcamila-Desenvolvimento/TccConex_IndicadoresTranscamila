@@ -115,16 +115,51 @@ export function useDownloadProtocolosBulkPdf() {
   });
 }
 
-/** Abre o PDF em nova aba apenas para visualização (sem download forçado). */
-export function openPdfPreviewInNewTab(blob: Blob) {
+/** Abre aba vazia no gesto do clique — evita bloqueio de popup após o fetch assíncrono. */
+export function openPdfPreviewPlaceholder(): Window | null {
+  const previewWindow = window.open('about:blank', '_blank');
+  if (!previewWindow) return null;
+
+  previewWindow.document.write(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Gerando PDF...</title></head>
+     <body style="margin:0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f8fafc;color:#334155">
+       <p>Gerando PDF do protocolo...</p>
+     </body></html>`,
+  );
+  previewWindow.document.close();
+  return previewWindow;
+}
+
+/**
+ * Entrega o PDF em nova aba (ou na aba já aberta no clique).
+ * Nunca navega a aba do ERP — se o popup for bloqueado, avisa o usuário.
+ */
+export function openPdfPreviewInNewTab(blob: Blob, previewWindow?: Window | null) {
   const pdfBlob =
     blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
   const url = URL.createObjectURL(pdfBlob);
-  const opened = window.open(url, '_blank', 'noopener');
-  if (!opened) {
-    // Fallback se o popup for bloqueado: ainda assim prioriza visualização na mesma aba.
-    window.location.assign(url);
+
+  const target =
+    previewWindow && !previewWindow.closed
+      ? previewWindow
+      : window.open(url, '_blank');
+
+  if (target) {
+    try {
+      target.opener = null;
+    } catch {
+      /* ignore */
+    }
+    if (previewWindow && !previewWindow.closed) {
+      target.location.href = url;
+    }
+    target.focus();
+  } else {
+    alert(
+      'Não foi possível abrir a visualização do PDF em outra aba. Permita pop-ups para este site e tente novamente.',
+    );
   }
+
   setTimeout(() => URL.revokeObjectURL(url), 120_000);
 }
 

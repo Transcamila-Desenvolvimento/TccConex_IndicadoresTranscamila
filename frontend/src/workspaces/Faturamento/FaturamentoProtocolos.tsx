@@ -7,6 +7,7 @@ import {
   useBulkDeleteProtocolos,
   useDownloadProtocolosBulkPdf,
   openPdfPreviewInNewTab,
+  openPdfPreviewPlaceholder,
   useProtocoloClientes,
   useProtocolosEnvio,
 } from '../../hooks/useFaturamentoProtocolos';
@@ -98,11 +99,21 @@ const FaturamentoProtocolos: React.FC = () => {
   const handlePrintSelected = () => {
     if (selectedIds.length === 0 || downloadBulk.isPending) return;
 
+    // Abre a aba no mesmo gesto do clique — evita bloqueio após o fetch e não sai do ERP.
+    const previewWindow = openPdfPreviewPlaceholder();
+    if (!previewWindow) {
+      alert(
+        'Não foi possível abrir outra aba. Permita pop-ups para este site e tente novamente.',
+      );
+      return;
+    }
+
     downloadBulk.mutate(selectedIds, {
       onSuccess: (blob) => {
-        openPdfPreviewInNewTab(blob);
+        openPdfPreviewInNewTab(blob, previewWindow);
       },
       onError: async (error: unknown) => {
+        previewWindow.close();
         alert(await resolveFaturamentoErrorMessage(error));
       },
     });
