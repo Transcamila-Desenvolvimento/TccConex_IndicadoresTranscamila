@@ -6,6 +6,7 @@ import {
   resolveFaturamentoErrorMessage,
   useBulkDeleteProtocolos,
   useDownloadProtocolosBulkPdf,
+  openPdfPreviewInNewTab,
   useProtocoloClientes,
   useProtocolosEnvio,
 } from '../../hooks/useFaturamentoProtocolos';
@@ -95,30 +96,36 @@ const FaturamentoProtocolos: React.FC = () => {
   };
 
   const handlePrintSelected = () => {
-    if (selectedIds.length === 0) return;
+    if (selectedIds.length === 0 || downloadBulk.isPending) return;
 
-    // Abre a aba no mesmo gesto do clique — evita bloqueio silencioso após o fetch.
-    const previewWindow = window.open('about:blank', '_blank');
-    if (previewWindow) {
-      previewWindow.document.write(
-        '<p style="font-family:sans-serif;padding:24px;color:#334155">Gerando PDF do protocolo...</p>',
-      );
-      previewWindow.document.close();
-    }
-
-    downloadBulk.mutate(
-      { ids: selectedIds, previewWindow },
-      {
-        onError: async (error: unknown) => {
-          previewWindow?.close();
-          alert(await resolveFaturamentoErrorMessage(error));
-        },
+    downloadBulk.mutate(selectedIds, {
+      onSuccess: (blob) => {
+        openPdfPreviewInNewTab(blob);
       },
-    );
+      onError: async (error: unknown) => {
+        alert(await resolveFaturamentoErrorMessage(error));
+      },
+    });
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '4px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '4px', position: 'relative' }}>
+      {downloadBulk.isPending && (
+        <div className="protocolo-pdf-overlay" role="status" aria-live="polite" aria-busy="true">
+          <div className="protocolo-pdf-overlay-card">
+            <span className="async-query-spinner" aria-hidden="true" />
+            <div className="protocolo-pdf-overlay-text">
+              <strong>Gerando PDF...</strong>
+              <span>
+                {selectedIds.length === 1
+                  ? 'Preparando o protocolo selecionado'
+                  : `Preparando ${selectedIds.length} protocolos`}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -135,8 +142,12 @@ const FaturamentoProtocolos: React.FC = () => {
                 onClick={handlePrintSelected}
                 disabled={downloadBulk.isPending}
               >
-                <i className="bi bi-printer" />
-                <span>Imprimir ({selectedIds.length})</span>
+                {downloadBulk.isPending ? (
+                  <span className="async-query-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} aria-hidden="true" />
+                ) : (
+                  <i className="bi bi-eye" />
+                )}
+                <span>{downloadBulk.isPending ? 'Gerando...' : `Visualizar PDF (${selectedIds.length})`}</span>
               </button>
               <button
                 type="button"

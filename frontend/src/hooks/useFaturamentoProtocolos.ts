@@ -103,42 +103,29 @@ export function useBulkDeleteProtocolos() {
   });
 }
 
-/** Baixa o PDF e tenta abrir em `previewWindow` (já aberta no clique do usuário). */
-function deliverPdfBlob(blob: Blob, filename: string, previewWindow: Window | null) {
-  const url = URL.createObjectURL(blob);
-
-  if (previewWindow && !previewWindow.closed) {
-    previewWindow.location.href = url;
-  } else {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.rel = 'noopener';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  }
-
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
 export function useDownloadProtocoloPdf() {
   return useMutation({
-    mutationFn: async ({ id, previewWindow }: { id: string; previewWindow: Window | null }) => {
-      const blob = await apiService.downloadProtocoloPdf(id);
-      deliverPdfBlob(blob, `protocolo_${id}.pdf`, previewWindow);
-    },
+    mutationFn: (id: string) => apiService.downloadProtocoloPdf(id),
   });
 }
 
 export function useDownloadProtocolosBulkPdf() {
   return useMutation({
-    mutationFn: async ({ ids, previewWindow }: { ids: number[]; previewWindow: Window | null }) => {
-      const blob = await apiService.downloadProtocolosBulkPdf(ids);
-      const filename = ids.length === 1 ? `protocolo_${ids[0]}.pdf` : 'protocolos.pdf';
-      deliverPdfBlob(blob, filename, previewWindow);
-    },
+    mutationFn: (ids: number[]) => apiService.downloadProtocolosBulkPdf(ids),
   });
+}
+
+/** Abre o PDF em nova aba apenas para visualização (sem download forçado). */
+export function openPdfPreviewInNewTab(blob: Blob) {
+  const pdfBlob =
+    blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+  const url = URL.createObjectURL(pdfBlob);
+  const opened = window.open(url, '_blank', 'noopener');
+  if (!opened) {
+    // Fallback se o popup for bloqueado: ainda assim prioriza visualização na mesma aba.
+    window.location.assign(url);
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 120_000);
 }
 
 export function useImportProtocolosSpreadsheet() {
