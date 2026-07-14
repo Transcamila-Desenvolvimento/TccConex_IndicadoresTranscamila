@@ -3,7 +3,7 @@
 # Portal / CLI: Startup Command = bash startup.sh
 set -e
 
-echo "== TccConex ERP startup.sh v7 =="
+echo "== TccConex ERP startup.sh v8 =="
 export PYTHONUNBUFFERED=1
 cd "$(dirname "$0")"
 
@@ -17,12 +17,14 @@ REQ_HASH_FILE="${CACHE_ROOT}/.requirements_sha256"
 PORT="${WEBSITES_PORT:-8000}"
 
 verify_python_deps() {
-  PYTHONPATH="$CACHE_DIR" python -c "import django, asgiref, gunicorn, rest_framework, cryptography, xlrd; from cryptography.hazmat.bindings._rust import exceptions"
+  local target_dir="$1"
+  PYTHONPATH="$target_dir" python -c "import django, asgiref, gunicorn, rest_framework, cryptography, xlrd; from cryptography.hazmat.bindings._rust import exceptions"
 }
 
 python_deps_ok() {
   [ -d "$CACHE_DIR" ] || return 1
-  verify_python_deps 2>/dev/null
+  [ -f "$REQ_HASH_FILE" ] || return 1
+  verify_python_deps "$CACHE_DIR" 2>/dev/null
 }
 
 requirements_changed() {
@@ -32,6 +34,9 @@ requirements_changed() {
   [ "$(cat "$REQ_HASH_FILE")" != "$current" ]
 }
 
+# Remove leftovers de installs interrompidos (evita encher /home/site).
+rm -rf "${CACHE_ROOT}".tmp.* 2>/dev/null || true
+
 if python_deps_ok && ! requirements_changed; then
   echo "== TccConex ERP: deps em cache (/home/site/python_packages) =="
 else
@@ -40,7 +45,9 @@ else
   rm -rf "$CACHE_TMP" 2>/dev/null || true
   mkdir -p "${CACHE_TMP}/lib/site-packages"
   python -m pip install --no-cache-dir -r requirements.txt --target "${CACHE_TMP}/lib/site-packages"
-  verify_python_deps
+  echo "== TccConex ERP: validando deps no cache temporario =="
+  verify_python_deps "${CACHE_TMP}/lib/site-packages"
+  echo "== TccConex ERP: promovendo cache de deps =="
   rm -rf "$CACHE_ROOT" 2>/dev/null || true
   mv "$CACHE_TMP" "$CACHE_ROOT"
   sha256sum requirements.txt | awk '{print $1}' > "$REQ_HASH_FILE"
