@@ -115,24 +115,25 @@ export function useDownloadProtocolosBulkPdf() {
   });
 }
 
-/** Abre aba vazia no gesto do clique — evita bloqueio de popup após o fetch assíncrono. */
+/**
+ * Reserva uma aba no gesto do clique (evita bloqueio de popup após o fetch).
+ * Fica em branco e devolve o foco ao ERP — o loading aparece só no site.
+ * Quando o PDF fica pronto, essa aba recebe o arquivo.
+ */
 export function openPdfPreviewPlaceholder(): Window | null {
   const previewWindow = window.open('about:blank', '_blank');
   if (!previewWindow) return null;
-
-  previewWindow.document.write(
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Gerando PDF...</title></head>
-     <body style="margin:0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f8fafc;color:#334155">
-       <p>Gerando PDF do protocolo...</p>
-     </body></html>`,
-  );
-  previewWindow.document.close();
+  try {
+    window.focus();
+  } catch {
+    /* ignore */
+  }
   return previewWindow;
 }
 
 /**
- * Entrega o PDF em nova aba (ou na aba já aberta no clique).
- * Nunca navega a aba do ERP — se o popup for bloqueado, avisa o usuário.
+ * Entrega o PDF na aba já reservada.
+ * Nunca navega a aba do ERP.
  */
 export function openPdfPreviewInNewTab(blob: Blob, previewWindow?: Window | null) {
   const pdfBlob =

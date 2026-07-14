@@ -99,7 +99,7 @@ const FaturamentoProtocolos: React.FC = () => {
   const handlePrintSelected = () => {
     if (selectedIds.length === 0 || downloadBulk.isPending) return;
 
-    // Abre a aba no mesmo gesto do clique — evita bloqueio após o fetch e não sai do ERP.
+    // Reserva aba em branco no clique (anti-bloqueio). Loading fica só no overlay do ERP.
     const previewWindow = openPdfPreviewPlaceholder();
     if (!previewWindow) {
       alert(
