@@ -7,6 +7,11 @@ from apps.accounts.mixins import ModuleScopedViewMixin
 from .cashflow_service import build_cashflow_day_detail, build_cashflow_payload, get_financeiro_activity_version
 from .gerencial_email_service import _parse_emails, _parse_reference, send_gerencial_email
 from .models import IndicadorFilial, IndicadorKpi
+from .ocorrencias_indicadores_service import (
+    build_gnre_guias_list,
+    build_gnre_indicadores,
+    build_ops_indicadores,
+)
 from .serializers import IndicadorFilialSerializer, IndicadorKpiSerializer
 
 
@@ -88,6 +93,30 @@ class CashFlowView(ModuleScopedViewMixin, APIView):
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(payload)
+
+
+class OpsOcorrenciasIndicadoresView(ModuleScopedViewMixin, APIView):
+    permission_module = 'Indicadores'
+    permission_requires_filial = False
+
+    def get(self, request):
+        return Response(build_ops_indicadores(request.query_params))
+
+
+class GnreOcorrenciasIndicadoresView(ModuleScopedViewMixin, APIView):
+    permission_module = 'Indicadores'
+    permission_requires_filial = False
+
+    def get(self, request):
+        return Response(build_gnre_indicadores(request.query_params))
+
+
+class GnreOcorrenciasGuiasView(ModuleScopedViewMixin, APIView):
+    permission_module = 'Indicadores'
+    permission_requires_filial = False
+
+    def get(self, request):
+        return Response(build_gnre_guias_list(request.query_params))
 
 
 class IndicadorKpiViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):

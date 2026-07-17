@@ -197,6 +197,60 @@ export interface CashAdjustment {
   user: string;
 }
 
+export interface OcorrenciasMeta {
+  filiais: string[];
+  justificativas: string[];
+}
+
+export interface OpsRecebidaOcorrencia {
+  id: number;
+  filial: string;
+  contrato: string;
+  dataPagamento: string;
+  mdfeEncerrado: boolean;
+}
+
+export interface GnreIcmsOcorrencia {
+  id: number;
+  filial: string;
+  cte: string;
+  valorGuia: number;
+  periodoReferencia: string;
+  dataPagamento: string;
+  validada: boolean;
+}
+
+export interface NotaPagaSemLancamento {
+  id: number;
+  filial: string;
+  nfs: string;
+  fornecedor: string;
+  valor: number;
+  dataEmissao: string;
+  envioProvisaoLuft: string | null;
+  dataPagamento: string;
+  justificativa: string;
+}
+
+export interface OpsRecebidaQueryParams extends ListQueryParams {
+  filial?: string;
+  date?: string;
+  mdfeEncerrado?: 'true' | 'false' | '';
+}
+
+export interface GnreIcmsQueryParams extends ListQueryParams {
+  filial?: string;
+  date?: string;
+  validada?: 'true' | 'false' | '';
+  periodoReferencia?: string;
+}
+
+export interface NotaPagaQueryParams extends ListQueryParams {
+  filial?: string;
+  date?: string;
+  justificativa?: string;
+}
+
 export interface BankAccount {
   id: number;
   bank: string;
@@ -231,6 +285,151 @@ export interface IndicadorFilialRow {
   fretes: number;
   toneladas: string;
   meta: string;
+}
+
+export type OpsIndicadoresGranularity = 'day' | 'month';
+
+export interface OcorrenciasIndicadoresQueryParams {
+  filial?: string;
+  startDate?: string;
+  endDate?: string;
+  year?: number;
+  months?: number[];
+  granularity?: OpsIndicadoresGranularity;
+}
+
+export interface OpsIndicadoresSummary {
+  total: number;
+  mdfeEncerradas: number;
+  mdfePendentes: number;
+  percentualEncerrado: number;
+  percentualFalha: number;
+  volumeOperacao: number;
+}
+
+export interface OpsIndicadoresFilialRow {
+  filial: string;
+  total: number;
+  encerradas: number;
+  pendentes: number;
+  percentualEncerrado: number;
+  percentualFalha: number;
+}
+
+export interface OpsIndicadoresPeriodRow {
+  period: string;
+  month: string;
+  label: string;
+  total: number;
+  encerradas: number;
+  pendentes: number;
+  percentualFalha: number;
+}
+
+/** @deprecated use OpsIndicadoresPeriodRow */
+export type OpsIndicadoresMonthRow = OpsIndicadoresPeriodRow;
+
+export interface OpsIndicadoresMeta {
+  availableYears: number[];
+  availableFiliais: string[];
+  granularity: OpsIndicadoresGranularity;
+  requestedGranularity: OpsIndicadoresGranularity;
+  allowedGranularities: OpsIndicadoresGranularity[];
+  granularityAdjusted: boolean;
+  granularityMessage: string;
+  year: number | null;
+  months: number[];
+}
+
+export interface OpsIndicadoresResponse {
+  summary: OpsIndicadoresSummary;
+  byFilial: OpsIndicadoresFilialRow[];
+  byPeriod: OpsIndicadoresPeriodRow[];
+  byMonth: OpsIndicadoresPeriodRow[];
+  insights: string[];
+  meta: OpsIndicadoresMeta;
+}
+
+export interface GnreIndicadoresSummary {
+  total: number;
+  validadas: number;
+  naoValidadas: number;
+  percentualValidado: number;
+  percentualFalha: number;
+  valorTotal: number;
+  valorValidado: number;
+  valorPendente: number;
+  volumeOperacao: number;
+}
+
+export interface GnreIndicadoresFilialRow {
+  filial: string;
+  total: number;
+  validadas: number;
+  pendentes: number;
+  percentualValidado: number;
+  percentualFalha: number;
+  valorTotal: number;
+  valorPendente: number;
+}
+
+export interface GnreIndicadoresPeriodRow {
+  period: string;
+  month: string;
+  label: string;
+  total: number;
+  validadas: number;
+  pendentes: number;
+  percentualFalha: number;
+  valorTotal: number;
+  valorPendente: number;
+}
+
+/** @deprecated use GnreIndicadoresPeriodRow */
+export type GnreIndicadoresMonthRow = GnreIndicadoresPeriodRow;
+
+export interface GnreIndicadoresMeta {
+  availableYears: number[];
+  availableFiliais: string[];
+  granularity: OpsIndicadoresGranularity;
+  requestedGranularity: OpsIndicadoresGranularity;
+  allowedGranularities: OpsIndicadoresGranularity[];
+  granularityAdjusted: boolean;
+  granularityMessage: string;
+  year: number | null;
+  months: number[];
+}
+
+export interface GnreIndicadoresGuiaRow {
+  id: number;
+  filial: string;
+  cte: string;
+  periodoReferencia: string;
+  dataPagamento: string;
+  validada: boolean;
+  valorGuia: number;
+}
+
+export interface GnreIndicadoresGuiasQueryParams extends OcorrenciasIndicadoresQueryParams {
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface GnreIndicadoresGuiasResponse {
+  count: number;
+  page: number;
+  pageSize: number;
+  results: GnreIndicadoresGuiaRow[];
+}
+
+export interface GnreIndicadoresResponse {
+  summary: GnreIndicadoresSummary;
+  byFilial: GnreIndicadoresFilialRow[];
+  byPeriod: GnreIndicadoresPeriodRow[];
+  byMonth: GnreIndicadoresPeriodRow[];
+  insights: string[];
+  meta: GnreIndicadoresMeta;
 }
 
 export interface CashflowQueryParams {

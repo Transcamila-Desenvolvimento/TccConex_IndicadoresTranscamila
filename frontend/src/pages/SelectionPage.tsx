@@ -7,8 +7,8 @@ import { AUTH_PROFILE_QUERY_KEY } from '../hooks/useAuthProfile';
 import {
   filterActiveEnvironments,
   ADMIN_ENVIRONMENT,
+  ACTIVE_ENVIRONMENTS,
   ENVIRONMENT_CODES,
-  type ActiveEnvironment,
 } from '../constants/environments';
 import logoImg from '../assets/Logo_TccConex.png';
 
@@ -146,13 +146,19 @@ const SelectionPage: React.FC = () => {
 
   const getEnvCode = (env: string) => ENV_META[env]?.code ?? 'ERP';
 
-  const envData: { name: ActiveEnvironment; code: string; color: string; text: string }[] = [
-    { name: ADMIN_ENVIRONMENT, code: ENVIRONMENT_CODES[ADMIN_ENVIRONMENT], color: ENV_BADGE_COLOR, text: `Administração / Manutenção (${ENVIRONMENT_CODES[ADMIN_ENVIRONMENT]})` },
-    { name: 'Indicadores', code: ENVIRONMENT_CODES.Indicadores, color: ENV_BADGE_COLOR, text: `Módulo de Indicadores (${ENVIRONMENT_CODES.Indicadores})` },
-    { name: 'Financeiro', code: ENVIRONMENT_CODES.Financeiro, color: ENV_BADGE_COLOR, text: `Módulo Financeiro (${ENVIRONMENT_CODES.Financeiro})` },
-    { name: 'Compras', code: ENVIRONMENT_CODES.Compras, color: ENV_BADGE_COLOR, text: `Módulo de Compras (${ENVIRONMENT_CODES.Compras})` },
-    { name: 'RH', code: ENVIRONMENT_CODES.RH, color: ENV_BADGE_COLOR, text: `Recursos Humanos (${ENVIRONMENT_CODES.RH})` },
-  ];
+  const envData = useMemo(
+    () => ACTIVE_ENVIRONMENTS.map((name) => {
+      const meta = ENV_META[name];
+      const code = ENVIRONMENT_CODES[name];
+      return {
+        name,
+        code,
+        color: meta?.color ?? ENV_BADGE_COLOR,
+        text: `${meta?.text ?? name} (${code})`,
+      };
+    }),
+    [],
+  );
 
   const filteredEnvs = envData.filter(env =>
     userEnvironments.includes(env.name) &&

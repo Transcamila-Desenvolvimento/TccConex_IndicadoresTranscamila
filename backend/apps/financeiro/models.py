@@ -124,3 +124,60 @@ class BalanceHistoryEntry(models.Model):
 
     class Meta:
         ordering = ['-reference_date', '-id']
+
+
+class OpsRecebidaOcorrencia(models.Model):
+    filial = models.CharField(max_length=50)
+    contrato = models.CharField(max_length=50)
+    data_pagamento = models.DateField()
+    mdfe_encerrado = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-data_pagamento', '-id']
+        verbose_name = 'OP recebida (ocorrência)'
+        verbose_name_plural = 'OPs recebidas (ocorrências)'
+
+    def __str__(self):
+        return f'{self.filial} / {self.contrato}'
+
+
+class GnreIcmsOcorrencia(models.Model):
+    filial = models.CharField(max_length=50)
+    cte = models.CharField(max_length=50)
+    valor_guia = models.DecimalField(max_digits=14, decimal_places=2)
+    periodo_referencia = models.CharField(max_length=20)
+    data_pagamento = models.DateField()
+    validada = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-data_pagamento', '-id']
+        verbose_name = 'GNRE-ICMS (ocorrência)'
+        verbose_name_plural = 'GNRE-ICMS (ocorrências)'
+
+    def __str__(self):
+        return f'{self.filial} / CT-e {self.cte}'
+
+
+class NotaPagaSemLancamento(models.Model):
+    filial = models.CharField(max_length=50)
+    nfs = models.CharField(max_length=50)
+    fornecedor = models.CharField(max_length=200)
+    valor = models.DecimalField(max_digits=14, decimal_places=2)
+    data_emissao = models.DateField()
+    envio_provisao_luft = models.DateField(null=True, blank=True)
+    data_pagamento = models.DateField()
+    justificativa = models.CharField(max_length=120)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-data_pagamento', '-id']
+        verbose_name = 'Nota paga sem lançamento'
+        verbose_name_plural = 'Notas pagas sem lançamento'
+
+    def __str__(self):
+        return f'{self.filial} / NFS {self.nfs}'

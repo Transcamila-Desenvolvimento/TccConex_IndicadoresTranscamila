@@ -196,9 +196,20 @@ body {
 }
 
 .sidebar-nav .nav-btn .nav-icon.nav-icon-sub {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
   font-size: 0.875rem;
+  text-align: center;
+}
+
+.sidebar-nav .sub-nav-btn .nav-btn-left {
+  width: 100%;
+}
+
+.sidebar-nav .sub-nav-btn .nav-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .chevron-submenu.bi {
@@ -1957,7 +1968,7 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 }
 
 .sub-nav-btn {
-  padding-left: 36px !important;
+  padding-left: 44px !important;
   font-size: 13px !important;
   height: 44px !important;
   background-color: #fafafa !important;
@@ -2966,6 +2977,12 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 
 .segmented-tab-btn.active svg {
   color: #0f85c1;
+}
+
+.segmented-tab-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .comercial-filters-container {
@@ -4376,7 +4393,8 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 
 /* ─── Fluxo de Caixa (Indicadores) ─────────────────────────────────────────── */
 
-.cashflow-page {
+.cashflow-page,
+.indicadores-ocorrencias-page {
   display: flex;
   flex-direction: column;
   min-height: 100%;

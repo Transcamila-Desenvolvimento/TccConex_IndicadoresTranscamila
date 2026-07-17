@@ -8,6 +8,10 @@ from .views import (
     BankDataSyncView,
     BillingRecordViewSet,
     CashAdjustmentViewSet,
+    GnreIcmsOcorrenciaViewSet,
+    NotaPagaSemLancamentoViewSet,
+    OcorrenciasMetaView,
+    OpsRecebidaOcorrenciaViewSet,
     PagarDiffAnalysisView,
     PrActionView,
     PrAnalysisView,
@@ -22,6 +26,9 @@ router.register('billing', BillingRecordViewSet, basename='billing')
 router.register('adjustments', CashAdjustmentViewSet, basename='adjustments')
 router.register('bank-accounts', BankAccountViewSet, basename='bank-accounts')
 router.register('balance-history', BalanceHistoryEntryViewSet, basename='balance-history')
+router.register('ocorrencias/ops-recebidas', OpsRecebidaOcorrenciaViewSet, basename='ocorrencias-ops')
+router.register('ocorrencias/gnre-icms', GnreIcmsOcorrenciaViewSet, basename='ocorrencias-gnre')
+router.register('ocorrencias/notas-pagas', NotaPagaSemLancamentoViewSet, basename='ocorrencias-notas')
 
 urlpatterns = [
     path('reports/pagar/', ActiveReportDataView.as_view(), {'report_type': 'pagar'}, name='reports-pagar'),
@@ -35,5 +42,6 @@ urlpatterns = [
     path('reports/pr-action/', PrActionView.as_view(), name='reports-pr-action'),
     path('tasks/<str:task_id>/', CeleryTaskStatusView.as_view(), name='celery-task-status'),
     path('bank-data/sync/', BankDataSyncView.as_view(), name='bank-data-sync'),
+    path('ocorrencias/meta/', OcorrenciasMetaView.as_view(), name='ocorrencias-meta'),
     path('', include(router.urls)),
 ]

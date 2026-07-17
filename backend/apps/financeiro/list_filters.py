@@ -10,6 +10,19 @@ def _skip_filter(value: str | None) -> bool:
     return normalized in ('', 'todas', 'todos', 'all')
 
 
+def _parse_bool_filter(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in ('', 'todos', 'todas', 'all'):
+        return None
+    if normalized in ('1', 'true', 'sim', 'yes', 's'):
+        return True
+    if normalized in ('0', 'false', 'nao', 'não', 'no', 'n'):
+        return False
+    return None
+
+
 def filter_billing_queryset(qs, params):
     search = (params.get('search') or '').strip()
     branch = params.get('branch') or params.get('filial')
@@ -88,3 +101,69 @@ def billing_trend(record: BillingRecord) -> str:
     if record.value < previous.value:
         return 'down'
     return 'equal'
+
+
+def filter_ops_recebidas_queryset(qs, params):
+    search = (params.get('search') or '').strip()
+    filial = params.get('filial') or params.get('branch')
+    ref_date = params.get('date') or params.get('dataPagamento')
+    mdfe = _parse_bool_filter(params.get('mdfeEncerrado') or params.get('mdfe_encerrado'))
+
+    if not _skip_filter(filial):
+        qs = qs.filter(filial=filial)
+    if ref_date:
+        qs = qs.filter(data_pagamento=ref_date)
+    if mdfe is not None:
+        qs = qs.filter(mdfe_encerrado=mdfe)
+    if search:
+        qs = qs.filter(
+            Q(filial__icontains=search)
+            | Q(contrato__icontains=search)
+        )
+    return qs
+
+
+def filter_gnre_icms_queryset(qs, params):
+    search = (params.get('search') or '').strip()
+    filial = params.get('filial') or params.get('branch')
+    ref_date = params.get('date') or params.get('dataPagamento')
+    validada = _parse_bool_filter(params.get('validada'))
+    periodo = (params.get('periodoReferencia') or params.get('periodo_referencia') or '').strip()
+
+    if not _skip_filter(filial):
+        qs = qs.filter(filial=filial)
+    if ref_date:
+        qs = qs.filter(data_pagamento=ref_date)
+    if validada is not None:
+        qs = qs.filter(validada=validada)
+    if periodo:
+        qs = qs.filter(periodo_referencia=periodo)
+    if search:
+        qs = qs.filter(
+            Q(filial__icontains=search)
+            | Q(cte__icontains=search)
+            | Q(periodo_referencia__icontains=search)
+        )
+    return qs
+
+
+def filter_notas_pagas_queryset(qs, params):
+    search = (params.get('search') or '').strip()
+    filial = params.get('filial') or params.get('branch')
+    ref_date = params.get('date') or params.get('dataPagamento')
+    justificativa = params.get('justificativa')
+
+    if not _skip_filter(filial):
+        qs = qs.filter(filial=filial)
+    if ref_date:
+        qs = qs.filter(data_pagamento=ref_date)
+    if not _skip_filter(justificativa):
+        qs = qs.filter(justificativa=justificativa)
+    if search:
+        qs = qs.filter(
+            Q(filial__icontains=search)
+            | Q(nfs__icontains=search)
+            | Q(fornecedor__icontains=search)
+            | Q(justificativa__icontains=search)
+        )
+    return qs

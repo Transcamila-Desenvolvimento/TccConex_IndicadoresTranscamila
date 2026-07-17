@@ -141,7 +141,7 @@ const FaturamentoProtocolos: React.FC = () => {
       <header className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '6px', height: '22px', backgroundColor: '#118CC4' }} />
-          <h1 className="view-page-title">Envio de NF para Cliente</h1>
+          <h1 className="view-page-title">Envio NF Cliente</h1>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {selectedIds.length > 0 && (
