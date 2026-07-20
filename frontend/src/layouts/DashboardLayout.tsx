@@ -35,7 +35,6 @@ const DashboardLayout: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isCashflowSubmenuOpen, setIsCashflowSubmenuOpen] = useState(false);
-  const [isOcorrenciasSubmenuOpen, setIsOcorrenciasSubmenuOpen] = useState(false);
   const [isIndFinanceiroSubmenuOpen, setIsIndFinanceiroSubmenuOpen] = useState(false);
   const [isIndLogisticaSubmenuOpen, setIsIndLogisticaSubmenuOpen] = useState(false);
   const [isEnvioDocumentosSubmenuOpen, setIsEnvioDocumentosSubmenuOpen] = useState(false);
@@ -71,12 +70,7 @@ const DashboardLayout: React.FC = () => {
       || location.pathname.startsWith('/financeiro/billing')) {
       setIsCashflowSubmenuOpen(true);
     }
-    if (location.pathname.startsWith('/financeiro/ocorrencias')) {
-      setIsOcorrenciasSubmenuOpen(true);
-    }
-    if (location.pathname.startsWith('/indicadores/fluxo-de-caixa')
-      || location.pathname.startsWith('/indicadores/ops')
-      || location.pathname.startsWith('/indicadores/gnre')) {
+    if (location.pathname.startsWith('/indicadores/fluxo-de-caixa')) {
       setIsIndFinanceiroSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/indicadores/logistica')) {
@@ -199,28 +193,6 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Financeiro'
       },
       {
-        title: "OPS Recebidas",
-        path: "Financeiro / Ocorrências financeiras / OPS Recebidas",
-        icon: (
-          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.955a3.375 3.375 0 00-.95-2.348L12.25 2.25H9.75l-1.05 1.52a3.375 3.375 0 00-.95 2.348v.955m5.25 0v3.75m-5.25-3.75v3.75m0 0h5.25" />
-          </svg>
-        ),
-        action: () => navigate('/financeiro/ocorrencias/ops-recebidas'),
-        show: selectedEnvironment === 'Financeiro'
-      },
-      {
-        title: "GNRE-ICMS",
-        path: "Financeiro / Ocorrências financeiras / GNRE-ICMS",
-        icon: (
-          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-          </svg>
-        ),
-        action: () => navigate('/financeiro/ocorrencias/gnre-icms'),
-        show: selectedEnvironment === 'Financeiro'
-      },
-      {
         title: "Home Faturamento",
         path: "Faturamento / Home",
         icon: (
@@ -262,28 +234,6 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/indicadores/fluxo-de-caixa'),
-        show: selectedEnvironment === 'Indicadores'
-      },
-      {
-        title: "Indicadores de OPs",
-        path: "Indicadores / Financeiro / OPs",
-        icon: (
-          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.955a3.375 3.375 0 00-.95-2.348L12.25 2.25H9.75l-1.05 1.52a3.375 3.375 0 00-.95 2.348v.955m5.25 0v3.75m-5.25-3.75v3.75m0 0h5.25" />
-          </svg>
-        ),
-        action: () => navigate('/indicadores/ops'),
-        show: selectedEnvironment === 'Indicadores'
-      },
-      {
-        title: "Indicadores de GNREs",
-        path: "Indicadores / Financeiro / GNREs",
-        icon: (
-          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-          </svg>
-        ),
-        action: () => navigate('/indicadores/gnre'),
         show: selectedEnvironment === 'Indicadores'
       },
       {
@@ -370,14 +320,8 @@ const DashboardLayout: React.FC = () => {
     '/financeiro/adjustments',
     '/financeiro/billing',
   ];
-  const FINANCEIRO_OCORRENCIAS_PATHS = [
-    '/financeiro/ocorrencias/ops-recebidas',
-    '/financeiro/ocorrencias/gnre-icms',
-  ];
   const IND_FINANCEIRO_PATHS = [
     '/indicadores/fluxo-de-caixa',
-    '/indicadores/ops',
-    '/indicadores/gnre',
   ];
   const IND_LOGISTICA_PATHS = ['/indicadores/logistica/meta-faturamento'];
   const FATURAMENTO_ENVIO_PATHS = ['/faturamento/protocolos'];
@@ -404,15 +348,10 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/financeiro/balances')) return `${env} / Fluxo de Caixa / Saldos Bancários`;
     if (path.startsWith('/financeiro/adjustments')) return `${env} / Fluxo de Caixa / Ajustes de Caixa`;
     if (path.startsWith('/financeiro/billing')) return `${env} / Fluxo de Caixa / Faturamento`;
-    if (path.startsWith('/financeiro/ocorrencias/ops-recebidas')) return `${env} / Ocorrências financeiras / OPS Recebidas`;
-    if (path.startsWith('/financeiro/ocorrencias/gnre-icms')) return `${env} / Ocorrências financeiras / GNRE-ICMS`;
-    if (path.startsWith('/financeiro/ocorrencias')) return `${env} / Ocorrências financeiras`;
     if (path.startsWith('/faturamento/protocolos')) return `${env} / Envio de documentos / Envio NF Cliente`;
     if (path.startsWith('/faturamento')) return `${env} / Home`;
     if (path.startsWith('/indicadores/logistica/meta-faturamento')) return `${env} / Logística / Meta de faturamento`;
     if (path.startsWith('/indicadores/fluxo-de-caixa')) return `${env} / Financeiro / Fluxo de Caixa`;
-    if (path.startsWith('/indicadores/ops')) return `${env} / Financeiro / Indicadores de OPs`;
-    if (path.startsWith('/indicadores/gnre')) return `${env} / Financeiro / Indicadores de GNREs`;
     if (path.startsWith('/indicadores')) return `${env} / Home Indicadores`;
     
     return `${env} / Principal`;
@@ -502,7 +441,7 @@ const DashboardLayout: React.FC = () => {
                   className="submenu-container"
                   style={{
                     display: isSidebarCollapsed ? undefined : 'block',
-                    maxHeight: isSidebarCollapsed ? undefined : (isIndFinanceiroSubmenuOpen ? '180px' : '0px'),
+                    maxHeight: isSidebarCollapsed ? undefined : (isIndFinanceiroSubmenuOpen ? '80px' : '0px'),
                     overflow: 'hidden',
                     transition: 'max-height 0.25s ease',
                   }}
@@ -514,24 +453,6 @@ const DashboardLayout: React.FC = () => {
                     <div className="nav-btn-left">
                       <NavIcon name="arrow-down-up" sub />
                       <span className="nav-text">Fluxo de caixa</span>
-                    </div>
-                  </Link>
-                  <Link
-                    to="/indicadores/ops"
-                    className={`nav-btn sub-nav-btn ${isRouteActive('/indicadores/ops') ? 'active' : ''}`}
-                  >
-                    <div className="nav-btn-left">
-                      <NavIcon name="truck" sub />
-                      <span className="nav-text">OPs</span>
-                    </div>
-                  </Link>
-                  <Link
-                    to="/indicadores/gnre"
-                    className={`nav-btn sub-nav-btn ${isRouteActive('/indicadores/gnre') ? 'active' : ''}`}
-                  >
-                    <div className="nav-btn-left">
-                      <NavIcon name="receipt-cutoff" sub />
-                      <span className="nav-text">GNREs</span>
                     </div>
                   </Link>
                 </div>
@@ -651,50 +572,6 @@ const DashboardLayout: React.FC = () => {
                     <div className="nav-btn-left">
                       <NavIcon name="receipt" sub />
                       <span className="nav-text">Faturamento</span>
-                    </div>
-                  </Link>
-                </div>
-              </div>
-
-              {/* Ocorrências financeiras Collapsible Submenu */}
-              <div className="nav-group-wrapper" id="btn-menu-financeiro-ocorrencias">
-                <button
-                  type="button"
-                  className={`nav-btn ${isParentNavActive(FINANCEIRO_OCORRENCIAS_PATHS) ? 'active-parent' : ''}`}
-                  onClick={() => setIsOcorrenciasSubmenuOpen(!isOcorrenciasSubmenuOpen)}
-                >
-                  <div className="nav-btn-left">
-                    <NavIcon name="exclamation-circle" />
-                    <span className="nav-text">Ocorrências financeiras</span>
-                  </div>
-                  <ChevronSubmenu open={isOcorrenciasSubmenuOpen} />
-                </button>
-
-                <div
-                  className="submenu-container"
-                  style={{
-                    display: isSidebarCollapsed ? undefined : 'block',
-                    maxHeight: isSidebarCollapsed ? undefined : (isOcorrenciasSubmenuOpen ? '120px' : '0px'),
-                    overflow: 'hidden',
-                    transition: 'max-height 0.25s ease',
-                  }}
-                >
-                  <Link
-                    to="/financeiro/ocorrencias/ops-recebidas"
-                    className={`nav-btn sub-nav-btn ${isRouteActive('/financeiro/ocorrencias/ops-recebidas') ? 'active' : ''}`}
-                  >
-                    <div className="nav-btn-left">
-                      <NavIcon name="truck" sub />
-                      <span className="nav-text">OPS Recebidas</span>
-                    </div>
-                  </Link>
-                  <Link
-                    to="/financeiro/ocorrencias/gnre-icms"
-                    className={`nav-btn sub-nav-btn ${isRouteActive('/financeiro/ocorrencias/gnre-icms') ? 'active' : ''}`}
-                  >
-                    <div className="nav-btn-left">
-                      <NavIcon name="receipt-cutoff" sub />
-                      <span className="nav-text">GNRE-ICMS</span>
                     </div>
                   </Link>
                 </div>

@@ -1,27 +1,16 @@
 from rest_framework import serializers
 
 from .billing_import_service import BILLING_BRANCHES
-from .constants import NOTA_PAGA_JUSTIFICATIVAS, OCORRENCIA_FILIAIS
 from .models import (
     AgingTitulo,
     BalanceHistoryEntry,
     BankAccount,
     BillingRecord,
     CashAdjustment,
-    GnreIcmsOcorrencia,
-    NotaPagaSemLancamento,
-    OpsRecebidaOcorrencia,
     PagarTitulo,
     ReceberTitulo,
     ReportBatch,
 )
-
-
-def _validate_ocorrencia_filial(filial: str | None):
-    if filial and filial not in OCORRENCIA_FILIAIS:
-        raise serializers.ValidationError(
-            {'filial': f'Filial inválida. Use uma de: {", ".join(OCORRENCIA_FILIAIS)}.'}
-        )
 
 
 class ReportBatchSerializer(serializers.ModelSerializer):
@@ -156,72 +145,3 @@ class BalanceHistoryEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = BalanceHistoryEntry
         fields = ['id', 'accountId', 'date', 'bank', 'number', 'type', 'value']
-
-
-class OpsRecebidaOcorrenciaSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)
-    dataPagamento = serializers.DateField(source='data_pagamento', format='%Y-%m-%d')
-    mdfeEncerrado = serializers.BooleanField(source='mdfe_encerrado')
-
-    class Meta:
-        model = OpsRecebidaOcorrencia
-        fields = ['id', 'filial', 'contrato', 'dataPagamento', 'mdfeEncerrado']
-
-    def validate(self, attrs):
-        filial = attrs.get('filial') or getattr(self.instance, 'filial', None)
-        _validate_ocorrencia_filial(filial)
-        return attrs
-
-
-class GnreIcmsOcorrenciaSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)
-    valorGuia = serializers.DecimalField(source='valor_guia', max_digits=14, decimal_places=2)
-    periodoReferencia = serializers.CharField(source='periodo_referencia', max_length=20)
-    dataPagamento = serializers.DateField(source='data_pagamento', format='%Y-%m-%d')
-
-    class Meta:
-        model = GnreIcmsOcorrencia
-        fields = [
-            'id', 'filial', 'cte', 'valorGuia', 'periodoReferencia',
-            'dataPagamento', 'validada',
-        ]
-
-    def validate(self, attrs):
-        filial = attrs.get('filial') or getattr(self.instance, 'filial', None)
-        _validate_ocorrencia_filial(filial)
-        periodo = attrs.get('periodo_referencia') or getattr(self.instance, 'periodo_referencia', None)
-        if periodo and len(str(periodo).strip()) < 4:
-            raise serializers.ValidationError(
-                {'periodoReferencia': 'Informe o período de referência (ex.: 2025-08).'}
-            )
-        return attrs
-
-
-class NotaPagaSemLancamentoSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)
-    dataEmissao = serializers.DateField(source='data_emissao', format='%Y-%m-%d')
-    envioProvisaoLuft = serializers.DateField(
-        source='envio_provisao_luft', format='%Y-%m-%d', required=False, allow_null=True,
-    )
-    dataPagamento = serializers.DateField(source='data_pagamento', format='%Y-%m-%d')
-
-    class Meta:
-        model = NotaPagaSemLancamento
-        fields = [
-            'id', 'filial', 'nfs', 'fornecedor', 'valor', 'dataEmissao',
-            'envioProvisaoLuft', 'dataPagamento', 'justificativa',
-        ]
-
-    def validate(self, attrs):
-        filial = attrs.get('filial') or getattr(self.instance, 'filial', None)
-        _validate_ocorrencia_filial(filial)
-        justificativa = attrs.get('justificativa') or getattr(self.instance, 'justificativa', None)
-        if justificativa and justificativa not in NOTA_PAGA_JUSTIFICATIVAS:
-            raise serializers.ValidationError(
-                {
-                    'justificativa': (
-                        f'Justificativa inválida. Use uma de: {", ".join(NOTA_PAGA_JUSTIFICATIVAS)}.'
-                    )
-                }
-            )
-        return attrs

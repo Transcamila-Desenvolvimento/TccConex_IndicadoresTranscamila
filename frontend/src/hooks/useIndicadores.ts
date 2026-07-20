@@ -3,8 +3,6 @@ import { apiService } from '../services/apiService';
 import type {
   CashflowDayDetailParams,
   CashflowQueryParams,
-  GnreIndicadoresGuiasQueryParams,
-  OcorrenciasIndicadoresQueryParams,
   SendGerencialEmailParams,
 } from '../types/domain';
 
@@ -13,9 +11,6 @@ export const INDICADORES_FILIAIS_KEY = ['indicadores', 'filiais'] as const;
 export const INDICADORES_CASHFLOW_KEY = ['indicadores', 'cashflow'] as const;
 export const INDICADORES_CASHFLOW_DAY_KEY = ['indicadores', 'cashflow', 'day'] as const;
 export const INDICADORES_CASHFLOW_ACTIVITY_KEY = ['indicadores', 'cashflow', 'activity'] as const;
-export const INDICADORES_OPS_KEY = ['indicadores', 'ocorrencias', 'ops'] as const;
-export const INDICADORES_GNRE_KEY = ['indicadores', 'ocorrencias', 'gnre'] as const;
-export const INDICADORES_GNRE_GUIAS_KEY = ['indicadores', 'ocorrencias', 'gnre', 'guias'] as const;
 
 // Sistema multiusuário: o Fluxo de Caixa precisa refletir alterações feitas por
 // outra pessoa no Financeiro sem exigir refresh manual. Em vez de recarregar o
@@ -80,32 +75,5 @@ export function useCashflowActivityVersion(enabled = true) {
     refetchInterval: CASHFLOW_ACTIVITY_POLL_INTERVAL_MS,
     staleTime: 0,
     retry: 1,
-  });
-}
-
-export function useOpsIndicadores(params: OcorrenciasIndicadoresQueryParams = {}, enabled = true) {
-  return useQuery({
-    queryKey: [...INDICADORES_OPS_KEY, params],
-    queryFn: () => apiService.getOpsIndicadores(params),
-    enabled,
-    placeholderData: (prev) => prev,
-  });
-}
-
-export function useGnreIndicadores(params: OcorrenciasIndicadoresQueryParams = {}, enabled = true) {
-  return useQuery({
-    queryKey: [...INDICADORES_GNRE_KEY, params],
-    queryFn: () => apiService.getGnreIndicadores(params),
-    enabled,
-    placeholderData: (prev) => prev,
-  });
-}
-
-export function useGnreIndicadoresGuias(params: GnreIndicadoresGuiasQueryParams = {}, enabled = true) {
-  return useQuery({
-    queryKey: [...INDICADORES_GNRE_GUIAS_KEY, params],
-    queryFn: () => apiService.getGnreIndicadoresGuias(params),
-    enabled,
-    placeholderData: (prev) => prev,
   });
 }

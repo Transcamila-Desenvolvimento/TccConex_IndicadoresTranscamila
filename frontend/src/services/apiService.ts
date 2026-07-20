@@ -3,15 +3,11 @@ import type {
   User, Role, SystemLog, PagarRow, ReceberRow, AgingRow, ReportBatch,
   BillingRecord, CashAdjustment, BankAccount, BalanceHistoryEntry,
   IndicadorKpi, IndicadorFilialRow,
-  OcorrenciasIndicadoresQueryParams, OpsIndicadoresResponse, GnreIndicadoresResponse,
-  GnreIndicadoresGuiasQueryParams, GnreIndicadoresGuiasResponse,
   CashflowQueryParams, CashflowResponse, CashflowDayDetailParams, CashflowDayDetailResponse,
   SendGerencialEmailParams, SendGerencialEmailResponse,
   ReportImportResult, ReportImportType,
   PaginatedResponse, ReportQueryParams, ReportFacets,
   BillingQueryParams, AdjustmentQueryParams, BalanceHistoryQueryParams,
-  OcorrenciasMeta, OpsRecebidaOcorrencia, GnreIcmsOcorrencia, NotaPagaSemLancamento,
-  OpsRecebidaQueryParams, GnreIcmsQueryParams, NotaPagaQueryParams,
   ReportBatchesResponse,
   PrAnalysisResponse,
   PagarDiffQueryParams,
@@ -261,42 +257,6 @@ function normalizeCashAdjustment(raw: any): CashAdjustment {
   };
 }
 
-function normalizeOpsRecebida(raw: any): OpsRecebidaOcorrencia {
-  return {
-    id: Number(raw.id),
-    filial: raw.filial ?? '',
-    contrato: String(raw.contrato ?? ''),
-    dataPagamento: raw.dataPagamento ?? raw.data_pagamento ?? '',
-    mdfeEncerrado: Boolean(raw.mdfeEncerrado ?? raw.mdfe_encerrado),
-  };
-}
-
-function normalizeGnreIcms(raw: any): GnreIcmsOcorrencia {
-  return {
-    id: Number(raw.id),
-    filial: raw.filial ?? '',
-    cte: String(raw.cte ?? ''),
-    valorGuia: Number(raw.valorGuia ?? raw.valor_guia ?? 0),
-    periodoReferencia: raw.periodoReferencia ?? raw.periodo_referencia ?? '',
-    dataPagamento: raw.dataPagamento ?? raw.data_pagamento ?? '',
-    validada: Boolean(raw.validada),
-  };
-}
-
-function normalizeNotaPaga(raw: any): NotaPagaSemLancamento {
-  return {
-    id: Number(raw.id),
-    filial: raw.filial ?? '',
-    nfs: String(raw.nfs ?? ''),
-    fornecedor: raw.fornecedor ?? '',
-    valor: Number(raw.valor ?? 0),
-    dataEmissao: raw.dataEmissao ?? raw.data_emissao ?? '',
-    envioProvisaoLuft: raw.envioProvisaoLuft ?? raw.envio_provisao_luft ?? null,
-    dataPagamento: raw.dataPagamento ?? raw.data_pagamento ?? '',
-    justificativa: raw.justificativa ?? '',
-  };
-}
-
 function normalizeBankAccount(raw: any): BankAccount {
   return {
     id: Number(raw.id),
@@ -516,40 +476,6 @@ function buildAdjustmentQueryParams(params: AdjustmentQueryParams = {}) {
   if (params.search) query.search = params.search;
   if (params.date) query.date = params.date;
   if (params.type) query.type = params.type;
-  return query;
-}
-
-function buildOpsRecebidaQueryParams(params: OpsRecebidaQueryParams = {}) {
-  const query: Record<string, string | number> = {};
-  if (params.page) query.page = params.page;
-  if (params.pageSize) query.page_size = params.pageSize;
-  if (params.search) query.search = params.search;
-  if (params.filial) query.filial = params.filial;
-  if (params.date) query.date = params.date;
-  if (params.mdfeEncerrado) query.mdfeEncerrado = params.mdfeEncerrado;
-  return query;
-}
-
-function buildGnreIcmsQueryParams(params: GnreIcmsQueryParams = {}) {
-  const query: Record<string, string | number> = {};
-  if (params.page) query.page = params.page;
-  if (params.pageSize) query.page_size = params.pageSize;
-  if (params.search) query.search = params.search;
-  if (params.filial) query.filial = params.filial;
-  if (params.date) query.date = params.date;
-  if (params.validada) query.validada = params.validada;
-  if (params.periodoReferencia) query.periodoReferencia = params.periodoReferencia;
-  return query;
-}
-
-function buildNotaPagaQueryParams(params: NotaPagaQueryParams = {}) {
-  const query: Record<string, string | number> = {};
-  if (params.page) query.page = params.page;
-  if (params.pageSize) query.page_size = params.pageSize;
-  if (params.search) query.search = params.search;
-  if (params.filial) query.filial = params.filial;
-  if (params.date) query.date = params.date;
-  if (params.justificativa) query.justificativa = params.justificativa;
   return query;
 }
 
@@ -893,77 +819,6 @@ export const apiService = {
     await api.delete(`/api/financeiro/adjustments/${id}/`);
   },
 
-  async getOcorrenciasMeta(): Promise<OcorrenciasMeta> {
-    const { data } = await api.get('/api/financeiro/ocorrencias/meta/');
-    return {
-      filiais: Array.isArray(data?.filiais) ? data.filiais : [],
-      justificativas: Array.isArray(data?.justificativas) ? data.justificativas : [],
-    };
-  },
-
-  async getOpsRecebidas(params: OpsRecebidaQueryParams = {}): Promise<PaginatedResponse<OpsRecebidaOcorrencia>> {
-    const { data } = await api.get('/api/financeiro/ocorrencias/ops-recebidas/', {
-      params: buildOpsRecebidaQueryParams(params),
-    });
-    return paginatedFromResponse(data, normalizeOpsRecebida);
-  },
-
-  async createOpsRecebida(payload: Omit<OpsRecebidaOcorrencia, 'id'>): Promise<OpsRecebidaOcorrencia> {
-    const { data } = await api.post('/api/financeiro/ocorrencias/ops-recebidas/', payload);
-    return normalizeOpsRecebida(data);
-  },
-
-  async updateOpsRecebida(id: number, payload: Partial<Omit<OpsRecebidaOcorrencia, 'id'>>): Promise<OpsRecebidaOcorrencia> {
-    const { data } = await api.patch(`/api/financeiro/ocorrencias/ops-recebidas/${id}/`, payload);
-    return normalizeOpsRecebida(data);
-  },
-
-  async deleteOpsRecebida(id: number): Promise<void> {
-    await api.delete(`/api/financeiro/ocorrencias/ops-recebidas/${id}/`);
-  },
-
-  async getGnreIcms(params: GnreIcmsQueryParams = {}): Promise<PaginatedResponse<GnreIcmsOcorrencia>> {
-    const { data } = await api.get('/api/financeiro/ocorrencias/gnre-icms/', {
-      params: buildGnreIcmsQueryParams(params),
-    });
-    return paginatedFromResponse(data, normalizeGnreIcms);
-  },
-
-  async createGnreIcms(payload: Omit<GnreIcmsOcorrencia, 'id'>): Promise<GnreIcmsOcorrencia> {
-    const { data } = await api.post('/api/financeiro/ocorrencias/gnre-icms/', payload);
-    return normalizeGnreIcms(data);
-  },
-
-  async updateGnreIcms(id: number, payload: Partial<Omit<GnreIcmsOcorrencia, 'id'>>): Promise<GnreIcmsOcorrencia> {
-    const { data } = await api.patch(`/api/financeiro/ocorrencias/gnre-icms/${id}/`, payload);
-    return normalizeGnreIcms(data);
-  },
-
-  async deleteGnreIcms(id: number): Promise<void> {
-    await api.delete(`/api/financeiro/ocorrencias/gnre-icms/${id}/`);
-  },
-
-  async getNotasPagas(params: NotaPagaQueryParams = {}): Promise<PaginatedResponse<NotaPagaSemLancamento>> {
-    const { data } = await api.get('/api/financeiro/ocorrencias/notas-pagas/', {
-      params: buildNotaPagaQueryParams(params),
-    });
-    return paginatedFromResponse(data, normalizeNotaPaga);
-  },
-
-  async createNotaPaga(payload: Omit<NotaPagaSemLancamento, 'id'>): Promise<NotaPagaSemLancamento> {
-    const { data } = await api.post('/api/financeiro/ocorrencias/notas-pagas/', payload);
-    return normalizeNotaPaga(data);
-  },
-
-  async updateNotaPaga(id: number, payload: Partial<Omit<NotaPagaSemLancamento, 'id'>>): Promise<NotaPagaSemLancamento> {
-    const { data } = await api.patch(`/api/financeiro/ocorrencias/notas-pagas/${id}/`, payload);
-    return normalizeNotaPaga(data);
-  },
-
-  async deleteNotaPaga(id: number): Promise<void> {
-    await api.delete(`/api/financeiro/ocorrencias/notas-pagas/${id}/`);
-  },
-
   async getBankAccounts(): Promise<BankAccount[]> {
     const { data } = await api.get('/api/financeiro/bank-accounts/');
     return listFromResponse(data, normalizeBankAccount);
@@ -1051,182 +906,6 @@ export const apiService = {
   async getCashflowActivityVersion(): Promise<number> {
     const { data } = await api.get<{ version: number }>('/api/indicadores/fluxo-caixa/atividade/');
     return data.version;
-  },
-
-  async getOpsIndicadores(params: OcorrenciasIndicadoresQueryParams = {}): Promise<OpsIndicadoresResponse> {
-    const query: Record<string, string> = {};
-    if (params.filial) query.filial = params.filial;
-    if (params.startDate) query.startDate = params.startDate;
-    if (params.endDate) query.endDate = params.endDate;
-    if (params.year != null) query.year = String(params.year);
-    if (params.months !== undefined) query.months = params.months.join(',');
-    if (params.granularity) query.granularity = params.granularity;
-    const { data } = await api.get('/api/indicadores/ocorrencias/ops/', { params: query });
-    const mapPeriodRow = (row: any) => ({
-      period: row.period ?? row.month ?? '',
-      month: row.month ?? row.period ?? '',
-      label: row.label ?? '',
-      total: Number(row.total ?? 0),
-      encerradas: Number(row.encerradas ?? 0),
-      pendentes: Number(row.pendentes ?? 0),
-      percentualFalha: Number(row.percentualFalha ?? 0),
-    });
-    const byPeriod = Array.isArray(data?.byPeriod)
-      ? data.byPeriod.map(mapPeriodRow)
-      : Array.isArray(data?.byMonth)
-        ? data.byMonth.map(mapPeriodRow)
-        : [];
-    return {
-      summary: {
-        total: Number(data?.summary?.total ?? 0),
-        mdfeEncerradas: Number(data?.summary?.mdfeEncerradas ?? 0),
-        mdfePendentes: Number(data?.summary?.mdfePendentes ?? 0),
-        percentualEncerrado: Number(data?.summary?.percentualEncerrado ?? 0),
-        percentualFalha: Number(data?.summary?.percentualFalha ?? 0),
-        volumeOperacao: Number(data?.summary?.volumeOperacao ?? data?.summary?.total ?? 0),
-      },
-      byFilial: Array.isArray(data?.byFilial)
-        ? data.byFilial.map((row: any) => ({
-            filial: row.filial ?? '',
-            total: Number(row.total ?? 0),
-            encerradas: Number(row.encerradas ?? 0),
-            pendentes: Number(row.pendentes ?? 0),
-            percentualEncerrado: Number(row.percentualEncerrado ?? 0),
-            percentualFalha: Number(row.percentualFalha ?? 0),
-          }))
-        : [],
-      byPeriod,
-      byMonth: byPeriod,
-      insights: Array.isArray(data?.insights) ? data.insights.map(String) : [],
-      meta: (() => {
-        const asGranularity = (value: unknown): 'day' | 'month' => (value === 'day' ? 'day' : 'month');
-        const allowedRaw = Array.isArray(data?.meta?.allowedGranularities)
-          ? data.meta.allowedGranularities.map(asGranularity)
-          : ['month'];
-        return {
-          availableYears: Array.isArray(data?.meta?.availableYears)
-            ? data.meta.availableYears.map((y: any) => Number(y)).filter((y: number) => Number.isFinite(y))
-            : [],
-          availableFiliais: Array.isArray(data?.meta?.availableFiliais)
-            ? data.meta.availableFiliais.map(String).filter(Boolean)
-            : [],
-          granularity: asGranularity(data?.meta?.granularity),
-          requestedGranularity: asGranularity(data?.meta?.requestedGranularity ?? data?.meta?.granularity),
-          allowedGranularities: Array.from(new Set(allowedRaw)),
-          granularityAdjusted: Boolean(data?.meta?.granularityAdjusted),
-          granularityMessage: data?.meta?.granularityMessage ? String(data.meta.granularityMessage) : '',
-          year: data?.meta?.year == null || data?.meta?.year === '' ? null : Number(data.meta.year),
-          months: Array.isArray(data?.meta?.months)
-            ? data.meta.months.map((m: any) => Number(m)).filter((m: number) => m >= 1 && m <= 12)
-            : [],
-        };
-      })(),
-    };
-  },
-
-  async getGnreIndicadores(params: OcorrenciasIndicadoresQueryParams = {}): Promise<GnreIndicadoresResponse> {
-    const query: Record<string, string> = {};
-    if (params.filial) query.filial = params.filial;
-    if (params.startDate) query.startDate = params.startDate;
-    if (params.endDate) query.endDate = params.endDate;
-    if (params.year != null) query.year = String(params.year);
-    if (params.months !== undefined) query.months = params.months.join(',');
-    if (params.granularity) query.granularity = params.granularity;
-    const { data } = await api.get('/api/indicadores/ocorrencias/gnre/', { params: query });
-    const mapPeriodRow = (row: any) => ({
-      period: row.period ?? row.month ?? '',
-      month: row.month ?? row.period ?? '',
-      label: row.label ?? '',
-      total: Number(row.total ?? 0),
-      validadas: Number(row.validadas ?? 0),
-      pendentes: Number(row.pendentes ?? 0),
-      percentualFalha: Number(row.percentualFalha ?? 0),
-      valorTotal: Number(row.valorTotal ?? 0),
-      valorPendente: Number(row.valorPendente ?? 0),
-    });
-    const byPeriod = Array.isArray(data?.byPeriod)
-      ? data.byPeriod.map(mapPeriodRow)
-      : Array.isArray(data?.byMonth)
-        ? data.byMonth.map(mapPeriodRow)
-        : [];
-    const asGranularity = (value: unknown): 'day' | 'month' => (value === 'day' ? 'day' : 'month');
-    const allowedRaw = Array.isArray(data?.meta?.allowedGranularities)
-      ? data.meta.allowedGranularities.map(asGranularity)
-      : ['month'];
-    return {
-      summary: {
-        total: Number(data?.summary?.total ?? 0),
-        validadas: Number(data?.summary?.validadas ?? 0),
-        naoValidadas: Number(data?.summary?.naoValidadas ?? 0),
-        percentualValidado: Number(data?.summary?.percentualValidado ?? 0),
-        percentualFalha: Number(data?.summary?.percentualFalha ?? 0),
-        valorTotal: Number(data?.summary?.valorTotal ?? 0),
-        valorValidado: Number(data?.summary?.valorValidado ?? 0),
-        valorPendente: Number(data?.summary?.valorPendente ?? 0),
-        volumeOperacao: Number(data?.summary?.volumeOperacao ?? data?.summary?.total ?? 0),
-      },
-      byFilial: Array.isArray(data?.byFilial)
-        ? data.byFilial.map((row: any) => ({
-            filial: row.filial ?? '',
-            total: Number(row.total ?? 0),
-            validadas: Number(row.validadas ?? 0),
-            pendentes: Number(row.pendentes ?? 0),
-            percentualValidado: Number(row.percentualValidado ?? 0),
-            percentualFalha: Number(row.percentualFalha ?? 0),
-            valorTotal: Number(row.valorTotal ?? 0),
-            valorPendente: Number(row.valorPendente ?? 0),
-          }))
-        : [],
-      byPeriod,
-      byMonth: byPeriod,
-      insights: Array.isArray(data?.insights) ? data.insights.map(String) : [],
-      meta: {
-        availableYears: Array.isArray(data?.meta?.availableYears)
-          ? data.meta.availableYears.map((y: any) => Number(y)).filter((y: number) => Number.isFinite(y))
-          : [],
-        availableFiliais: Array.isArray(data?.meta?.availableFiliais)
-          ? data.meta.availableFiliais.map(String).filter(Boolean)
-          : [],
-        granularity: asGranularity(data?.meta?.granularity),
-        requestedGranularity: asGranularity(data?.meta?.requestedGranularity ?? data?.meta?.granularity),
-        allowedGranularities: Array.from(new Set(allowedRaw)),
-        granularityAdjusted: Boolean(data?.meta?.granularityAdjusted),
-        granularityMessage: data?.meta?.granularityMessage ? String(data.meta.granularityMessage) : '',
-        year: data?.meta?.year == null || data?.meta?.year === '' ? null : Number(data.meta.year),
-        months: Array.isArray(data?.meta?.months)
-          ? data.meta.months.map((m: any) => Number(m)).filter((m: number) => m >= 1 && m <= 12)
-          : [],
-      },
-    };
-  },
-
-  async getGnreIndicadoresGuias(
-    params: GnreIndicadoresGuiasQueryParams = {},
-  ): Promise<GnreIndicadoresGuiasResponse> {
-    const query: Record<string, string> = {};
-    if (params.filial) query.filial = params.filial;
-    if (params.year != null) query.year = String(params.year);
-    if (params.months !== undefined) query.months = params.months.join(',');
-    if (params.search) query.search = params.search;
-    if (params.page != null) query.page = String(params.page);
-    if (params.pageSize != null) query.pageSize = String(params.pageSize);
-    const { data } = await api.get('/api/indicadores/ocorrencias/gnre/guias/', { params: query });
-    return {
-      count: Number(data?.count ?? 0),
-      page: Number(data?.page ?? 1),
-      pageSize: Number(data?.pageSize ?? 10),
-      results: Array.isArray(data?.results)
-        ? data.results.map((row: any) => ({
-            id: Number(row.id ?? 0),
-            filial: row.filial ?? '',
-            cte: String(row.cte ?? ''),
-            periodoReferencia: row.periodoReferencia ?? row.periodo_referencia ?? '',
-            dataPagamento: row.dataPagamento ?? row.data_pagamento ?? '',
-            validada: Boolean(row.validada),
-            valorGuia: Number(row.valorGuia ?? row.valor_guia ?? 0),
-          }))
-        : [],
-    };
   },
 
   // ─── Google OAuth / Contatos ───────────────────────────────────────────────

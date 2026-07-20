@@ -16,16 +16,12 @@ from .batch_service import create_import_batch
 from .constants import MAX_REPORT_BATCHES
 from .billing_import_service import import_billing_file
 from .import_service import import_report_file
-from .constants import NOTA_PAGA_JUSTIFICATIVAS, OCORRENCIA_FILIAIS
 from .models import (
     AgingTitulo,
     BalanceHistoryEntry,
     BankAccount,
     BillingRecord,
     CashAdjustment,
-    GnreIcmsOcorrencia,
-    NotaPagaSemLancamento,
-    OpsRecebidaOcorrencia,
     PagarTitulo,
     ReceberTitulo,
     ReportBatch,
@@ -35,9 +31,6 @@ from .list_filters import (
     filter_adjustments_queryset,
     filter_balance_history_queryset,
     filter_billing_queryset,
-    filter_gnre_icms_queryset,
-    filter_notas_pagas_queryset,
-    filter_ops_recebidas_queryset,
 )
 from .pagination import ReportPagination
 from .report_filters import (
@@ -53,9 +46,6 @@ from .serializers import (
     BankAccountSerializer,
     BillingRecordSerializer,
     CashAdjustmentSerializer,
-    GnreIcmsOcorrenciaSerializer,
-    NotaPagaSemLancamentoSerializer,
-    OpsRecebidaOcorrenciaSerializer,
     PagarTituloSerializer,
     ReceberTituloSerializer,
     ReportBatchSerializer,
@@ -409,118 +399,6 @@ class BalanceHistoryEntryViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         )
         super().perform_destroy(instance)
         refresh_account_balance(account_id)
-
-
-class OcorrenciasMetaView(ModuleScopedViewMixin, APIView):
-    permission_module = 'Financeiro'
-
-    def get(self, request):
-        return Response({
-            'filiais': list(OCORRENCIA_FILIAIS),
-            'justificativas': list(NOTA_PAGA_JUSTIFICATIVAS),
-        })
-
-
-class OpsRecebidaOcorrenciaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
-    permission_module = 'Financeiro'
-    serializer_class = OpsRecebidaOcorrenciaSerializer
-    queryset = OpsRecebidaOcorrencia.objects.all()
-    pagination_class = ReportPagination
-
-    def get_queryset(self):
-        return filter_ops_recebidas_queryset(OpsRecebidaOcorrencia.objects.all(), self.request.query_params)
-
-    def perform_create(self, serializer):
-        row = serializer.save()
-        record_audit(
-            self.request.user,
-            'financeiro.ocorrencia.ops.criado',
-            f'OP recebida #{row.pk} ({row.filial}, contrato {row.contrato}).',
-        )
-
-    def perform_update(self, serializer):
-        row = serializer.save()
-        record_audit(
-            self.request.user,
-            'financeiro.ocorrencia.ops.atualizado',
-            f'OP recebida #{row.pk} atualizada.',
-        )
-
-    def perform_destroy(self, instance):
-        record_audit(
-            self.request.user,
-            'financeiro.ocorrencia.ops.excluido',
-            f'OP recebida #{instance.pk} excluída.',
-        )
-        super().perform_destroy(instance)
-
-
-class GnreIcmsOcorrenciaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
-    permission_module = 'Financeiro'
-    serializer_class = GnreIcmsOcorrenciaSerializer
-    queryset = GnreIcmsOcorrencia.objects.all()
-    pagination_class = ReportPagination
-
-    def get_queryset(self):
-        return filter_gnre_icms_queryset(GnreIcmsOcorrencia.objects.all(), self.request.query_params)
-
-    def perform_create(self, serializer):
-        row = serializer.save()
-        record_audit(
-            self.request.user,
-            'financeiro.ocorrencia.gnre.criado',
-            f'GNRE #{row.pk} ({row.filial}, CT-e {row.cte}).',
-        )
-
-    def perform_update(self, serializer):
-        row = serializer.save()
-        record_audit(
-            self.request.user,
-            'financeiro.ocorrencia.gnre.atualizado',
-            f'GNRE #{row.pk} atualizada.',
-        )
-
-    def perform_destroy(self, instance):
-        record_audit(
-            self.request.user,
-            'financeiro.ocorrencia.gnre.excluido',
-            f'GNRE #{instance.pk} excluída.',
-        )
-        super().perform_destroy(instance)
-
-
-class NotaPagaSemLancamentoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
-    permission_module = 'Financeiro'
-    serializer_class = NotaPagaSemLancamentoSerializer
-    queryset = NotaPagaSemLancamento.objects.all()
-    pagination_class = ReportPagination
-
-    def get_queryset(self):
-        return filter_notas_pagas_queryset(NotaPagaSemLancamento.objects.all(), self.request.query_params)
-
-    def perform_create(self, serializer):
-        row = serializer.save()
-        record_audit(
-            self.request.user,
-            'financeiro.ocorrencia.nota.criado',
-            f'Nota sem lançamento #{row.pk} ({row.filial}, NFS {row.nfs}).',
-        )
-
-    def perform_update(self, serializer):
-        row = serializer.save()
-        record_audit(
-            self.request.user,
-            'financeiro.ocorrencia.nota.atualizado',
-            f'Nota sem lançamento #{row.pk} atualizada.',
-        )
-
-    def perform_destroy(self, instance):
-        record_audit(
-            self.request.user,
-            'financeiro.ocorrencia.nota.excluido',
-            f'Nota sem lançamento #{instance.pk} excluída.',
-        )
-        super().perform_destroy(instance)
 
 
 class BankDataSyncView(ModuleScopedViewMixin, APIView):
