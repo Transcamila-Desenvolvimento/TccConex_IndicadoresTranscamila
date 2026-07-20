@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/apiService';
 
 export const AUTH_PROFILE_QUERY_KEY = ['auth', 'profile'] as const;
@@ -17,5 +17,19 @@ export function useLogin() {
   return useMutation({
     mutationFn: ({ username, password }: { username: string; password: string }) =>
       apiService.login(username, password),
+  });
+}
+
+export function useChangePassword() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      currentPassword: string;
+      newPassword: string;
+      confirmPassword: string;
+    }) => apiService.changePassword(payload),
+    onSuccess: (user) => {
+      queryClient.setQueryData(AUTH_PROFILE_QUERY_KEY, user);
+    },
   });
 }

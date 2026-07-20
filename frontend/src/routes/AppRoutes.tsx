@@ -8,6 +8,7 @@ import { lazyWithMinDuration } from '../utils/pageLoaderTiming';
 // Pages
 import LoginPage from '../pages/LoginPage';
 import SelectionPage from '../pages/SelectionPage';
+import ChangePasswordPage from '../pages/ChangePasswordPage';
 import GoogleCallbackPage from '../pages/GoogleCallbackPage';
 import DashboardLayout from '../layouts/DashboardLayout';
 
@@ -22,8 +23,8 @@ const IndicadoresWorkspace = lazyWithMinDuration(() => import('../workspaces/Ind
 const ComprasWorkspace = lazyWithMinDuration(() => import('../workspaces/Compras/ComprasWorkspace'));
 const RHWorkspace = lazyWithMinDuration(() => import('../workspaces/RH/RHWorkspace'));
 const FaturamentoWorkspace = lazyWithMinDuration(() => import('../workspaces/Faturamento/FaturamentoWorkspace'));
-// Route Guard: Requires authentication
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+// Autenticado, sem bloquear quem precisa trocar a senha (usado em /change-password).
+const ProtectedRouteAllowPasswordChange: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
   const showLoader = useMinLoaderVisibility(isLoading);
 
@@ -33,12 +34,25 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
-// Route Guard: Requires environment selection
-const EnvironmentRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { selectedEnvironment, isLoading } = useAuth();
+// Route Guard: Requires authentication (bloqueia se houver troca de senha pendente)
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isLoading, user } = useAuth();
   const showLoader = useMinLoaderVisibility(isLoading);
 
   if (showLoader) return <PageLoader />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user?.mustChangePassword) return <Navigate to="/change-password" replace />;
+
+  return <>{children}</>;
+};
+
+// Route Guard: Requires environment selection
+const EnvironmentRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { selectedEnvironment, isLoading, user } = useAuth();
+  const showLoader = useMinLoaderVisibility(isLoading);
+
+  if (showLoader) return <PageLoader />;
+  if (user?.mustChangePassword) return <Navigate to="/change-password" replace />;
   if (!selectedEnvironment) return <Navigate to="/select-environment" replace />;
 
   return <>{children}</>;
@@ -79,6 +93,14 @@ const AppRoutes: React.FC = () => {
     <Router>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/change-password"
+          element={
+            <ProtectedRouteAllowPasswordChange>
+              <ChangePasswordPage />
+            </ProtectedRouteAllowPasswordChange>
+          }
+        />
         <Route
           path="/auth/google/callback"
           element={

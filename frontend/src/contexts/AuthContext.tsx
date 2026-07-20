@@ -13,7 +13,7 @@ interface AuthContextType {
   selectedFilial: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<User | null>;
   logout: () => void;
   selectEnvironmentAndFilial: (env: string, filial: string) => void;
   clearEnvironment: () => void;
@@ -43,19 +43,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<User | null> => {
     try {
       const authenticatedUser = await loginMutation.mutateAsync({ username, password });
       if (authenticatedUser) {
         setSessionActive(true);
         queryClient.setQueryData(AUTH_PROFILE_QUERY_KEY, authenticatedUser);
-        return true;
+        return authenticatedUser;
       }
     } catch (err) {
       console.error('Login error:', err);
       if (err instanceof Error && err.message === 'SERVER_OFFLINE') throw err;
     }
-    return false;
+    return null;
   };
 
   const logout = () => {

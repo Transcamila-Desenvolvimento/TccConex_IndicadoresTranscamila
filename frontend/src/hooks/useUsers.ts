@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/apiService';
 import type { UserQueryParams } from '../types/domain';
+import { AUTH_PROFILE_QUERY_KEY } from './useAuthProfile';
 
 export const USERS_QUERY_KEY = ['users'] as const;
 
@@ -25,7 +26,11 @@ export function useUpdateUser() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Parameters<typeof apiService.updateUser>[1] }) =>
       apiService.updateUser(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY });
+      // Se o admin editar o próprio usuário, o perfil da sessão reflete na hora.
+      queryClient.invalidateQueries({ queryKey: AUTH_PROFILE_QUERY_KEY });
+    },
   });
 }
 
@@ -41,6 +46,14 @@ export function useToggleUserStatus() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiService.toggleUserStatus(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY }),
+  });
+}
+
+export function useForcePasswordChange() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.forcePasswordChange(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY }),
   });
 }

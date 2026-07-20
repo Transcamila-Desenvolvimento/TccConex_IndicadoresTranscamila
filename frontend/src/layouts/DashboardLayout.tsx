@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdminEnvironment } from '../constants/environments';
+import { getAllowedIndicadores } from '../constants/indicadores';
 import logoExpanded from '../assets/Logo_TccConex.png';
 import logoCollapsed from '../assets/Logo_TccConex_Fechado.png';
 
@@ -31,6 +32,7 @@ const DashboardLayout: React.FC = () => {
   const { user, selectedEnvironment, logout, clearEnvironment } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const allowedIndicadores = getAllowedIndicadores(user);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -424,6 +426,7 @@ const DashboardLayout: React.FC = () => {
                 </div>
               </Link>
 
+              {allowedIndicadores.has('fluxo-caixa') && (
               <div className="nav-group-wrapper" id="btn-menu-indicadores-financeiro">
                 <button
                   type="button"
@@ -457,7 +460,9 @@ const DashboardLayout: React.FC = () => {
                   </Link>
                 </div>
               </div>
+              )}
 
+              {allowedIndicadores.has('meta-faturamento') && (
               <div className="nav-group-wrapper" id="btn-menu-indicadores-logistica">
                 <button
                   type="button"
@@ -491,6 +496,7 @@ const DashboardLayout: React.FC = () => {
                   </Link>
                 </div>
               </div>
+              )}
             </div>
           )}
 

@@ -7,12 +7,15 @@ import {
   useUpdateUser,
   useDeleteUser,
   useToggleUserStatus,
+  useForcePasswordChange,
 } from '../../hooks/useUsers';
 import { useRoles } from '../../hooks/useRoles';
 import {
   ADMIN_ENVIRONMENT,
   normalizeEnvironment,
 } from '../../constants/environments';
+import { INDICADOR_ITEMS, type IndicadorKey } from '../../constants/indicadores';
+import { funcoesDoModulo, type FuncaoKey } from '../../constants/funcoes';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 
@@ -21,12 +24,23 @@ const PAGE_SIZE = 10;
 const BRANCHES = ['Ibiporã (Matriz)', 'Rondonópolis', 'Paranaguá'] as const;
 
 const MODULE_ACCESS_GROUPS = [
-  { module: 'Financeiro', label: 'Financeiro', colorKey: 'financeiro' },
-  { module: 'Faturamento', label: 'Faturamento', colorKey: 'faturamento' },
-  { module: 'Indicadores', label: 'Indicadores', colorKey: 'indicadores' },
-  { module: 'Compras', label: 'Compras', colorKey: 'compras' },
-  { module: 'RH', label: 'RH', colorKey: 'rh' },
+  { module: 'Financeiro', label: 'Financeiro' },
+  { module: 'Faturamento', label: 'Faturamento' },
+  { module: 'Indicadores', label: 'Indicadores' },
+  { module: 'Compras', label: 'Compras' },
+  { module: 'RH', label: 'RH' },
 ] as const;
+
+const INDICADOR_GROUPS = INDICADOR_ITEMS.reduce<Record<string, typeof INDICADOR_ITEMS[number][]>>((acc, item) => {
+  (acc[item.group] ??= []).push(item);
+  return acc;
+}, {});
+
+const ChipCheck: React.FC = () => (
+  <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24" aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+  </svg>
+);
 
 const AdminUsersPanel: React.FC = () => {
   const { user: currentUser } = useAuth();
@@ -58,6 +72,7 @@ const AdminUsersPanel: React.FC = () => {
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
   const toggleUserStatus = useToggleUserStatus();
+  const forcePasswordChange = useForcePasswordChange();
 
   const defaultRoleId = useMemo(
     () => roles.find((r) => !r.permissions.some((perm) => normalizeEnvironment(perm) === ADMIN_ENVIRONMENT))?.id ?? roles[0]?.id ?? '2',
@@ -83,6 +98,10 @@ const AdminUsersPanel: React.FC = () => {
   const [roleId, setRoleId] = useState('2');
   const [status, setStatus] = useState('ativo');
   const [moduleAccess, setModuleAccess] = useState<Record<string, string[]>>({});
+  const [indicadoresMode, setIndicadoresMode] = useState<'todos' | 'personalizado'>('todos');
+  const [selectedIndicadores, setSelectedIndicadores] = useState<IndicadorKey[]>([]);
+  const [funcoes, setFuncoes] = useState<Record<string, string[]>>({});
+  const [expandedModule, setExpandedModule] = useState<string | null>(null);
 
   const isSelectedAdmin = roleId === '1';
   const isEditingSelf = !!editingUserId && editingUserId === currentUser?.id;
@@ -137,6 +156,10 @@ const AdminUsersPanel: React.FC = () => {
     setRoleId(defaultRoleId);
     setStatus('ativo');
     setModuleAccess({});
+    setIndicadoresMode('todos');
+    setSelectedIndicadores([]);
+    setFuncoes({});
+    setExpandedModule(null);
     setIsModalOpen(true);
   };
 
@@ -156,6 +179,15 @@ const AdminUsersPanel: React.FC = () => {
     });
 
     setModuleAccess(nextAccess);
+
+    const userIndicadores = (user.indicadores ?? []).filter(
+      (key): key is IndicadorKey => INDICADOR_ITEMS.some((item) => item.key === key),
+    );
+    setIndicadoresMode(userIndicadores.length > 0 ? 'personalizado' : 'todos');
+    setSelectedIndicadores(userIndicadores);
+    setFuncoes(user.funcoes ?? {});
+    setExpandedModule(null);
+
     setIsModalOpen(true);
   };
 
@@ -185,7 +217,20 @@ const AdminUsersPanel: React.FC = () => {
       environments.push(ADMIN_ENVIRONMENT);
     }
 
-    const userData: any = { username, name, roleId, status, environments, filiais };
+    const hasIndicadoresModule = environments.includes('Indicadores');
+    if (hasIndicadoresModule && indicadoresMode === 'personalizado' && selectedIndicadores.length === 0) {
+      alert('Selecione ao menos um indicador ou escolha "Liberar todos".');
+      return;
+    }
+    // Lista vazia = acesso a todos os indicadores (padrão).
+    const indicadores = hasIndicadoresModule && indicadoresMode === 'personalizado' ? selectedIndicadores : [];
+
+    // Só envia funções de módulos que o usuário realmente tem acesso.
+    const funcoesFiltradas = Object.fromEntries(
+      Object.entries(funcoes).filter(([module, keys]) => environments.includes(module) && keys.length > 0),
+    );
+
+    const userData: any = { username, name, roleId, status, environments, filiais, indicadores, funcoes: funcoesFiltradas };
     if (password) userData.password = password;
 
     try {
@@ -239,9 +284,31 @@ const AdminUsersPanel: React.FC = () => {
     }
   };
 
-  const isBranchSelected = (module: string, branch: string) => (moduleAccess[module] ?? []).includes(branch);
+  const handleForcePasswordChange = async () => {
+    setIsActionsMenuOpen(false);
+    const targets = selectedUsers.filter((u) => u.id !== currentUser?.id && u.status === 'ativo');
+    if (targets.length === 0) {
+      alert('Selecione usuários ativos (exceto você) para solicitar a redefinição de senha.');
+      return;
+    }
+    const confirmMessage = targets.length > 1
+      ? `Solicitar redefinição de senha para os ${targets.length} usuários selecionados? Eles deverão alterar a senha no próximo acesso.`
+      : `Solicitar redefinição de senha para ${targets[0].name || targets[0].username}? O usuário deverá alterar a senha no próximo acesso.`;
+    if (!window.confirm(confirmMessage)) return;
+    try {
+      await Promise.all(targets.map((u) => forcePasswordChange.mutateAsync(u.id)));
+      setSelectedIds([]);
+      alert(
+        targets.length > 1
+          ? 'Redefinição solicitada. Os usuários deverão alterar a senha no próximo acesso.'
+          : 'Redefinição solicitada. O usuário deverá alterar a senha no próximo acesso.',
+      );
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || 'Erro ao solicitar redefinição de senha.');
+    }
+  };
 
-  const isModuleFullySelected = (module: string) => (moduleAccess[module]?.length ?? 0) === BRANCHES.length;
+  const isBranchSelected = (module: string, branch: string) => (moduleAccess[module] ?? []).includes(branch);
 
   const handleToggleBranch = (module: string, branch: string) => {
     setModuleAccess((prev) => {
@@ -251,11 +318,12 @@ const AdminUsersPanel: React.FC = () => {
     });
   };
 
-  // Clique no nome do módulo: alterna rapidamente entre "todas as filiais" e "nenhuma".
-  const handleToggleModule = (module: string) => {
+  // Interruptor do módulo: com qualquer acesso → remove tudo; sem acesso → libera todas as filiais.
+  // forceOn=true força a seleção de todas as filiais independente do estado atual.
+  const handleToggleModule = (module: string, forceOn = false) => {
     setModuleAccess((prev) => {
-      const fullySelected = (prev[module]?.length ?? 0) === BRANCHES.length;
-      return { ...prev, [module]: fullySelected ? [] : [...BRANCHES] };
+      const hasAccess = (prev[module]?.length ?? 0) > 0;
+      return { ...prev, [module]: hasAccess && !forceOn ? [] : [...BRANCHES] };
     });
   };
 
@@ -266,6 +334,20 @@ const AdminUsersPanel: React.FC = () => {
   };
 
   const handleClearAllModules = () => setModuleAccess({});
+
+  const handleToggleIndicador = (key: IndicadorKey) => {
+    setSelectedIndicadores((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+  };
+
+  const handleToggleFuncao = (module: string, key: FuncaoKey) => {
+    setFuncoes((prev) => {
+      const current = prev[module] ?? [];
+      const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+      return { ...prev, [module]: next };
+    });
+  };
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -330,10 +412,39 @@ const AdminUsersPanel: React.FC = () => {
             </button>
             <div className={`reports-dropdown-menu ${isActionsMenuOpen ? 'show' : ''}`}>
               {selectedUsers.length === 1 && (
-                <span className="reports-dropdown-item" onClick={handleEditSelected}>Editar</span>
+                <span className="reports-dropdown-item" onClick={handleEditSelected}>
+                  <span className="reports-dropdown-item-left">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                    </svg>
+                    Editar
+                  </span>
+                </span>
               )}
-              <span className="reports-dropdown-item" onClick={handleBulkToggleStatus}>Ativar / Inativar</span>
-              <span className="reports-dropdown-item" onClick={handleBulkDelete}>Excluir</span>
+              <span className="reports-dropdown-item" onClick={handleForcePasswordChange}>
+                <span className="reports-dropdown-item-left">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                  </svg>
+                  Redefinir senha
+                </span>
+              </span>
+              <span className="reports-dropdown-item" onClick={handleBulkToggleStatus}>
+                <span className="reports-dropdown-item-left">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
+                  </svg>
+                  Ativar / Inativar
+                </span>
+              </span>
+              <span className="reports-dropdown-item is-danger" onClick={handleBulkDelete}>
+                <span className="reports-dropdown-item-left">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                  </svg>
+                  Excluir
+                </span>
+              </span>
             </div>
           </div>
 
@@ -371,13 +482,14 @@ const AdminUsersPanel: React.FC = () => {
                   <th>Nome Completo</th>
                   <th>Função</th>
                   <th>Status</th>
+                  <th>Senha</th>
                   <th>Último Acesso</th>
                 </tr>
               </thead>
               <tbody>
                 {usersQueryState.canShowEmpty && usersList.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
                       Nenhum usuário operacional cadastrado com os filtros ativos.
                     </td>
                   </tr>
@@ -412,9 +524,21 @@ const AdminUsersPanel: React.FC = () => {
                         <td>{u.name}</td>
                         <td><span style={{ fontWeight: 600 }}>{roleName}</span></td>
                         <td>
-                          <span className={`status-badge ${u.status === 'ativo' ? 'success' : 'inativo'}`}>
-                            {u.status}
+                          <span className={`status-dot-label ${u.status === 'ativo' ? 'is-active' : 'is-inactive'}`}>
+                            {u.status === 'ativo' ? 'Ativo' : 'Inativo'}
                           </span>
+                        </td>
+                        <td>
+                          {u.mustChangePassword ? (
+                            <span
+                              className="status-dot-label is-warning"
+                              title="Deverá alterar a senha no próximo acesso"
+                            >
+                              Pendente
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Em dia</span>
+                          )}
                         </td>
                         <td><small style={{ color: 'var(--text-muted)' }}>{lastLoginStr}</small></td>
                       </tr>
@@ -464,7 +588,7 @@ const AdminUsersPanel: React.FC = () => {
         <div className="search-backdrop admin-user-modal-backdrop" id="user-admin-modal" style={{ display: 'flex' }} onClick={(e) => {
           if (e.target === e.currentTarget) setIsModalOpen(false);
         }}>
-          <div className="search-modal-card admin-user-modal-card" style={{ width: '520px' }}>
+          <div className="search-modal-card admin-user-modal-card admin-user-modal-card--wide">
             <div className="search-input-wrapper" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 id="admin-modal-title" style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>
                 {editingUserId ? 'Editar Usuário' : 'Criar Novo Usuário'}
@@ -472,150 +596,297 @@ const AdminUsersPanel: React.FC = () => {
               <span className="search-close-key" style={{ cursor: 'pointer' }} onClick={() => setIsModalOpen(false)}>Fechar (X)</span>
             </div>
 
-            <form id="admin-user-form" style={{ padding: '16px 24px 20px 24px' }} onSubmit={handleSubmit}>
-              <div style={{ display: 'flex', gap: '15px', marginBottom: '10px' }}>
-                <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="admin-user-username">Usuário (Username)</label>
-                  <input
-                    type="text"
-                    id="admin-user-username"
-                    placeholder="Ex: joao.santos"
-                    required
-                    readOnly={!!editingUserId}
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="admin-user-name">Nome Completo</label>
-                  <input
-                    type="text"
-                    id="admin-user-name"
-                    placeholder="Ex: João dos Santos"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoComplete="off"
-                  />
+            <form id="admin-user-form" className="admin-user-form" onSubmit={handleSubmit}>
+              <div className="admin-form-columns">
+              {/* Coluna esquerda: dados do usuário */}
+              <div className="admin-form-col admin-form-col--fields">
+              {/* Seção 1: Identificação */}
+              <div className="admin-form-section">
+                <h4 className="admin-form-section-title">Identificação</h4>
+                <div className="admin-form-row">
+                  <div className="login-group">
+                    <label htmlFor="admin-user-username">Usuário</label>
+                    <input
+                      type="text"
+                      id="admin-user-username"
+                      placeholder="Ex: joao.santos"
+                      required
+                      readOnly={!!editingUserId}
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="login-group">
+                    <label htmlFor="admin-user-name">Nome Completo</label>
+                    <input
+                      type="text"
+                      id="admin-user-name"
+                      placeholder="Ex: João dos Santos"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="login-group" style={{ marginBottom: '10px' }}>
-                <label htmlFor="admin-user-password">Senha</label>
-                <input
-                  type="password"
-                  id="admin-user-password"
-                  placeholder={editingUserId ? 'Preencha apenas para definir nova senha' : 'Defina a senha do novo usuário'}
-                  required={!editingUserId}
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="new-password"
-                />
-                {!editingUserId && (
-                  <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '2px', fontSize: '11px' }}>
-                    Mínimo de 6 caracteres. Informe a senha ao usuário por um canal seguro.
-                  </small>
+
+              {/* Seção 2: Acesso */}
+              <div className="admin-form-section">
+                <h4 className="admin-form-section-title">Acesso</h4>
+                <div className="admin-form-row">
+                  <div className="login-group">
+                    <label htmlFor="admin-user-password">Senha</label>
+                    <input
+                      type="password"
+                      id="admin-user-password"
+                      placeholder={editingUserId ? 'Só preencha para trocar' : 'Mínimo 6 caracteres'}
+                      required={!editingUserId}
+                      minLength={6}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div className="login-group">
+                    <label htmlFor="admin-user-role">Função</label>
+                    <select
+                      id="admin-user-role"
+                      className="selection-select"
+                      style={{ height: '40px' }}
+                      required
+                      value={roles.length > 0 ? roleId : ''}
+                      disabled={rolesLoading || roles.length === 0 || isEditingSelf}
+                      onChange={(e) => setRoleId(e.target.value)}
+                    >
+                      {rolesLoading || roles.length === 0 ? (
+                        <option value="">
+                          {rolesError ? 'Erro ao carregar funções' : 'Carregando funções...'}
+                        </option>
+                      ) : (
+                        roles.map((role) => (
+                          <option key={role.id} value={role.id}>{role.name}</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+                </div>
+                {isEditingSelf && (
+                  <small className="admin-form-hint">Você não pode alterar sua própria função de administrador.</small>
+                )}
+                {editingUserId && (
+                  <div className="admin-form-row" style={{ marginTop: '10px' }}>
+                    <div className="login-group">
+                      <label htmlFor="admin-user-status">Status</label>
+                      <select
+                        id="admin-user-status"
+                        className="selection-select"
+                        style={{ height: '40px' }}
+                        required
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value)}
+                      >
+                        <option value="ativo">Ativo</option>
+                        <option value="inativo">Inativo</option>
+                      </select>
+                    </div>
+                  </div>
                 )}
               </div>
-
-              <div style={{ display: 'flex', gap: '15px', marginBottom: '10px' }}>
-                <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="admin-user-role">Função</label>
-                  <select
-                    id="admin-user-role"
-                    className="selection-select"
-                    style={{ height: '40px' }}
-                    required
-                    value={roles.length > 0 ? roleId : ''}
-                    disabled={rolesLoading || roles.length === 0 || isEditingSelf}
-                    onChange={(e) => setRoleId(e.target.value)}
-                  >
-                    {rolesLoading || roles.length === 0 ? (
-                      <option value="">
-                        {rolesError ? 'Erro ao carregar funções' : 'Carregando funções...'}
-                      </option>
-                    ) : (
-                      roles.map((role) => (
-                        <option key={role.id} value={role.id}>{role.name}</option>
-                      ))
-                    )}
-                  </select>
-                  {isEditingSelf && (
-                    <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '4px', fontSize: '11px' }}>
-                      Você não pode alterar sua própria função de administrador.
-                    </small>
-                  )}
-                </div>
-                <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="admin-user-status">Status</label>
-                  <select
-                    id="admin-user-status"
-                    className="selection-select"
-                    style={{ height: '40px' }}
-                    required
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                  >
-                    <option value="ativo">Ativo</option>
-                    <option value="inativo">Inativo</option>
-                  </select>
-                </div>
               </div>
 
-              {/* Módulo e Filial: acesso granular por módulo */}
-              <div style={{ marginTop: '10px', borderTop: '1px solid #e2e8f0', paddingTop: '10px', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '2px' }}>
-                  <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>Acesso por Módulo e Filial</h4>
+              {/* Coluna direita: permissões */}
+              <div className="admin-form-col">
+              {/* Seção 3: Permissões por módulo (acordeão) */}
+              <div className="admin-form-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <h4 className="admin-form-section-title">Permissões por Módulo</h4>
                   <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
                     <span className="module-access-quick-action" onClick={handleSelectAllModules}>Selecionar tudo</span>
                     <span className="module-access-quick-action" onClick={handleClearAllModules}>Limpar</span>
                   </div>
                 </div>
-                <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 8px 0' }}>
-                  Clique no nome do módulo para marcar/desmarcar todas as filiais.
+                <p className="admin-form-hint" style={{ margin: '0 0 8px 0' }}>
+                  Use o interruptor para liberar ou bloquear o módulo. Expanda a linha para escolher filiais e permissões específicas.
                 </p>
 
                 {isSelectedAdmin && (
                   <div style={{ fontSize: '11px', color: '#0076ce', background: '#eff6ff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #bfdbfe', marginBottom: '8px' }}>
-                    Administradores também têm acesso automático ao ambiente de Administração/Manutenção.
+                    Administradores têm acesso automático à Administração/Manutenção e a todas as funções dos módulos.
                   </div>
                 )}
 
-                <div className="module-access-list">
+                <div className="module-config-list">
                   {MODULE_ACCESS_GROUPS.map((group) => {
-                    const fullySelected = isModuleFullySelected(group.module);
-                    const hasSome = (moduleAccess[group.module]?.length ?? 0) > 0;
+                    const branches = moduleAccess[group.module] ?? [];
+                    const hasAccess = branches.length > 0;
+                    const isExpanded = expandedModule === group.module;
+                    const funcaoItems = funcoesDoModulo(group.module);
+                    const selectedFuncoes = funcoes[group.module] ?? [];
+                    const showFuncoes = funcaoItems.length > 0 && !isSelectedAdmin;
+
+                    const summaryParts: string[] = [];
+                    if (!hasAccess) {
+                      summaryParts.push('Sem acesso');
+                    } else {
+                      summaryParts.push(
+                        branches.length === BRANCHES.length ? 'Todas as filiais' : `${branches.length} de ${BRANCHES.length} filiais`,
+                      );
+                      if (group.module === 'Indicadores') {
+                        summaryParts.push(
+                          indicadoresMode === 'todos' ? 'todos os indicadores' : `${selectedIndicadores.length} indicador(es)`,
+                        );
+                      }
+                      if (showFuncoes) {
+                        summaryParts.push(
+                          selectedFuncoes.length === 0 ? 'somente consulta' : `${selectedFuncoes.length} de ${funcaoItems.length} funções`,
+                        );
+                      }
+                    }
 
                     return (
-                      <div className="module-access-row" key={group.module}>
-                        <button
-                          type="button"
-                          className={`module-access-name ${hasSome ? `active-${group.colorKey}` : ''}`}
-                          onClick={() => handleToggleModule(group.module)}
-                          title={fullySelected ? 'Remover todas as filiais deste módulo' : 'Liberar todas as filiais deste módulo'}
+                      <div className={`module-config ${hasAccess ? 'is-active' : ''}`} key={group.module}>
+                        <div
+                          className="module-config-header"
+                          onClick={() => setExpandedModule(isExpanded ? null : group.module)}
                         >
-                          <span className="module-access-check">{fullySelected ? '✓' : hasSome ? '–' : ''}</span>
-                          {group.label}
-                        </button>
-                        <div className="module-access-branches">
-                          {BRANCHES.map((branch) => {
-                            const active = isBranchSelected(group.module, branch);
-                            return (
-                              <span
-                                key={branch}
-                                className={`module-access-branch-chip ${active ? `active-${group.colorKey}` : ''}`}
-                                onClick={() => handleToggleBranch(group.module, branch)}
-                              >
-                                {branch}
-                              </span>
-                            );
-                          })}
+                          <label
+                            className="perm-switch"
+                            onClick={(e) => e.stopPropagation()}
+                            title={hasAccess ? 'Remover acesso ao módulo' : 'Liberar módulo (todas as filiais)'}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={hasAccess}
+                              onChange={() => handleToggleModule(group.module)}
+                            />
+                            <span className="perm-switch-slider" />
+                          </label>
+                          <span className="module-config-name">{group.label}</span>
+                          <span className="module-config-summary">{summaryParts.join(' · ')}</span>
+                          <svg
+                            className={`module-config-chevron ${isExpanded ? 'is-open' : ''}`}
+                            width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
                         </div>
+
+                        {isExpanded && (
+                          <div className="module-config-body">
+                            <div className="module-config-group">
+                              <div className="module-config-group-head">
+                                <span className="module-config-group-label">Em quais filiais?</span>
+                                <span
+                                  className="module-access-quick-action"
+                                  onClick={() =>
+                                    branches.length === BRANCHES.length
+                                      ? handleToggleModule(group.module)
+                                      : handleToggleModule(group.module, true)
+                                  }
+                                >
+                                  {branches.length === BRANCHES.length ? 'Desmarcar todas' : 'Marcar todas'}
+                                </span>
+                              </div>
+                              <div className="perm-chip-list">
+                                {BRANCHES.map((branch) => {
+                                  const selected = isBranchSelected(group.module, branch);
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={branch}
+                                      className={`perm-chip ${selected ? 'is-selected' : ''}`}
+                                      onClick={() => handleToggleBranch(group.module, branch)}
+                                    >
+                                      {selected && <ChipCheck />}
+                                      {branch}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {group.module === 'Indicadores' && (
+                              <div className="module-config-group">
+                                <span className="module-config-group-label">Quais indicadores pode ver?</span>
+                                <div className="perm-segment">
+                                  <button
+                                    type="button"
+                                    className={indicadoresMode === 'todos' ? 'is-selected' : ''}
+                                    onClick={() => setIndicadoresMode('todos')}
+                                  >
+                                    Todos
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={indicadoresMode === 'personalizado' ? 'is-selected' : ''}
+                                    onClick={() => setIndicadoresMode('personalizado')}
+                                  >
+                                    Escolher quais
+                                  </button>
+                                </div>
+                                {indicadoresMode === 'personalizado' && (
+                                  <div className="indicadores-access-groups">
+                                    {Object.entries(INDICADOR_GROUPS).map(([groupName, items]) => (
+                                      <div key={groupName} className="indicadores-access-group">
+                                        <span className="indicadores-access-group-name">{groupName}</span>
+                                        <div className="perm-chip-list">
+                                          {items.map((item) => {
+                                            const selected = selectedIndicadores.includes(item.key);
+                                            return (
+                                              <button
+                                                type="button"
+                                                key={item.key}
+                                                className={`perm-chip ${selected ? 'is-selected' : ''}`}
+                                                onClick={() => handleToggleIndicador(item.key)}
+                                              >
+                                                {selected && <ChipCheck />}
+                                                {item.label}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {showFuncoes && (
+                              <div className="module-config-group">
+                                <span className="module-config-group-label">O que pode fazer?</span>
+                                <div className="perm-chip-list">
+                                  {funcaoItems.map((item) => {
+                                    const selected = selectedFuncoes.includes(item.key);
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={item.key}
+                                        className={`perm-chip ${selected ? 'is-selected' : ''}`}
+                                        title={item.description}
+                                        onClick={() => handleToggleFuncao(group.module, item.key)}
+                                      >
+                                        {selected && <ChipCheck />}
+                                        {item.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <small className="admin-form-hint" style={{ marginTop: '4px' }}>
+                                  Sem nenhuma função marcada, o operador apenas consulta.
+                                </small>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
+              </div>
+              </div>
               </div>
 
               <button type="submit" className="btn-login" id="btn-admin-submit-user">Salvar Usuário</button>

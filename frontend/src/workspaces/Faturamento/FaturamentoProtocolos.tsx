@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
+import { userHasFuncao } from '../../constants/funcoes';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
   resolveFaturamentoErrorMessage,
@@ -49,6 +50,10 @@ function SortIcon({ field, ordering }: { field: SortField; ordering?: ProtocoloO
 const FaturamentoProtocolos: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.roleId === '1';
+  const canCreateProtocolos = userHasFuncao(user, 'Faturamento', 'criar-protocolos');
+  const canEditProtocolos = userHasFuncao(user, 'Faturamento', 'editar-protocolos');
+  const canDeleteProtocolos = userHasFuncao(user, 'Faturamento', 'excluir-protocolos');
+  const canManageClientes = userHasFuncao(user, 'Faturamento', 'gerenciar-clientes');
   const [filters, setFilters] = useState<ProtocoloQueryParams>({ page: 1, pageSize: DEFAULT_PAGE_SIZE, ordering: 'data_desc' });
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showNovo, setShowNovo] = useState(false);
@@ -160,51 +165,55 @@ const FaturamentoProtocolos: React.FC = () => {
                 )}
                 <span>{downloadBulk.isPending ? 'Gerando...' : `Visualizar PDF (${selectedIds.length})`}</span>
               </button>
-              <button
-                type="button"
-                className="reports-action-btn secondary"
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px', color: '#ef4444', borderColor: '#fca5a5' }}
-                onClick={handleDeleteSelected}
-                disabled={bulkDelete.isPending}
-              >
-                <i className="bi bi-trash" />
-                <span>Excluir ({selectedIds.length})</span>
-              </button>
+              {canDeleteProtocolos && (
+                <button
+                  type="button"
+                  className="reports-action-btn secondary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px', color: '#ef4444', borderColor: '#fca5a5' }}
+                  onClick={handleDeleteSelected}
+                  disabled={bulkDelete.isPending}
+                >
+                  <i className="bi bi-trash" />
+                  <span>Excluir ({selectedIds.length})</span>
+                </button>
+              )}
             </>
+          )}
+          {canManageClientes && (
+            <button
+              type="button"
+              className="reports-action-btn secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+              onClick={() => setShowClientes(true)}
+            >
+              <i className="bi bi-people" />
+              <span>Gerenciar clientes</span>
+            </button>
           )}
           {isAdmin && (
-            <>
-              <button
-                type="button"
-                className="reports-action-btn secondary"
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
-                onClick={() => setShowClientes(true)}
-              >
-                <i className="bi bi-people" />
-                <span>Gerenciar clientes</span>
-              </button>
-              <button
-                type="button"
-                className="reports-action-btn secondary"
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
-                onClick={() => setShowImport(true)}
-              >
-                <i className="bi bi-file-earmark-excel" />
-                <span>Importar planilha</span>
-              </button>
-            </>
+            <button
+              type="button"
+              className="reports-action-btn secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+              onClick={() => setShowImport(true)}
+            >
+              <i className="bi bi-file-earmark-excel" />
+              <span>Importar planilha</span>
+            </button>
           )}
-          <button
-            type="button"
-            className="reports-action-btn primary"
-            style={{ backgroundColor: '#118CC4', borderColor: '#118CC4', display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
-            onClick={() => setShowNovo(true)}
-          >
-            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            <span>Novo protocolo</span>
-          </button>
+          {canCreateProtocolos && (
+            <button
+              type="button"
+              className="reports-action-btn primary"
+              style={{ backgroundColor: '#118CC4', borderColor: '#118CC4', display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+              onClick={() => setShowNovo(true)}
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              <span>Novo protocolo</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -340,14 +349,16 @@ const FaturamentoProtocolos: React.FC = () => {
                         </td>
                         <td style={{ color: 'var(--text-secondary)' }}>{protocolo.usuarioNome}</td>
                         <td>
-                          <button
-                            type="button"
-                            className="btn-icon"
-                            title="Editar protocolo"
-                            onClick={() => setEditingProtocolo(protocolo)}
-                          >
-                            <i className="bi bi-pencil" />
-                          </button>
+                          {canEditProtocolos && (
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              title="Editar protocolo"
+                              onClick={() => setEditingProtocolo(protocolo)}
+                            >
+                              <i className="bi bi-pencil" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -432,14 +443,14 @@ const FaturamentoProtocolos: React.FC = () => {
         </div>
       </QueryDataPanel>
 
-      {showNovo && <NovoProtocoloModal onClose={() => setShowNovo(false)} />}
-      {editingProtocolo && (
+      {showNovo && canCreateProtocolos && <NovoProtocoloModal onClose={() => setShowNovo(false)} />}
+      {editingProtocolo && canEditProtocolos && (
         <NovoProtocoloModal
           protocolo={editingProtocolo}
           onClose={() => setEditingProtocolo(null)}
         />
       )}
-      {showClientes && isAdmin && <GerenciarClientesProtocoloModal onClose={() => setShowClientes(false)} />}
+      {showClientes && canManageClientes && <GerenciarClientesProtocoloModal onClose={() => setShowClientes(false)} />}
       {showImport && isAdmin && <ImportarProtocolosModal onClose={() => setShowImport(false)} />}
     </div>
   );

@@ -17,6 +17,15 @@ class FaturamentoProtocoloTests(TestCase):
             role_id='2',
             environments=['Faturamento'],
             filiais={'Faturamento': ['Ibiporã (Matriz)']},
+            funcoes={'Faturamento': ['criar-protocolos', 'editar-protocolos']},
+        )
+        self.user_sem_funcoes = User.objects.create_user(
+            username='fat.leitor',
+            password='test123',
+            name='Operador Sem Funções',
+            role_id='2',
+            environments=['Faturamento'],
+            filiais={'Faturamento': ['Ibiporã (Matriz)']},
         )
         self.admin = User.objects.create_user(
             username='fat.admin.main',
@@ -25,6 +34,15 @@ class FaturamentoProtocoloTests(TestCase):
             role_id='1',
             environments=['Faturamento', 'Administração'],
             filiais={'Faturamento': ['Ibiporã (Matriz)']},
+        )
+        self.user_excluidor = User.objects.create_user(
+            username='fat.excluidor',
+            password='test123',
+            name='Operador com Exclusão',
+            role_id='2',
+            environments=['Faturamento'],
+            filiais={'Faturamento': ['Ibiporã (Matriz)']},
+            funcoes={'Faturamento': ['excluir-protocolos']},
         )
         self.cliente = ClienteProtocolo.objects.create(
             nome='Cliente Teste',
@@ -204,6 +222,140 @@ class FaturamentoProtocoloTests(TestCase):
         self.assertEqual(resp1.data['protocoloNumero'], '2026-0001')
         self.assertEqual(resp2.data['protocoloNumero'], '2026-0001')
         self.assertEqual(resp3.data['protocoloNumero'], '2026-0002')
+
+    def _criar_protocolo(self, nota: str):
+        response = self.api.post(
+            '/api/faturamento/protocolos/',
+            {'data': '2026-07-10', 'clienteId': self.other_cliente.pk, 'notaFiscal': nota},
+            format='json',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 201)
+        return response.data
+
+    def test_operador_sem_funcao_nao_pode_criar_protocolo(self):
+        response = self.api.post(
+            '/api/faturamento/protocolos/',
+            {'data': '2026-07-10', 'clienteId': self.other_cliente.pk, 'notaFiscal': '3801'},
+            format='json',
+            **auth_headers(self.user_sem_funcoes, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(ProtocoloEnvio.objects.count(), 0)
+
+    def test_operador_sem_funcao_nao_pode_editar_protocolo(self):
+        p1 = self._criar_protocolo('3851')
+        response = self.api.patch(
+            f"/api/faturamento/protocolos/{p1['id']}/",
+            {'notaFiscal': '3852'},
+            format='json',
+            **auth_headers(self.user_sem_funcoes, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 403)
+        protocolo = ProtocoloEnvio.objects.get(pk=p1['id'])
+        self.assertEqual(protocolo.nota_fiscal, '3851')
+
+    def test_operador_sem_funcao_pode_listar_protocolos(self):
+        self._criar_protocolo('3881')
+        response = self.api.get(
+            '/api/faturamento/protocolos/',
+            **auth_headers(self.user_sem_funcoes, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+
+    def test_operador_sem_funcao_nao_pode_excluir_protocolo(self):
+        p1 = self._criar_protocolo('3901')
+        response = self.api.delete(
+            f"/api/faturamento/protocolos/{p1['id']}/",
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 403)
+
+        response = self.api.post(
+            '/api/faturamento/protocolos/bulk_delete/',
+            {'ids': [p1['id']]},
+            format='json',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(ProtocoloEnvio.objects.filter(pk=p1['id']).exists())
+
+    def test_operador_com_funcao_gerenciar_clientes_pode_criar_cliente(self):
+        operador = User.objects.create_user(
+            username='fat.gestor.clientes',
+            password='test123',
+            name='Operador Gestor',
+            role_id='2',
+            environments=['Faturamento'],
+            filiais={'Faturamento': ['Ibiporã (Matriz)']},
+            funcoes={'Faturamento': ['gerenciar-clientes']},
+        )
+        response = self.api.post(
+            '/api/faturamento/protocolo-clientes/',
+            {'nome': 'Cliente do Operador', 'requerExpedicao': False},
+            format='json',
+            **auth_headers(operador, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(ClienteProtocolo.objects.filter(nome='Cliente do Operador').exists())
+
+    def test_excluir_ultimo_protocolo_devolve_numero_para_sequencia(self):
+        self._criar_protocolo('4001')
+        p2 = self._criar_protocolo('4002')
+
+        response = self.api.delete(
+            f"/api/faturamento/protocolos/{p2['id']}/",
+            **auth_headers(self.user_excluidor, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 204)
+
+        self.other_cliente.refresh_from_db()
+        self.assertEqual(self.other_cliente.ultimo_numero_protocolo, 1)
+
+        p3 = self._criar_protocolo('4003')
+        self.assertEqual(p3['protocoloNumero'], '2026-0002')
+
+    def test_excluir_protocolo_do_meio_nao_devolve_numero(self):
+        p1 = self._criar_protocolo('5001')
+        self._criar_protocolo('5002')
+
+        response = self.api.delete(
+            f"/api/faturamento/protocolos/{p1['id']}/",
+            **auth_headers(self.user_excluidor, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 204)
+
+        self.other_cliente.refresh_from_db()
+        self.assertEqual(self.other_cliente.ultimo_numero_protocolo, 2)
+
+        p3 = self._criar_protocolo('5003')
+        self.assertEqual(p3['protocoloNumero'], '2026-0003')
+
+    def test_bulk_delete_devolve_numeros_contiguos_do_topo(self):
+        p1 = self._criar_protocolo('6001')
+        p2 = self._criar_protocolo('6002')
+        p3 = self._criar_protocolo('6003')
+
+        # Exclui o nº 1 (meio) e os nºs 2 e 3 (topo contíguo): contador volta a 1.
+        response = self.api.post(
+            '/api/faturamento/protocolos/bulk_delete/',
+            {'ids': [p2['id'], p3['id']]},
+            format='json',
+            **auth_headers(self.user_excluidor, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.other_cliente.refresh_from_db()
+        self.assertEqual(self.other_cliente.ultimo_numero_protocolo, 1)
+
+        response = self.api.delete(
+            f"/api/faturamento/protocolos/{p1['id']}/",
+            **auth_headers(self.user_excluidor, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 204)
+        self.other_cliente.refresh_from_db()
+        self.assertEqual(self.other_cliente.ultimo_numero_protocolo, 0)
 
     def test_nf_duplicada_para_mesmo_cliente_retorna_400(self):
         ProtocoloEnvio.objects.create(

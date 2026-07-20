@@ -23,6 +23,7 @@ from .serializers import (
     ProtocoloEnvioSerializer,
     ProtocoloEnvioUpdateSerializer,
 )
+from .services import liberar_numeros_sequenciais
 
 
 def _usuario_display(user) -> str:
@@ -31,10 +32,25 @@ def _usuario_display(user) -> str:
     return user.name or user.get_full_name() or user.username
 
 
-def _admin_required_response(request, detail: str):
-    if request.user.is_admin:
+def _funcao_required_response(request, funcao: str, detail: str):
+    """Nega o acesso a operadores sem a função liberada (admin sempre pode)."""
+    if request.user.has_funcao('Faturamento', funcao):
         return None
     return Response({'detail': detail}, status=status.HTTP_403_FORBIDDEN)
+
+
+_GERENCIAR_CLIENTES_DETAIL = (
+    'Acesso negado. Solicite ao administrador a função "Gerenciar clientes" do Faturamento.'
+)
+_CRIAR_PROTOCOLOS_DETAIL = (
+    'Acesso negado. Solicite ao administrador a função "Criar protocolos" do Faturamento.'
+)
+_EDITAR_PROTOCOLOS_DETAIL = (
+    'Acesso negado. Solicite ao administrador a função "Editar protocolos" do Faturamento.'
+)
+_EXCLUIR_PROTOCOLOS_DETAIL = (
+    'Acesso negado. Solicite ao administrador a função "Excluir protocolos" do Faturamento.'
+)
 
 
 _ORDERING_MAP = {
@@ -79,19 +95,13 @@ class ClienteProtocoloViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
 
     def create(self, request, *args, **kwargs):
-        denied = _admin_required_response(
-            request,
-            'Acesso negado. Apenas administradores podem gerenciar clientes de protocolo.',
-        )
+        denied = _funcao_required_response(request, 'gerenciar-clientes', _GERENCIAR_CLIENTES_DETAIL)
         if denied:
             return denied
         return super().create(request, *args, **kwargs)
 
     def update(self, request, *args, **kwargs):
-        denied = _admin_required_response(
-            request,
-            'Acesso negado. Apenas administradores podem gerenciar clientes de protocolo.',
-        )
+        denied = _funcao_required_response(request, 'gerenciar-clientes', _GERENCIAR_CLIENTES_DETAIL)
         if denied:
             return denied
         return super().update(request, *args, **kwargs)
@@ -113,10 +123,7 @@ class ClienteProtocoloViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         )
 
     def destroy(self, request, *args, **kwargs):
-        denied = _admin_required_response(
-            request,
-            'Acesso negado. Apenas administradores podem gerenciar clientes de protocolo.',
-        )
+        denied = _funcao_required_response(request, 'gerenciar-clientes', _GERENCIAR_CLIENTES_DETAIL)
         if denied:
             return denied
         instance = self.get_object()
@@ -149,19 +156,13 @@ class FilialClienteProtocoloViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet
         return FilialClienteProtocolo.objects.filter(cliente_id=self.kwargs['cliente_pk'])
 
     def create(self, request, *args, **kwargs):
-        denied = _admin_required_response(
-            request,
-            'Acesso negado. Apenas administradores podem gerenciar filiais de cliente de protocolo.',
-        )
+        denied = _funcao_required_response(request, 'gerenciar-clientes', _GERENCIAR_CLIENTES_DETAIL)
         if denied:
             return denied
         return super().create(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        denied = _admin_required_response(
-            request,
-            'Acesso negado. Apenas administradores podem gerenciar filiais de cliente de protocolo.',
-        )
+        denied = _funcao_required_response(request, 'gerenciar-clientes', _GERENCIAR_CLIENTES_DETAIL)
         if denied:
             return denied
         return super().destroy(request, *args, **kwargs)
@@ -229,6 +230,9 @@ class ProtocoloEnvioViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return ProtocoloEnvioSerializer(instance, context=self.get_serializer_context()).data
 
     def create(self, request, *args, **kwargs):
+        denied = _funcao_required_response(request, 'criar-protocolos', _CRIAR_PROTOCOLOS_DETAIL)
+        if denied:
+            return denied
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -236,6 +240,9 @@ class ProtocoloEnvioViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return Response(self._reserialize(serializer.instance), status=status.HTTP_201_CREATED, headers=headers)
 
     def update(self, request, *args, **kwargs):
+        denied = _funcao_required_response(request, 'editar-protocolos', _EDITAR_PROTOCOLOS_DETAIL)
+        if denied:
+            return denied
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
@@ -243,22 +250,43 @@ class ProtocoloEnvioViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         self.perform_update(serializer)
         return Response(self._reserialize(serializer.instance))
 
+    def destroy(self, request, *args, **kwargs):
+        denied = _funcao_required_response(request, 'excluir-protocolos', _EXCLUIR_PROTOCOLOS_DETAIL)
+        if denied:
+            return denied
+        return super().destroy(request, *args, **kwargs)
+
     def perform_destroy(self, instance):
+        cliente = instance.cliente
+        numero = instance.numero_sequencial
         record_audit(
             self.request.user,
             'faturamento.protocolo.excluido',
-            f'Protocolo #{instance.pk} ({instance.cliente.nome}) excluído.',
+            f'Protocolo #{instance.pk} ({cliente.nome}) excluído.',
         )
         instance.delete()
+        # Se era o último criado da sequência do cliente, devolve o número.
+        liberar_numeros_sequenciais(cliente, [numero])
 
     @action(detail=False, methods=['post'])
     def bulk_delete(self, request):
+        denied = _funcao_required_response(request, 'excluir-protocolos', _EXCLUIR_PROTOCOLOS_DETAIL)
+        if denied:
+            return denied
         serializer = ProtocoloBulkDeleteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         ids = serializer.validated_data['ids']
         qs = ProtocoloEnvio.objects.filter(pk__in=ids)
+        numeros_por_cliente: dict[int, list[int]] = {}
+        clientes = {}
+        for protocolo in qs.select_related('cliente'):
+            clientes[protocolo.cliente_id] = protocolo.cliente
+            numeros_por_cliente.setdefault(protocolo.cliente_id, []).append(protocolo.numero_sequencial)
         count = qs.count()
         qs.delete()
+        # Devolve à sequência os números excluídos que estavam no topo do contador.
+        for cliente_id, numeros in numeros_por_cliente.items():
+            liberar_numeros_sequenciais(clientes[cliente_id], numeros)
         record_audit(
             request.user,
             'faturamento.protocolo.excluido_lote',

@@ -18,6 +18,7 @@ from .pagination import UserPagination
 from apps.audit.services import record_audit
 
 from .serializers import (
+    ChangePasswordSerializer,
     CreateUserSerializer,
     LoginSerializer,
     RoleSerializer,
@@ -344,3 +345,61 @@ class UserManagementViewSet(viewsets.ModelViewSet):
             "username": user_to_toggle.username,
             "status": user_to_toggle.status
         }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='force-password-change')
+    def force_password_change(self, request, pk=None):
+        """Solicita que o usuário altere a senha no próximo acesso."""
+        target = self.get_object()
+        if target.id == request.user.id:
+            return Response(
+                {"detail": "Use a troca de senha da própria conta para alterar sua senha."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if target.status != 'ativo':
+            return Response(
+                {"detail": "Só é possível solicitar redefinição para usuários ativos."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target.must_change_password = True
+        target.save(update_fields=['must_change_password'])
+        record_audit(
+            request.user,
+            'usuario.senha.redefinicao_solicitada',
+            f'Redefinição de senha solicitada para {target.username}.',
+        )
+        return Response({
+            'id': target.id,
+            'username': target.username,
+            'mustChangePassword': True,
+        }, status=status.HTTP_200_OK)
+
+
+class ChangePasswordAPIView(APIView):
+    """Troca de senha do próprio usuário (obrigatória quando must_change_password)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        current = serializer.validated_data['currentPassword']
+        new_password = serializer.validated_data['newPassword']
+
+        if not user.check_password(current):
+            return Response(
+                {'currentPassword': ['Senha atual incorreta.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new_password)
+        user.must_change_password = False
+        user.save(update_fields=['password', 'must_change_password'])
+        record_audit(
+            user,
+            'usuario.senha.alterada',
+            f'Senha alterada por {user.username}.',
+        )
+        return Response(UserSerializer(user).data, status=status.HTTP_200_OK)

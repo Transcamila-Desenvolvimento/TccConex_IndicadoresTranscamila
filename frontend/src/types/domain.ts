@@ -9,8 +9,13 @@ export interface User {
   lastLogin: string | null;
   environments: string[];
   filiais: Record<string, string[]>;
+  /** Indicadores liberados no ambiente Indicadores; lista vazia = todos. */
+  indicadores: string[];
+  /** Funções extras liberadas por ambiente (ex.: {"Faturamento": ["excluir-protocolos"]}). */
+  funcoes: Record<string, string[]>;
   googleEmail: string | null;
   googleLinkedAt: string | null;
+  mustChangePassword: boolean;
 }
 
 export interface GoogleContact {

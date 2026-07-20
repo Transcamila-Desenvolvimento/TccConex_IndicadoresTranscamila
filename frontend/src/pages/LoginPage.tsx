@@ -9,15 +9,13 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // If already logged in, redirect to environment selection
-    if (isAuthenticated) {
-      navigate('/select-environment');
-    }
-  }, [isAuthenticated, navigate]);
+    if (!isAuthenticated) return;
+    navigate(user?.mustChangePassword ? '/change-password' : '/select-environment', { replace: true });
+  }, [isAuthenticated, user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,9 +23,12 @@ const LoginPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      const success = await login(username, password);
-      if (success) {
-        navigate('/select-environment');
+      const authenticatedUser = await login(username, password);
+      if (authenticatedUser) {
+        navigate(
+          authenticatedUser.mustChangePassword ? '/change-password' : '/select-environment',
+          { replace: true },
+        );
       } else {
         setError('Credenciais inválidas ou usuário inativo.');
       }

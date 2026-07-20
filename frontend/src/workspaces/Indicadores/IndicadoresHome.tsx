@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { getAllowedIndicadores } from '../../constants/indicadores';
 
 const QUICK_LINKS = [
   {
@@ -32,6 +33,13 @@ const IndicadoresHome: React.FC = () => {
   const { user, selectedFilial } = useAuth();
   const firstName = user?.name?.split(' ')[0] ?? 'Usuário';
 
+  const allowed = getAllowedIndicadores(user);
+  const visibleLinks = QUICK_LINKS.filter((link) =>
+    link.path === '/indicadores/fluxo-de-caixa'
+      ? allowed.has('fluxo-caixa')
+      : allowed.has('meta-faturamento'),
+  );
+
   return (
     <section id="indicadores-home-view" className="view active" style={{ display: 'block' }}>
       <div className="welcome-banner">
@@ -47,7 +55,7 @@ const IndicadoresHome: React.FC = () => {
       </div>
 
       <div className="quick-access-grid">
-        {QUICK_LINKS.map((link) => (
+        {visibleLinks.map((link) => (
           <button
             key={link.path}
             type="button"

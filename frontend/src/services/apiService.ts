@@ -59,8 +59,11 @@ function normalizeUser(raw: any): User {
     filiais: Object.fromEntries(
       Object.entries(raw.filiais ?? {}).filter(([module]) => activeEnvSet.has(module)),
     ) as Record<string, string[]>,
+    indicadores: Array.isArray(raw.indicadores) ? raw.indicadores : [],
+    funcoes: raw.funcoes && typeof raw.funcoes === 'object' ? raw.funcoes : {},
     googleEmail: raw.googleEmail ?? null,
     googleLinkedAt: raw.googleLinkedAt ?? null,
+    mustChangePassword: Boolean(raw.mustChangePassword),
   };
 }
 
@@ -627,6 +630,19 @@ export const apiService = {
   async toggleUserStatus(id: string): Promise<string> {
     const { data } = await api.post(`/api/auth/users/${id}/toggle_status/`);
     return data.status as string;
+  },
+
+  async forcePasswordChange(id: string): Promise<void> {
+    await api.post(`/api/auth/users/${id}/force-password-change/`);
+  },
+
+  async changePassword(payload: {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+  }): Promise<User> {
+    const { data } = await api.post('/api/auth/profile/change-password/', payload);
+    return normalizeUser(data);
   },
 
   async getRoles(): Promise<Role[]> {

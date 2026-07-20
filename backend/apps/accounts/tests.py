@@ -88,6 +88,52 @@ class AuthAPITests(TestCase):
         response = self.client.post('/api/auth/profile/google/unlink/', **auth_headers(self.admin))
         self.assertEqual(response.status_code, 400)
 
+    def test_admin_can_force_password_change(self):
+        response = self.client.post(
+            f'/api/auth/users/{self.operator.id}/force-password-change/',
+            **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['mustChangePassword'])
+        self.operator.refresh_from_db()
+        self.assertTrue(self.operator.must_change_password)
+
+    def test_force_password_change_cannot_target_self(self):
+        response = self.client.post(
+            f'/api/auth/users/{self.admin.id}/force-password-change/',
+            **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_change_password_clears_must_change_flag(self):
+        self.operator.must_change_password = True
+        self.operator.save(update_fields=['must_change_password'])
+
+        response = self.client.post(
+            '/api/auth/profile/change-password/',
+            {
+                'currentPassword': 'oper123',
+                'newPassword': 'nova456',
+                'confirmPassword': 'nova456',
+            },
+            **auth_headers(self.operator),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['mustChangePassword'])
+        self.operator.refresh_from_db()
+        self.assertTrue(self.operator.check_password('nova456'))
+        self.assertFalse(self.operator.must_change_password)
+
+    def test_login_includes_must_change_password(self):
+        self.operator.must_change_password = True
+        self.operator.save(update_fields=['must_change_password'])
+        response = self.client.post('/api/auth/login/', {
+            'username': 'oper_test',
+            'password': 'oper123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['user']['mustChangePassword'])
+
 
 class ModulePermissionTests(TestCase):
     def setUp(self):

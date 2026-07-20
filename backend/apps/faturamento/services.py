@@ -38,6 +38,28 @@ def gerar_numero_sequencial(cliente: ClienteProtocolo) -> int:
         return cliente_bloqueado.ultimo_numero_protocolo
 
 
+def liberar_numeros_sequenciais(cliente: ClienteProtocolo, numeros_excluidos: list[int]) -> None:
+    """Devolve à sequência do cliente apenas os números excluídos que estavam
+    no topo do contador (o último criado, ou os últimos, se contíguos).
+
+    Ex.: contador em 22 e exclusão do 22 → contador volta a 21 e o próximo
+    protocolo criado reutiliza o 22. Números excluídos no meio da sequência
+    (ex.: 20 com o contador em 22) ficam queimados de forma permanente, para
+    que um número nunca identifique dois protocolos diferentes.
+    """
+    excluidos = set(numeros_excluidos)
+    if not excluidos:
+        return
+    with transaction.atomic():
+        cliente_bloqueado = ClienteProtocolo.objects.select_for_update().get(pk=cliente.pk)
+        contador = cliente_bloqueado.ultimo_numero_protocolo
+        while contador > 0 and contador in excluidos:
+            contador -= 1
+        if contador != cliente_bloqueado.ultimo_numero_protocolo:
+            cliente_bloqueado.ultimo_numero_protocolo = contador
+            cliente_bloqueado.save(update_fields=['ultimo_numero_protocolo'])
+
+
 def notas_fiscais_duplicadas(
     *, cliente: ClienteProtocolo, notas: list[str], protocolo_atual_id: int | None = None,
 ) -> list[str]:
