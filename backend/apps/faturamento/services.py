@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.db import transaction
+from django.db.models import Max
 
 from .constants import (
     EXPEDICAO_PREFIXO_COMUM,
@@ -29,13 +30,22 @@ def normalize_notas_fiscais(raw: str) -> str:
 def gerar_numero_sequencial(cliente: ClienteProtocolo) -> int:
     """Gera o próximo número de protocolo para o cliente, de forma atômica.
 
-    Cada cliente possui sua própria sequência numérica, independente dos demais.
+    O próximo número é sempre o maior número existente no banco + 1 — a
+    sequência continua do último protocolo real, mesmo que o contador do
+    cliente tenha divergido por exclusões antigas. Cada cliente possui sua
+    própria sequência numérica, independente dos demais.
     """
     with transaction.atomic():
         cliente_bloqueado = ClienteProtocolo.objects.select_for_update().get(pk=cliente.pk)
-        cliente_bloqueado.ultimo_numero_protocolo += 1
+        maior_existente = (
+            ProtocoloEnvio.objects.filter(cliente=cliente_bloqueado)
+            .aggregate(maior=Max('numero_sequencial'))['maior']
+            or 0
+        )
+        proximo = maior_existente + 1
+        cliente_bloqueado.ultimo_numero_protocolo = proximo
         cliente_bloqueado.save(update_fields=['ultimo_numero_protocolo'])
-        return cliente_bloqueado.ultimo_numero_protocolo
+        return proximo
 
 
 def liberar_numeros_sequenciais(cliente: ClienteProtocolo, numeros_excluidos: list[int]) -> None:
