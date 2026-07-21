@@ -72,7 +72,6 @@ const ImportarProtocolosModal: React.FC<ImportarProtocolosModalProps> = ({ onClo
         file: selectedFile,
         clienteId,
         dryRun,
-        skipDuplicatas: true,
       })
       .then((res) => {
         clearInterval(fakeInterval);
@@ -273,7 +272,8 @@ const ImportarProtocolosModal: React.FC<ImportarProtocolosModalProps> = ({ onClo
                 Simular importação (dry-run) — não grava no banco
               </label>
               <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>
-                NFs ou números de protocolo já existentes são ignorados automaticamente.
+                NFs repetidas do mesmo cliente são permitidas na importação (com aviso).
+                Números de protocolo já existentes são ignorados automaticamente.
                 Expedição e filial são opcionais.
               </p>
             </div>

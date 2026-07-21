@@ -29,6 +29,7 @@ const MODULE_ACCESS_GROUPS = [
   { module: 'Indicadores', label: 'Indicadores' },
   { module: 'Compras', label: 'Compras' },
   { module: 'RH', label: 'RH' },
+  { module: 'SGQ', label: 'SGQ' },
 ] as const;
 
 const INDICADOR_GROUPS = INDICADOR_ITEMS.reduce<Record<string, typeof INDICADOR_ITEMS[number][]>>((acc, item) => {

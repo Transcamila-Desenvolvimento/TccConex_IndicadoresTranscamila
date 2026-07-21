@@ -309,6 +309,10 @@ def generate_pdf_protocol(buffer, protocolos: list[ProtocoloEnvio]) -> None:
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
             ('FONTSIZE', (0, 1), (-1, -1), 8),
+            # Padding compacto nas linhas de dados para o protocolo cheio
+            # (78 NFs = 26 linhas) caber em uma única página A4.
+            ('TOPPADDING', (0, 1), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 2),
         ]
         for row_idx, row in enumerate(table_data):
             for col in range(num_cols):

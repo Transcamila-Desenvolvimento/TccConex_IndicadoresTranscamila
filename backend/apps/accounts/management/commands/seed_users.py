@@ -5,7 +5,7 @@ from apps.accounts.constants import ALL_BRANCHES
 
 User = get_user_model()
 
-ADMIN_FILIAIS = {env: list(ALL_BRANCHES) for env in ['Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento']}
+ADMIN_FILIAIS = {env: list(ALL_BRANCHES) for env in ['Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ']}
 
 INITIAL_USERS = [
     {
@@ -14,7 +14,7 @@ INITIAL_USERS = [
         'name': 'Administrador Geral',
         'role_id': '1',
         'status': 'ativo',
-        'environments': ['Administração', 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento'],
+        'environments': ['Administração', 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ'],
         'filiais': ADMIN_FILIAIS,
         'is_staff': True,
         'is_superuser': True,
@@ -25,7 +25,7 @@ INITIAL_USERS = [
         'name': 'Miguel Ribeiro',
         'role_id': '1',
         'status': 'ativo',
-        'environments': ['Administração', 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento'],
+        'environments': ['Administração', 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ'],
         'filiais': ADMIN_FILIAIS,
         'is_staff': True,
         'is_superuser': True,

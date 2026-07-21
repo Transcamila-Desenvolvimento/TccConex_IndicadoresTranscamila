@@ -1,4 +1,4 @@
-MAX_NOTAS_FISCAIS = 72
+MAX_NOTAS_FISCAIS = 78
 
 EXPEDICAO_CHOICES = [
     ('Transcamila Ibiporã', 'Transcamila Ibiporã'),

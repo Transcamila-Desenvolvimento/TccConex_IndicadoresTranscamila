@@ -581,13 +581,14 @@ def import_protocolos_from_workbook(
     """Importa protocolos a partir dos bytes de um .xlsx.
 
     Expedição e filial são opcionais: se houver colunas na planilha, são gravadas.
-    NFs/números já existentes são ignorados com aviso (não derrubam o lote).
+    NFs repetidas do mesmo cliente são permitidas na importação (com aviso);
+    números de protocolo já existentes são ignorados com aviso (não derrubam o lote).
     Flags ``cliente.requer_expedicao`` / ``exige_filial`` não bloqueiam a importação.
 
     Retorna dict camelCase pronto para a API. Em falha estrutural, levanta
     ProtocoloImportError. Em falha de negócio com rollback, `success=False`.
     """
-    _ = skip_duplicatas  # mantido por compatibilidade da API; duplicatas sempre são ignoradas
+    _ = skip_duplicatas  # mantido por compatibilidade da API; duplicatas são sempre importadas
     ws = _load_worksheet(file_bytes, sheet)
     headers_row, header_row_num = _read_headers(ws)
     mapping = _resolve_columns(
@@ -633,25 +634,17 @@ def import_protocolos_from_workbook(
                 erros.append({'label': label, 'message': str(exc)})
                 continue
 
+            # NFs repetidas do mesmo cliente são permitidas na importação
+            # (histórico/planilhas legadas); apenas o cadastro manual pelo
+            # formulário bloqueia duplicatas. Fica só o aviso informativo.
             duplicadas = notas_fiscais_duplicadas(cliente=cliente, notas=notas)
             if duplicadas:
-                msg = (
-                    f'NFs já cadastradas para "{cliente.nome}": '
-                    f'{", ".join(duplicadas)}'
-                )
-                # Duplicatas nunca derrubam o lote: remove NFs repetidas ou
-                # ignora o protocolo se não sobrar nenhuma.
-                notas = [nf for nf in notas if nf not in set(duplicadas)]
-                if not notas:
-                    avisos.append({
-                        'label': label,
-                        'message': f'ignorado — {msg}',
-                    })
-                    ignorados += 1
-                    continue
                 avisos.append({
                     'label': label,
-                    'message': f'{msg} — removidas do protocolo',
+                    'message': (
+                        f'NFs já cadastradas para "{cliente.nome}" '
+                        f'(importadas mesmo assim): {", ".join(duplicadas)}'
+                    ),
                 })
 
             # ── Expedição (opcional) ──────────────────────────────────────────

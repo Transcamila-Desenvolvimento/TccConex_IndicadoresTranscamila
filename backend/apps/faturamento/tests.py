@@ -233,6 +233,37 @@ class FaturamentoProtocoloTests(TestCase):
         self.assertEqual(response.status_code, 201)
         return response.data
 
+    def test_nota_fiscal_com_letras_e_rejeitada(self):
+        response = self.api.post(
+            '/api/faturamento/protocolos/',
+            {'data': '2026-07-10', 'clienteId': self.other_cliente.pk, 'notaFiscal': '1001, NF-2'},
+            format='json',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('apenas números', str(response.data))
+        self.assertEqual(ProtocoloEnvio.objects.count(), 0)
+
+    def test_limite_de_78_notas_por_protocolo(self):
+        notas_78 = ', '.join(str(10000 + i) for i in range(78))
+        response = self.api.post(
+            '/api/faturamento/protocolos/',
+            {'data': '2026-07-10', 'clienteId': self.other_cliente.pk, 'notaFiscal': notas_78},
+            format='json',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+        notas_79 = ', '.join(str(20000 + i) for i in range(79))
+        response = self.api.post(
+            '/api/faturamento/protocolos/',
+            {'data': '2026-07-10', 'clienteId': self.other_cliente.pk, 'notaFiscal': notas_79},
+            format='json',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('78', str(response.data))
+
     def test_operador_sem_funcao_nao_pode_criar_protocolo(self):
         response = self.api.post(
             '/api/faturamento/protocolos/',
@@ -549,7 +580,9 @@ class FaturamentoProtocoloImportTests(TestCase):
         self.assertEqual(response.data['created'], 1)
         self.assertEqual(ProtocoloEnvio.objects.count(), 0)
 
-    def test_duplicatas_sao_ignoradas_e_lote_continua(self):
+    def test_importacao_permite_nf_duplicada_do_mesmo_cliente(self):
+        """Na importação, NFs já cadastradas para o cliente são importadas mesmo
+        assim (com aviso) — o bloqueio de duplicatas vale só para o formulário."""
         ProtocoloEnvio.objects.create(
             data='2026-07-01',
             cliente=self.cliente,
@@ -571,41 +604,30 @@ class FaturamentoProtocoloImportTests(TestCase):
         )
         self.assertEqual(response.status_code, 200, response.data)
         self.assertTrue(response.data['success'])
-        self.assertEqual(response.data['created'], 1)
-        self.assertEqual(response.data['ignored'], 1)
-        self.assertEqual(ProtocoloEnvio.objects.filter(cliente=self.cliente).count(), 2)
-        self.assertTrue(
-            ProtocoloEnvio.objects.filter(cliente=self.cliente, nota_fiscal='9002').exists()
+        self.assertEqual(response.data['created'], 2)
+        self.assertEqual(response.data['ignored'], 0)
+        self.assertEqual(ProtocoloEnvio.objects.filter(cliente=self.cliente).count(), 3)
+        self.assertEqual(
+            ProtocoloEnvio.objects.filter(cliente=self.cliente, nota_fiscal='9001').count(), 2
         )
+        avisos = [w['message'] for w in response.data['warnings']]
+        self.assertTrue(any('9001' in msg for msg in avisos))
 
-    def test_duplicatas_com_skip_importa_parcial(self):
-        ProtocoloEnvio.objects.create(
-            data='2026-07-01',
-            cliente=self.cliente,
-            nota_fiscal='9001',
-            numero_sequencial=1,
-            usuario_nome='Pré-existente',
-        )
+    def test_importacao_rejeita_nf_com_letras(self):
         response = self.api.post(
             '/api/faturamento/protocolos/import_spreadsheet/',
             {
-                'file': self._xlsx_file([
-                    ('10/07/2026', '9001'),
-                    ('11/07/2026', '9002'),
-                ]),
+                'file': self._xlsx_file([('10/07/2026', 'ABC123')]),
                 'clienteId': str(self.cliente.pk),
-                'skipDuplicatas': 'true',
             },
             format='multipart',
             **auth_headers(self.admin, 'Faturamento'),
         )
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertTrue(response.data['success'])
-        self.assertEqual(response.data['created'], 1)
-        self.assertEqual(ProtocoloEnvio.objects.filter(cliente=self.cliente).count(), 2)
-        self.assertTrue(
-            ProtocoloEnvio.objects.filter(cliente=self.cliente, nota_fiscal='9002').exists()
-        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(response.data['success'])
+        erros = [e['message'] for e in response.data['errors']]
+        self.assertTrue(any('apenas números' in msg for msg in erros))
+        self.assertEqual(ProtocoloEnvio.objects.count(), 0)
 
     def test_importa_expedicao_e_filial_opcionais(self):
         self.cliente.requer_expedicao = True

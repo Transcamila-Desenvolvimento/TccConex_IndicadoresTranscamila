@@ -44,7 +44,7 @@ const DashboardWorkspace: React.FC = () => {
             <div className="stat-card">
               <div className="stat-card-label" id="dash-card-1-label">Ambiente Atual</div>
               <div className="stat-card-value" id="dash-current-filial">{selectedFilial ?? '—'}</div>
-              <div className="stat-card-desc" id="dash-current-ambiente">{selectedEnvironment === 'RH' ? 'Recursos Humanos (RH)' : (selectedEnvironment ?? '—')}</div>
+              <div className="stat-card-desc" id="dash-current-ambiente">{selectedEnvironment === 'RH' ? 'Recursos Humanos (RH)' : selectedEnvironment === 'SGQ' ? 'Gestão da Qualidade (SGQ)' : (selectedEnvironment ?? '—')}</div>
             </div>
             <div className="stat-card">
               <div className="stat-card-label" id="dash-card-2-label">Perfil</div>

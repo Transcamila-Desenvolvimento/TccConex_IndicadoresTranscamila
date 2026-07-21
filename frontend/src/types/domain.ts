@@ -738,6 +738,9 @@ export type ProtocoloExpedicao = (typeof PROTOCOLO_EXPEDICAO_OPTIONS)[number];
 /** Quantidade máxima de expedições que podem ser combinadas em um único protocolo. */
 export const MAX_EXPEDICOES_POR_PROTOCOLO = 2;
 
+/** Quantidade máxima de notas fiscais por protocolo (paridade com o backend). */
+export const MAX_NFS_POR_PROTOCOLO = 78;
+
 export interface FilialClienteProtocolo {
   id: string;
   nome: string;
@@ -838,6 +841,79 @@ export interface ProtocoloImportParams {
   file: File;
   clienteId: string;
   dryRun?: boolean;
-  skipDuplicatas?: boolean;
+}
+
+// --- SGQ (Pesquisa de Satisfação) TYPES ---
+
+export const SGQ_AVALIACAO_OPTIONS = [
+  { value: 'otimo', label: 'Ótimo' },
+  { value: 'bom', label: 'Bom' },
+  { value: 'regular', label: 'Regular' },
+  { value: 'ruim', label: 'Ruim' },
+] as const;
+
+export type SgqAvaliacao = (typeof SGQ_AVALIACAO_OPTIONS)[number]['value'];
+
+export const SGQ_CLIENTE_OPTIONS = ['CCAB', 'PRENTISS', 'ALBAUGH', 'UPL', 'OUTROS'] as const;
+
+export type SgqCliente = (typeof SGQ_CLIENTE_OPTIONS)[number];
+
+/** Critérios avaliados na pesquisa (chave camelCase da API → rótulo). */
+export const SGQ_CRITERIOS = [
+  { key: 'prazoEntrega', label: 'Prazo de Entrega' },
+  { key: 'condicoesMercadoria', label: 'Condições da Mercadoria' },
+  { key: 'condicoesVeiculo', label: 'Condições do Veículo' },
+  { key: 'apresentacaoMotorista', label: 'Apresentação do Motorista' },
+  { key: 'atendimentoDispensado', label: 'Atendimento Dispensado' },
+] as const;
+
+export type SgqCriterioKey = (typeof SGQ_CRITERIOS)[number]['key'];
+
+export interface SgqPesquisa {
+  id: string;
+  motorista: string;
+  cte: string;
+  data: string;
+  notaFiscal: string;
+  cliente: SgqCliente;
+  prazoEntrega: SgqAvaliacao;
+  condicoesMercadoria: SgqAvaliacao;
+  condicoesVeiculo: SgqAvaliacao;
+  apresentacaoMotorista: SgqAvaliacao;
+  atendimentoDispensado: SgqAvaliacao;
+  analise: string;
+  tratativaJustificativa: string;
+  criadoPor: string;
+}
+
+export type SgqPesquisaPayload = Omit<SgqPesquisa, 'id' | 'criadoPor'>;
+
+export interface SgqPesquisaQueryParams extends ListQueryParams {
+  cliente?: string;
+  avaliacao?: string;
+  dataInicio?: string;
+  dataFim?: string;
+  ordering?: 'data_asc' | 'data_desc';
+}
+
+export interface SgqCriterioStats {
+  campo: string;
+  label: string;
+  otimo: number;
+  bom: number;
+  regular: number;
+  ruim: number;
+  /** Score médio na escala 1 (Ruim) a 4 (Ótimo). */
+  score: number;
+}
+
+export interface SgqPesquisaStats {
+  totalPesquisas: number;
+  totalAvaliacoes: number;
+  contagem: Record<SgqAvaliacao, number>;
+  percentual: Record<SgqAvaliacao, number>;
+  pontosAtencao: number;
+  metaOtimo: number;
+  criterios: SgqCriterioStats[];
 }
 

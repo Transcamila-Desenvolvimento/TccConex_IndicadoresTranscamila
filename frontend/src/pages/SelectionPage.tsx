@@ -12,7 +12,7 @@ import {
 } from '../constants/environments';
 import logoImg from '../assets/Logo_TccConex.png';
 
-const GLOBAL_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento'];
+const GLOBAL_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ'];
 
 const NOTION_PROJECT_URL =
   'https://transcamila-miguel.notion.site/ebd//37322feb02fe8012ba34da103c4ef203';
@@ -28,6 +28,7 @@ const ENV_META: Record<string, { code: string; color: string; text: string }> = 
   Compras: { code: ENVIRONMENT_CODES.Compras, color: ENV_BADGE_COLOR, text: 'Módulo de Compras' },
   RH: { code: ENVIRONMENT_CODES.RH, color: ENV_BADGE_COLOR, text: 'Recursos Humanos' },
   Faturamento: { code: ENVIRONMENT_CODES.Faturamento, color: ENV_BADGE_COLOR, text: 'Módulo de Faturamento' },
+  SGQ: { code: ENVIRONMENT_CODES.SGQ, color: ENV_BADGE_COLOR, text: 'Gestão da Qualidade' },
 };
 
 const formatLastLogin = (value: string | null) => {
@@ -354,7 +355,7 @@ const SelectionPage: React.FC = () => {
                 >
                   <option value="" disabled>Selecione o ERP</option>
                   {userEnvironments.map((env) => (
-                    <option key={env} value={env}>{env === 'RH' ? 'Recursos Humanos (RH)' : env}</option>
+                    <option key={env} value={env}>{env === 'RH' ? 'Recursos Humanos (RH)' : env === 'SGQ' ? 'Gestão da Qualidade (SGQ)' : env}</option>
                   ))}
                 </select>
               </div>
@@ -523,7 +524,7 @@ const SelectionPage: React.FC = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.58 4 8 4s8-1.79 8-4M4 7c0-2.21 3.58-4 8-4s8 1.79 8 4m0 5c0 2.21-3.58 4-8 4s-8-1.79-8-4"></path>
                       </svg>
                       <div>
-                        <div className="search-item-title">{env.name === 'RH' ? 'Recursos Humanos (RH)' : env.name}</div>
+                        <div className="search-item-title">{env.name === 'RH' ? 'Recursos Humanos (RH)' : env.name === 'SGQ' ? 'Gestão da Qualidade (SGQ)' : env.name}</div>
                         <div className="search-item-path">{env.text}</div>
                       </div>
                     </div>

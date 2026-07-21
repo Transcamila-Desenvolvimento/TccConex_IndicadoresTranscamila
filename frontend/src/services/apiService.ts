@@ -23,6 +23,7 @@ import type {
   ClienteProtocolo, ProtocoloEnvio,
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
   ProtocoloImportParams, ProtocoloImportResult,
+  SgqPesquisa, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
 } from '../types/domain';
 import { filterActiveEnvironments, ACTIVE_ENVIRONMENTS } from '../constants/environments';
 
@@ -524,6 +525,19 @@ function buildProtocoloQueryParams(params: ProtocoloQueryParams = {}) {
   if (params.protocoloId) query.protocoloId = params.protocoloId;
   if (params.notaFiscal) query.notaFiscal = params.notaFiscal;
   if (params.usuario) query.usuario = params.usuario;
+  if (params.ordering) query.ordering = params.ordering;
+  return query;
+}
+
+function buildSgqPesquisaQueryParams(params: SgqPesquisaQueryParams = {}) {
+  const query: Record<string, string | number> = {};
+  if (params.page) query.page = params.page;
+  if (params.pageSize) query.page_size = params.pageSize;
+  if (params.search) query.search = params.search;
+  if (params.cliente) query.cliente = params.cliente;
+  if (params.avaliacao) query.avaliacao = params.avaliacao;
+  if (params.dataInicio) query.dataInicio = params.dataInicio;
+  if (params.dataFim) query.dataFim = params.dataFim;
   if (params.ordering) query.ordering = params.ordering;
   return query;
 }
@@ -1349,7 +1363,6 @@ export const apiService = {
     form.append('file', params.file);
     form.append('clienteId', params.clienteId);
     if (params.dryRun) form.append('dryRun', 'true');
-    if (params.skipDuplicatas) form.append('skipDuplicatas', 'true');
     const { data } = await api.post('/api/faturamento/protocolos/import_spreadsheet/', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 120000,
@@ -1367,6 +1380,36 @@ export const apiService = {
       throw new Error(await readBlobErrorMessage(data, 'Não foi possível baixar a planilha de referência.'));
     }
     return assertSpreadsheetBlob(data, headers);
+  },
+
+  // ─── SGQ — Pesquisa de Satisfação (Django API) ──────────────────────────────
+
+  async getSgqPesquisas(params: SgqPesquisaQueryParams = {}): Promise<PaginatedResponse<SgqPesquisa>> {
+    const { data } = await api.get('/api/sgq/pesquisas-satisfacao/', {
+      params: buildSgqPesquisaQueryParams(params),
+    });
+    return paginatedFromResponse(data, (raw) => raw as SgqPesquisa);
+  },
+
+  async getSgqPesquisaStats(params: SgqPesquisaQueryParams = {}): Promise<SgqPesquisaStats> {
+    const { data } = await api.get('/api/sgq/pesquisas-satisfacao/stats/', {
+      params: buildSgqPesquisaQueryParams(params),
+    });
+    return data as SgqPesquisaStats;
+  },
+
+  async createSgqPesquisa(payload: SgqPesquisaPayload): Promise<SgqPesquisa> {
+    const { data } = await api.post('/api/sgq/pesquisas-satisfacao/', payload);
+    return data as SgqPesquisa;
+  },
+
+  async updateSgqPesquisa(id: string, payload: Partial<SgqPesquisaPayload>): Promise<SgqPesquisa> {
+    const { data } = await api.patch(`/api/sgq/pesquisas-satisfacao/${id}/`, payload);
+    return data as SgqPesquisa;
+  },
+
+  async deleteSgqPesquisa(id: string): Promise<void> {
+    await api.delete(`/api/sgq/pesquisas-satisfacao/${id}/`);
   },
 };
 

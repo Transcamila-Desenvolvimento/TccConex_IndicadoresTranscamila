@@ -6,7 +6,7 @@ import {
   useUpdateProtocoloEnvio,
 } from '../../../hooks/useFaturamentoProtocolos';
 import type { ProtocoloEnvio, ProtocoloExpedicao } from '../../../types/domain';
-import { MAX_EXPEDICOES_POR_PROTOCOLO, PROTOCOLO_EXPEDICAO_OPTIONS } from '../../../types/domain';
+import { MAX_EXPEDICOES_POR_PROTOCOLO, MAX_NFS_POR_PROTOCOLO, PROTOCOLO_EXPEDICAO_OPTIONS } from '../../../types/domain';
 
 interface NovoProtocoloModalProps {
   onClose: () => void;
@@ -14,7 +14,7 @@ interface NovoProtocoloModalProps {
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
-const MAX_NFS = 72;
+const MAX_NFS = MAX_NFS_POR_PROTOCOLO;
 
 interface NotaItem {
   nf: string;
@@ -51,6 +51,10 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
   const addNota = () => {
     const value = nfInput.trim();
     if (!value) return;
+    if (!/^\d+$/.test(value)) {
+      alert('O número da nota fiscal deve conter apenas números.');
+      return;
+    }
     if (notas.length >= MAX_NFS) {
       alert(`O protocolo aceita no máximo ${MAX_NFS} notas fiscais.`);
       return;
@@ -223,8 +227,9 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
                 className="form-input"
                 style={{ flex: 1, minWidth: '140px' }}
                 value={nfInput}
-                onChange={(e) => setNfInput(e.target.value)}
-                placeholder="Número da NF"
+                onChange={(e) => setNfInput(e.target.value.replace(/\D/g, ''))}
+                placeholder="Número da NF (somente números)"
+                inputMode="numeric"
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addNota(); } }}
               />
               {exigeFilial && (
