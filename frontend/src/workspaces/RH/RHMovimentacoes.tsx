@@ -441,49 +441,55 @@ const RHMovimentacoes: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="erp-card reports-table-card">
-                  <div className="table-container">
-                    <table className="erp-table reports-table">
-                      <thead>
-                        <tr>
-                          <th>Funcionário</th>
-                          <th>CPF</th>
-                          <th>Cargo</th>
-                          <th>Categoria</th>
-                          <th>Idade</th>
-                          <th>Tempo Empresa</th>
-                          <th>Admissão</th>
-                          <th className="num">Salário</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ativosQueryState.showInitialLoader ? (
-                          <tr><td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>Carregando...</td></tr>
-                        ) : (ativosQuery.data ?? []).length === 0 ? (
-                          <tr><td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontStyle: 'italic' }}>Nenhum colaborador ativo encontrado.</td></tr>
-                        ) : (
-                          (ativosQuery.data ?? []).map((c) => (
-                            <tr key={c.id}>
-                              <td>
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <strong>{c.nome}</strong>
-                                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>{c.filial}</span>
-                                </div>
-                              </td>
-                              <td>{c.cpf}</td>
-                              <td>{c.funcao || '—'}</td>
-                              <td><CategoriaBadge categoria={c.categoria} /></td>
-                              <td>{c.idadeStr}</td>
-                              <td>{c.tempoEmpresaStr}</td>
-                              <td>{c.dataAdmissao}</td>
-                              <td className="num"><SalaryValue value={c.salario} hidden={!showSalaries} /></td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+                <QueryDataPanel
+                  query={ativosQuery}
+                  variant="compact"
+                  loadingMessage="Carregando colaboradores ativos..."
+                  refreshingMessage="Atualizando colaboradores..."
+                  errorMessage="Não foi possível carregar os colaboradores ativos. Tente novamente."
+                >
+                  <div className="erp-card reports-table-card">
+                    <div className="table-container">
+                      <table className="erp-table reports-table">
+                        <thead>
+                          <tr>
+                            <th>Funcionário</th>
+                            <th>CPF</th>
+                            <th>Cargo</th>
+                            <th>Categoria</th>
+                            <th>Idade</th>
+                            <th>Tempo Empresa</th>
+                            <th>Admissão</th>
+                            <th className="num">Salário</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ativosQueryState.canShowEmpty && (ativosQuery.data ?? []).length === 0 ? (
+                            <tr><td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontStyle: 'italic' }}>Nenhum colaborador ativo encontrado.</td></tr>
+                          ) : (
+                            (ativosQuery.data ?? []).map((c) => (
+                              <tr key={c.id}>
+                                <td>
+                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <strong>{c.nome}</strong>
+                                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>{c.filial}</span>
+                                  </div>
+                                </td>
+                                <td>{c.cpf}</td>
+                                <td>{c.funcao || '—'}</td>
+                                <td><CategoriaBadge categoria={c.categoria} /></td>
+                                <td>{c.idadeStr}</td>
+                                <td>{c.tempoEmpresaStr}</td>
+                                <td>{c.dataAdmissao}</td>
+                                <td className="num"><SalaryValue value={c.salario} hidden={!showSalaries} /></td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
+                </QueryDataPanel>
               </>
             )}
 
