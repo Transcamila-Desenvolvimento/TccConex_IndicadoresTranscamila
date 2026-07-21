@@ -515,7 +515,17 @@ const DashboardLayout: React.FC = () => {
                 </div>
               </Link>
 
-
+              {/* Calendário Financeiro */}
+              <Link
+                to="/financeiro/calendar"
+                className={`nav-btn ${isRouteActive('/financeiro/calendar') ? 'active' : ''}`}
+                data-tooltip="Calendário"
+              >
+                <div className="nav-btn-left">
+                  <NavIcon name="calendar3" />
+                  <span className="nav-text">Calendário</span>
+                </div>
+              </Link>
 
               {/* Fluxo de Caixa Collapsible Submenu */}
               <div className="nav-group-wrapper" id="btn-menu-financeiro-cashflow">

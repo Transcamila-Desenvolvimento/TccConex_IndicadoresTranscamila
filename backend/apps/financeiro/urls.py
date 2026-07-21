@@ -7,6 +7,8 @@ from .views import (
     BankAccountViewSet,
     BankDataSyncView,
     BillingRecordViewSet,
+    CalendarSystemEventsView,
+    CalendarioEventoViewSet,
     CashAdjustmentViewSet,
     PagarDiffAnalysisView,
     PrActionView,
@@ -22,6 +24,7 @@ router.register('billing', BillingRecordViewSet, basename='billing')
 router.register('adjustments', CashAdjustmentViewSet, basename='adjustments')
 router.register('bank-accounts', BankAccountViewSet, basename='bank-accounts')
 router.register('balance-history', BalanceHistoryEntryViewSet, basename='balance-history')
+router.register('calendario/eventos', CalendarioEventoViewSet, basename='calendario-eventos')
 
 urlpatterns = [
     path('reports/pagar/', ActiveReportDataView.as_view(), {'report_type': 'pagar'}, name='reports-pagar'),
@@ -35,5 +38,6 @@ urlpatterns = [
     path('reports/pr-action/', PrActionView.as_view(), name='reports-pr-action'),
     path('tasks/<str:task_id>/', CeleryTaskStatusView.as_view(), name='celery-task-status'),
     path('bank-data/sync/', BankDataSyncView.as_view(), name='bank-data-sync'),
+    path('calendario/sistema/', CalendarSystemEventsView.as_view(), name='calendario-sistema'),
     path('', include(router.urls)),
 ]

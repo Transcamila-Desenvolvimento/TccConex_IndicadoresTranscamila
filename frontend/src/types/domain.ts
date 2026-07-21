@@ -202,6 +202,39 @@ export interface CashAdjustment {
   user: string;
 }
 
+/** Título individual dentro de um evento do calendário financeiro. */
+export interface CalendarSystemTitulo {
+  doc: string;
+  filial: string;
+  vencimento: string;
+  valor: number;
+}
+
+/** Evento agregado (a pagar/receber) do calendário financeiro. */
+export interface CalendarSystemEvent {
+  type: 'pagar' | 'receber';
+  date: string;
+  title: string;
+  fullTitle: string;
+  amount: number;
+  count: number;
+  titulos: CalendarSystemTitulo[];
+}
+
+export interface CalendarSystemEventsResponse {
+  batchLabel: string | null;
+  events: Record<string, CalendarSystemEvent[]>;
+}
+
+/** Evento pessoal do calendário financeiro. */
+export interface CalendarPersonalEvent {
+  id: number;
+  date: string;
+  title: string;
+  description: string;
+  color: string;
+}
+
 export interface BankAccount {
   id: number;
   bank: string;

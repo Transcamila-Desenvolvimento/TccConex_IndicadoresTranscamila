@@ -6,6 +6,7 @@ from .models import (
     BalanceHistoryEntry,
     BankAccount,
     BillingRecord,
+    CalendarioEvento,
     CashAdjustment,
     PagarTitulo,
     ReceberTitulo,
@@ -132,6 +133,24 @@ class BankAccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = BankAccount
         fields = ['id', 'bank', 'agency', 'number', 'type', 'balance', 'creditLimit', 'lastUpdated']
+
+
+class CalendarioEventoSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
+    date = serializers.DateField(source='data', format='%Y-%m-%d')
+    title = serializers.CharField(source='titulo', max_length=200)
+    description = serializers.CharField(source='descricao', required=False, allow_blank=True, default='')
+    color = serializers.CharField(source='cor', required=False, default='azul')
+
+    class Meta:
+        model = CalendarioEvento
+        fields = ['id', 'date', 'title', 'description', 'color']
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            validated_data['usuario'] = request.user
+        return super().create(validated_data)
 
 
 class BalanceHistoryEntrySerializer(serializers.ModelSerializer):

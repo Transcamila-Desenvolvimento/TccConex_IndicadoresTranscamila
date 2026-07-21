@@ -2,6 +2,7 @@ import axios from 'axios';
 import type {
   User, Role, SystemLog, PagarRow, ReceberRow, AgingRow, ReportBatch,
   BillingRecord, CashAdjustment, BankAccount, BalanceHistoryEntry,
+  CalendarSystemEventsResponse, CalendarPersonalEvent,
   IndicadorKpi, IndicadorFilialRow,
   CashflowQueryParams, CashflowResponse, CashflowDayDetailParams, CashflowDayDetailResponse,
   SendGerencialEmailParams, SendGerencialEmailResponse,
@@ -833,6 +834,35 @@ export const apiService = {
 
   async deleteCashAdjustment(id: number): Promise<void> {
     await api.delete(`/api/financeiro/adjustments/${id}/`);
+  },
+
+  // ── Calendário Financeiro ────────────────────────────────────────────────
+
+  async getCalendarSystemEvents(start: string, end: string): Promise<CalendarSystemEventsResponse> {
+    const { data } = await api.get('/api/financeiro/calendario/sistema/', { params: { start, end } });
+    return {
+      batchLabel: data.batchLabel ?? null,
+      events: data.events ?? {},
+    };
+  },
+
+  async getCalendarPersonalEvents(start: string, end: string): Promise<CalendarPersonalEvent[]> {
+    const { data } = await api.get('/api/financeiro/calendario/eventos/', { params: { start, end } });
+    return (Array.isArray(data) ? data : data.results ?? []) as CalendarPersonalEvent[];
+  },
+
+  async createCalendarPersonalEvent(payload: Omit<CalendarPersonalEvent, 'id'>): Promise<CalendarPersonalEvent> {
+    const { data } = await api.post('/api/financeiro/calendario/eventos/', payload);
+    return data as CalendarPersonalEvent;
+  },
+
+  async updateCalendarPersonalEvent(id: number, payload: Partial<Omit<CalendarPersonalEvent, 'id'>>): Promise<CalendarPersonalEvent> {
+    const { data } = await api.patch(`/api/financeiro/calendario/eventos/${id}/`, payload);
+    return data as CalendarPersonalEvent;
+  },
+
+  async deleteCalendarPersonalEvent(id: number): Promise<void> {
+    await api.delete(`/api/financeiro/calendario/eventos/${id}/`);
   },
 
   async getBankAccounts(): Promise<BankAccount[]> {

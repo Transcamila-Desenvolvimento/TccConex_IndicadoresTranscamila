@@ -114,6 +114,24 @@ class BankAccount(models.Model):
         ordering = ['bank', 'number']
 
 
+class CalendarioEvento(models.Model):
+    """Evento pessoal do calendário financeiro (cada usuário vê só os seus)."""
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='eventos_calendario',
+    )
+    titulo = models.CharField(max_length=200)
+    descricao = models.TextField(blank=True, default='')
+    data = models.DateField()
+    cor = models.CharField(max_length=30, default='azul')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['data', 'id']
+
+
 class BalanceHistoryEntry(models.Model):
     account = models.ForeignKey(BankAccount, on_delete=models.CASCADE, related_name='history_entries')
     reference_date = models.DateField()

@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 
 // Sub-components/Pages
 import FinanceiroHome from './FinanceiroHome';
+import FinanceiroCalendar from './FinanceiroCalendar';
 import FinanceiroReports from './FinanceiroReports';
 import FinanceiroBalances from './FinanceiroBalances';
 import FinanceiroAdjustments from './FinanceiroAdjustments';
@@ -12,6 +13,7 @@ const FinanceiroWorkspace: React.FC = () => {
   return (
     <Routes>
       <Route path="home" element={<FinanceiroHome />} />
+      <Route path="calendar" element={<FinanceiroCalendar />} />
       <Route path="reports" element={<FinanceiroReports />} />
       <Route path="balances" element={<FinanceiroBalances />} />
       <Route path="adjustments" element={<FinanceiroAdjustments />} />

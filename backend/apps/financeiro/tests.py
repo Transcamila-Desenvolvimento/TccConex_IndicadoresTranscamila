@@ -868,3 +868,136 @@ class CeleryImportTaskTests(TestCase):
             '<Valor_x0020_Frete>1.000,00</Valor_x0020_Frete>'
             '</Row>'
         )
+
+
+class CalendarioFinanceiroTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='fin_calendario',
+            password='fin123',
+            role_id='2',
+            environments=['Financeiro'],
+            filiais={'Financeiro': ['Ibiporã (Matriz)', 'Rondonópolis']},
+        )
+        self.batch = ReportBatch.objects.create(
+            label='##C01',
+            reference_date=date(2026, 7, 1),
+            is_active=True,
+            imported_pagar=True,
+            imported_receber=True,
+        )
+        # Dois títulos do mesmo fornecedor no mesmo dia → agrupados em 1 evento
+        for titulo in ('P0001', 'P0002'):
+            PagarTitulo.objects.create(
+                batch=self.batch,
+                filial='01',
+                cod_forn='F001',
+                fornecedor='Fornecedor Alpha',
+                titulo=titulo,
+                tipo='NF',
+                emissao='01/07/2026',
+                vencimento='15/07/2026',
+                vencimento_real='15/07/2026',
+                valor=Decimal('100.00'),
+                saldo=Decimal('100.00'),
+                historico='',
+            )
+        ReceberTitulo.objects.create(
+            batch=self.batch,
+            filial='01',
+            cod_cliente='C001',
+            cliente='Cliente Beta',
+            titulo='R0001',
+            natureza='DUP',
+            emissao='01/07/2026',
+            vencimento='20/07/2026',
+            vencimento_real='20/07/2026',
+            valor=Decimal('250.00'),
+            saldo=Decimal('250.00'),
+            historico='',
+        )
+
+    def test_sistema_agrupa_por_fornecedor_e_dia(self):
+        response = self.client.get(
+            '/api/financeiro/calendario/sistema/?start=2026-07-01&end=2026-07-31',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['batchLabel'], '##C01')
+        events = response.data['events']
+
+        pagar_dia = events['2026-07-15']
+        self.assertEqual(len(pagar_dia), 1)
+        self.assertEqual(pagar_dia[0]['type'], 'pagar')
+        self.assertEqual(pagar_dia[0]['count'], 2)
+        self.assertEqual(pagar_dia[0]['amount'], 200.0)
+        self.assertEqual(len(pagar_dia[0]['titulos']), 2)
+
+        receber_dia = events['2026-07-20']
+        self.assertEqual(receber_dia[0]['type'], 'receber')
+        self.assertEqual(receber_dia[0]['amount'], 250.0)
+
+    def test_sistema_fora_do_intervalo_fica_vazio(self):
+        response = self.client.get(
+            '/api/financeiro/calendario/sistema/?start=2026-08-01&end=2026-08-31',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['events'], {})
+
+    def test_sistema_exige_start_e_end(self):
+        response = self.client.get(
+            '/api/financeiro/calendario/sistema/',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_evento_pessoal_crud_escopo_por_usuario(self):
+        create = self.client.post(
+            '/api/financeiro/calendario/eventos/',
+            {'date': '2026-07-10', 'title': 'Reunião banco', 'description': 'Levar contratos', 'color': 'verde'},
+            format='json',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(create.status_code, 201)
+        evento_id = create.data['id']
+
+        listagem = self.client.get(
+            '/api/financeiro/calendario/eventos/?start=2026-07-01&end=2026-07-31',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(listagem.status_code, 200)
+        results = listagem.data if isinstance(listagem.data, list) else listagem.data['results']
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['title'], 'Reunião banco')
+
+        # Outro usuário não vê o evento
+        outro = User.objects.create_user(
+            username='fin_outro',
+            password='fin123',
+            role_id='2',
+            environments=['Financeiro'],
+            filiais={'Financeiro': ['Ibiporã (Matriz)']},
+        )
+        listagem_outro = self.client.get(
+            '/api/financeiro/calendario/eventos/?start=2026-07-01&end=2026-07-31',
+            **auth_headers(outro, 'Financeiro'),
+        )
+        results_outro = listagem_outro.data if isinstance(listagem_outro.data, list) else listagem_outro.data['results']
+        self.assertEqual(len(results_outro), 0)
+
+        update = self.client.patch(
+            f'/api/financeiro/calendario/eventos/{evento_id}/',
+            {'date': '2026-07-11'},
+            format='json',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(update.status_code, 200)
+        self.assertEqual(update.data['date'], '2026-07-11')
+
+        delete = self.client.delete(
+            f'/api/financeiro/calendario/eventos/{evento_id}/',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(delete.status_code, 204)

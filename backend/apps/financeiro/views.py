@@ -16,11 +16,13 @@ from .batch_service import create_import_batch
 from .constants import MAX_REPORT_BATCHES
 from .billing_import_service import import_billing_file
 from .import_service import import_report_file
+from .calendar_service import build_system_events
 from .models import (
     AgingTitulo,
     BalanceHistoryEntry,
     BankAccount,
     BillingRecord,
+    CalendarioEvento,
     CashAdjustment,
     PagarTitulo,
     ReceberTitulo,
@@ -45,6 +47,7 @@ from .serializers import (
     BalanceHistoryEntrySerializer,
     BankAccountSerializer,
     BillingRecordSerializer,
+    CalendarioEventoSerializer,
     CashAdjustmentSerializer,
     PagarTituloSerializer,
     ReceberTituloSerializer,
@@ -198,6 +201,50 @@ class ReportFacetsView(ModuleScopedViewMixin, APIView):
         if report_type not in ('pagar', 'receber', 'aging'):
             return Response({'detail': 'Tipo inválido.'}, status=status.HTTP_400_BAD_REQUEST)
         return Response(report_facets(active_batch(), report_type, request.user, request))
+
+
+class CalendarSystemEventsView(ModuleScopedViewMixin, APIView):
+    """Vencimentos de contas a pagar/receber do lote ativo, agrupados por dia."""
+    permission_module = 'Financeiro'
+
+    def get(self, request):
+        try:
+            start = date.fromisoformat(request.query_params.get('start', ''))
+            end = date.fromisoformat(request.query_params.get('end', ''))
+        except ValueError:
+            return Response(
+                {'detail': 'Parâmetros start e end são obrigatórios (YYYY-MM-DD).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if end < start:
+            return Response({'detail': 'end deve ser maior ou igual a start.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        batch = active_batch()
+        events = build_system_events(batch, start=start, end=end, user=request.user, request=request)
+        return Response({
+            'batchLabel': batch.label if batch else None,
+            'events': events,
+        })
+
+
+class CalendarioEventoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+    """Eventos pessoais do calendário financeiro (escopo: usuário logado)."""
+    permission_module = 'Financeiro'
+    serializer_class = CalendarioEventoSerializer
+    queryset = CalendarioEvento.objects.none()
+
+    def get_queryset(self):
+        qs = CalendarioEvento.objects.filter(usuario=self.request.user)
+        start = self.request.query_params.get('start')
+        end = self.request.query_params.get('end')
+        try:
+            if start:
+                qs = qs.filter(data__gte=date.fromisoformat(start))
+            if end:
+                qs = qs.filter(data__lte=date.fromisoformat(end))
+        except ValueError:
+            return CalendarioEvento.objects.none()
+        return qs
 
 
 class CeleryTaskStatusView(ModuleScopedViewMixin, APIView):

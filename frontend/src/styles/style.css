@@ -1,5 +1,9 @@
 /* style.css - Clean, Modern System UI - Light Mode */
 :root {
+  /* Escala global da UI. O layout foi desenhado para 1920×1080; em telas
+     menores a interface inteira é reduzida proporcionalmente via zoom. */
+  --app-zoom: 1;
+
   --bg-app: #ffffff;
   --bg-sidebar: #ffffff;
   --bg-panel: #ffffff;
@@ -31,15 +35,38 @@ body {
   font-family: 'Inter', sans-serif;
   background-color: var(--bg-app);
   color: var(--text-primary);
-  height: 100vh;
+  /* Unidades de viewport não são afetadas pelo zoom, então dividimos
+     pelo fator para a UI reduzida continuar preenchendo a tela toda. */
+  zoom: var(--app-zoom);
+  height: calc(100vh / var(--app-zoom));
   overflow: hidden;
   user-select: none;
 }
 
+/* Telas menores que Full HD: reduz a escala da UI inteira.
+   (guardado por @supports para navegadores sem a propriedade zoom) */
+@supports (zoom: 0.9) {
+  @media (max-width: 1706px) {
+    :root { --app-zoom: 0.9; }
+  }
+
+  @media (max-width: 1526px) {
+    :root { --app-zoom: 0.85; }
+  }
+
+  @media (max-width: 1380px) {
+    :root { --app-zoom: 0.8; }
+  }
+
+  @media (max-width: 1152px) {
+    :root { --app-zoom: 0.72; }
+  }
+}
+
 .app-container {
   display: flex;
-  height: 100vh;
-  width: 100vw;
+  height: calc(100vh / var(--app-zoom));
+  width: calc(100vw / var(--app-zoom));
 }
 
 /* Sidebar */
@@ -49,7 +76,7 @@ body {
   border-right: 1px solid #d9d9d9;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh / var(--app-zoom));
   transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
   position: relative;
   overflow: hidden;
@@ -276,7 +303,7 @@ body {
   display: flex;
   flex-direction: column;
   flex: 1;
-  height: 100vh;
+  height: calc(100vh / var(--app-zoom));
   overflow: hidden;
 }
 
@@ -716,7 +743,7 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 80vh;
+  height: calc(80vh / var(--app-zoom));
   width: 100%;
   flex-direction: column;
   gap: 16px;
@@ -754,8 +781,8 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: calc(100vw / var(--app-zoom));
+  height: calc(100vh / var(--app-zoom));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -957,15 +984,15 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: calc(100vw / var(--app-zoom));
+  height: calc(100vh / var(--app-zoom));
   background-color: rgba(15, 23, 42, 0.4);
   backdrop-filter: blur(4px);
   z-index: 3000;
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding-top: 15vh;
+  padding-top: calc(15vh / var(--app-zoom));
   animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1384,7 +1411,7 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   display: flex;
   flex-direction: column;
   width: min(1400px, 100%);
-  height: min(94vh, 100%);
+  height: min(calc(94vh / var(--app-zoom)), 100%);
   background: #fff;
   border-radius: 12px;
   overflow: hidden;
@@ -3502,6 +3529,177 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   gap: 10px;
 }
 
+/* ── Calendário Financeiro ─────────────────────────────────────────────── */
+.fin-calendar-filters {
+  display: flex;
+  gap: 8px;
+}
+
+.fin-calendar-pill {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #94a3b8;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.fin-calendar-pill.pagar.is-on {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.fin-calendar-pill.receber.is-on {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.fin-calendar-pill.pessoal.is-on {
+  border-color: #a5d8ff;
+  background: #f0f7ff;
+  color: #118CC4;
+}
+
+.fin-calendar-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  user-select: none;
+}
+
+.fin-calendar-table th {
+  padding: 10px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  text-align: center;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+}
+
+.fin-calendar-table th.is-weekend-head {
+  color: #118CC4;
+}
+
+.fin-calendar-cell {
+  height: 104px;
+  vertical-align: top;
+  padding: 8px;
+  border: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.fin-calendar-cell:hover {
+  background: #f8fbff;
+}
+
+.fin-calendar-cell.is-weekend {
+  background: #fafafa;
+}
+
+.fin-calendar-cell.is-weekend:hover {
+  background: #f8fbff;
+}
+
+.fin-calendar-cell.is-outside {
+  background: #fcfcfd;
+  cursor: default;
+}
+
+.fin-calendar-cell.is-today {
+  background: #eff6ff;
+  outline: 2px solid #118CC4;
+  outline-offset: -2px;
+}
+
+.fin-calendar-day-number {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 4px;
+}
+
+.fin-calendar-events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 72px;
+  overflow-y: auto;
+}
+
+.fin-calendar-events::-webkit-scrollbar {
+  width: 3px;
+}
+
+.fin-calendar-events::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+.fin-calendar-event {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.fin-calendar-event:hover {
+  filter: brightness(0.92);
+}
+
+.fin-calendar-event.is-pagar {
+  background: #dc2626;
+}
+
+.fin-calendar-event.is-receber {
+  background: #16a34a;
+}
+
+.fin-calendar-event-arrow {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.fin-calendar-color-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.fin-calendar-color-option {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s;
+  padding: 0;
+}
+
+.fin-calendar-color-option:hover {
+  transform: scale(1.12);
+}
+
+.fin-calendar-color-option.is-active {
+  border-color: #0f172a;
+  box-shadow: 0 0 0 2px #ffffff inset;
+}
+
 .module-config-chevron {
   flex-shrink: 0;
   color: #94a3b8;
@@ -3615,7 +3813,7 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 }
 
 .admin-user-modal-card {
-  max-height: calc(100vh - 48px);
+  max-height: calc(100vh / var(--app-zoom) - 48px);
   overflow-y: auto;
   flex-shrink: 0;
 }
@@ -3643,7 +3841,7 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 
 .admin-user-modal-card--wide {
   width: 900px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100vw / var(--app-zoom) - 32px);
 }
 
 /* Duas colunas: dados do usuário à esquerda, permissões à direita */
@@ -4869,7 +5067,7 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 .cashflow-accounts-menu {
   left: 0;
   right: auto;
-  width: min(320px, 90vw);
+  width: min(320px, calc(90vw / var(--app-zoom)));
   max-height: 320px;
   overflow: hidden;
   padding: 0;
@@ -5299,8 +5497,8 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 }
 
 .cashflow-detail-modal {
-  width: min(1180px, 96vw);
-  max-height: 90vh;
+  width: min(1180px, calc(96vw / var(--app-zoom)));
+  max-height: calc(90vh / var(--app-zoom));
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -5754,8 +5952,8 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 }
 
 .gerencial-email-modal {
-  width: min(520px, 94vw);
-  max-height: 90vh;
+  width: min(520px, calc(94vw / var(--app-zoom)));
+  max-height: calc(90vh / var(--app-zoom));
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -5957,8 +6155,8 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 }
 
 .pr-analysis-modal {
-  width: min(960px, 96vw);
-  max-height: 90vh;
+  width: min(960px, calc(96vw / var(--app-zoom)));
+  max-height: calc(90vh / var(--app-zoom));
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -6132,8 +6330,8 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 }
 
 .report-diff-modal {
-  width: min(1080px, calc(100vw - 32px));
-  max-height: calc(100vh - 40px);
+  width: min(1080px, calc(100vw / var(--app-zoom) - 32px));
+  max-height: calc(100vh / var(--app-zoom) - 40px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -6678,7 +6876,7 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   box-shadow: 0 10px 32px rgba(15, 23, 42, 0.18);
   border: 1px solid #e2e8f0;
   overflow: hidden;
-  max-height: calc(100vh - 48px);
+  max-height: calc(100vh / var(--app-zoom) - 48px);
   overflow-y: auto;
   flex-shrink: 0;
   animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
