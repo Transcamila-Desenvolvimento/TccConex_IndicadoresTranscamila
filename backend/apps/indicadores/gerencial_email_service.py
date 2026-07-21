@@ -77,11 +77,12 @@ def _fat_dia_periodo(reference: date) -> str:
     (ex.: segunda vira "sexta e sábado" quando domingo não tem faturamento).
     """
     dates = gerencial_fat_hoje_dates(reference)
-    com_lancamento = sorted(
+    # set() dedupe: o Meta.ordering do BillingRecord (por data e filial) faz o
+    # .distinct() do banco considerar a filial, repetindo a mesma data.
+    com_lancamento = sorted(set(
         BillingRecord.objects.filter(reference_date__in=dates)
         .values_list('reference_date', flat=True)
-        .distinct()
-    )
+    ))
     efetivas = com_lancamento or [dates[-1]]
     if len(efetivas) == 1:
         return fmt_br(efetivas[0])

@@ -957,6 +957,18 @@ class GerencialEmailTests(TestCase):
         # 12/06/2026 é sexta-feira: o faturamento exibido é o de quinta (11/06).
         self.assertEqual(_fat_dia_periodo(date(2026, 6, 12)), '11/06/2026')
 
+    def test_fat_dia_periodo_nao_repete_data_com_varias_filiais(self):
+        from .gerencial_email_service import _fat_dia_periodo
+
+        for branch in ('Ibiporã', 'Barueri', 'Paranaguá'):
+            BillingRecord.objects.create(
+                reference_date=date(2026, 6, 11),
+                branch=branch,
+                value=Decimal('500.00'),
+            )
+        # Várias filiais na mesma data não podem duplicar a data exibida.
+        self.assertEqual(_fat_dia_periodo(date(2026, 6, 12)), '11/06/2026')
+
     def test_fat_dia_periodo_segunda_mostra_sexta_e_sabado(self):
         from .gerencial_email_service import _fat_dia_periodo
 
