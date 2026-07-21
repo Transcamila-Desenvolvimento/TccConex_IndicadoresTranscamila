@@ -272,7 +272,8 @@ class LoteMovimentacaoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             })
 
         total_colabs = colaboradores.count()
-        total_adm_oper = colaboradores.filter(categoria__in=['ADMINISTRATIVO', 'OPERACIONAL']).count()
+        total_adm = colaboradores.filter(categoria='ADMINISTRATIVO').count()
+        total_oper = colaboradores.filter(categoria='OPERACIONAL').count()
         total_mot_ativos = colaboradores.filter(categoria='MOTORISTA').exclude(situacao__icontains='AFASTADO').count()
         total_mot_afastados = colaboradores.filter(categoria='MOTORISTA', situacao__icontains='AFASTADO').count()
         total_folha = colaboradores.aggregate(Sum('salario'))['salario__sum'] or Decimal('0')
@@ -374,7 +375,8 @@ class LoteMovimentacaoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             'relatorio': relatorio_filiais,
             'geral': {
                 'total_colabs': total_colabs,
-                'total_adm_oper': total_adm_oper,
+                'total_adm': total_adm,
+                'total_oper': total_oper,
                 'total_mot_ativos': total_mot_ativos,
                 'total_mot_afastados': total_mot_afastados,
                 'total_folha_str': format_currency_br(total_folha),

@@ -219,7 +219,7 @@
         }
 
         .personnel-grid td {
-            width: 33.33%;
+            width: 25%;
             text-align: center;
             padding: 2px 6px;
             border-left: 1px solid #eef2f6;
@@ -374,8 +374,12 @@
                     <table class="personnel-grid">
                         <tr>
                             <td>
-                                <div class="personnel-value text-blue">{{ geral.total_adm_oper }}</div>
-                                <div class="personnel-label">Adm/Operacional</div>
+                                <div class="personnel-value text-blue">{{ geral.total_adm }}</div>
+                                <div class="personnel-label">Administrativo</div>
+                            </td>
+                            <td>
+                                <div class="personnel-value text-blue">{{ geral.total_oper }}</div>
+                                <div class="personnel-label">Operacional</div>
                             </td>
                             <td>
                                 <div class="personnel-value text-green">{{ geral.total_mot_ativos }}</div>

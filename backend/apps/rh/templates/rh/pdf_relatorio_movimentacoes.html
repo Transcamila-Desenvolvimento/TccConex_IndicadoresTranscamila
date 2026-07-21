@@ -21,53 +21,61 @@
         line-height: 1.35;
     }
 
-    .company-name {
+    /* Cabeçalho do documento — logo à esquerda, nome do PDF à direita,
+       separados do conteúdo por um filete azul. */
+    table.pdf-header {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 16px;
+    }
+    table.pdf-header td {
+        padding: 0 0 10px 0;
+        border-bottom: 2px solid #118CC4;
+        vertical-align: middle;
+    }
+    td.pdf-header-title {
+        text-align: right;
+    }
+    .doc-name {
+        font-size: 17pt;
+        font-weight: bold;
+        color: #0f172a;
+    }
+    .doc-sub {
         font-size: 8pt;
         color: #94a3b8;
         text-transform: uppercase;
         letter-spacing: 0.6px;
-        margin: 0 0 12px 0;
+        margin-top: 3px;
     }
 
-    /* Título — barra azul + texto, igual ao cabeçalho das telas do sistema.
-       Usa border-left em vez de célula de tabela com vertical-align: a barra
-       fica sempre com a altura exata do texto, sem risco de desalinhamento. */
-    .title-text {
-        border-left: 4px solid #118CC4;
-        padding-left: 11px;
-        margin: 0 0 14px 0;
-        font-size: 16pt;
-        font-weight: bold;
-        color: #0f172a;
-    }
-
-    /* Faixa de informações do documento — sem caixa, só um filete inferior sutil */
+    /* Faixa de informações do documento — texto simples, sem linhas */
     table.doc-info {
         width: 100%;
         border-collapse: collapse;
-        margin-bottom: 20px;
-        padding-bottom: 9px;
-        border-bottom: 1px solid #e2e8f0;
+        margin-bottom: 18px;
     }
     table.doc-info td {
         font-size: 8.5pt;
         color: #94a3b8;
         padding: 0;
     }
+    table.doc-info td.doc-info-right {
+        text-align: right;
+    }
     table.doc-info strong {
         color: #334155;
         font-weight: bold;
     }
 
-    /* Título de seção — barra azul fina + texto, sem moldura (mesma técnica
-       de border-left do título principal, para altura sempre correta) */
+    /* Título de seção — faixa suave de fundo, sem barras nem molduras */
     .section-text {
-        border-left: 4px solid #118CC4;
-        padding-left: 8px;
+        background-color: #eff8ff;
+        padding: 6px 10px;
         margin: 20px 0 10px 0;
         font-size: 9.5pt;
         font-weight: bold;
-        color: #334155;
+        color: #0f6a96;
         text-transform: uppercase;
         letter-spacing: 0.4px;
         -pdf-keep-with-next: true;
@@ -162,7 +170,6 @@
         vertical-align: middle;
     }
     #footer_content img {
-        height: 11px;
         margin-left: 4px;
         vertical-align: middle;
     }
@@ -177,17 +184,26 @@
     <table class="footer-table">
         <tr>
             <td>Documento gerado automaticamente em {{ gerado_em }}.</td>
-            <td class="footer-page">Powered by TccConex <img src="data:image/png;base64,{{ logo_base64 }}" /> &nbsp;|&nbsp; Página <pdf:pagenumber /> de <pdf:pagecount /></td>
+            <td class="footer-page">Powered by <img src="data:image/png;base64,{{ logo_tccconex_base64 }}" width="46" height="11" /> &nbsp;|&nbsp; Página <pdf:pagenumber /> de <pdf:pagecount /></td>
         </tr>
     </table>
 </div>
 
-<p class="company-name">TccConex ERP &mdash; Transcamila Cargas e Armazéns Gerais Ltda</p>
-<p class="title-text">Relatório de Movimentações de Recursos Humanos</p>
+<table class="pdf-header">
+    <tr>
+        <!-- width/height na proporção exata da imagem (1048×238); o xhtml2pdf
+             estica a logo se apenas uma das dimensões for informada. -->
+        <td style="width: 7cm;"><img src="data:image/png;base64,{{ logo_base64 }}" width="132" height="30" /></td>
+        <td class="pdf-header-title">
+            <div class="doc-name">Movimentações de RH</div>
+            <div class="doc-sub">TccConex ERP &mdash; Transcamila Cargas e Armazéns Gerais Ltda</div>
+        </td>
+    </tr>
+</table>
 <table class="doc-info">
     <tr>
         <td>Período de referência: <strong>{{ mes_nome }}/{{ ano }}</strong></td>
-        <td>Emitido em: <strong>{{ gerado_em }}</strong></td>
+        <td class="doc-info-right">Emitido em: <strong>{{ gerado_em }}</strong></td>
     </tr>
 </table>
 
