@@ -332,6 +332,7 @@ const RHMovimentacoes: React.FC = () => {
         query={dashboardQuery}
         variant="compact"
         fullPageLoader
+        refreshVariant="overlay"
         loadingMessage="Carregando movimentações de RH..."
         refreshingMessage="Atualizando movimentações..."
         errorMessage="Não foi possível carregar as movimentações de RH. Tente novamente."
@@ -444,6 +445,8 @@ const RHMovimentacoes: React.FC = () => {
                 <QueryDataPanel
                   query={ativosQuery}
                   variant="compact"
+                  fullPageLoader
+                  refreshVariant="overlay"
                   loadingMessage="Carregando colaboradores ativos..."
                   refreshingMessage="Atualizando colaboradores..."
                   errorMessage="Não foi possível carregar os colaboradores ativos. Tente novamente."

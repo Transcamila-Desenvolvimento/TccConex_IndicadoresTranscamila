@@ -20,7 +20,13 @@ from apps.financeiro.models import BillingRecord, ReceberTitulo, ReportBatch
 from apps.financeiro.report_filters import active_batch
 
 from .cashflow_service import build_cashflow_payload
-from .cashflow_utils import cashflow_start_date, fmt_br, gerencial_pagar_cutoff, parse_br_date
+from .cashflow_utils import (
+    cashflow_start_date,
+    fmt_br,
+    gerencial_fat_hoje_dates,
+    gerencial_pagar_cutoff,
+    parse_br_date,
+)
 from .gerencial_service import build_gerencial_panel
 from .models import GerencialSnapshot
 
@@ -60,6 +66,28 @@ def _fmt_currency(value) -> str:
     negative = amount < 0
     formatted = f'R$ {abs(amount):,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
     return f'({formatted})' if negative else formatted
+
+
+def _fat_dia_periodo(reference: date) -> str:
+    """Data(s) que o valor de "Faturamento do Dia" realmente cobre.
+
+    O faturamento é sempre defasado: dias comuns mostram o dia anterior;
+    segunda-feira acumula sexta a domingo (mesmas datas usadas no cálculo do
+    valor, em ``gerencial_fat_hoje_dates``). Exibe só as datas com lançamento
+    (ex.: segunda vira "sexta e sábado" quando domingo não tem faturamento).
+    """
+    dates = gerencial_fat_hoje_dates(reference)
+    com_lancamento = sorted(
+        BillingRecord.objects.filter(reference_date__in=dates)
+        .values_list('reference_date', flat=True)
+        .distinct()
+    )
+    efetivas = com_lancamento or [dates[-1]]
+    if len(efetivas) == 1:
+        return fmt_br(efetivas[0])
+    if len(efetivas) == 2:
+        return f'{efetivas[0]:%d/%m} e {fmt_br(efetivas[-1])}'
+    return f'{efetivas[0]:%d/%m} a {fmt_br(efetivas[-1])}'
 
 
 def _clean_client_name(name: str) -> str:
@@ -295,7 +323,7 @@ def send_gerencial_email(
         'batch_label': snapshot.batch_label,
         'ref_date': reference,
         'fat_dia': _fmt_currency(snapshot.fat_dia),
-        'fat_dia_date': fmt_br(reference),
+        'fat_dia_date': _fat_dia_periodo(reference),
         'fat_mes': _fmt_currency(snapshot.fat_mes),
         'fat_ano': _fmt_currency(snapshot.fat_ano),
         'saldo_banco': _fmt_currency(snapshot.saldo_banco),

@@ -946,6 +946,49 @@ class GerencialEmailTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(GerencialSnapshot.objects.count(), 0)
 
+    def test_fat_dia_periodo_dia_comum_mostra_vespera(self):
+        from .gerencial_email_service import _fat_dia_periodo
+
+        BillingRecord.objects.create(
+            reference_date=date(2026, 6, 11),
+            branch='Ibiporã',
+            value=Decimal('1000.00'),
+        )
+        # 12/06/2026 é sexta-feira: o faturamento exibido é o de quinta (11/06).
+        self.assertEqual(_fat_dia_periodo(date(2026, 6, 12)), '11/06/2026')
+
+    def test_fat_dia_periodo_segunda_mostra_sexta_e_sabado(self):
+        from .gerencial_email_service import _fat_dia_periodo
+
+        BillingRecord.objects.create(
+            reference_date=date(2026, 6, 12),
+            branch='Ibiporã',
+            value=Decimal('1000.00'),
+        )
+        BillingRecord.objects.create(
+            reference_date=date(2026, 6, 13),
+            branch='Ibiporã',
+            value=Decimal('500.00'),
+        )
+        # 15/06/2026 é segunda-feira: acumula sexta (12/06) e sábado (13/06).
+        self.assertEqual(_fat_dia_periodo(date(2026, 6, 15)), '12/06 e 13/06/2026')
+
+    def test_fat_dia_periodo_segunda_com_domingo_mostra_intervalo(self):
+        from .gerencial_email_service import _fat_dia_periodo
+
+        for dia in (12, 13, 14):
+            BillingRecord.objects.create(
+                reference_date=date(2026, 6, dia),
+                branch='Ibiporã',
+                value=Decimal('100.00'),
+            )
+        self.assertEqual(_fat_dia_periodo(date(2026, 6, 15)), '12/06 a 14/06/2026')
+
+    def test_fat_dia_periodo_sem_lancamento_usa_vespera(self):
+        from .gerencial_email_service import _fat_dia_periodo
+
+        self.assertEqual(_fat_dia_periodo(date(2026, 6, 12)), '11/06/2026')
+
     def test_send_gerencial_email_creates_snapshot_and_sends_mail(self):
         mail.outbox.clear()
         response = self.client.post(
@@ -970,6 +1013,9 @@ class GerencialEmailTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         message = mail.outbox[0]
         self.assertIn('RELATÓRIO GERENCIAL', message.subject)
+        # A data do "Faturamento do Dia" é a do faturamento defasado (véspera),
+        # não a data de referência do relatório.
+        self.assertIn('Faturamento do Dia (11/06/2026)', message.body)
         self.assertEqual(message.to, ['gerente@empresa.com.br'])
         self.assertEqual(message.cc, ['copia@empresa.com.br'])
         self.assertEqual(len(message.attachments), 1)
