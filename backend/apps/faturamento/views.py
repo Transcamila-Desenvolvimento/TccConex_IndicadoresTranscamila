@@ -13,6 +13,7 @@ from .protocol_pdf import render_protocols_pdf
 from .protocolo_import_service import (
     ProtocoloImportError,
     build_protocolo_import_template,
+    build_protocolos_export_xlsx,
     import_protocolos_from_workbook,
 )
 from .serializers import (
@@ -331,6 +332,43 @@ class ProtocoloEnvioViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if not protocolos:
             return Response({'detail': 'Nenhum protocolo encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         return self._pdf_response(protocolos, 'protocolos.pdf')
+
+    @action(detail=False, methods=['get'])
+    def bulk_export_excel(self, request):
+        """Gera uma planilha .xlsx com os protocolos selecionados na tela (checkbox)."""
+        ids_raw = (request.query_params.get('ids') or '').strip()
+        if not ids_raw:
+            return Response({'detail': 'Informe os IDs dos protocolos.'}, status=status.HTTP_400_BAD_REQUEST)
+        ids = [int(value) for value in ids_raw.split(',') if value.strip().isdigit()]
+        if not ids:
+            return Response({'detail': 'IDs inválidos.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Mantém a ordem dos IDs selecionados na tela.
+        protocolos_qs = ProtocoloEnvio.objects.filter(pk__in=ids).select_related('cliente', 'usuario')
+        by_id = {p.pk: p for p in protocolos_qs}
+        protocolos = [by_id[i] for i in ids if i in by_id]
+        if not protocolos:
+            return Response({'detail': 'Nenhum protocolo encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            content = build_protocolos_export_xlsx(protocolos)
+        except Exception as exc:
+            return Response(
+                {'detail': f'Não foi possível gerar a planilha: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        record_audit(
+            request.user,
+            'faturamento.protocolo.exportado_excel',
+            f'{len(protocolos)} protocolo(s) exportado(s) para Excel.',
+        )
+
+        response = HttpResponse(
+            content,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = 'attachment; filename="protocolos.xlsx"'
+        return response
 
     @action(detail=False, methods=['get'])
     def exportar_modelo(self, request):

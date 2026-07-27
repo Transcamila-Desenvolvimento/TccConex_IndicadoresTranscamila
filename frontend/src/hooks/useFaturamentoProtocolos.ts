@@ -115,6 +115,22 @@ export function useDownloadProtocolosBulkPdf() {
   });
 }
 
+export function useDownloadProtocolosBulkExcel() {
+  return useMutation({
+    mutationFn: (ids: number[]) => apiService.downloadProtocolosBulkExcel(ids),
+  });
+}
+
+/** Dispara o download de um blob como arquivo, sem navegar a aba atual. */
+export function downloadBlobAsFile(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 /**
  * Reserva uma aba no gesto do clique (evita bloqueio de popup após o fetch).
  * Fica em branco e devolve o foco ao ERP — o loading aparece só no site.

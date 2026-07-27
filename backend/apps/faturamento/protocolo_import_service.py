@@ -12,6 +12,7 @@ from io import BytesIO
 
 import openpyxl
 from django.db import transaction
+from django.utils import timezone
 
 from apps.faturamento.constants import EXPEDICAO_VALUES
 from apps.faturamento.models import ClienteProtocolo, ProtocoloEnvio
@@ -397,6 +398,55 @@ def _parse_raw_rows(ws, headers_row: list[str], header_row_num: int, mapping: di
             ),
         })
     return raw_rows
+
+
+def build_protocolos_export_xlsx(protocolos) -> bytes:
+    """Gera planilha (.xlsx) com os protocolos selecionados na tela (extração de relatório)."""
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Protocolos'
+
+    headers = [
+        'Protocolo', 'Data de envio', 'Cliente', 'CNPJ', 'Expedição',
+        'Notas Fiscais', 'Indexador', 'Data de criação',
+    ]
+    header_fill = PatternFill(fill_type='solid', fgColor='118CC4')
+    header_font = Font(bold=True, color='FFFFFF')
+
+    ws.append(headers)
+    for col in range(1, len(headers) + 1):
+        cell = ws.cell(1, col)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+
+    for protocolo in protocolos:
+        notas_fiscais = ', '.join(nf.strip() for nf in protocolo.nota_fiscal.split(',') if nf.strip())
+        ws.append([
+            f'{protocolo.data.year}-{protocolo.numero_sequencial:04d}',
+            protocolo.data,
+            protocolo.cliente.nome,
+            protocolo.cliente.cnpj or '-',
+            protocolo.expedicao or '-',
+            notas_fiscais,
+            protocolo.usuario_nome or '-',
+            timezone.localtime(protocolo.data_criacao).replace(tzinfo=None) if protocolo.data_criacao else None,
+        ])
+        ws.cell(ws.max_row, 2).number_format = 'DD/MM/YYYY'
+        if protocolo.data_criacao:
+            ws.cell(ws.max_row, 8).number_format = 'DD/MM/YYYY HH:MM'
+
+    widths = [14, 14, 30, 20, 24, 30, 22, 20]
+    for i, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = width
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.read()
 
 
 def build_protocolo_import_template() -> bytes:

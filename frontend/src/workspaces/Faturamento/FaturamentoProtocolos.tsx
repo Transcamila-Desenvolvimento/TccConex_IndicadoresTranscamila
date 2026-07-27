@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
@@ -6,7 +6,9 @@ import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
   resolveFaturamentoErrorMessage,
   useBulkDeleteProtocolos,
+  useDownloadProtocolosBulkExcel,
   useDownloadProtocolosBulkPdf,
+  downloadBlobAsFile,
   openPdfPreviewInNewTab,
   openPdfPreviewPlaceholder,
   useProtocoloClientes,
@@ -60,12 +62,14 @@ const FaturamentoProtocolos: React.FC = () => {
   const [editingProtocolo, setEditingProtocolo] = useState<ProtocoloEnvio | null>(null);
   const [showClientes, setShowClientes] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
 
   const protocolosQuery = useProtocolosEnvio(filters);
   const { canShowEmpty } = useAsyncQueryState(protocolosQuery);
   const clientesQuery = useProtocoloClientes();
   const bulkDelete = useBulkDeleteProtocolos();
   const downloadBulk = useDownloadProtocolosBulkPdf();
+  const downloadBulkExcel = useDownloadProtocolosBulkExcel();
 
   const protocolos = protocolosQuery.data?.results ?? [];
   const total = protocolosQuery.data?.count ?? 0;
@@ -124,6 +128,35 @@ const FaturamentoProtocolos: React.FC = () => {
     });
   };
 
+  const handleExportSelected = () => {
+    if (selectedIds.length === 0 || downloadBulkExcel.isPending) return;
+
+    downloadBulkExcel.mutate(selectedIds, {
+      onSuccess: (blob) => {
+        const dataAtual = new Date().toISOString().slice(0, 10);
+        downloadBlobAsFile(blob, `protocolos_${dataAtual}.xlsx`);
+      },
+      onError: async (error: unknown) => {
+        alert(await resolveFaturamentoErrorMessage(error));
+      },
+    });
+  };
+
+  const openAction = (setter: (open: boolean) => void) => {
+    setIsActionsOpen(false);
+    setter(true);
+  };
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.reports-dropdown-wrapper')) {
+        setIsActionsOpen(false);
+      }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '4px', position: 'relative' }}>
       {downloadBulk.isPending && (
@@ -150,57 +183,71 @@ const FaturamentoProtocolos: React.FC = () => {
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {selectedIds.length > 0 && (
-            <>
-              <button
-                type="button"
-                className="reports-action-btn secondary"
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
-                onClick={handlePrintSelected}
-                disabled={downloadBulk.isPending}
-              >
-                {downloadBulk.isPending ? (
-                  <span className="async-query-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} aria-hidden="true" />
-                ) : (
-                  <i className="bi bi-eye" />
-                )}
-                <span>{downloadBulk.isPending ? 'Gerando...' : `Visualizar PDF (${selectedIds.length})`}</span>
-              </button>
-              {canDeleteProtocolos && (
-                <button
-                  type="button"
-                  className="reports-action-btn secondary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px', color: '#ef4444', borderColor: '#fca5a5' }}
-                  onClick={handleDeleteSelected}
-                  disabled={bulkDelete.isPending}
-                >
-                  <i className="bi bi-trash" />
-                  <span>Excluir ({selectedIds.length})</span>
-                </button>
+            <button
+              type="button"
+              className="reports-action-btn secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+              onClick={handlePrintSelected}
+              disabled={downloadBulk.isPending}
+            >
+              {downloadBulk.isPending ? (
+                <span className="async-query-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} aria-hidden="true" />
+              ) : (
+                <i className="bi bi-eye" />
               )}
-            </>
+              <span>{downloadBulk.isPending ? 'Gerando...' : `Visualizar PDF (${selectedIds.length})`}</span>
+            </button>
           )}
-          {canManageClientes && (
+
+          <div className="reports-dropdown-wrapper">
             <button
               type="button"
               className="reports-action-btn secondary"
               style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
-              onClick={() => setShowClientes(true)}
+              onClick={() => setIsActionsOpen((open) => !open)}
             >
-              <i className="bi bi-people" />
-              <span>Gerenciar clientes</span>
+              <span>Outras Ações</span>
+              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
-          )}
-          {isAdmin && (
-            <button
-              type="button"
-              className="reports-action-btn secondary"
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
-              onClick={() => setShowImport(true)}
-            >
-              <i className="bi bi-file-earmark-excel" />
-              <span>Importar planilha</span>
-            </button>
-          )}
+            <div className={`reports-dropdown-menu ${isActionsOpen ? 'show' : ''}`}>
+              {selectedIds.length > 0 && (
+                <span className="reports-dropdown-item" onClick={() => { setIsActionsOpen(false); handleExportSelected(); }}>
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-file-earmark-excel" />
+                    Extrair Excel ({selectedIds.length})
+                  </span>
+                </span>
+              )}
+              {selectedIds.length > 0 && canDeleteProtocolos && (
+                <span className="reports-dropdown-item is-danger" onClick={() => { setIsActionsOpen(false); handleDeleteSelected(); }}>
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-trash" />
+                    Excluir ({selectedIds.length})
+                  </span>
+                </span>
+              )}
+              {selectedIds.length > 0 && (canManageClientes || isAdmin) && <div className="reports-dropdown-divider" />}
+              {canManageClientes && (
+                <span className="reports-dropdown-item" onClick={() => openAction(setShowClientes)}>
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-people" />
+                    Gerenciar clientes
+                  </span>
+                </span>
+              )}
+              {isAdmin && (
+                <span className="reports-dropdown-item" onClick={() => openAction(setShowImport)}>
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-file-earmark-excel" />
+                    Importar planilha
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
+
           {canCreateProtocolos && (
             <button
               type="button"

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { apiService } from '../services/apiService';
-import type { ColaboradorPJ, CargoMapping } from '../types/domain';
+import type { ColaboradorPJ, CargoMapping, RHMovimentacaoOrdering } from '../types/domain';
 
 export function getRHErrorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
@@ -39,7 +39,18 @@ export function useLotesRH() {
   });
 }
 
-export function useRHDashboardSummary(params: { mes?: number; ano?: number; loteId?: string }) {
+export function useRHDashboardSummary(params: {
+  mes?: number;
+  ano?: number;
+  loteId?: string;
+  pageSize?: number;
+  novosPage?: number;
+  desligadosPage?: number;
+  alteracoesPage?: number;
+  novosSearch?: string;
+  desligadosSearch?: string;
+  alteracoesSearch?: string;
+}) {
   return useQuery({
     queryKey: [...RH_KEYS.dashboard, params],
     queryFn: () => apiService.getRHDashboardSummary(params),
@@ -48,7 +59,7 @@ export function useRHDashboardSummary(params: { mes?: number; ano?: number; lote
 }
 
 export function useMovimentacoesRH(
-  params: { loteId?: string; filial?: string; categoria?: string; situacao?: string; search?: string },
+  params: { loteId?: string; filial?: string; categoria?: string; situacao?: string; search?: string; page?: number; pageSize?: number; ordering?: RHMovimentacaoOrdering },
   enabled = true,
 ) {
   return useQuery({

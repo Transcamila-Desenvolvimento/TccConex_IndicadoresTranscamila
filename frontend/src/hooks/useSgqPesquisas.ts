@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { apiService } from '../services/apiService';
-import type { SgqPesquisaPayload, SgqPesquisaQueryParams } from '../types/domain';
+import type { SgqPesquisaBulkErrors, SgqPesquisaPayload, SgqPesquisaQueryParams } from '../types/domain';
 
 export const SGQ_KEYS = {
   pesquisas: (params: SgqPesquisaQueryParams) => ['sgq', 'pesquisas', params] as const,
@@ -30,6 +31,14 @@ export function useCreateSgqPesquisa() {
   });
 }
 
+export function useBulkCreateSgqPesquisas() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payloads: SgqPesquisaPayload[]) => apiService.bulkCreateSgqPesquisas(payloads),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SGQ_KEYS.all }),
+  });
+}
+
 export function useUpdateSgqPesquisa() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -45,4 +54,13 @@ export function useDeleteSgqPesquisa() {
     mutationFn: (id: string) => apiService.deleteSgqPesquisa(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: SGQ_KEYS.all }),
   });
+}
+
+/** Extrai os erros por linha/campo de uma falha do bulk_create (400 com { errors: {...} }). */
+export function getSgqBulkErrors(error: unknown): SgqPesquisaBulkErrors | null {
+  if (axios.isAxiosError(error) && error.response?.status === 400) {
+    const errors = error.response.data?.errors;
+    if (errors && typeof errors === 'object') return errors as SgqPesquisaBulkErrors;
+  }
+  return null;
 }

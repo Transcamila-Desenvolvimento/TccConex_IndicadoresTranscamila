@@ -125,6 +125,35 @@ class PesquisaSatisfacaoTests(APITestCase):
         response = self._create(prazoEntrega='')
         self.assertEqual(response.status_code, 400)
 
+    def test_bulk_create_sucesso(self):
+        response = self.client.post(
+            '/api/sgq/pesquisas-satisfacao/bulk_create/',
+            [_payload(cte='111'), _payload(cte='222', cliente='PRENTISS')],
+            format='json',
+            **ENV_HEADER,
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(response.data), 2)
+        self.assertEqual(PesquisaSatisfacao.objects.count(), 2)
+
+    def test_bulk_create_tudo_ou_nada(self):
+        # Segunda linha inválida (sem prazoEntrega) — nenhuma das duas deve ser salva.
+        response = self.client.post(
+            '/api/sgq/pesquisas-satisfacao/bulk_create/',
+            [_payload(cte='111'), _payload(cte='222', prazoEntrega='')],
+            format='json',
+            **ENV_HEADER,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('1', {str(k) for k in response.data['errors'].keys()})
+        self.assertEqual(PesquisaSatisfacao.objects.count(), 0)
+
+    def test_bulk_create_lista_vazia(self):
+        response = self.client.post(
+            '/api/sgq/pesquisas-satisfacao/bulk_create/', [], format='json', **ENV_HEADER
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_acesso_negado_sem_ambiente_sgq(self):
         operador = User.objects.create_user(
             username='sem.sgq',

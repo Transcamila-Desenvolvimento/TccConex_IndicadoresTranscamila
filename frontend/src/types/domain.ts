@@ -622,6 +622,17 @@ export interface ColaboradorPJ {
   dataCriacao: string;
 }
 
+export interface RHPaginatedSection<T> {
+  results: T[];
+  count: number;
+}
+
+export type RHMovimentacaoOrdering =
+  | 'idade_asc' | 'idade_desc'
+  | 'tempoEmpresa_asc' | 'tempoEmpresa_desc'
+  | 'admissao_asc' | 'admissao_desc'
+  | 'salario_asc' | 'salario_desc';
+
 export interface RHDashboardSummaryResponse {
   lote: LoteMovimentacaoRH | null;
   lotesDisponiveis: LoteMovimentacaoRH[];
@@ -634,9 +645,9 @@ export interface RHDashboardSummaryResponse {
     novos: number;
     desligados: number;
   }>;
-  novos: MovimentacaoColaborador[];
-  desligados: MovimentacaoColaborador[];
-  alteracoes: InconsistenciaColaborador[];
+  novos: RHPaginatedSection<MovimentacaoColaborador>;
+  desligados: RHPaginatedSection<MovimentacaoColaborador>;
+  alteracoes: RHPaginatedSection<InconsistenciaColaborador>;
   totais: {
     totalColaboradores: number;
     admitidos: number;
@@ -858,13 +869,14 @@ export const SGQ_CLIENTE_OPTIONS = ['CCAB', 'PRENTISS', 'ALBAUGH', 'UPL', 'OUTRO
 
 export type SgqCliente = (typeof SGQ_CLIENTE_OPTIONS)[number];
 
-/** Critérios avaliados na pesquisa (chave camelCase da API → rótulo). */
+/** Critérios avaliados na pesquisa (chave camelCase da API → rótulo).
+ * `shortLabel` é usado em colunas estreitas de tabela/grade (o rótulo completo fica no `title`). */
 export const SGQ_CRITERIOS = [
-  { key: 'prazoEntrega', label: 'Prazo de Entrega' },
-  { key: 'condicoesMercadoria', label: 'Condições da Mercadoria' },
-  { key: 'condicoesVeiculo', label: 'Condições do Veículo' },
-  { key: 'apresentacaoMotorista', label: 'Apresentação do Motorista' },
-  { key: 'atendimentoDispensado', label: 'Atendimento Dispensado' },
+  { key: 'prazoEntrega', label: 'Prazo de Entrega', shortLabel: 'Prazo' },
+  { key: 'condicoesMercadoria', label: 'Condições da Mercadoria', shortLabel: 'Mercadoria' },
+  { key: 'condicoesVeiculo', label: 'Condições do Veículo', shortLabel: 'Veículo' },
+  { key: 'apresentacaoMotorista', label: 'Apresentação do Motorista', shortLabel: 'Apresentação' },
+  { key: 'atendimentoDispensado', label: 'Atendimento Dispensado', shortLabel: 'Atendimento' },
 ] as const;
 
 export type SgqCriterioKey = (typeof SGQ_CRITERIOS)[number]['key'];
@@ -916,4 +928,8 @@ export interface SgqPesquisaStats {
   metaOtimo: number;
   criterios: SgqCriterioStats[];
 }
+
+/** Erros de validação por linha, retornados pelo endpoint de inclusão em lote. */
+export type SgqPesquisaBulkFieldErrors = Partial<Record<keyof SgqPesquisaPayload, string[]>>;
+export type SgqPesquisaBulkErrors = Record<number, SgqPesquisaBulkFieldErrors>;
 

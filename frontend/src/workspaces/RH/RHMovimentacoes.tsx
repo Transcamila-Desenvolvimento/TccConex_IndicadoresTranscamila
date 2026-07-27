@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { InconsistenciaColaborador, MovimentacaoColaborador } from '../../types/domain';
+import type { InconsistenciaColaborador, RHMovimentacaoOrdering } from '../../types/domain';
 import {
   useRHDashboardSummary,
   useMovimentacoesRH,
@@ -30,6 +30,59 @@ const TABS: { id: MovTab; label: string }[] = [
   { id: 'desligados', label: 'Desligados' },
   { id: 'alteracoes', label: 'Alterações' },
 ];
+
+const PAGE_SIZE = 10;
+
+type AtivosSortField = 'idade' | 'tempoEmpresa' | 'admissao' | 'salario';
+
+function nextAtivosOrdering(field: AtivosSortField, current: RHMovimentacaoOrdering | undefined): RHMovimentacaoOrdering {
+  return current === `${field}_asc` ? `${field}_desc` : `${field}_asc`;
+}
+
+function SortIcon({ field, ordering }: { field: AtivosSortField; ordering?: RHMovimentacaoOrdering }) {
+  const isActive = ordering?.startsWith(field);
+  const isAsc = ordering === `${field}_asc`;
+  return (
+    <span style={{ marginLeft: 6, display: 'inline-flex', flexDirection: 'column', gap: 0, verticalAlign: 'middle', lineHeight: 1 }}>
+      <i className="bi bi-caret-up-fill" style={{ fontSize: 11, display: 'block', color: isActive && isAsc ? '#0f85c1' : '#c8d3e0' }} />
+      <i className="bi bi-caret-down-fill" style={{ fontSize: 11, display: 'block', color: isActive && !isAsc ? '#0f85c1' : '#c8d3e0' }} />
+    </span>
+  );
+}
+
+function PaginationBar({ page, totalPages, totalItems, onChange }: { page: number; totalPages: number; totalItems: number; onChange: (page: number) => void }) {
+  return (
+    <div className="erp-pagination-bar">
+      <span style={{ fontWeight: 500, marginRight: '4px' }}>
+        {totalItems} registro(s) — Página <span className="erp-pagination-current">{Math.min(page, totalPages)}</span> de <span className="erp-pagination-current">{totalPages}</span>
+      </span>
+      <button
+        type="button"
+        className="reports-action-btn secondary"
+        disabled={page <= 1}
+        onClick={() => onChange(Math.max(1, page - 1))}
+        style={{ height: '28px', padding: '0 10px', fontSize: '11px', gap: '4px', opacity: page <= 1 ? 0.5 : 1, cursor: page <= 1 ? 'not-allowed' : 'pointer' }}
+      >
+        <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+        </svg>
+        Anterior
+      </button>
+      <button
+        type="button"
+        className="reports-action-btn secondary"
+        disabled={page >= totalPages}
+        onClick={() => onChange(Math.min(totalPages, page + 1))}
+        style={{ height: '28px', padding: '0 10px', fontSize: '11px', gap: '4px', opacity: page >= totalPages ? 0.5 : 1, cursor: page >= totalPages ? 'not-allowed' : 'pointer' }}
+      >
+        Próximo
+        <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+        </svg>
+      </button>
+    </div>
+  );
+}
 
 const formatCurrency = (value: number | null | undefined) =>
   (value ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -89,12 +142,6 @@ const JustificativaCell: React.FC<JustificativaCellProps> = ({ alteracao }) => {
   );
 };
 
-function matchesText(values: Array<string | undefined | null>, query: string) {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return true;
-  return values.some((v) => (v ?? '').toLowerCase().includes(normalized));
-}
-
 const RHMovimentacoes: React.FC = () => {
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
@@ -111,6 +158,12 @@ const RHMovimentacoes: React.FC = () => {
   const [desligadosSearch, setDesligadosSearch] = useState('');
   const [alteracoesSearch, setAlteracoesSearch] = useState('');
 
+  const [ativosOrdering, setAtivosOrdering] = useState<RHMovimentacaoOrdering | undefined>(undefined);
+  const [ativosPage, setAtivosPage] = useState(1);
+  const [novosPage, setNovosPage] = useState(1);
+  const [desligadosPage, setDesligadosPage] = useState(1);
+  const [alteracoesPage, setAlteracoesPage] = useState(1);
+
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isImportLoteOpen, setIsImportLoteOpen] = useState(false);
   const [isEmailOpen, setIsEmailOpen] = useState(false);
@@ -121,8 +174,17 @@ const RHMovimentacoes: React.FC = () => {
   const [isExportarRelatorioOpen, setIsExportarRelatorioOpen] = useState(false);
 
   const dashboardParams = useMemo(
-    () => (periodTouched ? { mes: selectedMonth, ano: selectedYear } : {}),
-    [periodTouched, selectedMonth, selectedYear],
+    () => ({
+      ...(periodTouched ? { mes: selectedMonth, ano: selectedYear } : {}),
+      pageSize: PAGE_SIZE,
+      novosPage,
+      desligadosPage,
+      alteracoesPage,
+      novosSearch: novosSearch.trim() || undefined,
+      desligadosSearch: desligadosSearch.trim() || undefined,
+      alteracoesSearch: alteracoesSearch.trim() || undefined,
+    }),
+    [periodTouched, selectedMonth, selectedYear, novosPage, desligadosPage, alteracoesPage, novosSearch, desligadosSearch, alteracoesSearch],
   );
 
   const dashboardQuery = useRHDashboardSummary(dashboardParams);
@@ -147,11 +209,22 @@ const RHMovimentacoes: React.FC = () => {
       search: ativosSearch.trim() || undefined,
       filial: ativosFilial || undefined,
       categoria: ativosCategoria || undefined,
+      page: ativosPage,
+      pageSize: PAGE_SIZE,
+      ordering: ativosOrdering,
     }),
-    [loteId, ativosSearch, ativosFilial, ativosCategoria],
+    [loteId, ativosSearch, ativosFilial, ativosCategoria, ativosPage, ativosOrdering],
   );
+
+  const handleAtivosSort = (field: AtivosSortField) => {
+    setAtivosOrdering((prev) => nextAtivosOrdering(field, prev));
+    setAtivosPage(1);
+  };
   const ativosQuery = useMovimentacoesRH(ativosParams, activeTab === 'ativos' && !!loteId);
   const ativosQueryState = useAsyncQueryState(ativosQuery);
+  const ativosRows = ativosQuery.data?.results ?? [];
+  const ativosTotal = ativosQuery.data?.count ?? 0;
+  const ativosTotalPages = Math.ceil(ativosTotal / PAGE_SIZE) || 1;
 
   const yearsOptions = useMemo(() => {
     const set = new Set<number>();
@@ -170,25 +243,23 @@ const RHMovimentacoes: React.FC = () => {
     setPeriodTouched(true);
     setSelectedMonth(month);
     setSelectedYear(year);
+    setAtivosPage(1);
+    setNovosPage(1);
+    setDesligadosPage(1);
+    setAlteracoesPage(1);
   };
 
-  const filteredNovos = useMemo(
-    () => (data?.novos ?? []).filter((c: MovimentacaoColaborador) =>
-      matchesText([c.nome, c.cpf, c.funcao, c.filial], novosSearch)),
-    [data?.novos, novosSearch],
-  );
+  const novosRows = data?.novos.results ?? [];
+  const novosTotal = data?.novos.count ?? 0;
+  const novosTotalPages = Math.ceil(novosTotal / PAGE_SIZE) || 1;
 
-  const filteredDesligados = useMemo(
-    () => (data?.desligados ?? []).filter((c: MovimentacaoColaborador) =>
-      matchesText([c.nome, c.cpf, c.funcao, c.filial], desligadosSearch)),
-    [data?.desligados, desligadosSearch],
-  );
+  const desligadosRows = data?.desligados.results ?? [];
+  const desligadosTotal = data?.desligados.count ?? 0;
+  const desligadosTotalPages = Math.ceil(desligadosTotal / PAGE_SIZE) || 1;
 
-  const filteredAlteracoes = useMemo(
-    () => (data?.alteracoes ?? []).filter((a: InconsistenciaColaborador) =>
-      matchesText([a.nome, a.cpf, a.tipoDisplay], alteracoesSearch)),
-    [data?.alteracoes, alteracoesSearch],
-  );
+  const alteracoesRows = data?.alteracoes.results ?? [];
+  const alteracoesTotal = data?.alteracoes.count ?? 0;
+  const alteracoesTotalPages = Math.ceil(alteracoesTotal / PAGE_SIZE) || 1;
 
   const openAction = (setter: (open: boolean) => void) => {
     setIsActionsOpen(false);
@@ -422,18 +493,18 @@ const RHMovimentacoes: React.FC = () => {
                       <svg className="search-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.637 10.637z" />
                       </svg>
-                      <input
-                        type="text"
-                        placeholder="Buscar por nome, CPF ou cargo..."
-                        value={ativosSearch}
-                        onChange={(e) => setAtivosSearch(e.target.value)}
-                      />
-                    </div>
-                    <select className="rh-period-select" value={ativosFilial} onChange={(e) => setAtivosFilial(e.target.value)}>
+                    <input
+                      type="text"
+                      placeholder="Buscar por nome, CPF ou cargo..."
+                      value={ativosSearch}
+                      onChange={(e) => { setAtivosSearch(e.target.value); setAtivosPage(1); }}
+                    />
+                  </div>
+                    <select className="rh-period-select" value={ativosFilial} onChange={(e) => { setAtivosFilial(e.target.value); setAtivosPage(1); }}>
                       <option value="">Todas as filiais</option>
                       {filiaisOptions.map((f) => <option key={f} value={f}>{f}</option>)}
                     </select>
-                    <select className="rh-period-select" value={ativosCategoria} onChange={(e) => setAtivosCategoria(e.target.value)}>
+                    <select className="rh-period-select" value={ativosCategoria} onChange={(e) => { setAtivosCategoria(e.target.value); setAtivosPage(1); }}>
                       <option value="">Todas as categorias</option>
                       <option value="ADMINISTRATIVO">Administrativo</option>
                       <option value="OPERACIONAL">Operacional</option>
@@ -460,17 +531,25 @@ const RHMovimentacoes: React.FC = () => {
                             <th>CPF</th>
                             <th>Cargo</th>
                             <th>Categoria</th>
-                            <th>Idade</th>
-                            <th>Tempo Empresa</th>
-                            <th>Admissão</th>
-                            <th className="num">Salário</th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleAtivosSort('idade')}>
+                              Idade <SortIcon field="idade" ordering={ativosOrdering} />
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleAtivosSort('tempoEmpresa')}>
+                              Tempo Empresa <SortIcon field="tempoEmpresa" ordering={ativosOrdering} />
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleAtivosSort('admissao')}>
+                              Admissão <SortIcon field="admissao" ordering={ativosOrdering} />
+                            </th>
+                            <th className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleAtivosSort('salario')}>
+                              Salário <SortIcon field="salario" ordering={ativosOrdering} />
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {ativosQueryState.canShowEmpty && (ativosQuery.data ?? []).length === 0 ? (
+                          {ativosQueryState.canShowEmpty && ativosRows.length === 0 ? (
                             <tr><td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontStyle: 'italic' }}>Nenhum colaborador ativo encontrado.</td></tr>
                           ) : (
-                            (ativosQuery.data ?? []).map((c) => (
+                            ativosRows.map((c) => (
                               <tr key={c.id}>
                                 <td>
                                   <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -492,6 +571,7 @@ const RHMovimentacoes: React.FC = () => {
                       </table>
                     </div>
                   </div>
+                  <PaginationBar page={ativosPage} totalPages={ativosTotalPages} totalItems={ativosTotal} onChange={setAtivosPage} />
                 </QueryDataPanel>
               </>
             )}
@@ -508,7 +588,7 @@ const RHMovimentacoes: React.FC = () => {
                         type="text"
                         placeholder="Buscar por nome, CPF ou cargo..."
                         value={novosSearch}
-                        onChange={(e) => setNovosSearch(e.target.value)}
+                        onChange={(e) => { setNovosSearch(e.target.value); setNovosPage(1); }}
                       />
                     </div>
                   </div>
@@ -528,10 +608,10 @@ const RHMovimentacoes: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredNovos.length === 0 ? (
+                        {novosRows.length === 0 ? (
                           <tr><td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontStyle: 'italic' }}>Nenhuma nova contratação identificada.</td></tr>
                         ) : (
-                          filteredNovos.map((c) => (
+                          novosRows.map((c) => (
                             <tr key={c.id}>
                               <td><strong>{c.nome}</strong></td>
                               <td>{c.cpf}</td>
@@ -547,6 +627,7 @@ const RHMovimentacoes: React.FC = () => {
                     </table>
                   </div>
                 </div>
+                <PaginationBar page={novosPage} totalPages={novosTotalPages} totalItems={novosTotal} onChange={setNovosPage} />
               </>
             )}
 
@@ -562,7 +643,7 @@ const RHMovimentacoes: React.FC = () => {
                         type="text"
                         placeholder="Buscar por nome, CPF ou cargo..."
                         value={desligadosSearch}
-                        onChange={(e) => setDesligadosSearch(e.target.value)}
+                        onChange={(e) => { setDesligadosSearch(e.target.value); setDesligadosPage(1); }}
                       />
                     </div>
                   </div>
@@ -582,10 +663,10 @@ const RHMovimentacoes: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredDesligados.length === 0 ? (
+                        {desligadosRows.length === 0 ? (
                           <tr><td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontStyle: 'italic' }}>Nenhum desligamento identificado.</td></tr>
                         ) : (
-                          filteredDesligados.map((c) => (
+                          desligadosRows.map((c) => (
                             <tr key={c.id}>
                               <td><strong>{c.nome}</strong></td>
                               <td>{c.cpf}</td>
@@ -601,6 +682,7 @@ const RHMovimentacoes: React.FC = () => {
                     </table>
                   </div>
                 </div>
+                <PaginationBar page={desligadosPage} totalPages={desligadosTotalPages} totalItems={desligadosTotal} onChange={setDesligadosPage} />
               </>
             )}
 
@@ -616,7 +698,7 @@ const RHMovimentacoes: React.FC = () => {
                         type="text"
                         placeholder="Buscar por nome, CPF ou tipo..."
                         value={alteracoesSearch}
-                        onChange={(e) => setAlteracoesSearch(e.target.value)}
+                        onChange={(e) => { setAlteracoesSearch(e.target.value); setAlteracoesPage(1); }}
                       />
                     </div>
                   </div>
@@ -635,10 +717,10 @@ const RHMovimentacoes: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredAlteracoes.length === 0 ? (
+                        {alteracoesRows.length === 0 ? (
                           <tr><td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontStyle: 'italic' }}>Nenhuma alteração detectada.</td></tr>
                         ) : (
-                          filteredAlteracoes.map((a) => (
+                          alteracoesRows.map((a) => (
                             <tr key={a.id}>
                               <td>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -658,6 +740,7 @@ const RHMovimentacoes: React.FC = () => {
                     </table>
                   </div>
                 </div>
+                <PaginationBar page={alteracoesPage} totalPages={alteracoesTotalPages} totalItems={alteracoesTotal} onChange={setAlteracoesPage} />
               </>
             )}
           </>

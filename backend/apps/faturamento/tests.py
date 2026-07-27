@@ -474,6 +474,54 @@ class FaturamentoProtocoloTests(TestCase):
         self.assertEqual(response['Content-Type'], 'application/pdf')
         self.assertTrue(response.content.startswith(b'%PDF'))
 
+    def test_bulk_export_excel_retorna_planilha_com_protocolos_selecionados(self):
+        protocolo1 = ProtocoloEnvio.objects.create(
+            data='2026-07-10',
+            cliente=self.other_cliente,
+            nota_fiscal='1001, 1002',
+            numero_sequencial=1,
+            usuario=self.user,
+            usuario_nome='Usuário Faturamento',
+        )
+        protocolo2 = ProtocoloEnvio.objects.create(
+            data='2026-07-11',
+            cliente=self.other_cliente,
+            nota_fiscal='2001',
+            numero_sequencial=2,
+            usuario=self.user,
+            usuario_nome='Usuário Faturamento',
+        )
+        response = self.api.get(
+            '/api/faturamento/protocolos/bulk_export_excel/',
+            {'ids': f'{protocolo1.pk},{protocolo2.pk}'},
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 200, getattr(response, 'data', response.content))
+        self.assertEqual(
+            response['Content-Type'],
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+
+        import openpyxl
+        from io import BytesIO
+        workbook = openpyxl.load_workbook(BytesIO(response.content))
+        sheet = workbook.active
+        rows = list(sheet.iter_rows(values_only=True))
+        self.assertEqual(
+            rows[0],
+            ('Protocolo', 'Data de envio', 'Cliente', 'CNPJ', 'Expedição', 'Notas Fiscais', 'Indexador', 'Data de criação'),
+        )
+        protocolos_numeros = {row[0] for row in rows[1:]}
+        self.assertIn('2026-0001', protocolos_numeros)
+        self.assertIn('2026-0002', protocolos_numeros)
+
+    def test_bulk_export_excel_sem_ids_retorna_erro_400(self):
+        response = self.api.get(
+            '/api/faturamento/protocolos/bulk_export_excel/',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_print_pdf_individual_retorna_pdf(self):
         protocolo = ProtocoloEnvio.objects.create(
             data='2026-07-10',

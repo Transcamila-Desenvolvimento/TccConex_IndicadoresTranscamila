@@ -17,7 +17,7 @@ import type {
   AuditLogQueryParams,
   AuditLogFacets,
   UserQueryParams,
-  Colaborador, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, RHDashboardSummaryResponse, RHComparisonResponse,
+  Colaborador, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
   UnidadeMedida, Setor, ColaboradorCompras, Fornecedor, ItemEstoque, EntradaEstoque, SaidaEstoque,
   RegistrarCompraPayload, RegistrarSaidaPayload,
   ClienteProtocolo, ProtocoloEnvio,
@@ -1070,7 +1070,7 @@ export const apiService = {
     return data;
   },
 
-  async getMovimentacoesRH(params: { loteId?: string; filial?: string; categoria?: string; situacao?: string; search?: string }): Promise<MovimentacaoColaborador[]> {
+  async getMovimentacoesRH(params: { loteId?: string; filial?: string; categoria?: string; situacao?: string; search?: string; page?: number; pageSize?: number; ordering?: RHMovimentacaoOrdering }): Promise<PaginatedResponse<MovimentacaoColaborador>> {
     const { data } = await api.get('/api/rh/movimentacoes/', {
       params: {
         loteId: params.loteId,
@@ -1078,12 +1078,26 @@ export const apiService = {
         categoria: params.categoria,
         situacao: params.situacao,
         search: params.search,
+        page: params.page,
+        page_size: params.pageSize,
+        ordering: params.ordering,
       },
     });
-    return data;
+    return paginatedFromResponse(data, (raw) => raw as MovimentacaoColaborador);
   },
 
-  async getRHDashboardSummary(params: { mes?: number; ano?: number; loteId?: string }): Promise<RHDashboardSummaryResponse> {
+  async getRHDashboardSummary(params: {
+    mes?: number;
+    ano?: number;
+    loteId?: string;
+    pageSize?: number;
+    novosPage?: number;
+    desligadosPage?: number;
+    alteracoesPage?: number;
+    novosSearch?: string;
+    desligadosSearch?: string;
+    alteracoesSearch?: string;
+  }): Promise<RHDashboardSummaryResponse> {
     const { data } = await api.get('/api/rh/movimentacoes/dashboard_summary/', { params });
     return data;
   },
@@ -1358,6 +1372,18 @@ export const apiService = {
     return assertPdfBlob(data, headers);
   },
 
+  async downloadProtocolosBulkExcel(ids: number[]): Promise<Blob> {
+    const { data, headers, status } = await api.get('/api/faturamento/protocolos/bulk_export_excel/', {
+      params: { ids: ids.join(',') },
+      responseType: 'blob',
+      validateStatus: () => true,
+    });
+    if (status < 200 || status >= 300) {
+      throw new Error(await readBlobErrorMessage(data, 'Não foi possível gerar a planilha dos protocolos.'));
+    }
+    return assertSpreadsheetBlob(data, headers);
+  },
+
   async importProtocolosSpreadsheet(params: ProtocoloImportParams): Promise<ProtocoloImportResult> {
     const form = new FormData();
     form.append('file', params.file);
@@ -1401,6 +1427,11 @@ export const apiService = {
   async createSgqPesquisa(payload: SgqPesquisaPayload): Promise<SgqPesquisa> {
     const { data } = await api.post('/api/sgq/pesquisas-satisfacao/', payload);
     return data as SgqPesquisa;
+  },
+
+  async bulkCreateSgqPesquisas(payloads: SgqPesquisaPayload[]): Promise<SgqPesquisa[]> {
+    const { data } = await api.post('/api/sgq/pesquisas-satisfacao/bulk_create/', payloads);
+    return data as SgqPesquisa[];
   },
 
   async updateSgqPesquisa(id: string, payload: Partial<SgqPesquisaPayload>): Promise<SgqPesquisa> {

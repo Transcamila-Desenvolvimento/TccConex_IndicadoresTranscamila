@@ -1,26 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { SgqAvaliacao, SgqPesquisa, SgqPesquisaPayload } from '../../types/domain';
 import { SGQ_AVALIACAO_OPTIONS, SGQ_CLIENTE_OPTIONS, SGQ_CRITERIOS } from '../../types/domain';
 import {
   useSgqPesquisas,
-  useSgqPesquisaStats,
   useCreateSgqPesquisa,
   useUpdateSgqPesquisa,
   useDeleteSgqPesquisa,
 } from '../../hooks/useSgqPesquisas';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
+import SGQPesquisaLoteModal from './SGQPesquisaLoteModal';
 
 const PAGE_SIZE = 10;
 
-const AVALIACAO_META: Record<SgqAvaliacao, { label: string; color: string; bg: string }> = {
-  otimo: { label: 'Ótimo', color: '#16a34a', bg: 'rgba(22, 163, 74, 0.08)' },
-  bom: { label: 'Bom', color: '#0f85c1', bg: 'rgba(15, 133, 193, 0.08)' },
-  regular: { label: 'Regular', color: '#d97706', bg: 'rgba(217, 119, 6, 0.10)' },
-  ruim: { label: 'Ruim', color: '#dc2626', bg: 'rgba(220, 38, 38, 0.08)' },
+/** Todos os ícones são círculos preenchidos ("-circle-fill"), mesmo peso e formato —
+ * só o glifo interno e a cor mudam entre os níveis. */
+const AVALIACAO_META: Record<SgqAvaliacao, { label: string; color: string; icon: string }> = {
+  otimo: { label: 'Ótimo', color: '#16a34a', icon: 'bi bi-check-circle-fill' },
+  bom: { label: 'Bom', color: '#0f85c1', icon: 'bi bi-check-circle-fill' },
+  regular: { label: 'Regular', color: '#d97706', icon: 'bi bi-exclamation-circle-fill' },
+  ruim: { label: 'Ruim', color: '#dc2626', icon: 'bi bi-x-circle-fill' },
 };
-
-const AVALIACAO_SCORE: Record<SgqAvaliacao, number> = { ruim: 1, regular: 2, bom: 3, otimo: 4 };
 
 function formatDateBr(isoDate: string): string {
   const [year, month, day] = isoDate.split('-');
@@ -32,72 +32,53 @@ function AvaliacaoBadge({ value }: { value: SgqAvaliacao }) {
   const meta = AVALIACAO_META[value];
   if (!meta) return <span>—</span>;
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '5px',
-        padding: '2px 8px',
-        borderRadius: '9999px',
-        fontSize: '11px',
-        fontWeight: 600,
-        color: meta.color,
-        background: meta.bg,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: meta.color }} />
+    <span className="sgq-avaliacao-badge" style={{ color: meta.color }}>
+      <i className={meta.icon} />
       {meta.label}
     </span>
   );
 }
 
-/** Seletor de avaliação em estrelas (1=Ruim … 4=Ótimo), mesma escala da plataforma anterior. */
-function StarRating({ value, onChange }: { value: SgqAvaliacao | ''; onChange: (v: SgqAvaliacao) => void }) {
-  const [hovered, setHovered] = useState(0);
-  const selected = value ? AVALIACAO_SCORE[value] : 0;
-  const active = hovered || selected;
-  const activeOption = SGQ_AVALIACAO_OPTIONS.find((opt) => AVALIACAO_SCORE[opt.value] === active);
-
+/**
+ * Seletor de avaliação em segmentos (chips), no mesmo padrão visual usado para
+ * selecionar expedição no Faturamento — mais alinhado à seriedade do ERP do
+ * que um controle de estrelas.
+ */
+function AvaliacaoChips({ value, onChange }: { value: SgqAvaliacao | ''; onChange: (v: SgqAvaliacao) => void }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-      <div style={{ display: 'flex', gap: '2px' }} onMouseLeave={() => setHovered(0)}>
-        {[1, 2, 3, 4].map((star) => {
-          const option = SGQ_AVALIACAO_OPTIONS.find((opt) => AVALIACAO_SCORE[opt.value] === star)!;
-          return (
-            <button
-              key={star}
-              type="button"
-              onClick={() => onChange(option.value)}
-              onMouseEnter={() => setHovered(star)}
-              title={option.label}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                padding: '0 2px',
-                fontSize: '22px',
-                lineHeight: 1,
-                color: star <= active ? '#f59e0b' : '#d1d5db',
-                transition: 'color 0.1s ease, transform 0.1s ease',
-                transform: hovered === star ? 'scale(1.15)' : 'scale(1)',
-              }}
-            >
-              ★
-            </button>
-          );
-        })}
-      </div>
-      <span
-        style={{
-          fontSize: '12px',
-          fontWeight: 600,
-          minWidth: '52px',
-          color: activeOption ? AVALIACAO_META[activeOption.value].color : '#94a3b8',
-        }}
-      >
-        {activeOption ? activeOption.label : 'Avaliar'}
-      </span>
+    <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+      {SGQ_AVALIACAO_OPTIONS.map((opt) => {
+        const selected = value === opt.value;
+        const color = AVALIACAO_META[opt.value].color;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              flex: '1 1 0',
+              minWidth: 0,
+              padding: '7px 6px',
+              borderRadius: '20px',
+              fontSize: '12px',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              border: `1px solid ${selected ? color : '#cbd5e1'}`,
+              background: selected ? color : '#ffffff',
+              color: selected ? '#ffffff' : '#475569',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {selected && <i className="bi bi-check-lg" style={{ fontSize: '10px' }} />}
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -140,7 +121,6 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   const [filterDataInicio, setFilterDataInicio] = useState('');
   const [filterDataFim, setFilterDataFim] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [viewMode, setViewMode] = useState<'registros' | 'resumo'>('registros');
 
   const filterParams = useMemo(() => ({
     search: search.trim() || undefined,
@@ -162,9 +142,6 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   const totalItems = listQuery.data?.count ?? 0;
   const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
 
-  const statsQuery = useSgqPesquisaStats(filterParams);
-  const stats = statsQuery.data;
-
   const createPesquisa = useCreateSgqPesquisa();
   const updatePesquisa = useUpdateSgqPesquisa();
   const deletePesquisa = useDeleteSgqPesquisa();
@@ -176,6 +153,31 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formError, setFormError] = useState('');
 
+  // Dropdown "Incluir" (Formulário / Inclusão em Tabela)
+  const [isIncluirOpen, setIsIncluirOpen] = useState(false);
+  const [isLoteModalOpen, setIsLoteModalOpen] = useState(false);
+
+  // Seleção de linhas (caixas de seleção) e dropdown "Ações" (Editar / Excluir)
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const selectedRows = useMemo(() => rows.filter((r) => selectedIds.includes(r.id)), [rows, selectedIds]);
+  const isAllSelected = rows.length > 0 && rows.every((r) => selectedIds.includes(r.id));
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.reports-dropdown-wrapper')) {
+        setIsIncluirOpen(false);
+        setIsActionsOpen(false);
+      }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
+
+  const handleSelectAll = (checked: boolean) => setSelectedIds(checked ? rows.map((r) => r.id) : []);
+  const handleSelectRow = (id: string, checked: boolean) =>
+    setSelectedIds((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)));
+
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -186,6 +188,12 @@ const SGQPesquisaSatisfacao: React.FC = () => {
     setFilterDataInicio('');
     setFilterDataFim('');
     setCurrentPage(1);
+    setSelectedIds([]);
+  };
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    setSelectedIds([]);
   };
 
   const openCreateModal = () => {
@@ -258,67 +266,104 @@ const SGQPesquisaSatisfacao: React.FC = () => {
     }
   };
 
-  const handleDelete = (pesquisa: SgqPesquisa) => {
-    if (window.confirm(`Excluir a pesquisa do CT-e ${pesquisa.cte} (${pesquisa.cliente})?`)) {
-      deletePesquisa.mutate(pesquisa.id, {
-        onError: () => alert('Erro ao excluir a pesquisa. Tente novamente.'),
-      });
-    }
+  const handleEditSelected = () => {
+    setIsActionsOpen(false);
+    if (selectedRows.length !== 1) return;
+    openEditModal(selectedRows[0]);
   };
 
-  const pctOtimo = stats?.percentual.otimo ?? 0;
-  const metaOtimo = stats?.metaOtimo ?? 80;
+  const handleBulkDelete = async () => {
+    setIsActionsOpen(false);
+    if (selectedRows.length === 0) return;
+    const confirmMessage = selectedRows.length > 1
+      ? `Deseja realmente excluir as ${selectedRows.length} pesquisas selecionadas?`
+      : `Excluir a pesquisa do CT-e ${selectedRows[0].cte} (${selectedRows[0].cliente})?`;
+    if (!window.confirm(confirmMessage)) return;
+    try {
+      await Promise.all(selectedRows.map((r) => deletePesquisa.mutateAsync(r.id)));
+      setSelectedIds([]);
+    } catch {
+      alert('Erro ao excluir uma ou mais pesquisas. Tente novamente.');
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '4px' }}>
       {/* Header */}
-      <header className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+      <header className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '6px', height: '22px', backgroundColor: '#118CC4' }}></div>
           <h1 className="view-page-title">Pesquisa de Satisfação</h1>
         </div>
-        <button
-          type="button"
-          className="reports-action-btn primary"
-          style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
-          onClick={openCreateModal}
-        >
-          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"></path>
-          </svg>
-          <span>Nova Pesquisa</span>
-        </button>
-      </header>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="reports-dropdown-wrapper">
+            <button
+              type="button"
+              className="reports-action-btn secondary"
+              disabled={selectedIds.length === 0}
+              onClick={() => { setIsIncluirOpen(false); setIsActionsOpen((open) => !open); }}
+            >
+              <span>Ações{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}</span>
+              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div className={`reports-dropdown-menu ${isActionsOpen ? 'show' : ''}`}>
+              {selectedRows.length === 1 && (
+                <span className="reports-dropdown-item" onClick={handleEditSelected}>
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-pencil" />
+                    Editar
+                  </span>
+                </span>
+              )}
+              <span className="reports-dropdown-item is-danger" onClick={handleBulkDelete}>
+                <span className="reports-dropdown-item-left">
+                  <i className="bi bi-trash" />
+                  Excluir
+                </span>
+              </span>
+            </div>
+          </div>
 
-      {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '18px' }}>
-        <div className="stat-card">
-          <div className="stat-card-label">Total de Pesquisas</div>
-          <div className="stat-card-value">{stats?.totalPesquisas ?? '—'}</div>
-          <div className="stat-card-desc">{stats ? `${stats.totalAvaliacoes} avaliações registradas` : 'Carregando...'}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card-label">Avaliação Ótimo</div>
-          <div className="stat-card-value" style={{ color: pctOtimo >= metaOtimo ? '#16a34a' : '#d97706' }}>
-            {stats ? `${pctOtimo.toFixed(1)}%` : '—'}
+          <div className="reports-dropdown-wrapper">
+            <button
+              type="button"
+              className="reports-action-btn primary"
+              style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
+              onClick={() => { setIsActionsOpen(false); setIsIncluirOpen((open) => !open); }}
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"></path>
+              </svg>
+              <span>Incluir</span>
+              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div className={`reports-dropdown-menu ${isIncluirOpen ? 'show' : ''}`}>
+              <span
+                className="reports-dropdown-item"
+                onClick={() => { setIsIncluirOpen(false); openCreateModal(); }}
+              >
+                <span className="reports-dropdown-item-left">
+                  <i className="bi bi-file-earmark-text" />
+                  Formulário
+                </span>
+              </span>
+              <span
+                className="reports-dropdown-item"
+                onClick={() => { setIsIncluirOpen(false); setIsLoteModalOpen(true); }}
+              >
+                <span className="reports-dropdown-item-left">
+                  <i className="bi bi-table" />
+                  Inclusão em Tabela
+                </span>
+              </span>
+            </div>
           </div>
-          <div className="stat-card-desc">
-            Meta alvo: {metaOtimo}% {stats ? (pctOtimo >= metaOtimo ? '— atingida' : '— abaixo da meta') : ''}
-          </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-card-label">Avaliação Bom</div>
-          <div className="stat-card-value">{stats ? `${stats.percentual.bom.toFixed(1)}%` : '—'}</div>
-          <div className="stat-card-desc">{stats ? `${stats.contagem.bom} avaliações` : 'Carregando...'}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card-label">Pontos de Atenção</div>
-          <div className="stat-card-value" style={{ color: (stats?.pontosAtencao ?? 0) > 0 ? '#dc2626' : undefined }}>
-            {stats?.pontosAtencao ?? '—'}
-          </div>
-          <div className="stat-card-desc">Avaliações Regular + Ruim</div>
-        </div>
-      </div>
+      </header>
 
       {/* Filtros */}
       <div className="reports-filters-bar" style={{ marginBottom: '16px' }}>
@@ -338,12 +383,12 @@ const SGQPesquisaSatisfacao: React.FC = () => {
               type="text"
               placeholder="Motorista, CT-e ou NF..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); setSelectedIds([]); }}
             />
           </div>
 
           <div className="reports-select-wrapper">
-            <select value={filterCliente} onChange={(e) => { setFilterCliente(e.target.value); setCurrentPage(1); }}>
+            <select value={filterCliente} onChange={(e) => { setFilterCliente(e.target.value); setCurrentPage(1); setSelectedIds([]); }}>
               <option value="">Cliente: Todos</option>
               {SGQ_CLIENTE_OPTIONS.map((cliente) => (
                 <option key={cliente} value={cliente}>{cliente}</option>
@@ -352,7 +397,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
           </div>
 
           <div className="reports-select-wrapper">
-            <select value={filterAvaliacao} onChange={(e) => { setFilterAvaliacao(e.target.value); setCurrentPage(1); }}>
+            <select value={filterAvaliacao} onChange={(e) => { setFilterAvaliacao(e.target.value); setCurrentPage(1); setSelectedIds([]); }}>
               <option value="">Avaliação: Todas</option>
               {SGQ_AVALIACAO_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -364,14 +409,14 @@ const SGQPesquisaSatisfacao: React.FC = () => {
             type="date"
             title="Data inicial"
             value={filterDataInicio}
-            onChange={(e) => { setFilterDataInicio(e.target.value); setCurrentPage(1); }}
+            onChange={(e) => { setFilterDataInicio(e.target.value); setCurrentPage(1); setSelectedIds([]); }}
             style={{ height: '36px', padding: '0 12px', background: '#ffffff', border: '1px solid #cbd5e1', fontSize: '13px', color: '#334155', outline: 'none', boxSizing: 'border-box', width: '140px' }}
           />
           <input
             type="date"
             title="Data final"
             value={filterDataFim}
-            onChange={(e) => { setFilterDataFim(e.target.value); setCurrentPage(1); }}
+            onChange={(e) => { setFilterDataFim(e.target.value); setCurrentPage(1); setSelectedIds([]); }}
             style={{ height: '36px', padding: '0 12px', background: '#ffffff', border: '1px solid #cbd5e1', fontSize: '13px', color: '#334155', outline: 'none', boxSizing: 'border-box', width: '140px' }}
           />
 
@@ -380,50 +425,37 @@ const SGQPesquisaSatisfacao: React.FC = () => {
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: '0', marginLeft: 'auto' }}>
-          {(['registros', 'resumo'] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              className="reports-action-btn secondary"
-              onClick={() => setViewMode(mode)}
-              style={{
-                backgroundColor: viewMode === mode ? '#118CC4' : undefined,
-                borderColor: viewMode === mode ? '#118CC4' : undefined,
-                color: viewMode === mode ? '#ffffff' : undefined,
-              }}
-            >
-              {mode === 'registros' ? 'Registros' : 'Resumo por critério'}
-            </button>
-          ))}
+        <div className="reports-filter-right">
+          <span className="reports-records-count"><strong>{totalItems}</strong> Registros</span>
         </div>
       </div>
 
-      {viewMode === 'registros' ? (
-        <QueryDataPanel
-          query={listQuery}
-          loadingMessage="Carregando pesquisas de satisfação..."
-          refreshingMessage="Atualizando pesquisas..."
-          errorMessage="Não foi possível carregar as pesquisas. Tente novamente."
-        >
+      <QueryDataPanel
+        query={listQuery}
+        loadingMessage="Carregando pesquisas de satisfação..."
+        refreshingMessage="Atualizando pesquisas..."
+        errorMessage="Não foi possível carregar as pesquisas. Tente novamente."
+      >
           <div className="erp-card reports-table-card" style={{ padding: '8px', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
-              <table className="erp-table reports-table">
-                <thead>
-                  <tr>
-                    <th style={{ borderRight: 'none', borderBottom: '1px solid #e2e8f0', color: '#94a3b8', fontWeight: 500 }}>DATA</th>
-                    <th style={{ borderRight: 'none', borderBottom: '1px solid #e2e8f0', color: '#94a3b8', fontWeight: 500 }}>CLIENTE</th>
-                    <th style={{ borderRight: 'none', borderBottom: '1px solid #e2e8f0', color: '#94a3b8', fontWeight: 500 }}>MOTORISTA</th>
-                    <th style={{ borderRight: 'none', borderBottom: '1px solid #e2e8f0', color: '#94a3b8', fontWeight: 500 }}>CT-E</th>
-                    <th style={{ borderRight: 'none', borderBottom: '1px solid #e2e8f0', color: '#94a3b8', fontWeight: 500 }}>NF</th>
-                    {SGQ_CRITERIOS.map((criterio) => (
-                      <th key={criterio.key} title={criterio.label} style={{ borderRight: 'none', borderBottom: '1px solid #e2e8f0', color: '#94a3b8', fontWeight: 500, textAlign: 'center' }}>
-                        {criterio.label.split(' ')[0].toUpperCase()}
-                      </th>
-                    ))}
-                    <th style={{ borderRight: 'none', borderBottom: '1px solid #e2e8f0', color: '#94a3b8', fontWeight: 500, textAlign: 'center' }}>AÇÕES</th>
-                  </tr>
-                </thead>
+              <table className="erp-table reports-table" style={{ tableLayout: 'fixed' }}>
+              <thead>
+                <tr>
+                  <th className="checkbox-cell" style={{ width: '3%' }}>
+                    <input type="checkbox" checked={isAllSelected} onChange={(e) => handleSelectAll(e.target.checked)} style={{ borderRadius: '4px' }} />
+                  </th>
+                  <th style={{ width: '10%' }}>Data</th>
+                  <th style={{ width: '9%' }}>Cliente</th>
+                  <th style={{ width: '22%' }}>Motorista</th>
+                  <th style={{ width: '8%' }}>CT-e</th>
+                  <th style={{ width: '8%' }}>NF</th>
+                  {SGQ_CRITERIOS.map((criterio) => (
+                    <th key={criterio.key} title={criterio.label} style={{ width: '8%', textAlign: 'center' }}>
+                      {criterio.shortLabel}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
                 <tbody>
                   {listState.canShowEmpty && rows.length === 0 ? (
                     <tr>
@@ -434,12 +466,18 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                   ) : (
                     rows.map((pesquisa) => (
                       <tr key={pesquisa.id}>
+                        <td className="checkbox-cell">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(pesquisa.id)}
+                            onChange={(e) => handleSelectRow(pesquisa.id, e.target.checked)}
+                            style={{ borderRadius: '4px' }}
+                          />
+                        </td>
                         <td style={{ fontWeight: 500 }}>{formatDateBr(pesquisa.data)}</td>
                         <td>{pesquisa.cliente}</td>
-                        <td>
-                          <div style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pesquisa.motorista}>
-                            {pesquisa.motorista}
-                          </div>
+                        <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pesquisa.motorista}>
+                          {pesquisa.motorista}
                         </td>
                         <td>{pesquisa.cte}</td>
                         <td>{pesquisa.notaFiscal}</td>
@@ -448,36 +486,6 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                             <AvaliacaoBadge value={pesquisa[criterio.key]} />
                           </td>
                         ))}
-                        <td style={{ textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(pesquisa)}
-                              title="Editar"
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: 'transparent', color: '#64748b', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#eff6ff'; e.currentTarget.style.color = '#118CC4'; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#64748b'; }}
-                            >
-                              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-                              </svg>
-                              <span>Editar</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(pesquisa)}
-                              title="Excluir"
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: 'transparent', color: '#64748b', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.color = '#ef4444'; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#64748b'; }}
-                            >
-                              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                              </svg>
-                              <span>Excluir</span>
-                            </button>
-                          </div>
-                        </td>
                       </tr>
                     ))
                   )}
@@ -495,7 +503,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
               type="button"
               className="reports-action-btn secondary"
               disabled={currentPage <= 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              onClick={() => goToPage(Math.max(1, currentPage - 1))}
               style={{ height: '28px', padding: '0 10px', fontSize: '11px', gap: '4px', opacity: currentPage <= 1 ? 0.5 : 1, cursor: currentPage <= 1 ? 'not-allowed' : 'pointer' }}
             >
               <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -507,7 +515,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
               type="button"
               className="reports-action-btn secondary"
               disabled={currentPage >= totalPages}
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() => goToPage(Math.min(totalPages, currentPage + 1))}
               style={{ height: '28px', padding: '0 10px', fontSize: '11px', gap: '4px', opacity: currentPage >= totalPages ? 0.5 : 1, cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer' }}
             >
               Próximo
@@ -517,121 +525,79 @@ const SGQPesquisaSatisfacao: React.FC = () => {
             </button>
           </div>
         </QueryDataPanel>
-      ) : (
-        <QueryDataPanel
-          query={statsQuery}
-          loadingMessage="Calculando resumo por critério..."
-          refreshingMessage="Atualizando resumo..."
-          errorMessage="Não foi possível calcular o resumo. Tente novamente."
-        >
-          <div className="erp-card reports-table-card" style={{ padding: '8px', flex: 1, minHeight: 0, overflow: 'auto' }}>
-            <table className="erp-table reports-table">
-              <thead>
-                <tr>
-                  <th style={{ borderRight: 'none', borderBottom: '1px solid #e2e8f0', color: '#94a3b8', fontWeight: 500 }}>CRITÉRIO</th>
-                  {SGQ_AVALIACAO_OPTIONS.map((opt) => (
-                    <th key={opt.value} style={{ borderRight: 'none', borderBottom: '1px solid #e2e8f0', color: AVALIACAO_META[opt.value].color, fontWeight: 600, textAlign: 'center' }}>
-                      {opt.label.toUpperCase()}
-                    </th>
-                  ))}
-                  <th style={{ borderRight: 'none', borderBottom: '1px solid #e2e8f0', color: '#94a3b8', fontWeight: 500, textAlign: 'center' }}>% ÓTIMO</th>
-                  <th style={{ borderRight: 'none', borderBottom: '1px solid #e2e8f0', color: '#94a3b8', fontWeight: 500, textAlign: 'center' }}>SCORE (1–4)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(stats?.criterios ?? []).map((criterio) => {
-                  const total = criterio.otimo + criterio.bom + criterio.regular + criterio.ruim;
-                  const pct = total ? (criterio.otimo / total) * 100 : 0;
-                  return (
-                    <tr key={criterio.campo}>
-                      <td style={{ fontWeight: 600 }}>{criterio.label}</td>
-                      <td style={{ textAlign: 'center' }}>{criterio.otimo}</td>
-                      <td style={{ textAlign: 'center' }}>{criterio.bom}</td>
-                      <td style={{ textAlign: 'center' }}>{criterio.regular}</td>
-                      <td style={{ textAlign: 'center' }}>{criterio.ruim}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: pct >= metaOtimo ? '#16a34a' : '#d97706' }}>
-                        {total ? `${pct.toFixed(1)}%` : '—'}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ width: '90px', height: '6px', borderRadius: '3px', background: '#e2e8f0', overflow: 'hidden' }}>
-                            <div style={{ width: `${(criterio.score / 4) * 100}%`, height: '100%', borderRadius: '3px', background: criterio.score >= 3.5 ? '#16a34a' : criterio.score >= 2.5 ? '#0f85c1' : criterio.score >= 1.5 ? '#d97706' : '#dc2626' }} />
-                          </div>
-                          <span style={{ fontWeight: 600, fontSize: '12px' }}>{total ? criterio.score.toFixed(2) : '—'}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </QueryDataPanel>
-      )}
 
       {/* MODAL: NOVA/EDITAR PESQUISA */}
       {isModalOpen && (
-        <div className="search-backdrop" style={{ display: 'flex' }} onClick={(e) => {
-          if (e.target === e.currentTarget) setIsModalOpen(false);
-        }}>
-          <div className="search-modal-card" style={{ width: '640px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="search-input-wrapper" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#1e293b' }}>
-                {editingPesquisa ? 'Editar Pesquisa de Satisfação' : 'Nova Pesquisa de Satisfação'}
-              </h3>
-              <span className="search-close-key" style={{ cursor: 'pointer', fontSize: '12px' }} onClick={() => setIsModalOpen(false)}>Fechar (X)</span>
+        <div
+          className="search-backdrop"
+          style={{ display: 'flex', alignItems: 'center', padding: '24px 16px' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}
+        >
+          <div className="modal-card" style={{ width: 'min(640px, 100%)' }}>
+            <div className="modal-header">
+              <h3>{editingPesquisa ? 'Editar Pesquisa de Satisfação' : 'Nova Pesquisa de Satisfação'}</h3>
+              <button type="button" className="btn-icon" onClick={() => setIsModalOpen(false)} aria-label="Fechar">
+                <i className="bi bi-x-lg" />
+              </button>
             </div>
 
-            <form style={{ padding: '18px 24px 24px 24px' }} onSubmit={handleSubmit}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#118CC4', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '10px' }}>Dados principais</div>
-              <div style={{ display: 'flex', gap: '14px', marginBottom: '12px' }}>
-                <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="sgq-data">Data</label>
-                  <input type="date" id="sgq-data" required value={form.data} onChange={(e) => setField('data', e.target.value)} style={{ background: '#f8fafc' }} />
-                </div>
-                <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="sgq-cliente">Cliente</label>
-                  <select id="sgq-cliente" required value={form.cliente} onChange={(e) => setField('cliente', e.target.value)}>
+            <form className="modal-body" onSubmit={handleSubmit}>
+              <div className="form-grid two-cols">
+                <label>
+                  Data
+                  <input type="date" className="form-input" required value={form.data} onChange={(e) => setField('data', e.target.value)} />
+                </label>
+                <label>
+                  Cliente
+                  <select className="form-input" required value={form.cliente} onChange={(e) => setField('cliente', e.target.value)}>
                     {SGQ_CLIENTE_OPTIONS.map((cliente) => (
                       <option key={cliente} value={cliente}>{cliente}</option>
                     ))}
                   </select>
-                </div>
-              </div>
-              <div className="login-group" style={{ marginBottom: '12px' }}>
-                <label htmlFor="sgq-motorista">Motorista</label>
-                <input type="text" id="sgq-motorista" required placeholder="Nome do motorista" value={form.motorista} onChange={(e) => setField('motorista', e.target.value)} autoComplete="off" />
-              </div>
-              <div style={{ display: 'flex', gap: '14px', marginBottom: '16px' }}>
-                <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="sgq-cte">CT-e</label>
-                  <input type="text" id="sgq-cte" required placeholder="Nº do CT-e" value={form.cte} onChange={(e) => setField('cte', e.target.value)} autoComplete="off" />
-                </div>
-                <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
-                  <label htmlFor="sgq-nf">Nota Fiscal</label>
-                  <input type="text" id="sgq-nf" required placeholder="Nº da NF" value={form.notaFiscal} onChange={(e) => setField('notaFiscal', e.target.value)} autoComplete="off" />
-                </div>
+                </label>
               </div>
 
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#118CC4', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '10px' }}>Avaliações</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px', padding: '14px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+              <label style={{ display: 'block', marginTop: '14px' }}>
+                Motorista
+                <input type="text" className="form-input" required placeholder="Nome do motorista" value={form.motorista} onChange={(e) => setField('motorista', e.target.value)} autoComplete="off" />
+              </label>
+
+              <div className="form-grid two-cols" style={{ marginTop: '14px' }}>
+                <label>
+                  CT-e
+                  <input type="text" className="form-input" required placeholder="Nº do CT-e" value={form.cte} onChange={(e) => setField('cte', e.target.value)} autoComplete="off" />
+                </label>
+                <label>
+                  Nota Fiscal
+                  <input type="text" className="form-input" required placeholder="Nº da NF" value={form.notaFiscal} onChange={(e) => setField('notaFiscal', e.target.value)} autoComplete="off" />
+                </label>
+              </div>
+
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '20px', marginBottom: '10px' }}>
+                Avaliações
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '14px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
                 {SGQ_CRITERIOS.map((criterio) => (
-                  <div key={criterio.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#334155' }}>{criterio.label} <span style={{ color: '#dc2626' }}>*</span></span>
-                    <StarRating value={form[criterio.key]} onChange={(v) => setField(criterio.key, v)} />
+                  <div key={criterio.key}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                      {criterio.label} <span style={{ color: '#dc2626' }}>*</span>
+                    </div>
+                    <AvaliacaoChips value={form[criterio.key]} onChange={(v) => setField(criterio.key, v)} />
                   </div>
                 ))}
               </div>
 
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#118CC4', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '10px' }}>Análise e tratativa</div>
-              <div className="login-group" style={{ marginBottom: '12px' }}>
-                <label htmlFor="sgq-analise">Análise (opcional)</label>
-                <textarea id="sgq-analise" rows={2} placeholder="Digite a análise..." value={form.analise} onChange={(e) => setField('analise', e.target.value)} />
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '20px', marginBottom: '10px' }}>
+                Análise e tratativa
               </div>
-              <div className="login-group" style={{ marginBottom: 0 }}>
-                <label htmlFor="sgq-tratativa">Tratativa e Justificativa (opcional)</label>
-                <textarea id="sgq-tratativa" rows={2} placeholder="Digite a tratativa e justificativa..." value={form.tratativaJustificativa} onChange={(e) => setField('tratativaJustificativa', e.target.value)} />
-              </div>
+              <label style={{ display: 'block', marginBottom: '12px' }}>
+                Análise (opcional)
+                <textarea className="form-input" rows={2} placeholder="Digite a análise..." value={form.analise} onChange={(e) => setField('analise', e.target.value)} />
+              </label>
+              <label style={{ display: 'block' }}>
+                Tratativa e Justificativa (opcional)
+                <textarea className="form-input" rows={2} placeholder="Digite a tratativa e justificativa..." value={form.tratativaJustificativa} onChange={(e) => setField('tratativaJustificativa', e.target.value)} />
+              </label>
 
               {formError && (
                 <div style={{ marginTop: '14px', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', color: '#b91c1c', fontSize: '13px' }}>
@@ -639,12 +605,19 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                 </div>
               )}
 
-              <button type="submit" className="btn-login" disabled={isSaving} style={{ marginTop: '18px', backgroundColor: '#118CC4', opacity: isSaving ? 0.7 : 1 }}>
-                {isSaving ? 'Salvando...' : (editingPesquisa ? 'Salvar Alterações' : 'Registrar Pesquisa')}
-              </button>
+              <div className="modal-footer" style={{ marginTop: '20px' }}>
+                <button type="button" className="reports-action-btn secondary" onClick={() => setIsModalOpen(false)}>Cancelar</button>
+                <button type="submit" className="reports-action-btn primary" disabled={isSaving}>
+                  {isSaving ? 'Salvando...' : (editingPesquisa ? 'Salvar Alterações' : 'Registrar Pesquisa')}
+                </button>
+              </div>
             </form>
           </div>
         </div>
+      )}
+
+      {isLoteModalOpen && (
+        <SGQPesquisaLoteModal onClose={() => setIsLoteModalOpen(false)} />
       )}
     </div>
   );

@@ -2742,6 +2742,21 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   color: #dc2626;
 }
 
+/* Avaliação (Pesquisa de Satisfação / SGQ) — ícone + texto, sem pill/borda.
+   A distinção entre níveis vem da forma do ícone (não só da cor), mais sóbrio para um ERP. */
+.sgq-avaliacao-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sgq-avaliacao-badge i {
+  font-size: 15px;
+  line-height: 1;
+}
+
 /* Status discreto com bolinha colorida (sem pill de fundo) */
 .status-dot-label {
   display: inline-flex;
@@ -6914,6 +6929,144 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   padding-top: 16px;
   border-top: 1px solid #e2e8f0;
   margin-top: 4px;
+}
+
+/* Inclusão em Tabela — grade estilo planilha (Pesquisa de Satisfação / SGQ) */
+.sgq-lote-backdrop {
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  padding: 20px !important;
+}
+
+.sgq-lote-modal-card {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.sgq-lote-modal-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* .modal-footer normalmente herda padding horizontal do .modal-body pai; aqui o footer
+   fica fora do body (para não rolar junto com a grade), então precisa do próprio padding. */
+.sgq-lote-modal-card > .modal-footer {
+  padding: 16px 20px 20px;
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.sgq-lote-table-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.sgq-lote-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.sgq-lote-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 12px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+col.sgq-lote-col-index { width: 3%; }
+col.sgq-lote-col-data { width: 8%; }
+col.sgq-lote-col-cliente { width: 8%; }
+col.sgq-lote-col-motorista { width: 24%; }
+col.sgq-lote-col-doc { width: 7%; }
+col.sgq-lote-col-avaliacao { width: 8%; }
+col.sgq-lote-col-remove { width: 3%; }
+
+.sgq-lote-th-center { text-align: center; }
+
+.sgq-lote-table tbody td {
+  border-bottom: 1px solid #f1f5f9;
+  padding: 0;
+  height: 52px;
+}
+
+.sgq-lote-table tbody tr:hover td {
+  background-color: #f8fafc;
+}
+
+.sgq-lote-index {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sgq-lote-remove {
+  text-align: center;
+}
+
+.sgq-lote-input {
+  display: block;
+  width: 100%;
+  height: 52px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  color: #1e293b;
+  outline: none;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+select.sgq-lote-input {
+  cursor: pointer;
+  padding-right: 26px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+
+.sgq-lote-input:focus {
+  background-color: #eff6ff;
+  box-shadow: inset 0 0 0 2px #118CC4;
+  position: relative;
+  z-index: 1;
+}
+
+.sgq-lote-input.is-invalid {
+  background-color: #fef2f2;
+}
+
+.sgq-lote-input.is-invalid:focus {
+  box-shadow: inset 0 0 0 2px #dc2626;
 }
 
 /* Form input/select padrão para modais */

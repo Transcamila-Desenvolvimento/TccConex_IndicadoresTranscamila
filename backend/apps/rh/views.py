@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from apps.accounts.mixins import ModuleScopedViewMixin
 from apps.audit.services import record_audit
 
+from .pagination import RHPagination
 from .models import (
     Colaborador,
     LoteMovimentacaoRH,
@@ -435,10 +436,26 @@ class LoteMovimentacaoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             return Response({'error': f'Falha ao enviar e-mail: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+_MOVIMENTACAO_ORDERING_MAP = {
+    # Idade e Tempo de Empresa não são campos do banco (são propriedades calculadas
+    # a partir de data_nascimento/data_admissao), então a ordenação usa a data
+    # correspondente, invertida quando necessário para refletir o significado do rótulo.
+    'idade_asc': ('-data_nascimento', 'nome'),
+    'idade_desc': ('data_nascimento', 'nome'),
+    'tempoEmpresa_asc': ('-data_admissao', 'nome'),
+    'tempoEmpresa_desc': ('data_admissao', 'nome'),
+    'admissao_asc': ('data_admissao', 'nome'),
+    'admissao_desc': ('-data_admissao', 'nome'),
+    'salario_asc': ('salario', 'nome'),
+    'salario_desc': ('-salario', 'nome'),
+}
+
+
 class MovimentacaoColaboradorViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):
     permission_module = 'RH'
     serializer_class = MovimentacaoColaboradorSerializer
     queryset = MovimentacaoColaborador.objects.all()
+    pagination_class = RHPagination
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -462,13 +479,34 @@ class MovimentacaoColaboradorViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyMod
         # Ocultar desconsiderados
         cpfs_desconsiderados = set(Colaborador.objects.filter(desconsiderado=True).values_list('cpf', flat=True))
         qs = qs.exclude(cpf__in=cpfs_desconsiderados)
-        return qs.order_by('nome')
+
+        ordering = self.request.query_params.get('ordering')
+        order_fields = _MOVIMENTACAO_ORDERING_MAP.get(ordering, ('nome',))
+        return qs.order_by(*order_fields)
 
     @action(detail=False, methods=['get'])
     def dashboard_summary(self, request):
         mes = request.query_params.get('mes')
         ano = request.query_params.get('ano')
         lote_id = request.query_params.get('loteId')
+
+        def _parse_int(value, default):
+            try:
+                return max(int(value), 1)
+            except (TypeError, ValueError):
+                return default
+
+        page_size = _parse_int(request.query_params.get('pageSize'), 10)
+        novos_page = _parse_int(request.query_params.get('novosPage'), 1)
+        desligados_page = _parse_int(request.query_params.get('desligadosPage'), 1)
+        alteracoes_page = _parse_int(request.query_params.get('alteracoesPage'), 1)
+
+        novos_search = (request.query_params.get('novosSearch') or '').strip()
+        desligados_search = (request.query_params.get('desligadosSearch') or '').strip()
+        alteracoes_search = (request.query_params.get('alteracoesSearch') or '').strip()
+
+        def _empty_section():
+            return {'results': [], 'count': 0}
 
         if lote_id:
             lote = get_object_or_404(LoteMovimentacaoRH, id=lote_id)
@@ -484,9 +522,9 @@ class MovimentacaoColaboradorViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyMod
                 'lote': None,
                 'lotesDisponiveis': lotes_disponiveis,
                 'resumoFiliais': [],
-                'novos': [],
-                'desligados': [],
-                'alteracoes': [],
+                'novos': _empty_section(),
+                'desligados': _empty_section(),
+                'alteracoes': _empty_section(),
                 'totais': {
                     'totalColaboradores': 0,
                     'admitidos': 0,
@@ -517,16 +555,41 @@ class MovimentacaoColaboradorViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyMod
         # 1. Admitidos (Atuais - Anteriores)
         cpfs_novos = cpfs_atuais - cpfs_anteriores
         novos_qs = colaboradores.filter(cpf__in=cpfs_novos).order_by('nome')
-        novos_data = MovimentacaoColaboradorSerializer(novos_qs, many=True).data
+        if novos_search:
+            novos_qs = novos_qs.filter(
+                Q(nome__icontains=novos_search) | Q(cpf__icontains=novos_search)
+                | Q(funcao__icontains=novos_search) | Q(filial__icontains=novos_search)
+            )
+        novos_total = novos_qs.count()
+        novos_start = (novos_page - 1) * page_size
+        novos_data = MovimentacaoColaboradorSerializer(novos_qs[novos_start:novos_start + page_size], many=True).data
 
         # 2. Desligados (Anteriores - Atuais)
         cpfs_desligados = cpfs_anteriores - cpfs_atuais
         desligados_qs = colaboradores_ant.filter(cpf__in=cpfs_desligados).order_by('nome')
-        desligados_data = MovimentacaoColaboradorSerializer(desligados_qs, many=True).data
+        if desligados_search:
+            desligados_qs = desligados_qs.filter(
+                Q(nome__icontains=desligados_search) | Q(cpf__icontains=desligados_search)
+                | Q(funcao__icontains=desligados_search) | Q(filial__icontains=desligados_search)
+            )
+        desligados_total = desligados_qs.count()
+        desligados_start = (desligados_page - 1) * page_size
+        desligados_data = MovimentacaoColaboradorSerializer(desligados_qs[desligados_start:desligados_start + page_size], many=True).data
 
         # 3. Alterações (Inconsistências registradas no lote)
         alteracoes_qs = lote.inconsistencias.exclude(cpf__in=cpfs_desconsiderados).order_by('nome')
-        alteracoes_data = InconsistenciaColaboradorSerializer(alteracoes_qs, many=True).data
+        if alteracoes_search:
+            tipos_correspondentes = [
+                chave for chave, label in InconsistenciaColaborador.TIPO_CHOICES
+                if alteracoes_search.lower() in label.lower()
+            ]
+            search_q = Q(nome__icontains=alteracoes_search) | Q(cpf__icontains=alteracoes_search)
+            if tipos_correspondentes:
+                search_q |= Q(tipo__in=tipos_correspondentes)
+            alteracoes_qs = alteracoes_qs.filter(search_q)
+        alteracoes_total = alteracoes_qs.count()
+        alteracoes_start = (alteracoes_page - 1) * page_size
+        alteracoes_data = InconsistenciaColaboradorSerializer(alteracoes_qs[alteracoes_start:alteracoes_start + page_size], many=True).data
 
         # 4. Resumo por Filial
         hoje = date.today()
@@ -575,9 +638,9 @@ class MovimentacaoColaboradorViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyMod
 
         totais = {
             'totalColaboradores': colaboradores.count(),
-            'admitidos': len(novos_data),
-            'desligados': len(desligados_data),
-            'alteracoes': len(alteracoes_data),
+            'admitidos': novos_total,
+            'desligados': desligados_total,
+            'alteracoes': alteracoes_total,
             'payroll': payroll_geral,
             'mediaIdade': round(avg_age_geral, 1),
             'mediaTempo': round(avg_tenure_geral, 1),
@@ -587,9 +650,9 @@ class MovimentacaoColaboradorViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyMod
             'lote': LoteMovimentacaoRHSerializer(lote).data,
             'lotesDisponiveis': lotes_disponiveis,
             'resumoFiliais': resumo_filiais,
-            'novos': novos_data,
-            'desligados': desligados_data,
-            'alteracoes': alteracoes_data,
+            'novos': {'results': novos_data, 'count': novos_total},
+            'desligados': {'results': desligados_data, 'count': desligados_total},
+            'alteracoes': {'results': alteracoes_data, 'count': alteracoes_total},
             'totais': totais
         })
 

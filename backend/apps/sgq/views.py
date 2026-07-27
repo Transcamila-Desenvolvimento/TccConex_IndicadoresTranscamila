@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Q
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -91,6 +92,37 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             f'Pesquisa de satisfação #{instance.pk} ({instance.cliente}, CT-e {instance.cte}) excluída.',
         )
         instance.delete()
+
+    @action(detail=False, methods=['post'])
+    def bulk_create(self, request):
+        """Cria várias pesquisas de uma vez (Inclusão em Tabela). Tudo ou nada:
+        se qualquer linha for inválida, nada é salvo e os erros voltam indexados
+        por linha para o frontend destacar os campos problemáticos."""
+        items = request.data if isinstance(request.data, list) else request.data.get('items', [])
+        if not items:
+            return Response({'errors': {'0': {'non_field_errors': ['Nenhuma pesquisa informada.']}}}, status=400)
+
+        valid_serializers = []
+        errors = {}
+        for idx, item in enumerate(items):
+            serializer = PesquisaSatisfacaoSerializer(data=item)
+            if serializer.is_valid():
+                valid_serializers.append(serializer)
+            else:
+                errors[idx] = serializer.errors
+        if errors:
+            return Response({'errors': errors}, status=400)
+
+        criado_por = _usuario_display(request.user)
+        with transaction.atomic():
+            pesquisas = [serializer.save(criado_por=criado_por) for serializer in valid_serializers]
+
+        record_audit(
+            request.user,
+            'sgq.pesquisa.lote_criado',
+            f'{len(pesquisas)} pesquisa(s) de satisfação registradas em lote.',
+        )
+        return Response(PesquisaSatisfacaoSerializer(pesquisas, many=True).data, status=201)
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
