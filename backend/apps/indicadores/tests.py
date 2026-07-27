@@ -18,6 +18,7 @@ from apps.financeiro.models import (
     ReportBatch,
 )
 from apps.indicadores.models import GerencialSnapshot
+from apps.rh.models import Colaborador, LoteMovimentacaoRH, MovimentacaoColaborador
 
 User = get_user_model()
 
@@ -1112,3 +1113,157 @@ class CashflowActivityVersionTests(TestCase):
             **auth_headers(self.user, 'Financeiro'),
         )
         self.assertEqual(response.status_code, 403)
+
+
+class IndicadoresRHMovimentacaoTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='ind_rh',
+            password='ind123',
+            role_id='2',
+            environments=['Indicadores'],
+            filiais={'Indicadores': ['Ibiporã (Matriz)']},
+        )
+        self.desconsiderado = Colaborador.objects.create(
+            cpf='000.000.000-00',
+            matricula='M-DESC',
+            nome_completo='Desconsiderado Teste',
+            desconsiderado=True,
+        )
+
+        self.lote_04 = LoteMovimentacaoRH.objects.create(mes=4, ano=2026)
+        self.lote_05 = LoteMovimentacaoRH.objects.create(mes=5, ano=2026)
+        self.lote_06 = LoteMovimentacaoRH.objects.create(mes=6, ano=2026)
+
+        # Abril: A1 (ADM, matriz), A2 (OPERACIONAL, matriz), A3 (desconsiderado)
+        MovimentacaoColaborador.objects.create(
+            lote=self.lote_04, cpf='111.111.111-11', nome='Colab A1',
+            filial='Ibiporã (Matriz)', categoria='ADMINISTRATIVO', salario=Decimal('3000.00'),
+        )
+        MovimentacaoColaborador.objects.create(
+            lote=self.lote_04, cpf='222.222.222-22', nome='Colab A2',
+            filial='Ibiporã (Matriz)', categoria='OPERACIONAL', salario=Decimal('2000.00'),
+        )
+        MovimentacaoColaborador.objects.create(
+            lote=self.lote_04, cpf='000.000.000-00', nome='Desconsiderado Teste',
+            filial='Ibiporã (Matriz)', categoria='ADMINISTRATIVO', salario=Decimal('99999.00'),
+        )
+
+        # Maio: A1 continua, A2 sai, A3 (MOTORISTA, filial SP) entra
+        MovimentacaoColaborador.objects.create(
+            lote=self.lote_05, cpf='111.111.111-11', nome='Colab A1',
+            filial='Ibiporã (Matriz)', categoria='ADMINISTRATIVO', salario=Decimal('3200.00'),
+        )
+        MovimentacaoColaborador.objects.create(
+            lote=self.lote_05, cpf='333.333.333-33', nome='Colab A3',
+            filial='São Paulo (Filial)', categoria='MOTORISTA', salario=Decimal('2500.00'),
+        )
+
+        # Junho: A1 continua, A3 continua, A4 entra (ADM, matriz)
+        MovimentacaoColaborador.objects.create(
+            lote=self.lote_06, cpf='111.111.111-11', nome='Colab A1',
+            filial='Ibiporã (Matriz)', categoria='ADMINISTRATIVO', salario=Decimal('3200.00'),
+        )
+        MovimentacaoColaborador.objects.create(
+            lote=self.lote_06, cpf='333.333.333-33', nome='Colab A3',
+            filial='São Paulo (Filial)', categoria='MOTORISTA', salario=Decimal('2500.00'),
+        )
+        MovimentacaoColaborador.objects.create(
+            lote=self.lote_06, cpf='444.444.444-44', nome='Colab A4',
+            filial='Ibiporã (Matriz)', categoria='ADMINISTRATIVO', salario=Decimal('2800.00'),
+        )
+
+    def test_series_excludes_desconsiderados_and_computes_headcount_payroll(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-04&end=2026-06',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(response.status_code, 200)
+        series = response.data['series']
+        self.assertEqual(len(series), 3)
+
+        abril = series[0]
+        self.assertEqual(abril['label'], 'Abr/2026')
+        self.assertEqual(abril['headcount'], 2)
+        self.assertEqual(abril['payroll'], Decimal('5000.00'))
+        # Primeiro lote da história inteira: sem base de comparação.
+        self.assertEqual(abril['admitidos'], 0)
+        self.assertEqual(abril['desligados'], 0)
+
+    def test_admissoes_e_desligamentos_entre_lotes(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-04&end=2026-06',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        series = response.data['series']
+        maio = series[1]
+        self.assertEqual(maio['admitidos'], 1)
+        self.assertEqual(maio['desligados'], 1)
+
+        junho = series[2]
+        self.assertEqual(junho['admitidos'], 1)
+        self.assertEqual(junho['desligados'], 0)
+
+    def test_por_categoria_breakdown(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        junho = response.data['series'][0]
+        self.assertEqual(junho['porCategoria']['administrativo']['count'], 2)
+        self.assertEqual(junho['porCategoria']['motorista']['count'], 1)
+        self.assertEqual(junho['porCategoria']['operacional']['count'], 0)
+        self.assertEqual(junho['porCategoria']['naoMapeado']['count'], 0)
+
+    def test_filtro_por_filial(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&filial=São Paulo (Filial)',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        junho = response.data['series'][0]
+        self.assertEqual(junho['headcount'], 1)
+
+    def test_filtro_por_categoria(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&categoria=MOTORISTA',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        junho = response.data['series'][0]
+        self.assertEqual(junho['headcount'], 1)
+
+    def test_summary_totals_and_turnover(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-04&end=2026-06',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        summary = response.data['summary']
+        self.assertEqual(summary['totalColaboradores'], 3)
+        self.assertEqual(summary['payrollTotal'], Decimal('8500.00'))
+        self.assertEqual(summary['admitidosPeriodo'], 2)
+        self.assertEqual(summary['desligadosPeriodo'], 1)
+
+    def test_meta_lists_filiais_e_lotes_disponiveis(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        meta = response.data['meta']
+        self.assertIn('Ibiporã (Matriz)', meta['filiaisDisponiveis'])
+        self.assertIn('São Paulo (Filial)', meta['filiaisDisponiveis'])
+        self.assertEqual(len(meta['lotesDisponiveis']), 3)
+
+    def test_requires_indicadores_environment(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_works_without_session_filial(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['series'][0]['headcount'], 3)

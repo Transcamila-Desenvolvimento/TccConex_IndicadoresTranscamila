@@ -7,6 +7,7 @@ from apps.accounts.mixins import ModuleScopedViewMixin
 from .cashflow_service import build_cashflow_day_detail, build_cashflow_payload, get_financeiro_activity_version
 from .gerencial_email_service import _parse_emails, _parse_reference, send_gerencial_email
 from .models import IndicadorFilial, IndicadorKpi
+from .rh_indicador_service import build_rh_movimentacao_payload
 from .serializers import IndicadorFilialSerializer, IndicadorKpiSerializer
 
 
@@ -87,6 +88,15 @@ class CashFlowView(ModuleScopedViewMixin, APIView):
             return Response({'detail': 'Filial não autorizada.'}, status=status.HTTP_403_FORBIDDEN)
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class RHMovimentacaoIndicadorView(ModuleScopedViewMixin, APIView):
+    permission_module = 'Indicadores'
+    permission_requires_filial = False
+
+    def get(self, request):
+        payload = build_rh_movimentacao_payload(request.query_params)
         return Response(payload)
 
 

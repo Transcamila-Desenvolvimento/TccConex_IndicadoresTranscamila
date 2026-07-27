@@ -5,6 +5,7 @@ import type {
   CalendarSystemEventsResponse, CalendarPersonalEvent,
   IndicadorKpi, IndicadorFilialRow,
   CashflowQueryParams, CashflowResponse, CashflowDayDetailParams, CashflowDayDetailResponse,
+  RHIndicadorQueryParams, RHIndicadorResponse, RHIndicadorCategoriaBucket, RHIndicadorPorCategoria,
   SendGerencialEmailParams, SendGerencialEmailResponse,
   ReportImportResult, ReportImportType,
   PaginatedResponse, ReportQueryParams, ReportFacets,
@@ -432,6 +433,72 @@ function normalizeCashflowResponse(raw: any): CashflowResponse {
       })),
     },
   };
+}
+
+function normalizeRHIndicadorCategoriaBucket(raw: any): RHIndicadorCategoriaBucket {
+  return {
+    count: Number(raw?.count ?? 0),
+    payroll: Number(raw?.payroll ?? 0),
+    percentual: Number(raw?.percentual ?? 0),
+  };
+}
+
+function normalizeRHIndicadorPorCategoria(raw: any): RHIndicadorPorCategoria {
+  return {
+    administrativo: normalizeRHIndicadorCategoriaBucket(raw?.administrativo),
+    operacional: normalizeRHIndicadorCategoriaBucket(raw?.operacional),
+    motorista: normalizeRHIndicadorCategoriaBucket(raw?.motorista),
+    naoMapeado: normalizeRHIndicadorCategoriaBucket(raw?.naoMapeado),
+  };
+}
+
+function normalizeRHIndicadorResponse(raw: any): RHIndicadorResponse {
+  return {
+    meta: {
+      filiaisDisponiveis: raw?.meta?.filiaisDisponiveis ?? [],
+      lotesDisponiveis: (raw?.meta?.lotesDisponiveis ?? []).map((lote: any) => ({
+        mes: Number(lote?.mes ?? 0),
+        ano: Number(lote?.ano ?? 0),
+        label: lote?.label ?? '',
+      })),
+      periodoInicio: raw?.meta?.periodoInicio ?? null,
+      periodoFim: raw?.meta?.periodoFim ?? null,
+    },
+    summary: {
+      totalColaboradores: Number(raw?.summary?.totalColaboradores ?? 0),
+      payrollTotal: Number(raw?.summary?.payrollTotal ?? 0),
+      salarioMedio: Number(raw?.summary?.salarioMedio ?? 0),
+      admitidosPeriodo: Number(raw?.summary?.admitidosPeriodo ?? 0),
+      desligadosPeriodo: Number(raw?.summary?.desligadosPeriodo ?? 0),
+      turnoverPercentual: Number(raw?.summary?.turnoverPercentual ?? 0),
+      variacaoHeadcountPercentual: raw?.summary?.variacaoHeadcountPercentual != null
+        ? Number(raw.summary.variacaoHeadcountPercentual)
+        : null,
+      variacaoPayrollPercentual: raw?.summary?.variacaoPayrollPercentual != null
+        ? Number(raw.summary.variacaoPayrollPercentual)
+        : null,
+      porCategoriaAtual: normalizeRHIndicadorPorCategoria(raw?.summary?.porCategoriaAtual),
+    },
+    series: (raw?.series ?? []).map((ponto: any) => ({
+      mes: Number(ponto?.mes ?? 0),
+      ano: Number(ponto?.ano ?? 0),
+      label: ponto?.label ?? '',
+      headcount: Number(ponto?.headcount ?? 0),
+      payroll: Number(ponto?.payroll ?? 0),
+      admitidos: Number(ponto?.admitidos ?? 0),
+      desligados: Number(ponto?.desligados ?? 0),
+      porCategoria: normalizeRHIndicadorPorCategoria(ponto?.porCategoria),
+    })),
+  };
+}
+
+function buildRHIndicadorQueryParams(params: RHIndicadorQueryParams = {}) {
+  const query: Record<string, string> = {};
+  if (params.start) query.start = params.start;
+  if (params.end) query.end = params.end;
+  if (params.filial && params.filial !== 'Todas') query.filial = params.filial;
+  if (params.categoria && params.categoria !== 'Todas') query.categoria = params.categoria;
+  return query;
 }
 
 function buildCashflowQueryParams(params: CashflowQueryParams = {}) {
@@ -952,6 +1019,13 @@ export const apiService = {
       params: buildCashflowDayDetailParams(params),
     });
     return normalizeCashflowDayDetail(data);
+  },
+
+  async getIndicadorRHMovimentacao(params: RHIndicadorQueryParams = {}): Promise<RHIndicadorResponse> {
+    const { data } = await api.get('/api/indicadores/rh/movimentacao/', {
+      params: buildRHIndicadorQueryParams(params),
+    });
+    return normalizeRHIndicadorResponse(data);
   },
 
   async sendGerencialEmail(payload: SendGerencialEmailParams): Promise<SendGerencialEmailResponse> {

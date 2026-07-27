@@ -7,6 +7,7 @@ from .views import (
     CashFlowView,
     IndicadorFilialViewSet,
     IndicadorKpiViewSet,
+    RHMovimentacaoIndicadorView,
     SendGerencialEmailView,
 )
 
@@ -19,5 +20,6 @@ urlpatterns = [
     path('fluxo-caixa/dia/', CashFlowDayDetailView.as_view(), name='indicador-fluxo-caixa-dia'),
     path('fluxo-caixa/atividade/', CashFlowActivityView.as_view(), name='indicador-fluxo-caixa-atividade'),
     path('fluxo-caixa/', CashFlowView.as_view(), name='indicador-fluxo-caixa'),
+    path('rh/movimentacao/', RHMovimentacaoIndicadorView.as_view(), name='indicador-rh-movimentacao'),
     path('', include(router.urls)),
 ]

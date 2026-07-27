@@ -3,6 +3,7 @@ import { apiService } from '../services/apiService';
 import type {
   CashflowDayDetailParams,
   CashflowQueryParams,
+  RHIndicadorQueryParams,
   SendGerencialEmailParams,
 } from '../types/domain';
 
@@ -11,6 +12,7 @@ export const INDICADORES_FILIAIS_KEY = ['indicadores', 'filiais'] as const;
 export const INDICADORES_CASHFLOW_KEY = ['indicadores', 'cashflow'] as const;
 export const INDICADORES_CASHFLOW_DAY_KEY = ['indicadores', 'cashflow', 'day'] as const;
 export const INDICADORES_CASHFLOW_ACTIVITY_KEY = ['indicadores', 'cashflow', 'activity'] as const;
+export const INDICADORES_RH_MOVIMENTACAO_KEY = ['indicadores', 'rh', 'movimentacao'] as const;
 
 // Sistema multiusuário: o Fluxo de Caixa precisa refletir alterações feitas por
 // outra pessoa no Financeiro sem exigir refresh manual. Em vez de recarregar o
@@ -50,6 +52,15 @@ export function useIndicadorCashflowDayDetail(
     queryKey: [...INDICADORES_CASHFLOW_DAY_KEY, params],
     queryFn: () => apiService.getIndicadorCashflowDayDetail(params!),
     enabled: enabled && !!params?.date,
+  });
+}
+
+export function useIndicadorRHMovimentacao(params: RHIndicadorQueryParams) {
+  return useQuery({
+    queryKey: [...INDICADORES_RH_MOVIMENTACAO_KEY, params],
+    queryFn: () => apiService.getIndicadorRHMovimentacao(params),
+    placeholderData: (prev) => prev,
+    retry: 1,
   });
 }
 

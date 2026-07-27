@@ -5270,6 +5270,82 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   min-height: 280px;
 }
 
+/* Indicador Movimentação de RH — cards de categoria e grid de gráficos */
+.rh-ind-categoria-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0 0 16px;
+}
+
+@media (max-width: 900px) {
+  .rh-ind-categoria-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rh-ind-categoria-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.rh-ind-categoria-card--administrativo {
+  border-left-color: #1d4ed8;
+}
+
+.rh-ind-categoria-card--operacional {
+  border-left-color: #d97706;
+}
+
+.rh-ind-categoria-card--motorista {
+  border-left-color: #16a34a;
+}
+
+.rh-ind-categoria-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.rh-ind-categoria-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-ind-categoria-hint {
+  font-size: 11.5px;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-ind-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.rh-ind-chart-card--wide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1100px) {
+  .rh-ind-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .cashflow-table-card {
   flex: 1;
   min-height: 0;

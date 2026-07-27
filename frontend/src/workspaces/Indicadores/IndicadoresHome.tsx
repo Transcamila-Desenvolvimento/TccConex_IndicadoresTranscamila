@@ -26,6 +26,17 @@ const QUICK_LINKS = [
       </svg>
     ),
   },
+  {
+    title: 'Movimentação de RH',
+    description: 'Evolução de quantitativo e folha salarial por categoria e filial.',
+    path: '/indicadores/rh/movimentacao',
+    badge: 'Recursos Humanos',
+    icon: (
+      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+      </svg>
+    ),
+  },
 ] as const;
 
 const IndicadoresHome: React.FC = () => {
@@ -34,11 +45,11 @@ const IndicadoresHome: React.FC = () => {
   const firstName = user?.name?.split(' ')[0] ?? 'Usuário';
 
   const allowed = getAllowedIndicadores(user);
-  const visibleLinks = QUICK_LINKS.filter((link) =>
-    link.path === '/indicadores/fluxo-de-caixa'
-      ? allowed.has('fluxo-caixa')
-      : allowed.has('meta-faturamento'),
-  );
+  const visibleLinks = QUICK_LINKS.filter((link) => {
+    if (link.path === '/indicadores/fluxo-de-caixa') return allowed.has('fluxo-caixa');
+    if (link.path === '/indicadores/rh/movimentacao') return allowed.has('movimentacao-rh');
+    return allowed.has('meta-faturamento');
+  });
 
   return (
     <section id="indicadores-home-view" className="view active" style={{ display: 'block' }}>

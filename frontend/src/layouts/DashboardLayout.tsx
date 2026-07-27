@@ -39,6 +39,7 @@ const DashboardLayout: React.FC = () => {
   const [isCashflowSubmenuOpen, setIsCashflowSubmenuOpen] = useState(false);
   const [isIndFinanceiroSubmenuOpen, setIsIndFinanceiroSubmenuOpen] = useState(false);
   const [isIndLogisticaSubmenuOpen, setIsIndLogisticaSubmenuOpen] = useState(false);
+  const [isIndRHSubmenuOpen, setIsIndRHSubmenuOpen] = useState(false);
   const [isEnvioDocumentosSubmenuOpen, setIsEnvioDocumentosSubmenuOpen] = useState(false);
   const [, setIsAdminSubmenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
@@ -77,6 +78,9 @@ const DashboardLayout: React.FC = () => {
     }
     if (location.pathname.startsWith('/indicadores/logistica')) {
       setIsIndLogisticaSubmenuOpen(true);
+    }
+    if (location.pathname.startsWith('/indicadores/rh')) {
+      setIsIndRHSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/faturamento/protocolos')) {
       setIsEnvioDocumentosSubmenuOpen(true);
@@ -250,6 +254,17 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Indicadores'
       },
       {
+        title: "Movimentação de RH",
+        path: "Indicadores / Recursos Humanos / Movimentação de RH",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+          </svg>
+        ),
+        action: () => navigate('/indicadores/rh/movimentacao'),
+        show: selectedEnvironment === 'Indicadores'
+      },
+      {
         title: "Home Compras",
         path: "Compras / Home",
         icon: (
@@ -348,6 +363,7 @@ const DashboardLayout: React.FC = () => {
     '/indicadores/fluxo-de-caixa',
   ];
   const IND_LOGISTICA_PATHS = ['/indicadores/logistica/meta-faturamento'];
+  const IND_RH_PATHS = ['/indicadores/rh/movimentacao'];
   const FATURAMENTO_ENVIO_PATHS = ['/faturamento/protocolos'];
 
   // Get Breadcrumb text based on active route and environment
@@ -380,6 +396,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/faturamento/protocolos')) return `${env} / Envio de documentos / Envio NF Cliente`;
     if (path.startsWith('/faturamento')) return `${env} / Home`;
     if (path.startsWith('/indicadores/logistica/meta-faturamento')) return `${env} / Logística / Meta de faturamento`;
+    if (path.startsWith('/indicadores/rh/movimentacao')) return `${env} / Recursos Humanos / Movimentação de RH`;
     if (path.startsWith('/indicadores/fluxo-de-caixa')) return `${env} / Financeiro / Fluxo de Caixa`;
     if (path.startsWith('/indicadores')) return `${env} / Home Indicadores`;
     
@@ -519,6 +536,42 @@ const DashboardLayout: React.FC = () => {
                     <div className="nav-btn-left">
                       <NavIcon name="graph-up-arrow" sub />
                       <span className="nav-text">Meta de faturamento</span>
+                    </div>
+                  </Link>
+                </div>
+              </div>
+              )}
+
+              {allowedIndicadores.has('movimentacao-rh') && (
+              <div className="nav-group-wrapper" id="btn-menu-indicadores-rh">
+                <button
+                  type="button"
+                  className={`nav-btn ${isParentNavActive(IND_RH_PATHS) ? 'active-parent' : ''}`}
+                  onClick={() => setIsIndRHSubmenuOpen(!isIndRHSubmenuOpen)}
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="people" />
+                    <span className="nav-text">Recursos Humanos</span>
+                  </div>
+                  <ChevronSubmenu open={isIndRHSubmenuOpen} />
+                </button>
+
+                <div
+                  className="submenu-container"
+                  style={{
+                    display: isSidebarCollapsed ? undefined : 'block',
+                    maxHeight: isSidebarCollapsed ? undefined : (isIndRHSubmenuOpen ? '80px' : '0px'),
+                    overflow: 'hidden',
+                    transition: 'max-height 0.25s ease',
+                  }}
+                >
+                  <Link
+                    to="/indicadores/rh/movimentacao"
+                    className={`nav-btn sub-nav-btn ${isRouteActive('/indicadores/rh/movimentacao') ? 'active' : ''}`}
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="arrow-left-right" sub />
+                      <span className="nav-text">Movimentação de RH</span>
                     </div>
                   </Link>
                 </div>

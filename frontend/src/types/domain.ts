@@ -435,6 +435,66 @@ export interface CashflowDayDetailResponse {
   receber: CashflowDayReceberRow[];
 }
 
+export interface RHIndicadorQueryParams {
+  start?: string;
+  end?: string;
+  filial?: string;
+  categoria?: string;
+}
+
+export interface RHIndicadorCategoriaBucket {
+  count: number;
+  payroll: number;
+  percentual: number;
+}
+
+export interface RHIndicadorPorCategoria {
+  administrativo: RHIndicadorCategoriaBucket;
+  operacional: RHIndicadorCategoriaBucket;
+  motorista: RHIndicadorCategoriaBucket;
+  naoMapeado: RHIndicadorCategoriaBucket;
+}
+
+export interface RHIndicadorSeriePonto {
+  mes: number;
+  ano: number;
+  label: string;
+  headcount: number;
+  payroll: number;
+  admitidos: number;
+  desligados: number;
+  porCategoria: RHIndicadorPorCategoria;
+}
+
+export interface RHIndicadorLoteOption {
+  mes: number;
+  ano: number;
+  label: string;
+}
+
+export interface RHIndicadorSummary {
+  totalColaboradores: number;
+  payrollTotal: number;
+  salarioMedio: number;
+  admitidosPeriodo: number;
+  desligadosPeriodo: number;
+  turnoverPercentual: number;
+  variacaoHeadcountPercentual: number | null;
+  variacaoPayrollPercentual: number | null;
+  porCategoriaAtual: RHIndicadorPorCategoria;
+}
+
+export interface RHIndicadorResponse {
+  meta: {
+    filiaisDisponiveis: string[];
+    lotesDisponiveis: RHIndicadorLoteOption[];
+    periodoInicio: string | null;
+    periodoFim: string | null;
+  };
+  summary: RHIndicadorSummary;
+  series: RHIndicadorSeriePonto[];
+}
+
 export interface SendGerencialEmailParams {
   gerencialDate: string;
   to: string[];

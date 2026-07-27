@@ -18,6 +18,7 @@ ALL_BRANCHES = ['Ibiporã (Matriz)', 'Rondonópolis', 'Paranaguá']
 INDICADORES_KEYS = frozenset({
     'fluxo-caixa',
     'meta-faturamento',
+    'movimentacao-rh',
 })
 
 # Funções liberáveis por ambiente para operadores (admin sempre tem todas).
