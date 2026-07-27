@@ -255,6 +255,17 @@ class FaturamentoProtocoloTests(TestCase):
         protocolo = ProtocoloEnvio.objects.get(pk=response.data['id'])
         self.assertEqual(protocolo.nota_fiscal, '3455-3, 2323/3')
 
+    def test_nota_fiscal_com_espacos_em_volta_do_separador_e_normalizada(self):
+        response = self.api.post(
+            '/api/faturamento/protocolos/',
+            {'data': '2026-07-10', 'clienteId': self.other_cliente.pk, 'notaFiscal': '3434 / 2423, 2323/23232'},
+            format='json',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        protocolo = ProtocoloEnvio.objects.get(pk=response.data['id'])
+        self.assertEqual(protocolo.nota_fiscal, '3434/2423, 2323/23232')
+
     def test_limite_de_78_notas_por_protocolo(self):
         notas_78 = ', '.join(str(10000 + i) for i in range(78))
         response = self.api.post(
@@ -691,6 +702,31 @@ class FaturamentoProtocoloImportTests(TestCase):
         erros = [e['message'] for e in response.data['errors']]
         self.assertTrue(any('apenas números' in msg for msg in erros))
         self.assertEqual(ProtocoloEnvio.objects.count(), 0)
+
+    def test_importacao_aceita_nf_com_serie_e_espacos_em_volta_da_barra(self):
+        """Planilhas costumam ter NF de série digitada como "3434 / 2423" —
+        os espaços em volta do "/"/"-" não devem gerar erro na importação."""
+        response = self.api.post(
+            '/api/faturamento/protocolos/import_spreadsheet/',
+            {
+                'file': self._xlsx_file([
+                    ('10/07/2026', '3434 / 2423'),
+                    ('11/07/2026', '2323/23232'),
+                ]),
+                'clienteId': str(self.cliente.pk),
+            },
+            format='multipart',
+            **auth_headers(self.admin, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['created'], 2)
+        self.assertTrue(
+            ProtocoloEnvio.objects.filter(cliente=self.cliente, nota_fiscal='3434/2423').exists()
+        )
+        self.assertTrue(
+            ProtocoloEnvio.objects.filter(cliente=self.cliente, nota_fiscal='2323/23232').exists()
+        )
 
     def test_importa_expedicao_e_filial_opcionais(self):
         self.cliente.requer_expedicao = True

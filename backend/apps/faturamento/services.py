@@ -18,10 +18,17 @@ from .models import ClienteProtocolo, ProtocoloEnvio
 _NOTA_FISCAL_PATTERN = re.compile(r'^\d+([/-]\d+)*$')
 
 
+def _normalizar_nota_fiscal(nf: str) -> str:
+    """Remove espaços em volta do separador de série (comum em planilhas
+    Excel, ex.: "33559 / 33555") mantendo apenas "/" ou "-" entre os números."""
+    return re.sub(r'\s*([/-])\s*', r'\1', nf.strip())
+
+
 def parse_notas_fiscais(raw: str) -> list[str]:
     if not raw or not str(raw).strip():
         raise ValueError('Informe ao menos uma nota fiscal.')
-    notas = [nf.strip() for nf in str(raw).split(',') if nf.strip()]
+    notas = [_normalizar_nota_fiscal(nf) for nf in str(raw).split(',') if nf.strip()]
+    notas = [nf for nf in notas if nf]
     if not notas:
         raise ValueError('Informe ao menos uma nota fiscal.')
     invalidas = [nf for nf in notas if not _NOTA_FISCAL_PATTERN.match(nf)]
