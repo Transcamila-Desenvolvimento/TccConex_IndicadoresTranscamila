@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from django.db import transaction
 from django.db.models import Max
 
@@ -11,6 +13,10 @@ from .constants import (
 )
 from .models import ClienteProtocolo, ProtocoloEnvio
 
+# Números com dígitos e, opcionalmente, série indicada com "/" ou "-"
+# (ex.: 3455-3, 2323/3). Letras e outros símbolos continuam rejeitados.
+_NOTA_FISCAL_PATTERN = re.compile(r'^\d+([/-]\d+)*$')
+
 
 def parse_notas_fiscais(raw: str) -> list[str]:
     if not raw or not str(raw).strip():
@@ -18,11 +24,11 @@ def parse_notas_fiscais(raw: str) -> list[str]:
     notas = [nf.strip() for nf in str(raw).split(',') if nf.strip()]
     if not notas:
         raise ValueError('Informe ao menos uma nota fiscal.')
-    invalidas = [nf for nf in notas if not nf.isdigit()]
+    invalidas = [nf for nf in notas if not _NOTA_FISCAL_PATTERN.match(nf)]
     if invalidas:
         raise ValueError(
-            'O número da nota fiscal deve conter apenas números. '
-            f'Inválida(s): {", ".join(invalidas)}'
+            'O número da nota fiscal deve conter apenas números, podendo usar "/" ou "-" '
+            f'para indicar a série (ex.: 3455-3). Inválida(s): {", ".join(invalidas)}'
         )
     if len(notas) > MAX_NOTAS_FISCAIS:
         raise ValueError(f'O protocolo aceita no máximo {MAX_NOTAS_FISCAIS} notas fiscais.')

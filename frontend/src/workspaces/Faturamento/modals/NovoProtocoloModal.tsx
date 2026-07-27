@@ -51,8 +51,8 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
   const addNota = () => {
     const value = nfInput.trim();
     if (!value) return;
-    if (!/^\d+$/.test(value)) {
-      alert('O número da nota fiscal deve conter apenas números.');
+    if (!/^\d+([/-]\d+)*$/.test(value)) {
+      alert('O número da nota fiscal deve conter apenas números, podendo usar "/" ou "-" para indicar a série (ex.: 3455-3).');
       return;
     }
     if (notas.length >= MAX_NFS) {
@@ -227,8 +227,8 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
                 className="form-input"
                 style={{ flex: 1, minWidth: '140px' }}
                 value={nfInput}
-                onChange={(e) => setNfInput(e.target.value.replace(/\D/g, ''))}
-                placeholder="Número da NF (somente números)"
+                onChange={(e) => setNfInput(e.target.value.replace(/[^\d/-]/g, ''))}
+                placeholder="Número da NF (ex.: 3455 ou 3455-3)"
                 inputMode="numeric"
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addNota(); } }}
               />

@@ -401,8 +401,14 @@ def _parse_raw_rows(ws, headers_row: list[str], header_row_num: int, mapping: di
 
 
 def build_protocolos_export_xlsx(protocolos) -> bytes:
-    """Gera planilha (.xlsx) com os protocolos selecionados na tela (extração de relatório)."""
-    from openpyxl.styles import Alignment, Font, PatternFill
+    """Gera planilha (.xlsx) com os protocolos selecionados na tela (extração de relatório).
+
+    Uma linha por Nota Fiscal (em vez de concatenadas por vírgula em uma única
+    coluna) — os demais dados do protocolo se repetem em cada linha, facilitando
+    filtro/ordenação por NF no Excel. Números de NF podem incluir "/" ou "-"
+    para indicar série (ex.: 3455-3, 2323/3).
+    """
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
     wb = openpyxl.Workbook()
@@ -411,10 +417,12 @@ def build_protocolos_export_xlsx(protocolos) -> bytes:
 
     headers = [
         'Protocolo', 'Data de envio', 'Cliente', 'CNPJ', 'Expedição',
-        'Notas Fiscais', 'Indexador', 'Data de criação',
+        'Nota Fiscal', 'Indexador', 'Data de criação',
     ]
     header_fill = PatternFill(fill_type='solid', fgColor='118CC4')
     header_font = Font(bold=True, color='FFFFFF')
+    group_fill = PatternFill(fill_type='solid', fgColor='F1F5F9')
+    row_border = Border(bottom=Side(style='thin', color='E2E8F0'))
 
     ws.append(headers)
     for col in range(1, len(headers) + 1):
@@ -423,25 +431,35 @@ def build_protocolos_export_xlsx(protocolos) -> bytes:
         cell.font = header_font
         cell.alignment = Alignment(horizontal='center')
 
-    for protocolo in protocolos:
-        notas_fiscais = ', '.join(nf.strip() for nf in protocolo.nota_fiscal.split(',') if nf.strip())
-        ws.append([
-            f'{protocolo.data.year}-{protocolo.numero_sequencial:04d}',
-            protocolo.data,
-            protocolo.cliente.nome,
-            protocolo.cliente.cnpj or '-',
-            protocolo.expedicao or '-',
-            notas_fiscais,
-            protocolo.usuario_nome or '-',
-            timezone.localtime(protocolo.data_criacao).replace(tzinfo=None) if protocolo.data_criacao else None,
-        ])
-        ws.cell(ws.max_row, 2).number_format = 'DD/MM/YYYY'
-        if protocolo.data_criacao:
-            ws.cell(ws.max_row, 8).number_format = 'DD/MM/YYYY HH:MM'
+    for indice, protocolo in enumerate(protocolos):
+        notas_fiscais = [nf.strip() for nf in protocolo.nota_fiscal.split(',') if nf.strip()] or ['-']
+        fill_grupo = group_fill if indice % 2 == 1 else None
+        for nf in notas_fiscais:
+            ws.append([
+                f'{protocolo.data.year}-{protocolo.numero_sequencial:04d}',
+                protocolo.data,
+                protocolo.cliente.nome,
+                protocolo.cliente.cnpj or '-',
+                protocolo.expedicao or '-',
+                nf,
+                protocolo.usuario_nome or '-',
+                timezone.localtime(protocolo.data_criacao).replace(tzinfo=None) if protocolo.data_criacao else None,
+            ])
+            linha = ws.max_row
+            ws.cell(linha, 2).number_format = 'DD/MM/YYYY'
+            if protocolo.data_criacao:
+                ws.cell(linha, 8).number_format = 'DD/MM/YYYY HH:MM'
+            for col in range(1, len(headers) + 1):
+                cell = ws.cell(linha, col)
+                cell.border = row_border
+                if fill_grupo:
+                    cell.fill = fill_grupo
 
-    widths = [14, 14, 30, 20, 24, 30, 22, 20]
+    widths = [14, 14, 30, 20, 24, 16, 22, 20]
     for i, width in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = width
+
+    ws.freeze_panes = 'A2'
 
     output = BytesIO()
     wb.save(output)

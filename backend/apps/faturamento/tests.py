@@ -244,6 +244,17 @@ class FaturamentoProtocoloTests(TestCase):
         self.assertIn('apenas números', str(response.data))
         self.assertEqual(ProtocoloEnvio.objects.count(), 0)
 
+    def test_nota_fiscal_com_serie_barra_ou_hifen_e_aceita(self):
+        response = self.api.post(
+            '/api/faturamento/protocolos/',
+            {'data': '2026-07-10', 'clienteId': self.other_cliente.pk, 'notaFiscal': '3455-3, 2323/3'},
+            format='json',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        protocolo = ProtocoloEnvio.objects.get(pk=response.data['id'])
+        self.assertEqual(protocolo.nota_fiscal, '3455-3, 2323/3')
+
     def test_limite_de_78_notas_por_protocolo(self):
         notas_78 = ', '.join(str(10000 + i) for i in range(78))
         response = self.api.post(
@@ -509,11 +520,15 @@ class FaturamentoProtocoloTests(TestCase):
         rows = list(sheet.iter_rows(values_only=True))
         self.assertEqual(
             rows[0],
-            ('Protocolo', 'Data de envio', 'Cliente', 'CNPJ', 'Expedição', 'Notas Fiscais', 'Indexador', 'Data de criação'),
+            ('Protocolo', 'Data de envio', 'Cliente', 'CNPJ', 'Expedição', 'Nota Fiscal', 'Indexador', 'Data de criação'),
         )
-        protocolos_numeros = {row[0] for row in rows[1:]}
-        self.assertIn('2026-0001', protocolos_numeros)
-        self.assertIn('2026-0002', protocolos_numeros)
+        # Uma linha por NF: protocolo1 tem 2 NFs, protocolo2 tem 1 NF → 3 linhas de dados.
+        data_rows = rows[1:]
+        self.assertEqual(len(data_rows), 3)
+        protocolo1_linhas = [row for row in data_rows if row[0] == '2026-0001']
+        protocolo2_linhas = [row for row in data_rows if row[0] == '2026-0002']
+        self.assertEqual({row[5] for row in protocolo1_linhas}, {'1001', '1002'})
+        self.assertEqual({row[5] for row in protocolo2_linhas}, {'2001'})
 
     def test_bulk_export_excel_sem_ids_retorna_erro_400(self):
         response = self.api.get(
