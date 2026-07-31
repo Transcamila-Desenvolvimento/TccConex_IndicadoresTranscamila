@@ -48,7 +48,10 @@ api.interceptors.request.use((config) => {
   const env = localStorage.getItem(ENV_KEY);
   const filial = localStorage.getItem(FILIAL_KEY);
   if (env && !config.headers['X-Prothon-Environment']) config.headers['X-Prothon-Environment'] = env;
-  if (filial && !config.headers['X-Prothon-Filial']) config.headers['X-Prothon-Filial'] = filial;
+  // Percent-encode: proxies (Azure) podem corromper UTF-8 em headers (ex.: Ibiporã).
+  if (filial && !config.headers['X-Prothon-Filial']) {
+    config.headers['X-Prothon-Filial'] = encodeURIComponent(filial);
+  }
 
   return config;
 });

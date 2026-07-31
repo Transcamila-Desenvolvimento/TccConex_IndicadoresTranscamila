@@ -6,7 +6,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.mixins import ModuleScopedViewMixin
-from apps.accounts.permissions import get_request_context
+from apps.accounts.permissions import (
+    allowed_filiais_for_module,
+    get_request_context,
+    resolve_filial_name,
+)
 from apps.audit.services import record_audit
 from apps.financeiro.pagination import ReportPagination
 
@@ -56,7 +60,8 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     def _session_filial(self) -> str:
         _, filial = get_request_context(self.request)
-        return filial
+        allowed = allowed_filiais_for_module(self.request.user, 'SGQ')
+        return resolve_filial_name(filial, allowed) or filial
 
     def create(self, request, *args, **kwargs):
         denied = _funcao_required_response(request, 'criar-pesquisas', _CRIAR_PESQUISAS_DETAIL)

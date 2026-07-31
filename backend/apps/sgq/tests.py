@@ -250,6 +250,18 @@ class PesquisaSatisfacaoTests(APITestCase):
         response = self.client.get('/api/sgq/pesquisas-satisfacao/', **_headers(filial='Paranaguá'))
         self.assertEqual(response.status_code, 403)
 
+    def test_filial_percent_encoded_no_header_e_aceita(self):
+        """Azure/proxies podem exigir ASCII no header — frontend envia encodeURIComponent."""
+        from urllib.parse import quote
+
+        encoded = quote(IBIPORA, safe='')
+        response = self.client.get(
+            '/api/sgq/pesquisas-satisfacao/',
+            HTTP_X_PROTHON_ENVIRONMENT='SGQ',
+            HTTP_X_PROTHON_FILIAL=encoded,
+        )
+        self.assertEqual(response.status_code, 200)
+
     def test_pesquisas_isoladas_por_filial(self):
         """Pesquisa lançada em uma filial não aparece para outra filial — visão de operador."""
         self.client.force_authenticate(self.operador)

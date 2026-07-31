@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import unicodedata
+from urllib.parse import unquote
+
 from rest_framework.permissions import BasePermission
 
 from .constants import ADMIN_ENVIRONMENT, branches_for_module, normalize_environment, sanitize_environments
@@ -22,9 +25,23 @@ ENV_HEADER = 'HTTP_X_PROTHON_ENVIRONMENT'
 FILIAL_HEADER = 'HTTP_X_PROTHON_FILIAL'
 
 
+def _decode_filial_header(raw: str) -> str:
+    """Decodifica filial do header (ASCII percent-encoded ou texto cru)."""
+    value = (raw or '').strip()
+    if not value:
+        return ''
+    # Frontend envia encodeURIComponent para sobreviver a proxies que quebram UTF-8 em headers.
+    if '%' in value:
+        try:
+            value = unquote(value)
+        except Exception:
+            pass
+    return unicodedata.normalize('NFC', value)
+
+
 def get_request_context(request) -> tuple[str, str]:
     env = (request.META.get(ENV_HEADER) or '').strip()
-    filial = (request.META.get(FILIAL_HEADER) or '').strip()
+    filial = _decode_filial_header(request.META.get(FILIAL_HEADER) or '')
     return env, filial
 
 
@@ -41,6 +58,21 @@ def db_values_for_filiais(filial_names: list[str]) -> list[str]:
     return sorted(values)
 
 
+def resolve_filial_name(filial: str, allowed_names: list[str]) -> str | None:
+    """Resolve nome canônico da filial (NFC + aliases) dentro das permitidas."""
+    if not filial:
+        return None
+    needle = unicodedata.normalize('NFC', filial.strip())
+    for name in allowed_names:
+        canonical = unicodedata.normalize('NFC', name)
+        if needle == canonical:
+            return name
+        for alias in FILIAL_DB_ALIASES.get(name, [name]):
+            if needle == unicodedata.normalize('NFC', alias):
+                return name
+    return None
+
+
 def user_has_module_access(user, module: str) -> bool:
     if not user.is_authenticated:
         return False
@@ -55,7 +87,8 @@ def user_has_module_access(user, module: str) -> bool:
 def user_has_filial_access(user, module: str, filial: str) -> bool:
     if not filial:
         return module in GLOBAL_ENVIRONMENTS
-    return filial in allowed_filiais_for_module(user, module)
+    allowed = allowed_filiais_for_module(user, module)
+    return resolve_filial_name(filial, allowed) is not None
 
 
 def check_module_request_access(
@@ -104,10 +137,11 @@ def apply_filial_scope(qs, user, module: str, filial_field: str | None, request,
         return qs.filter(**{f'{filial_field}__in': db_vals})
 
     _, session_filial = get_request_context(request)
-    if not session_filial or session_filial not in allowed_names:
+    canonical = resolve_filial_name(session_filial, allowed_names)
+    if not canonical:
         return qs.none()
 
-    db_vals = db_values_for_filiais([session_filial])
+    db_vals = db_values_for_filiais([canonical])
     return qs.filter(**{f'{filial_field}__in': db_vals})
 
 
