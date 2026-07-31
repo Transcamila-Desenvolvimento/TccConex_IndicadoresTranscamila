@@ -1,7 +1,8 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { ADMIN_ENVIRONMENT } from '../constants/environments';
+import { ADMIN_ENVIRONMENT, environmentRequiresFilial } from '../constants/environments';
+import { branchesForModule } from '../constants/filiais';
 import { useMinLoaderVisibility } from '../hooks/useMinLoaderVisibility';
 import { lazyWithMinDuration } from '../utils/pageLoaderTiming';
 
@@ -49,12 +50,20 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 // Route Guard: Requires environment selection
 const EnvironmentRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { selectedEnvironment, isLoading, user } = useAuth();
+  const { selectedEnvironment, selectedFilial, isLoading, user } = useAuth();
   const showLoader = useMinLoaderVisibility(isLoading);
 
   if (showLoader) return <PageLoader />;
   if (user?.mustChangePassword) return <Navigate to="/change-password" replace />;
   if (!selectedEnvironment) return <Navigate to="/select-environment" replace />;
+
+  // SGQ (e futuros módulos com filial) — sessão sem filial válida → reescolher ambiente.
+  if (environmentRequiresFilial(selectedEnvironment)) {
+    const allowed = branchesForModule(selectedEnvironment);
+    if (!selectedFilial || !allowed.includes(selectedFilial)) {
+      return <Navigate to="/select-environment" replace />;
+    }
+  }
 
   return <>{children}</>;
 };

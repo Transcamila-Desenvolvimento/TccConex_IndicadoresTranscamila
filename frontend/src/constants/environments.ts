@@ -5,6 +5,12 @@ export const LEGACY_ADMIN_ENVIRONMENT = 'Administração' as const;
 /** Ordem canônica dos ambientes, crescente pelo código oficial (ver ENVIRONMENT_CODES). */
 export const ACTIVE_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Indicadores', 'Financeiro', 'Compras', 'RH', 'Faturamento', 'SGQ'] as const;
 
+/**
+ * Ambientes sem filial obrigatória na sessão (visão consolidada).
+ * SGQ exige filial — pesquisas são segregadas por unidade.
+ * Mantém paridade com backend/apps/accounts/permissions.py (GLOBAL_ENVIRONMENTS),
+ * com Indicadores ainda consolidado no frontend (APIs usam require_filial=False).
+ */
 export type ActiveEnvironment = (typeof ACTIVE_ENVIRONMENTS)[number];
 
 /** Código numérico oficial de cada ambiente, usado em vez de siglas (ex.: "00" ao invés de "ADM"). */
@@ -20,6 +26,20 @@ export const ENVIRONMENT_CODES: Record<ActiveEnvironment, string> = {
 
 export function normalizeEnvironment(env: string): string {
   return env === LEGACY_ADMIN_ENVIRONMENT ? ADMIN_ENVIRONMENT : env;
+}
+
+export const GLOBAL_SESSION_ENVIRONMENTS: readonly string[] = [
+  ADMIN_ENVIRONMENT,
+  'Financeiro',
+  'Indicadores',
+  'Compras',
+  'RH',
+  'Faturamento',
+];
+
+export function environmentRequiresFilial(env: string | null | undefined): boolean {
+  if (!env) return false;
+  return !GLOBAL_SESSION_ENVIRONMENTS.includes(normalizeEnvironment(env));
 }
 
 export function filterActiveEnvironments(environments: string[] | undefined): ActiveEnvironment[] {

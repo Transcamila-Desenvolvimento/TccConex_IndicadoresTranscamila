@@ -9,11 +9,12 @@ import {
   ADMIN_ENVIRONMENT,
   ACTIVE_ENVIRONMENTS,
   ENVIRONMENT_CODES,
+  GLOBAL_SESSION_ENVIRONMENTS,
 } from '../constants/environments';
 import { branchesForModule } from '../constants/filiais';
 import logoImg from '../assets/Logo_TccConex.png';
 
-const GLOBAL_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento'];
+const GLOBAL_ENVIRONMENTS = GLOBAL_SESSION_ENVIRONMENTS;
 
 const NOTION_PROJECT_URL =
   'https://transcamila-miguel.notion.site/ebd//37322feb02fe8012ba34da103c4ef203';
