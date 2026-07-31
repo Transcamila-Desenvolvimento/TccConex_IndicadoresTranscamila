@@ -19,6 +19,8 @@
 
   --primary-color: #0f85c1;
   --primary-hover: #0c6a99;
+  /* Azul dos indicadores (aba ativa, bordas de card, etc.) */
+  --ind-accent: #118CC4;
 
   --status-pending: #f59e0b;
   --status-syncing: #0f85c1;
@@ -44,22 +46,24 @@ body {
 }
 
 /* Telas menores que Full HD: reduz a escala da UI inteira.
+   Degraus ~110% dos valores anteriores (0.9/0.85/0.8/0.72),
+   para a UI não ficar pequena demais abaixo de 1920×1080.
    (guardado por @supports para navegadores sem a propriedade zoom) */
 @supports (zoom: 0.9) {
   @media (max-width: 1706px) {
-    :root { --app-zoom: 0.9; }
+    :root { --app-zoom: 0.99; }
   }
 
   @media (max-width: 1526px) {
-    :root { --app-zoom: 0.85; }
+    :root { --app-zoom: 0.94; }
   }
 
   @media (max-width: 1380px) {
-    :root { --app-zoom: 0.8; }
+    :root { --app-zoom: 0.88; }
   }
 
   @media (max-width: 1152px) {
-    :root { --app-zoom: 0.72; }
+    :root { --app-zoom: 0.79; }
   }
 }
 
@@ -2742,19 +2746,131 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   color: #dc2626;
 }
 
-/* Avaliação (Pesquisa de Satisfação / SGQ) — ícone + texto, sem pill/borda.
-   A distinção entre níveis vem da forma do ícone (não só da cor), mais sóbrio para um ERP. */
+/* Avaliação (Pesquisa de Satisfação / SGQ) — círculo sólido pastel chapado
+   (estilo escala NPS) + glifo branco; texto neutro ao lado. */
 .sgq-avaliacao-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #334155;
+  white-space: nowrap;
 }
 
 .sgq-avaliacao-badge i {
-  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
   line-height: 1;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.sgq-avaliacao-badge.is-ruim i {
+  background-color: #ef7a6e;
+}
+
+.sgq-avaliacao-badge.is-regular i {
+  background-color: #f0b24a;
+}
+
+.sgq-avaliacao-badge.is-bom i {
+  background-color: #a8d45a;
+}
+
+.sgq-avaliacao-badge.is-otimo i {
+  background-color: #5cbf7a;
+}
+
+.sgq-col-avaliacao {
+  width: 7%;
+  text-align: left;
+  padding-left: 6px !important;
+  padding-right: 4px !important;
+}
+
+.sgq-col-avaliacao .sgq-avaliacao-badge {
+  gap: 4px;
+  font-size: 12px;
+}
+
+/* Cabeçalho fixo ao rolar a lista de pesquisas de satisfação.
+   border-spacing vertical do .reports-table faz o sticky “tremular” no scroll —
+   aqui o spacing fica 0 e o vão entre linhas volta como borda branca. */
+.sgq-pesquisas-table-container {
+  min-height: 0;
+}
+
+.sgq-pesquisas-table.reports-table {
+  border-spacing: 0;
+}
+
+.sgq-pesquisas-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background-color: #f3f4f6 !important;
+  box-shadow: inset 0 -1px 0 #e5e7eb;
+}
+
+.sgq-pesquisas-table tbody tr + tr td {
+  border-top: 4px solid #ffffff !important;
+}
+
+.sgq-lancado-por-badge {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.sgq-filters-bar .reports-filter-left {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sgq-filters-bar .reports-search-wrapper input {
+  width: 160px;
+}
+
+.sgq-filters-bar .reports-select-wrapper select {
+  max-width: 140px;
+  padding-left: 8px;
+  padding-right: 24px;
+  font-size: 12.5px;
+}
+
+.sgq-filters-bar .sgq-filter-date {
+  height: 36px;
+  width: 124px;
+  padding: 0 8px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  font-size: 12.5px;
+  color: #334155;
+  outline: none;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.sgq-filters-bar .sgq-filter-date:focus {
+  border-color: #0076ce;
 }
 
 /* Status discreto com bolinha colorida (sem pill de fundo) */
@@ -4421,8 +4537,8 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 }
 
 .reports-tab-btn.active {
-  color: #118CC4;
-  border-bottom-color: #118CC4;
+  color: var(--ind-accent, #118CC4);
+  border-bottom-color: var(--ind-accent, #118CC4);
   font-weight: 600;
 }
 
@@ -4972,7 +5088,8 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   color: #64748b;
 }
 
-.cashflow-date-filter input[type="date"] {
+.cashflow-date-filter input[type="date"],
+.cashflow-date-filter input[type="month"] {
   height: 34px;
   padding: 0 10px;
   border: 1px solid #e2e8f0;
@@ -4982,7 +5099,8 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   background: #fff;
 }
 
-.cashflow-date-filter input[type="date"]:focus {
+.cashflow-date-filter input[type="date"]:focus,
+.cashflow-date-filter input[type="month"]:focus {
   outline: none;
   border-color: #118CC4;
   box-shadow: 0 0 0 2px rgba(17, 140, 196, 0.15);
@@ -5270,7 +5388,7 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   min-height: 280px;
 }
 
-/* Indicador Movimentação de RH — cards de categoria e grid de gráficos */
+/* Indicador Movimentação de RH — cards de categoria */
 .rh-ind-categoria-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5287,25 +5405,13 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 .rh-ind-categoria-card {
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-left: 4px solid #cbd5e1;
+  border-left: 4px solid #118CC4;
   border-radius: 10px;
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-
-.rh-ind-categoria-card--administrativo {
-  border-left-color: #1d4ed8;
-}
-
-.rh-ind-categoria-card--operacional {
-  border-left-color: #d97706;
-}
-
-.rh-ind-categoria-card--motorista {
-  border-left-color: #16a34a;
 }
 
 .rh-ind-categoria-label {
@@ -5330,6 +5436,48 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   font-variant-numeric: tabular-nums;
 }
 
+.rh-ind-categoria-status {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #eef2f7;
+}
+
+.rh-ind-categoria-status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.rh-ind-categoria-status-item strong {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+}
+
+.rh-ind-categoria-status-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #94a3b8;
+}
+
+.rh-ind-categoria-status-item.is-ativo strong {
+  color: #16a34a;
+}
+
+.rh-ind-categoria-status-item.is-afastado strong {
+  color: #d97706;
+}
+
 .rh-ind-charts-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5344,6 +5492,375 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   .rh-ind-charts-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Indicadores com 5 KPIs (RH / Satisfação) — uma fileira equilibrada */
+.sgq-ind-kpi-grid,
+.rh-ind-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1200px) {
+  .sgq-ind-kpi-grid,
+  .rh-ind-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .sgq-ind-kpi-grid,
+  .rh-ind-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Meta de Faturamento */
+.meta-fat-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1200px) {
+  .meta-fat-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .meta-fat-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.meta-fat-filial-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+@media (max-width: 1100px) {
+  .meta-fat-filial-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .meta-fat-filial-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.meta-fat-filial-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-left: 2.5px solid var(--ind-accent, #118CC4);
+  border-radius: 8px;
+}
+
+.meta-fat-filial-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.meta-fat-filial-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.meta-fat-filial-hint {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* Tabela diária — alinhada ao reports-table do Fluxo de Caixa */
+.meta-fat-daily-card {
+  flex: none;
+  min-height: auto;
+}
+
+.meta-fat-daily-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 16px;
+}
+
+.meta-fat-daily-unit {
+  font-size: 12px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.meta-fat-daily-scroll {
+  overflow-x: auto;
+}
+
+.meta-fat-daily-table {
+  min-width: 1100px;
+}
+
+.meta-fat-daily-table .meta-fat-col-dia {
+  text-align: center;
+  font-weight: 600;
+  width: 48px;
+  min-width: 48px;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
+}
+
+.meta-fat-daily-table thead .meta-fat-col-dia {
+  background: #f8fafc;
+  z-index: 3;
+}
+
+.meta-fat-daily-table tbody tr:nth-child(odd) .meta-fat-col-dia {
+  background: #fff;
+}
+
+.meta-fat-daily-table tbody tr:nth-child(even) .meta-fat-col-dia {
+  background: #f8fafc;
+}
+
+.meta-fat-daily-table tbody tr:hover .meta-fat-col-dia {
+  background: #f1f5f9;
+}
+
+.meta-fat-daily-table .meta-fat-group-start {
+  border-left: 1px solid #e2e8f0;
+}
+
+.meta-fat-daily-table tbody tr.is-weekend td {
+  color: #94a3b8;
+}
+
+.meta-fat-daily-table td.is-up,
+.meta-fat-daily-table td.is-down {
+  font-variant-numeric: tabular-nums;
+}
+
+.meta-fat-daily-table td.is-up {
+  color: #15803d;
+}
+
+.meta-fat-daily-table td.is-down {
+  color: #b91c1c;
+}
+
+.meta-fat-obs-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.meta-fat-obs-badge.is-up {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.meta-fat-obs-badge.is-down {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.meta-fat-daily-table tfoot .meta-fat-total-row td {
+  font-weight: 700;
+  border-top: 2px solid #cbd5e1;
+  background: #f8fafc;
+}
+
+.meta-fat-daily-table tfoot .meta-fat-col-dia {
+  background: #f8fafc;
+}
+
+/* Configuração de metas — Financeiro */
+.meta-fat-ano-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meta-fat-ano-step {
+  min-width: 36px;
+  padding-left: 10px;
+  padding-right: 10px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.meta-fat-config-card {
+  flex: none;
+  min-height: auto;
+  max-width: 560px;
+}
+
+.meta-fat-config-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 8px;
+}
+
+.meta-fat-config-summary-label {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.meta-fat-config-summary-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.meta-fat-config-feedback {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.meta-fat-config-feedback.is-ok {
+  color: #15803d;
+}
+
+.meta-fat-config-feedback.is-error {
+  color: #b91c1c;
+}
+
+.meta-fat-config-table {
+  min-width: 0;
+}
+
+.meta-fat-config-input {
+  width: 100%;
+  max-width: 180px;
+  margin-left: auto;
+  display: block;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.meta-fat-config-input:focus {
+  outline: none;
+  border-color: var(--ind-accent, #118CC4);
+  box-shadow: 0 0 0 3px rgba(17, 140, 196, 0.15);
+}
+
+.meta-fat-config-table tfoot .meta-fat-config-total-row td {
+  font-weight: 700;
+  border-top: 2px solid #cbd5e1;
+  background: #f8fafc;
+}
+
+/* Tabela Perfil das Avaliações — estética alinhada aos indicadores */
+.sgq-perfil-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sgq-perfil-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  padding: 8px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.sgq-perfil-meta-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.sgq-perfil-meta-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.sgq-perfil-table {
+  table-layout: fixed;
+}
+
+.sgq-perfil-table thead tr:first-child th.sgq-perfil-col {
+  text-align: center;
+}
+
+/* Separação suave entre grupos Ótimo / Bom / Regular / Ruim */
+.sgq-perfil-table th.sgq-perfil-group-start,
+.sgq-perfil-table td.sgq-perfil-group-start {
+  border-left: 1px solid #cbd5e1 !important;
+}
+
+.sgq-perfil-table .sgq-perfil-col.is-otimo::before,
+.sgq-perfil-table .sgq-perfil-col.is-bom::before,
+.sgq-perfil-table .sgq-perfil-col.is-regular::before,
+.sgq-perfil-table .sgq-perfil-col.is-ruim::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.sgq-perfil-table .sgq-perfil-col.is-otimo::before { background: #16a34a; }
+.sgq-perfil-table .sgq-perfil-col.is-bom::before { background: #0ea5e9; }
+.sgq-perfil-table .sgq-perfil-col.is-regular::before { background: #f59e0b; }
+.sgq-perfil-table .sgq-perfil-col.is-ruim::before { background: #dc2626; }
+
+.sgq-perfil-table .sgq-perfil-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8 !important;
+  text-align: center;
+}
+
+.sgq-perfil-table .sgq-perfil-sub::before {
+  display: none !important;
+}
+
+.sgq-perfil-table td.num,
+.sgq-perfil-table th.sgq-perfil-sub {
+  text-align: center;
+}
+
+.sgq-perfil-pct {
+  color: #64748b;
+}
+
+.sgq-perfil-total-row td {
+  background: #f8fafc !important;
+  border-top: 1px solid #e2e8f0 !important;
 }
 
 .cashflow-table-card {
@@ -7011,16 +7528,20 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 .sgq-lote-backdrop {
   align-items: stretch !important;
   justify-content: stretch !important;
-  padding: 20px !important;
+  padding: 12px !important;
 }
 
 .sgq-lote-modal-card {
   width: 100%;
   max-width: none;
   height: 100%;
-  max-height: 100%;
+  max-height: none;
   display: flex;
   flex-direction: column;
+}
+
+.sgq-lote-modal-card .modal-header {
+  align-items: flex-start;
 }
 
 .sgq-lote-modal-body {
@@ -7029,12 +7550,11 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  gap: 12px;
 }
 
-/* .modal-footer normalmente herda padding horizontal do .modal-body pai; aqui o footer
-   fica fora do body (para não rolar junto com a grade), então precisa do próprio padding. */
 .sgq-lote-modal-card > .modal-footer {
-  padding: 16px 20px 20px;
+  padding: 14px 20px 16px;
   margin-top: 0;
   flex-shrink: 0;
 }
@@ -7042,29 +7562,32 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 .sgq-lote-table-wrapper {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
+  background: #fff;
 }
 
 .sgq-lote-table {
   width: 100%;
   table-layout: fixed;
-  border-collapse: collapse;
-  font-size: 14px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
 }
 
 .sgq-lote-table thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
-  background-color: #f8fafc;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
+  z-index: 2;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 10.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
-  padding: 12px 10px;
+  letter-spacing: 0.02em;
+  padding: 8px 4px;
   border-bottom: 1px solid #e2e8f0;
   text-align: left;
   white-space: nowrap;
@@ -7072,77 +7595,141 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   text-overflow: ellipsis;
 }
 
-col.sgq-lote-col-index { width: 3%; }
-col.sgq-lote-col-data { width: 8%; }
-col.sgq-lote-col-cliente { width: 8%; }
-col.sgq-lote-col-motorista { width: 24%; }
-col.sgq-lote-col-doc { width: 7%; }
-col.sgq-lote-col-avaliacao { width: 8%; }
-col.sgq-lote-col-remove { width: 3%; }
+col.sgq-lote-col-index { width: 2%; }
+col.sgq-lote-col-data { width: 8.5%; }
+col.sgq-lote-col-cliente { width: 6%; }
+col.sgq-lote-col-motorista { width: 10%; }
+col.sgq-lote-col-doc { width: 8%; }
+col.sgq-lote-col-recusou { width: 3.5%; }
+col.sgq-lote-col-avaliacao { width: 6.5%; }
+col.sgq-lote-col-analise { width: 12%; }
+col.sgq-lote-col-remove { width: 2%; }
 
 .sgq-lote-th-center { text-align: center; }
 
 .sgq-lote-table tbody td {
   border-bottom: 1px solid #f1f5f9;
-  padding: 0;
-  height: 52px;
+  padding: 2px 3px;
+  vertical-align: middle;
+  background: #fff;
+  overflow: hidden;
+}
+
+.sgq-lote-table tbody tr:nth-child(even) td {
+  background: #fafbfc;
 }
 
 .sgq-lote-table tbody tr:hover td {
-  background-color: #f8fafc;
+  background: #f8fafc;
+}
+
+.sgq-lote-table tbody tr.has-errors td {
+  background: #fff7f7;
 }
 
 .sgq-lote-index {
   text-align: center;
   color: #94a3b8;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+}
+
+.sgq-lote-cell-center {
+  text-align: center;
+}
+
+.sgq-lote-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #118CC4;
+  cursor: pointer;
+  margin: 0;
+}
+
+.sgq-lote-input {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: #0f172a;
+  outline: none;
+  box-sizing: border-box;
+}
+
+input[type="date"].sgq-lote-input {
+  padding-right: 2px;
+}
+
+select.sgq-lote-input {
+  cursor: pointer;
+  padding-right: 18px;
+}
+
+select.sgq-lote-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sgq-lote-input:hover:not(:disabled) {
+  border-color: #e2e8f0;
+  background: #fff;
+}
+
+.sgq-lote-input:focus {
+  border-color: #118CC4;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(17, 140, 196, 0.15);
+}
+
+.sgq-lote-input.is-invalid {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.sgq-lote-input.is-invalid:focus {
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
 }
 
 .sgq-lote-remove {
   text-align: center;
 }
 
-.sgq-lote-input {
-  display: block;
-  width: 100%;
-  height: 52px;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  font-family: inherit;
-  font-size: 14px;
-  color: #1e293b;
-  outline: none;
-  box-shadow: none;
-  box-sizing: border-box;
+.sgq-lote-add-row {
+  align-self: flex-start;
+  flex-shrink: 0;
 }
 
-select.sgq-lote-input {
-  cursor: pointer;
-  padding-right: 26px;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 12px;
+.sgq-lote-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-.sgq-lote-input:focus {
-  background-color: #eff6ff;
-  box-shadow: inset 0 0 0 2px #118CC4;
-  position: relative;
-  z-index: 1;
+.sgq-lote-draft-hint {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: #64748b;
 }
 
-.sgq-lote-input.is-invalid {
-  background-color: #fef2f2;
-}
 
-.sgq-lote-input.is-invalid:focus {
-  box-shadow: inset 0 0 0 2px #dc2626;
+.sgq-lote-error {
+  padding: 10px 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #b91c1c;
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 /* Form input/select padrão para modais */
@@ -7179,6 +7766,10 @@ textarea.form-input {
 
 .form-grid.two-cols {
   grid-template-columns: 1fr 1fr;
+}
+
+.form-grid.three-cols {
+  grid-template-columns: 1fr 1fr 1fr;
 }
 
 /* Botões de ícone pequenos para ações em linha */

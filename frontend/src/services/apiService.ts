@@ -2,10 +2,13 @@ import axios from 'axios';
 import type {
   User, Role, SystemLog, PagarRow, ReceberRow, AgingRow, ReportBatch,
   BillingRecord, CashAdjustment, BankAccount, BalanceHistoryEntry,
+  MetaFaturamentoConfigPayload, MetaFaturamentoConfigResponse,
   CalendarSystemEventsResponse, CalendarPersonalEvent,
   IndicadorKpi, IndicadorFilialRow,
   CashflowQueryParams, CashflowResponse, CashflowDayDetailParams, CashflowDayDetailResponse,
   RHIndicadorQueryParams, RHIndicadorResponse, RHIndicadorCategoriaBucket, RHIndicadorPorCategoria,
+  MetaFaturamentoQueryParams, MetaFaturamentoResponse,
+  SgqSatisfacaoIndicadorQueryParams, SgqSatisfacaoIndicadorResponse,
   SendGerencialEmailParams, SendGerencialEmailResponse,
   ReportImportResult, ReportImportType,
   PaginatedResponse, ReportQueryParams, ReportFacets,
@@ -25,6 +28,7 @@ import type {
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
   ProtocoloImportParams, ProtocoloImportResult,
   SgqPesquisa, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
+  SgqLoteDraft, SgqLoteDraftRow,
 } from '../types/domain';
 import { filterActiveEnvironments, ACTIVE_ENVIRONMENTS } from '../constants/environments';
 
@@ -435,11 +439,20 @@ function normalizeCashflowResponse(raw: any): CashflowResponse {
   };
 }
 
+function normalizeRHIndicadorStatusBucket(raw: any) {
+  return {
+    count: Number(raw?.count ?? 0),
+    payroll: Number(raw?.payroll ?? 0),
+  };
+}
+
 function normalizeRHIndicadorCategoriaBucket(raw: any): RHIndicadorCategoriaBucket {
   return {
     count: Number(raw?.count ?? 0),
     payroll: Number(raw?.payroll ?? 0),
     percentual: Number(raw?.percentual ?? 0),
+    ativos: normalizeRHIndicadorStatusBucket(raw?.ativos),
+    afastados: normalizeRHIndicadorStatusBucket(raw?.afastados),
   };
 }
 
@@ -498,6 +511,17 @@ function buildRHIndicadorQueryParams(params: RHIndicadorQueryParams = {}) {
   if (params.end) query.end = params.end;
   if (params.filial && params.filial !== 'Todas') query.filial = params.filial;
   if (params.categoria && params.categoria !== 'Todas') query.categoria = params.categoria;
+  return query;
+}
+
+function buildSgqSatisfacaoIndicadorQueryParams(params: SgqSatisfacaoIndicadorQueryParams = {}) {
+  const query: Record<string, string> = {};
+  if (params.filial) query.filial = params.filial;
+  if (params.motorista) query.motorista = params.motorista;
+  if (params.dataInicio) query.dataInicio = params.dataInicio;
+  if (params.dataFim) query.dataFim = params.dataFim;
+  if (params.cliente) query.cliente = params.cliente;
+  if (params.avaliacao) query.avaliacao = params.avaliacao;
   return query;
 }
 
@@ -602,6 +626,8 @@ function buildSgqPesquisaQueryParams(params: SgqPesquisaQueryParams = {}) {
   if (params.pageSize) query.page_size = params.pageSize;
   if (params.search) query.search = params.search;
   if (params.cliente) query.cliente = params.cliente;
+  if (params.motorista) query.motorista = params.motorista;
+  if (params.criadoPor) query.criadoPor = params.criadoPor;
   if (params.avaliacao) query.avaliacao = params.avaliacao;
   if (params.dataInicio) query.dataInicio = params.dataInicio;
   if (params.dataFim) query.dataFim = params.dataFim;
@@ -898,6 +924,16 @@ export const apiService = {
     await api.delete(`/api/financeiro/billing/${id}/`);
   },
 
+  async getMetasFaturamento(ano: number): Promise<MetaFaturamentoConfigResponse> {
+    const { data } = await api.get('/api/financeiro/metas-faturamento/', { params: { ano } });
+    return data as MetaFaturamentoConfigResponse;
+  },
+
+  async saveMetasFaturamento(payload: MetaFaturamentoConfigPayload): Promise<MetaFaturamentoConfigResponse> {
+    const { data } = await api.put('/api/financeiro/metas-faturamento/', payload);
+    return data as MetaFaturamentoConfigResponse;
+  },
+
   async getCashAdjustments(params: AdjustmentQueryParams = {}): Promise<PaginatedResponse<CashAdjustment>> {
     const { data } = await api.get('/api/financeiro/adjustments/', { params: buildAdjustmentQueryParams(params) });
     return paginatedFromResponse(data, normalizeCashAdjustment);
@@ -1028,6 +1064,25 @@ export const apiService = {
     return normalizeRHIndicadorResponse(data);
   },
 
+  async getIndicadorSgqSatisfacao(
+    params: SgqSatisfacaoIndicadorQueryParams = {},
+  ): Promise<SgqSatisfacaoIndicadorResponse> {
+    const { data } = await api.get('/api/indicadores/sgq/satisfacao/', {
+      params: buildSgqSatisfacaoIndicadorQueryParams(params),
+    });
+    return data as SgqSatisfacaoIndicadorResponse;
+  },
+
+  async getIndicadorMetaFaturamento(
+    params: MetaFaturamentoQueryParams = {},
+  ): Promise<MetaFaturamentoResponse> {
+    const query: Record<string, number> = {};
+    if (params.ano != null) query.ano = params.ano;
+    if (params.mes != null) query.mes = params.mes;
+    const { data } = await api.get('/api/indicadores/logistica/meta-faturamento/', { params: query });
+    return data as MetaFaturamentoResponse;
+  },
+
   async sendGerencialEmail(payload: SendGerencialEmailParams): Promise<SendGerencialEmailResponse> {
     const { data } = await api.post('/api/indicadores/fluxo-caixa/enviar-gerencial/', payload);
     return data;
@@ -1039,6 +1094,13 @@ export const apiService = {
   // pesados do fluxo de caixa — evita polling caro/desnecessário.
   async getCashflowActivityVersion(): Promise<number> {
     const { data } = await api.get<{ version: number }>('/api/indicadores/fluxo-caixa/atividade/');
+    return data.version;
+  },
+
+  // Mesmo padrão do Fluxo de Caixa: polling leve para o indicador de Satisfação
+  // refletir lançamentos feitos no SGQ por outro usuário sem refresh manual.
+  async getSgqSatisfacaoActivityVersion(): Promise<number> {
+    const { data } = await api.get<{ version: number }>('/api/indicadores/sgq/satisfacao/atividade/');
     return data.version;
   },
 
@@ -1516,5 +1578,33 @@ export const apiService = {
   async deleteSgqPesquisa(id: string): Promise<void> {
     await api.delete(`/api/sgq/pesquisas-satisfacao/${id}/`);
   },
+
+  /** Nomes de motoristas já usados na filial — alimenta a sugestão do formulário
+   * (evita o mesmo motorista sendo digitado de formas diferentes) sem exigir
+   * um cadastro formal deles. */
+  async getSgqMotoristas(): Promise<string[]> {
+    const { data } = await api.get('/api/sgq/pesquisas-satisfacao/motoristas/');
+    return data as string[];
+  },
+
+  async getSgqLancadores(): Promise<string[]> {
+    const { data } = await api.get('/api/sgq/pesquisas-satisfacao/lancadores/');
+    return data as string[];
+  },
+
+  async getSgqLoteDraft(): Promise<SgqLoteDraft> {
+    const { data } = await api.get('/api/sgq/pesquisas-satisfacao/lote-draft/');
+    return data as SgqLoteDraft;
+  },
+
+  async saveSgqLoteDraft(rows: SgqLoteDraftRow[]): Promise<SgqLoteDraft> {
+    const { data } = await api.put('/api/sgq/pesquisas-satisfacao/lote-draft/', { rows });
+    return data as SgqLoteDraft;
+  },
+
+  async deleteSgqLoteDraft(): Promise<void> {
+    await api.delete('/api/sgq/pesquisas-satisfacao/lote-draft/');
+  },
+
 };
 

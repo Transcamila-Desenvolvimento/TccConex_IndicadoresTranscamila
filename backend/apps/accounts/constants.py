@@ -12,6 +12,17 @@ DEPRECATED_ENVIRONMENTS = frozenset({'Comercial', 'Frota'})
 # como as filiais de faturamento em apps/financeiro/billing_import_service.py.
 ALL_BRANCHES = ['Ibiporã (Matriz)', 'Rondonópolis', 'Paranaguá']
 
+# Filiais liberáveis por módulo. Módulos ausentes usam ALL_BRANCHES (padrão).
+# SGQ opera só nas unidades Ibiporã e Rondonópolis.
+# Mantém paridade com frontend/src/constants/filiais.ts.
+MODULE_BRANCHES: dict[str, list[str]] = {
+    'SGQ': ['Ibiporã (Matriz)', 'Rondonópolis'],
+}
+
+
+def branches_for_module(module: str) -> list[str]:
+    return list(MODULE_BRANCHES.get(module, ALL_BRANCHES))
+
 # Indicadores/abas liberáveis individualmente no ambiente Indicadores.
 # Mantém paridade com frontend/src/constants/indicadores.ts.
 # Lista vazia em CustomUser.indicadores = acesso a todos os indicadores.
@@ -19,6 +30,7 @@ INDICADORES_KEYS = frozenset({
     'fluxo-caixa',
     'meta-faturamento',
     'movimentacao-rh',
+    'satisfacao-clientes',
 })
 
 # Funções liberáveis por ambiente para operadores (admin sempre tem todas).
@@ -29,6 +41,11 @@ FUNCOES_POR_AMBIENTE = {
         'editar-protocolos',
         'excluir-protocolos',
         'gerenciar-clientes',
+    }),
+    'SGQ': frozenset({
+        'criar-pesquisas',
+        'editar-pesquisas',
+        'excluir-pesquisas',
     }),
 }
 
@@ -53,7 +70,7 @@ def sanitize_filiais(filiais: dict | None) -> dict[str, list]:
         for module, branches in (filiais or {}).items()
     }
     return {
-        module: branches
+        module: [b for b in (branches or []) if b in branches_for_module(module)]
         for module, branches in normalized.items()
         if module in ACTIVE_ENVIRONMENTS
     }

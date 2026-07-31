@@ -10,7 +10,7 @@ class ModuleScopedViewMixin:
     permission_requires_filial: bool | None = None
     permission_classes = [IsAuthenticated, ModuleAccessPermission]
 
-    def scope_queryset(self, qs, filial_field: str | None = None):
+    def scope_queryset(self, qs, filial_field: str | None = None, *, admin_bypass: bool = True):
         from apps.accounts.permissions import apply_filial_scope
 
         return apply_filial_scope(
@@ -19,4 +19,5 @@ class ModuleScopedViewMixin:
             self.permission_module,
             filial_field,
             self.request,
+            admin_bypass=admin_bypass,
         )

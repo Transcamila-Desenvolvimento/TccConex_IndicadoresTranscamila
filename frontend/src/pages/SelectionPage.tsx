@@ -10,9 +10,10 @@ import {
   ACTIVE_ENVIRONMENTS,
   ENVIRONMENT_CODES,
 } from '../constants/environments';
+import { branchesForModule } from '../constants/filiais';
 import logoImg from '../assets/Logo_TccConex.png';
 
-const GLOBAL_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ'];
+const GLOBAL_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento'];
 
 const NOTION_PROJECT_URL =
   'https://transcamila-miguel.notion.site/ebd//37322feb02fe8012ba34da103c4ef203';
@@ -106,7 +107,7 @@ const SelectionPage: React.FC = () => {
 
     let branches: string[] = [];
     if (user?.roleId === '1') {
-      branches = ['Ibiporã (Matriz)', 'Rondonópolis', 'Paranaguá'];
+      branches = [...branchesForModule(ambiente)];
     } else if (user?.filiais) {
       branches = user.filiais[ambiente] || [];
     }

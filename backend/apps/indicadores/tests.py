@@ -17,8 +17,10 @@ from apps.financeiro.models import (
     ReceberTitulo,
     ReportBatch,
 )
-from apps.indicadores.models import GerencialSnapshot
+from apps.indicadores.models import GerencialSnapshot, MetaFaturamentoMensal
+from apps.indicadores.meta_faturamento_service import networkdays
 from apps.rh.models import Colaborador, LoteMovimentacaoRH, MovimentacaoColaborador
+from apps.sgq.models import PesquisaSatisfacao
 
 User = get_user_model()
 
@@ -1216,6 +1218,25 @@ class IndicadoresRHMovimentacaoTests(TestCase):
         self.assertEqual(junho['porCategoria']['operacional']['count'], 0)
         self.assertEqual(junho['porCategoria']['naoMapeado']['count'], 0)
 
+    def test_ativos_e_afastados_por_categoria(self):
+        MovimentacaoColaborador.objects.filter(
+            lote=self.lote_06, cpf='444.444.444-44',
+        ).update(situacao='AFASTADO TEMP.')
+        MovimentacaoColaborador.objects.filter(
+            lote=self.lote_06, cpf='333.333.333-33',
+        ).update(situacao='ATIVO')
+
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        atual = response.data['summary']['porCategoriaAtual']
+        self.assertEqual(atual['administrativo']['count'], 2)
+        self.assertEqual(atual['administrativo']['ativos']['count'], 1)
+        self.assertEqual(atual['administrativo']['afastados']['count'], 1)
+        self.assertEqual(atual['motorista']['ativos']['count'], 1)
+        self.assertEqual(atual['motorista']['afastados']['count'], 0)
+
     def test_filtro_por_filial(self):
         response = self.client.get(
             '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&filial=São Paulo (Filial)',
@@ -1267,3 +1288,311 @@ class IndicadoresRHMovimentacaoTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['series'][0]['headcount'], 3)
+
+
+def _pesquisa(filial, **overrides):
+    data = {
+        'filial': filial,
+        'motorista': 'Motorista Teste',
+        'cte': '100',
+        'data_inclusao': date(2026, 7, 1),
+        'data_entrega': date(2026, 7, 2),
+        'nota_fiscal': '200',
+        'cliente': 'CCAB',
+        'prazo_entrega': 'otimo',
+        'condicoes_mercadoria': 'bom',
+        'condicoes_veiculo': 'bom',
+        'apresentacao_motorista': 'otimo',
+        'atendimento_dispensado': 'otimo',
+    }
+    data.update(overrides)
+    return PesquisaSatisfacao.objects.create(**data)
+
+
+class SgqSatisfacaoActivityVersionTests(TestCase):
+    """Sistema multiusuário: lançamentos no SGQ devem mudar o marcador consultado
+    pelo indicador de Satisfação (polling leve)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='ind_sgq_activity',
+            password='ind123',
+            role_id='2',
+            environments=['Indicadores'],
+            filiais={},
+        )
+
+    def _get_version(self) -> int:
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/atividade/',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        return response.data['version']
+
+    def test_version_is_zero_without_sgq_activity(self):
+        self.assertEqual(self._get_version(), 0)
+
+    def test_version_changes_after_pesquisa_action(self):
+        before = self._get_version()
+        AuditLog.objects.create(
+            username='outro_user',
+            action='sgq.pesquisa.criada',
+            details='Pesquisa teste',
+        )
+        after = self._get_version()
+        self.assertGreater(after, before)
+
+    def test_version_ignores_draft_and_unrelated_actions(self):
+        before = self._get_version()
+        AuditLog.objects.create(
+            username='sgq_user',
+            action='sgq.pesquisa.lote_draft_salvo',
+            details='Rascunho não afeta indicador',
+        )
+        AuditLog.objects.create(
+            username='fin_user',
+            action='financeiro.ajuste.criado',
+            details='Sem relação',
+        )
+        after = self._get_version()
+        self.assertEqual(after, before)
+
+    def test_version_requires_indicadores_environment(self):
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/atividade/',
+            **auth_headers(self.user, 'SGQ'),
+        )
+        self.assertEqual(response.status_code, 403)
+
+
+class IndicadoresSgqSatisfacaoTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='ind_sgq',
+            password='ind123',
+            role_id='2',
+            environments=['Indicadores'],
+            filiais={},
+        )
+        _pesquisa('Ibiporã (Matriz)', cte='IBI-1')
+        _pesquisa(
+            'Rondonópolis',
+            cte='RDN-1',
+            prazo_entrega='ruim',
+            condicoes_mercadoria='ruim',
+            condicoes_veiculo='regular',
+            apresentacao_motorista='bom',
+            atendimento_dispensado='bom',
+        )
+
+    def test_consolida_ambas_filiais_sgq(self):
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['totalPesquisas'], 2)
+        self.assertEqual(len(response.data['porFilial']), 2)
+        self.assertEqual(
+            response.data['meta']['filiaisDisponiveis'],
+            ['Ibiporã (Matriz)', 'Rondonópolis'],
+        )
+        self.assertIn('serieMensal', response.data)
+        self.assertGreaterEqual(len(response.data['serieMensal']), 1)
+        self.assertIsNotNone(response.data['scoreMedio'])
+        self.assertIn('motoristasDisponiveis', response.data['meta'])
+        self.assertIn('Motorista Teste', response.data['meta']['motoristasDisponiveis'])
+        self.assertIn('anosDisponiveis', response.data['meta'])
+        self.assertIn(2026, response.data['meta']['anosDisponiveis'])
+
+    def test_filtro_por_periodo_data_entrega(self):
+        _pesquisa('Ibiporã (Matriz)', cte='IBI-OLD', data_entrega=date(2025, 3, 10))
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/',
+            {'dataInicio': '2026-01-01', 'dataFim': '2026-12-31'},
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['totalPesquisas'], 2)
+        self.assertIn(2025, response.data['meta']['anosDisponiveis'])
+        self.assertIn(2026, response.data['meta']['anosDisponiveis'])
+
+    def test_filtro_por_motorista(self):
+        _pesquisa('Ibiporã (Matriz)', cte='IBI-2', motorista='Outro Motorista')
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/',
+            {'motorista': 'Motorista Teste'},
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['totalPesquisas'], 2)
+
+    def test_filtro_por_filial(self):
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/',
+            {'filial': 'Ibiporã (Matriz)'},
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['totalPesquisas'], 1)
+        self.assertEqual(len(response.data['porFilial']), 1)
+        self.assertEqual(response.data['porFilial'][0]['filial'], 'Ibiporã (Matriz)')
+
+    def test_requires_indicadores_environment(self):
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/',
+            **auth_headers(self.user, 'SGQ'),
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_total_recusas_conta_em_branco_e_recusa(self):
+        """KPI 'Não avaliou' = pesquisas sem critérios (em branco) + recusou avaliar.
+        Essas pesquisas não entram no total nem nas métricas de avaliação."""
+        _pesquisa(
+            'Ibiporã (Matriz)',
+            cte='BLANK-1',
+            prazo_entrega='',
+            condicoes_mercadoria='',
+            condicoes_veiculo='',
+            apresentacao_motorista='',
+            atendimento_dispensado='',
+        )
+        _pesquisa(
+            'Rondonópolis',
+            cte='RECUSA-1',
+            cliente_recusou_assinar=True,
+            prazo_entrega='',
+            condicoes_mercadoria='',
+            condicoes_veiculo='',
+            apresentacao_motorista='',
+            atendimento_dispensado='',
+        )
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['totalRecusas'], 2)
+        # setUp cria 2 avaliadas; as 2 em branco/recusa ficam só em totalRecusas
+        self.assertEqual(response.data['totalPesquisas'], 2)
+        self.assertEqual(response.data['totalAvaliacoes'], 10)
+
+
+class IndicadoresMetaFaturamentoTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='ind_meta_fat',
+            password='ind123',
+            role_id='2',
+            environments=['Indicadores'],
+            filiais={'Indicadores': ['Ibiporã (Matriz)']},
+        )
+        MetaFaturamentoMensal.objects.update_or_create(
+            ano=2026, mes=1, defaults={'valor': Decimal('6000000')},
+        )
+        MetaFaturamentoMensal.objects.update_or_create(
+            ano=2026, mes=2, defaults={'valor': Decimal('7000000')},
+        )
+        BillingRecord.objects.create(
+            reference_date=date(2026, 1, 5),
+            branch='Ibiporã',
+            value=Decimal('100000.00'),
+            notes_count=1,
+        )
+        BillingRecord.objects.create(
+            reference_date=date(2026, 1, 5),
+            branch='Rondonópolis',
+            value=Decimal('50000.00'),
+            notes_count=1,
+        )
+        BillingRecord.objects.create(
+            reference_date=date(2026, 1, 5),
+            branch='Armazém',
+            value=Decimal('10000.00'),
+            notes_count=1,
+        )
+        BillingRecord.objects.create(
+            reference_date=date(2026, 2, 3),
+            branch='Barueri',
+            value=Decimal('200000.00'),
+            notes_count=2,
+        )
+        BillingRecord.objects.create(
+            reference_date=date(2025, 1, 5),
+            branch='Ibiporã',
+            value=Decimal('80000.00'),
+            notes_count=1,
+        )
+
+    def test_networkdays_janeiro_2026(self):
+        self.assertEqual(networkdays(date(2026, 1, 1), date(2026, 1, 31)), 22)
+
+    def test_resumo_mensal_agrega_filiais_e_meta(self):
+        response = self.client.get(
+            '/api/indicadores/logistica/meta-faturamento/?ano=2026&mes=1',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(response.status_code, 200)
+        summary = response.data['summary']
+        self.assertEqual(summary['metaMes'], 6_000_000.0)
+        self.assertEqual(summary['realizadoMes'], 160_000.0)
+        self.assertEqual(summary['totalFretes'], 150_000.0)
+        self.assertEqual(summary['armazem'], 10_000.0)
+        self.assertEqual(summary['diasUteis'], 22)
+        self.assertAlmostEqual(summary['metaDia'], 6_000_000 / 22, places=2)
+
+        diaria = response.data['serieDiaria']
+        self.assertEqual(len(diaria['dias']), 31)
+        dia5 = next(d for d in diaria['dias'] if d['dia'] == 5)
+        self.assertEqual(dia5['receitaDia'], 160_000.0)
+        self.assertEqual(dia5['ibipora'], 100_000.0)
+        self.assertEqual(dia5['acumuladoMes'], 160_000.0)
+        self.assertEqual(dia5['realizadoAno'], 160_000.0)
+        # Jan: meta ano até o dia = só meta/dia × dias úteis decorridos (sem meses anteriores)
+        self.assertGreater(dia5['metaAnoAteDia'], 0)
+        self.assertEqual(dia5['gapMetaAnoAteDia'], dia5['realizadoAno'] - dia5['metaAnoAteDia'])
+        self.assertEqual(dia5['observacao'], 'ABAIXO DA META')
+        self.assertEqual(diaria['totais']['receitaDia'], 160_000.0)
+        self.assertEqual(diaria['metaMesesAnteriores'], 0.0)
+
+    def test_meta_ano_ate_dia_inclui_meses_anteriores(self):
+        """Em fevereiro: META 01/jan até o dia = meta jan + meta_dia_fev × dias úteis."""
+        response = self.client.get(
+            '/api/indicadores/logistica/meta-faturamento/?ano=2026&mes=2',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(response.status_code, 200)
+        diaria = response.data['serieDiaria']
+        self.assertEqual(diaria['metaMesesAnteriores'], 6_000_000.0)
+        dia3 = next(d for d in diaria['dias'] if d['dia'] == 3)
+        # 02/02 e 03/02/2026 são dias úteis (seg/ter); 01/02 é domingo
+        self.assertEqual(dia3['diaUtilAcumulado'], 2)
+        esperado_meta = 6_000_000 + (7_000_000 / 20) * 2  # fev/2026 tem 20 dias úteis
+        self.assertAlmostEqual(dia3['metaAnoAteDia'], esperado_meta, places=2)
+        self.assertEqual(dia3['realizadoAno'], 360_000.0)  # 160k jan + 200k fev
+
+    def test_serie_mensal_e_acumulado(self):
+        response = self.client.get(
+            '/api/indicadores/logistica/meta-faturamento/?ano=2026',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data['seriesMensal']), 12)
+        jan = response.data['seriesMensal'][0]
+        fev = response.data['seriesMensal'][1]
+        self.assertEqual(jan['realizado'], 160_000.0)
+        self.assertEqual(fev['realizado'], 200_000.0)
+        self.assertEqual(fev['realizadoAcumulado'], 360_000.0)
+        self.assertEqual(fev['metaAcumulada'], 13_000_000.0)
+        self.assertEqual(jan['realizadoAnoAnterior'], 80_000.0)
+
+    def test_ano_invalido(self):
+        response = self.client.get(
+            '/api/indicadores/logistica/meta-faturamento/?ano=abc',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(response.status_code, 400)

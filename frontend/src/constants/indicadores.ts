@@ -9,6 +9,7 @@ export const INDICADOR_ITEMS = [
   { key: 'fluxo-caixa', label: 'Fluxo de Caixa', group: 'Financeiro' },
   { key: 'meta-faturamento', label: 'Meta de Faturamento', group: 'Logística' },
   { key: 'movimentacao-rh', label: 'Movimentação de RH', group: 'Recursos Humanos' },
+  { key: 'satisfacao-clientes', label: 'Satisfação dos Clientes', group: 'Gestão da qualidade' },
 ] as const;
 
 export type IndicadorKey = (typeof INDICADOR_ITEMS)[number]['key'];

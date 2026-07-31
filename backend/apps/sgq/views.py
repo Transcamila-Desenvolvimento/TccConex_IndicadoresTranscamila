@@ -1,26 +1,20 @@
+from collections import Counter
+
 from django.db import transaction
-from django.db.models import Q
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.mixins import ModuleScopedViewMixin
+from apps.accounts.permissions import get_request_context
 from apps.audit.services import record_audit
 from apps.financeiro.pagination import ReportPagination
 
-from .models import AVALIACAO_CHOICES, CRITERIOS_AVALIACAO, PesquisaSatisfacao
+from .lote_draft import draft_payload, has_meaningful_draft, sanitize_draft_rows
+from .models import PesquisaSatisfacao, PesquisaSatisfacaoLoteDraft
+from .pesquisa_query import filter_pesquisas_queryset
 from .serializers import PesquisaSatisfacaoSerializer
-
-_AVALIACAO_KEYS = [key for key, _ in AVALIACAO_CHOICES]
-_CRITERIO_FIELDS = [field for field, _ in CRITERIOS_AVALIACAO]
-
-# Escala usada no score médio por critério (mesma da plataforma anterior).
-_SCORE_MAP = {'ruim': 1, 'regular': 2, 'bom': 3, 'otimo': 4}
-
-_ORDERING_MAP = {
-    'data_asc': ('data', 'id'),
-    'data_desc': ('-data', '-id'),
-}
+from .stats_service import build_pesquisa_stats
 
 
 def _usuario_display(user) -> str:
@@ -29,34 +23,22 @@ def _usuario_display(user) -> str:
     return user.name or user.get_full_name() or user.username
 
 
-def filter_pesquisas_queryset(qs, params):
-    search = (params.get('search') or '').strip()
-    cliente = (params.get('cliente') or '').strip()
-    avaliacao = (params.get('avaliacao') or '').strip().lower()
-    data_inicio = (params.get('dataInicio') or params.get('data_inicio') or '').strip()
-    data_fim = (params.get('dataFim') or params.get('data_fim') or '').strip()
-    ordering = (params.get('ordering') or 'data_desc').strip()
+def _funcao_required_response(request, funcao: str, detail: str):
+    """Nega o acesso a operadores sem a função liberada (admin sempre pode)."""
+    if request.user.has_funcao('SGQ', funcao):
+        return None
+    return Response({'detail': detail}, status=status.HTTP_403_FORBIDDEN)
 
-    if search:
-        qs = qs.filter(
-            Q(motorista__icontains=search)
-            | Q(cte__icontains=search)
-            | Q(nota_fiscal__icontains=search)
-        )
-    if cliente:
-        qs = qs.filter(cliente=cliente)
-    if avaliacao in _AVALIACAO_KEYS:
-        # Pesquisas em que qualquer um dos critérios recebeu a avaliação filtrada.
-        condition = Q()
-        for field in _CRITERIO_FIELDS:
-            condition |= Q(**{field: avaliacao})
-        qs = qs.filter(condition)
-    if data_inicio:
-        qs = qs.filter(data__gte=data_inicio)
-    if data_fim:
-        qs = qs.filter(data__lte=data_fim)
 
-    return qs.order_by(*_ORDERING_MAP.get(ordering, ('-data', '-id')))
+_CRIAR_PESQUISAS_DETAIL = (
+    'Acesso negado. Solicite ao administrador a função "Criar pesquisas" do SGQ.'
+)
+_EDITAR_PESQUISAS_DETAIL = (
+    'Acesso negado. Solicite ao administrador a função "Editar pesquisas" do SGQ.'
+)
+_EXCLUIR_PESQUISAS_DETAIL = (
+    'Acesso negado. Solicite ao administrador a função "Excluir pesquisas" do SGQ.'
+)
 
 
 class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
@@ -67,10 +49,44 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        return filter_pesquisas_queryset(self.queryset, self.request.query_params)
+        # admin_bypass=False: pesquisas do SGQ ficam sempre segregadas por filial,
+        # sem visão consolidada — nem mesmo para admin.
+        qs = self.scope_queryset(self.queryset, filial_field='filial', admin_bypass=False)
+        return filter_pesquisas_queryset(qs, self.request.query_params)
+
+    def _session_filial(self) -> str:
+        _, filial = get_request_context(self.request)
+        return filial
+
+    def create(self, request, *args, **kwargs):
+        denied = _funcao_required_response(request, 'criar-pesquisas', _CRIAR_PESQUISAS_DETAIL)
+        if denied:
+            return denied
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        denied = _funcao_required_response(request, 'editar-pesquisas', _EDITAR_PESQUISAS_DETAIL)
+        if denied:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        denied = _funcao_required_response(request, 'editar-pesquisas', _EDITAR_PESQUISAS_DETAIL)
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        denied = _funcao_required_response(request, 'excluir-pesquisas', _EXCLUIR_PESQUISAS_DETAIL)
+        if denied:
+            return denied
+        return super().destroy(request, *args, **kwargs)
 
     def perform_create(self, serializer):
-        pesquisa = serializer.save(criado_por=_usuario_display(self.request.user))
+        pesquisa = serializer.save(
+            criado_por=_usuario_display(self.request.user),
+            filial=self._session_filial(),
+        )
         record_audit(
             self.request.user,
             'sgq.pesquisa.criada',
@@ -98,6 +114,10 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         """Cria várias pesquisas de uma vez (Inclusão em Tabela). Tudo ou nada:
         se qualquer linha for inválida, nada é salvo e os erros voltam indexados
         por linha para o frontend destacar os campos problemáticos."""
+        denied = _funcao_required_response(request, 'criar-pesquisas', _CRIAR_PESQUISAS_DETAIL)
+        if denied:
+            return denied
+
         items = request.data if isinstance(request.data, list) else request.data.get('items', [])
         if not items:
             return Response({'errors': {'0': {'non_field_errors': ['Nenhuma pesquisa informada.']}}}, status=400)
@@ -114,8 +134,12 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             return Response({'errors': errors}, status=400)
 
         criado_por = _usuario_display(request.user)
+        filial = self._session_filial()
         with transaction.atomic():
-            pesquisas = [serializer.save(criado_por=criado_por) for serializer in valid_serializers]
+            pesquisas = [
+                serializer.save(criado_por=criado_por, filial=filial)
+                for serializer in valid_serializers
+            ]
 
         record_audit(
             request.user,
@@ -125,59 +149,103 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return Response(PesquisaSatisfacaoSerializer(pesquisas, many=True).data, status=201)
 
     @action(detail=False, methods=['get'])
+    def motoristas(self, request):
+        """Nomes de motoristas já usados nesta filial — alimenta a sugestão
+        (autocomplete) do formulário para reduzir o mesmo motorista sendo
+        digitado de formas diferentes, sem exigir um cadastro formal deles."""
+        qs = self.scope_queryset(PesquisaSatisfacao.objects.all(), filial_field='filial', admin_bypass=False)
+        nomes = qs.exclude(motorista='').values_list('motorista', flat=True)
+
+        # Agrupa variações de escrita (case/espaços) e usa a grafia mais
+        # frequente de cada uma como sugestão canônica.
+        variacoes_por_chave: dict[str, Counter] = {}
+        for nome in nomes:
+            nome = nome.strip()
+            if not nome:
+                continue
+            chave = nome.upper()
+            variacoes_por_chave.setdefault(chave, Counter())[nome] += 1
+
+        sugestoes = sorted(
+            (contador.most_common(1)[0][0] for contador in variacoes_por_chave.values()),
+            key=str.upper,
+        )
+        return Response(sugestoes)
+
+    @action(detail=False, methods=['get'])
+    def lancadores(self, request):
+        """Usuários que já lançaram pesquisa nesta filial — filtro 'Lançado por'."""
+        qs = self.scope_queryset(PesquisaSatisfacao.objects.all(), filial_field='filial', admin_bypass=False)
+        nomes = (
+            qs.exclude(criado_por='')
+            .values_list('criado_por', flat=True)
+            .distinct()
+        )
+        sugestoes = sorted({(nome or '').strip() for nome in nomes if (nome or '').strip()}, key=str.upper)
+        return Response(sugestoes)
+
+    @action(detail=False, methods=['get'])
     def stats(self, request):
         """KPIs e distribuição por critério, respeitando os mesmos filtros da lista."""
-        qs = filter_pesquisas_queryset(
-            PesquisaSatisfacao.objects.all(), request.query_params
-        )
-        pesquisas = list(qs.values(*_CRITERIO_FIELDS))
-        total_pesquisas = len(pesquisas)
+        qs = self.scope_queryset(PesquisaSatisfacao.objects.all(), filial_field='filial', admin_bypass=False)
+        qs = filter_pesquisas_queryset(qs, request.query_params)
+        return Response(build_pesquisa_stats(qs))
 
-        totais = {key: 0 for key in _AVALIACAO_KEYS}
-        criterios = []
-        for field, label in CRITERIOS_AVALIACAO:
-            contagem = {key: 0 for key in _AVALIACAO_KEYS}
-            for row in pesquisas:
-                valor = row[field]
-                if valor in contagem:
-                    contagem[valor] += 1
-                    totais[valor] += 1
-            respondidas = sum(contagem.values())
-            score = (
-                sum(_SCORE_MAP[key] * qtd for key, qtd in contagem.items()) / respondidas
-                if respondidas else 0
+    @action(detail=False, methods=['get', 'put', 'delete'], url_path='lote-draft')
+    def lote_draft(self, request):
+        """Rascunho de inclusão em tabela — singleton por usuário + filial da sessão."""
+        filial = self._session_filial()
+        if not filial:
+            return Response(
+                {'detail': 'Filial da sessão é obrigatória para o rascunho.'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            criterios.append({
-                'campo': field,
-                'label': label,
-                'otimo': contagem['otimo'],
-                'bom': contagem['bom'],
-                'regular': contagem['regular'],
-                'ruim': contagem['ruim'],
-                'score': round(score, 2),
-            })
 
-        total_avaliacoes = sum(totais.values())
+        draft = PesquisaSatisfacaoLoteDraft.objects.filter(
+            usuario=request.user,
+            filial=filial,
+        ).first()
 
-        def pct(qtd: int) -> float:
-            return round((qtd / total_avaliacoes) * 100, 1) if total_avaliacoes else 0.0
+        if request.method == 'GET':
+            return Response(draft_payload(draft, filial))
 
-        return Response({
-            'totalPesquisas': total_pesquisas,
-            'totalAvaliacoes': total_avaliacoes,
-            'contagem': {
-                'otimo': totais['otimo'],
-                'bom': totais['bom'],
-                'regular': totais['regular'],
-                'ruim': totais['ruim'],
-            },
-            'percentual': {
-                'otimo': pct(totais['otimo']),
-                'bom': pct(totais['bom']),
-                'regular': pct(totais['regular']),
-                'ruim': pct(totais['ruim']),
-            },
-            'pontosAtencao': totais['regular'] + totais['ruim'],
-            'metaOtimo': 80,
-            'criterios': criterios,
-        })
+        if request.method == 'DELETE':
+            # Descartar rascunho exige criar: o rascunho só existe no fluxo de inclusão.
+            denied = _funcao_required_response(request, 'criar-pesquisas', _CRIAR_PESQUISAS_DETAIL)
+            if denied:
+                return denied
+            if draft:
+                draft.delete()
+                record_audit(
+                    request.user,
+                    'sgq.pesquisa.lote_draft_descartado',
+                    f'Rascunho de inclusão em tabela descartado ({filial}).',
+                )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        # PUT — upsert; rows vazias/sem conteúdo útil apagam o rascunho
+        denied = _funcao_required_response(request, 'criar-pesquisas', _CRIAR_PESQUISAS_DETAIL)
+        if denied:
+            return denied
+        rows = sanitize_draft_rows(request.data.get('rows', []))
+        if not has_meaningful_draft(rows):
+            if draft:
+                draft.delete()
+                record_audit(
+                    request.user,
+                    'sgq.pesquisa.lote_draft_descartado',
+                    f'Rascunho de inclusão em tabela limpo ({filial}).',
+                )
+            return Response(draft_payload(None, filial))
+
+        draft, _created = PesquisaSatisfacaoLoteDraft.objects.update_or_create(
+            usuario=request.user,
+            filial=filial,
+            defaults={'version': 1, 'rows': rows},
+        )
+        record_audit(
+            request.user,
+            'sgq.pesquisa.lote_draft_salvo',
+            f'Rascunho de inclusão em tabela salvo ({filial}, {len(rows)} linha(s)).',
+        )
+        return Response(draft_payload(draft, filial))

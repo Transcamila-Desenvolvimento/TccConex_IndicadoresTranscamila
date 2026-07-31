@@ -37,9 +37,11 @@ const DashboardLayout: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isCashflowSubmenuOpen, setIsCashflowSubmenuOpen] = useState(false);
+  const [isConfigSubmenuOpen, setIsConfigSubmenuOpen] = useState(false);
   const [isIndFinanceiroSubmenuOpen, setIsIndFinanceiroSubmenuOpen] = useState(false);
   const [isIndLogisticaSubmenuOpen, setIsIndLogisticaSubmenuOpen] = useState(false);
   const [isIndRHSubmenuOpen, setIsIndRHSubmenuOpen] = useState(false);
+  const [isIndSgqSubmenuOpen, setIsIndSgqSubmenuOpen] = useState(false);
   const [isEnvioDocumentosSubmenuOpen, setIsEnvioDocumentosSubmenuOpen] = useState(false);
   const [, setIsAdminSubmenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
@@ -73,6 +75,9 @@ const DashboardLayout: React.FC = () => {
       || location.pathname.startsWith('/financeiro/billing')) {
       setIsCashflowSubmenuOpen(true);
     }
+    if (location.pathname.startsWith('/financeiro/configuracoes')) {
+      setIsConfigSubmenuOpen(true);
+    }
     if (location.pathname.startsWith('/indicadores/fluxo-de-caixa')) {
       setIsIndFinanceiroSubmenuOpen(true);
     }
@@ -81,6 +86,9 @@ const DashboardLayout: React.FC = () => {
     }
     if (location.pathname.startsWith('/indicadores/rh')) {
       setIsIndRHSubmenuOpen(true);
+    }
+    if (location.pathname.startsWith('/indicadores/gestao-qualidade')) {
+      setIsIndSgqSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/faturamento/protocolos')) {
       setIsEnvioDocumentosSubmenuOpen(true);
@@ -199,6 +207,18 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Financeiro'
       },
       {
+        title: "Meta de Faturamento",
+        path: "Financeiro / Configurações / Meta de Faturamento",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.93l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.93l.15-.894z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        ),
+        action: () => navigate('/financeiro/configuracoes/meta-faturamento'),
+        show: selectedEnvironment === 'Financeiro'
+      },
+      {
         title: "Home Faturamento",
         path: "Faturamento / Home",
         icon: (
@@ -262,6 +282,17 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/indicadores/rh/movimentacao'),
+        show: selectedEnvironment === 'Indicadores'
+      },
+      {
+        title: "Satisfação dos Clientes",
+        path: "Indicadores / Gestão da qualidade / Satisfação dos Clientes",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+          </svg>
+        ),
+        action: () => navigate('/indicadores/gestao-qualidade/satisfacao-clientes'),
         show: selectedEnvironment === 'Indicadores'
       },
       {
@@ -329,7 +360,7 @@ const DashboardLayout: React.FC = () => {
         ),
         action: () => navigate('/sgq/pesquisa-satisfacao'),
         show: selectedEnvironment === 'SGQ'
-      }
+      },
     ];
 
     return list.filter(f => f.show);
@@ -359,11 +390,15 @@ const DashboardLayout: React.FC = () => {
     '/financeiro/adjustments',
     '/financeiro/billing',
   ];
+  const FINANCEIRO_CONFIG_PATHS = [
+    '/financeiro/configuracoes/meta-faturamento',
+  ];
   const IND_FINANCEIRO_PATHS = [
     '/indicadores/fluxo-de-caixa',
   ];
   const IND_LOGISTICA_PATHS = ['/indicadores/logistica/meta-faturamento'];
   const IND_RH_PATHS = ['/indicadores/rh/movimentacao'];
+  const IND_SGQ_PATHS = ['/indicadores/gestao-qualidade/satisfacao-clientes'];
   const FATURAMENTO_ENVIO_PATHS = ['/faturamento/protocolos'];
 
   // Get Breadcrumb text based on active route and environment
@@ -393,10 +428,12 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/financeiro/balances')) return `${env} / Fluxo de Caixa / Saldos Bancários`;
     if (path.startsWith('/financeiro/adjustments')) return `${env} / Fluxo de Caixa / Ajustes de Caixa`;
     if (path.startsWith('/financeiro/billing')) return `${env} / Fluxo de Caixa / Faturamento`;
+    if (path.startsWith('/financeiro/configuracoes/meta-faturamento')) return `${env} / Configurações / Meta de Faturamento`;
     if (path.startsWith('/faturamento/protocolos')) return `${env} / Envio de documentos / Envio NF Cliente`;
     if (path.startsWith('/faturamento')) return `${env} / Home`;
     if (path.startsWith('/indicadores/logistica/meta-faturamento')) return `${env} / Logística / Meta de faturamento`;
     if (path.startsWith('/indicadores/rh/movimentacao')) return `${env} / Recursos Humanos / Movimentação de RH`;
+    if (path.startsWith('/indicadores/gestao-qualidade/satisfacao-clientes')) return `${env} / Gestão da qualidade / Satisfação dos Clientes`;
     if (path.startsWith('/indicadores/fluxo-de-caixa')) return `${env} / Financeiro / Fluxo de Caixa`;
     if (path.startsWith('/indicadores')) return `${env} / Home Indicadores`;
     
@@ -577,6 +614,42 @@ const DashboardLayout: React.FC = () => {
                 </div>
               </div>
               )}
+
+              {allowedIndicadores.has('satisfacao-clientes') && (
+              <div className="nav-group-wrapper" id="btn-menu-indicadores-sgq">
+                <button
+                  type="button"
+                  className={`nav-btn ${isParentNavActive(IND_SGQ_PATHS) ? 'active-parent' : ''}`}
+                  onClick={() => setIsIndSgqSubmenuOpen(!isIndSgqSubmenuOpen)}
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="clipboard-check" />
+                    <span className="nav-text">Gestão da qualidade</span>
+                  </div>
+                  <ChevronSubmenu open={isIndSgqSubmenuOpen} />
+                </button>
+
+                <div
+                  className="submenu-container"
+                  style={{
+                    display: isSidebarCollapsed ? undefined : 'block',
+                    maxHeight: isSidebarCollapsed ? undefined : (isIndSgqSubmenuOpen ? '80px' : '0px'),
+                    overflow: 'hidden',
+                    transition: 'max-height 0.25s ease',
+                  }}
+                >
+                  <Link
+                    to="/indicadores/gestao-qualidade/satisfacao-clientes"
+                    className={`nav-btn sub-nav-btn ${isRouteActive('/indicadores/gestao-qualidade/satisfacao-clientes') ? 'active' : ''}`}
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="star" sub />
+                      <span className="nav-text">Satisfação dos Clientes</span>
+                    </div>
+                  </Link>
+                </div>
+              </div>
+              )}
             </div>
           )}
 
@@ -668,6 +741,41 @@ const DashboardLayout: React.FC = () => {
                     <div className="nav-btn-left">
                       <NavIcon name="receipt" sub />
                       <span className="nav-text">Faturamento</span>
+                    </div>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Configurações */}
+              <div className="nav-group-wrapper" id="btn-menu-financeiro-config">
+                <button
+                  type="button"
+                  className={`nav-btn ${isParentNavActive(FINANCEIRO_CONFIG_PATHS) ? 'active-parent' : ''}`}
+                  onClick={() => setIsConfigSubmenuOpen(!isConfigSubmenuOpen)}
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="gear" />
+                    <span className="nav-text">Configurações</span>
+                  </div>
+                  <ChevronSubmenu open={isConfigSubmenuOpen} />
+                </button>
+
+                <div
+                  className="submenu-container"
+                  style={{
+                    display: isSidebarCollapsed ? undefined : 'block',
+                    maxHeight: isSidebarCollapsed ? undefined : (isConfigSubmenuOpen ? '80px' : '0px'),
+                    overflow: 'hidden',
+                    transition: 'max-height 0.25s ease',
+                  }}
+                >
+                  <Link
+                    to="/financeiro/configuracoes/meta-faturamento"
+                    className={`nav-btn sub-nav-btn ${isRouteActive('/financeiro/configuracoes/meta-faturamento') ? 'active' : ''}`}
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="graph-up-arrow" sub />
+                      <span className="nav-text">Meta de Faturamento</span>
                     </div>
                   </Link>
                 </div>
@@ -809,6 +917,7 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Pesquisa de satisfação</span>
                   </div>
                 </Link>
+
               </div>
             )}
           </nav>

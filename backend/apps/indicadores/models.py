@@ -30,6 +30,27 @@ class IndicadorFilial(models.Model):
         return self.filial
 
 
+class MetaFaturamentoMensal(models.Model):
+    """Meta de faturamento mensal (empresa) usada pelo indicador Meta de Faturamento.
+
+    O realizado vem dos `BillingRecord` do Financeiro; este model só guarda a meta
+    cadastrada (ex.: valores da planilha FATURAMENTO 2026).
+    """
+
+    ano = models.PositiveIntegerField()
+    mes = models.PositiveSmallIntegerField()
+    valor = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['ano', 'mes']
+        unique_together = [('ano', 'mes')]
+        verbose_name = 'Meta de faturamento mensal'
+        verbose_name_plural = 'Metas de faturamento mensais'
+
+    def __str__(self):
+        return f'Meta {self.mes:02d}/{self.ano}: {self.valor}'
+
+
 class GerencialSnapshot(models.Model):
     """Snapshot congelado no envio do e-mail gerencial (não muda com reimportação de lote)."""
 

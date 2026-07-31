@@ -1,42 +1,62 @@
-import React, { useState } from 'react';
-import type { SgqAvaliacao, SgqCliente, SgqPesquisaBulkErrors, SgqPesquisaPayload } from '../../types/domain';
+import React, { useEffect, useRef, useState } from 'react';
+import type {
+  SgqAvaliacao,
+  SgqCliente,
+  SgqLoteDraftRow,
+  SgqPesquisaBulkErrors,
+  SgqPesquisaPayload,
+} from '../../types/domain';
 import { SGQ_AVALIACAO_OPTIONS, SGQ_CLIENTE_OPTIONS, SGQ_CRITERIOS } from '../../types/domain';
-import { useBulkCreateSgqPesquisas, getSgqBulkErrors } from '../../hooks/useSgqPesquisas';
+import {
+  useBulkCreateSgqPesquisas,
+  useDeleteSgqLoteDraft,
+  useSaveSgqLoteDraft,
+  useSgqLoteDraft,
+  getSgqBulkErrors,
+} from '../../hooks/useSgqPesquisas';
+import { useAuth } from '../../contexts/AuthContext';
 
-type LoteRow = {
-  data: string;
-  cliente: SgqCliente;
-  motorista: string;
-  cte: string;
-  notaFiscal: string;
-  prazoEntrega: SgqAvaliacao | '';
-  condicoesMercadoria: SgqAvaliacao | '';
-  condicoesVeiculo: SgqAvaliacao | '';
-  apresentacaoMotorista: SgqAvaliacao | '';
-  atendimentoDispensado: SgqAvaliacao | '';
-};
+type LoteRow = SgqLoteDraftRow;
 
-const EMPTY_ROW: LoteRow = {
-  data: '',
-  cliente: 'OUTROS',
-  motorista: '',
-  cte: '',
-  notaFiscal: '',
-  prazoEntrega: '',
-  condicoesMercadoria: '',
-  condicoesVeiculo: '',
-  apresentacaoMotorista: '',
-  atendimentoDispensado: '',
-};
+function emptyRow(overrides: Partial<LoteRow> = {}): LoteRow {
+  return {
+    dataEntrega: '',
+    cliente: 'OUTROS',
+    motorista: '',
+    cte: '',
+    notaFiscal: '',
+    clienteRecusouAssinar: false,
+    prazoEntrega: '',
+    condicoesMercadoria: '',
+    condicoesVeiculo: '',
+    apresentacaoMotorista: '',
+    atendimentoDispensado: '',
+    analise: '',
+    ...overrides,
+  };
+}
 
 const INITIAL_ROW_COUNT = 5;
 
 function makeInitialRows(): LoteRow[] {
-  return Array.from({ length: INITIAL_ROW_COUNT }, () => ({ ...EMPTY_ROW }));
+  return Array.from({ length: INITIAL_ROW_COUNT }, () => emptyRow());
 }
 
 function isRowEmpty(row: LoteRow): boolean {
-  return !row.motorista.trim() && !row.data;
+  return !row.motorista.trim() && !row.cte.trim() && !row.notaFiscal.trim();
+}
+
+function formatDraftTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
 }
 
 type SGQPesquisaLoteModalProps = {
@@ -44,13 +64,63 @@ type SGQPesquisaLoteModalProps = {
 };
 
 const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) => {
-  const [rows, setRows] = useState<LoteRow[]>(makeInitialRows);
-  const [rowErrors, setRowErrors] = useState<SgqPesquisaBulkErrors>({});
-  const [formError, setFormError] = useState('');
+  const { selectedFilial } = useAuth();
+  const filial = selectedFilial ?? null;
+  const draftQuery = useSgqLoteDraft(filial);
+  const saveDraft = useSaveSgqLoteDraft(filial);
+  const deleteDraft = useDeleteSgqLoteDraft(filial);
   const bulkCreate = useBulkCreateSgqPesquisas();
 
+  const [rows, setRows] = useState<LoteRow[]>(makeInitialRows);
+  const [hydrated, setHydrated] = useState(false);
+  const [restoredDraft, setRestoredDraft] = useState(false);
+  const [draftUpdatedAt, setDraftUpdatedAt] = useState<string | null>(null);
+  const [rowErrors, setRowErrors] = useState<SgqPesquisaBulkErrors>({});
+  const [formError, setFormError] = useState('');
+  const skipNextSave = useRef(true);
+
+  useEffect(() => {
+    if (hydrated || draftQuery.isLoading || draftQuery.isFetching) return;
+    const draft = draftQuery.data;
+    if (draft?.hasDraft && draft.rows.length > 0) {
+      setRows(draft.rows);
+      setDraftUpdatedAt(draft.updatedAt);
+      setRestoredDraft(true);
+    } else {
+      setRows(makeInitialRows());
+      setDraftUpdatedAt(null);
+      setRestoredDraft(false);
+    }
+    setHydrated(true);
+    skipNextSave.current = true;
+  }, [draftQuery.data, draftQuery.isLoading, draftQuery.isFetching, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || !filial) return;
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      saveDraft.mutate(rows, {
+        onSuccess: (data) => {
+          setDraftUpdatedAt(data.hasDraft ? data.updatedAt : null);
+          if (!data.hasDraft) setRestoredDraft(false);
+        },
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [rows, hydrated, filial]); // eslint-disable-line react-hooks/exhaustive-deps -- debounce saveDraft
+
   const updateRow = <K extends keyof LoteRow>(idx: number, field: K, value: LoteRow[K]) => {
-    setRows((prev) => prev.map((row, i) => (i === idx ? { ...row, [field]: value } : row)));
+    setRows((prev) => prev.map((row, i) => {
+      if (i !== idx) return row;
+      const next = { ...row, [field]: value };
+      if (field === 'clienteRecusouAssinar' && value === true) {
+        SGQ_CRITERIOS.forEach((c) => { next[c.key] = ''; });
+      }
+      return next;
+    }));
     setRowErrors((prev) => {
       if (!prev[idx] || !(field in prev[idx])) return prev;
       const { [field]: _removed, ...restFields } = prev[idx];
@@ -58,10 +128,21 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
     });
   };
 
-  const addRow = () => setRows((prev) => [...prev, { ...EMPTY_ROW }]);
+  const addRow = () => {
+    setRows((prev) => {
+      const last = prev[prev.length - 1];
+      return [
+        ...prev,
+        emptyRow({
+          dataEntrega: last?.dataEntrega || '',
+          cliente: last?.cliente || 'OUTROS',
+        }),
+      ];
+    });
+  };
 
   const removeRow = (idx: number) => {
-    setRows((prev) => prev.filter((_, i) => i !== idx));
+    setRows((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)));
     setRowErrors((prev) => {
       const next: SgqPesquisaBulkErrors = {};
       Object.entries(prev).forEach(([key, value]) => {
@@ -70,6 +151,13 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
         else if (i > idx) next[i - 1] = value;
       });
       return next;
+    });
+  };
+
+  const discardDraft = () => {
+    deleteDraft.mutate(undefined, {
+      onSuccess: onClose,
+      onError: () => setFormError('Não foi possível descartar o rascunho. Tente novamente.'),
     });
   };
 
@@ -85,23 +173,23 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
       if (isRowEmpty(row)) return;
       mapping.push(idx);
       payloads.push({
-        data: row.data,
+        dataEntrega: row.dataEntrega,
         cliente: row.cliente,
         motorista: row.motorista.trim(),
         cte: row.cte.trim(),
         notaFiscal: row.notaFiscal.trim(),
-        prazoEntrega: row.prazoEntrega as SgqAvaliacao,
-        condicoesMercadoria: row.condicoesMercadoria as SgqAvaliacao,
-        condicoesVeiculo: row.condicoesVeiculo as SgqAvaliacao,
-        apresentacaoMotorista: row.apresentacaoMotorista as SgqAvaliacao,
-        atendimentoDispensado: row.atendimentoDispensado as SgqAvaliacao,
-        analise: '',
-        tratativaJustificativa: '',
+        clienteRecusouAssinar: row.clienteRecusouAssinar,
+        prazoEntrega: row.clienteRecusouAssinar ? '' : (row.prazoEntrega as SgqAvaliacao),
+        condicoesMercadoria: row.clienteRecusouAssinar ? '' : (row.condicoesMercadoria as SgqAvaliacao),
+        condicoesVeiculo: row.clienteRecusouAssinar ? '' : (row.condicoesVeiculo as SgqAvaliacao),
+        apresentacaoMotorista: row.clienteRecusouAssinar ? '' : (row.apresentacaoMotorista as SgqAvaliacao),
+        atendimentoDispensado: row.clienteRecusouAssinar ? '' : (row.atendimentoDispensado as SgqAvaliacao),
+        analise: row.analise.trim(),
       });
     });
 
     if (payloads.length === 0) {
-      setFormError('Preencha pelo menos uma linha antes de salvar.');
+      setFormError('Preencha pelo menos uma linha (motorista, CT-e ou NF) antes de salvar.');
       return;
     }
 
@@ -109,7 +197,11 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
     setRowErrors({});
 
     bulkCreate.mutate(payloads, {
-      onSuccess: onClose,
+      onSuccess: () => {
+        deleteDraft.mutate(undefined, {
+          onSettled: onClose,
+        });
+      },
       onError: (error) => {
         const backendErrors = getSgqBulkErrors(error);
         if (backendErrors) {
@@ -127,15 +219,44 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
     });
   };
 
+  const busy = bulkCreate.isPending || deleteDraft.isPending;
+  const draftHint = draftUpdatedAt
+    ? `Rascunho na sua conta · ${formatDraftTime(draftUpdatedAt)}`
+    : 'Rascunho salvo na sua conta (por filial)';
+
+  if (!hydrated) {
+    return (
+      <div className="search-backdrop sgq-lote-backdrop">
+        <div className="modal-card sgq-lote-modal-card">
+          <div className="modal-header">
+            <h3>Inclusão em Tabela — Pesquisa de Satisfação</h3>
+            <button type="button" className="btn-icon" onClick={onClose} aria-label="Fechar">
+              <i className="bi bi-x-lg" />
+            </button>
+          </div>
+          <div className="modal-body sgq-lote-modal-body">
+            <p className="sgq-lote-draft-hint">Carregando rascunho...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="search-backdrop sgq-lote-backdrop"
-      onClick={(e) => { if (e.target === e.currentTarget && !bulkCreate.isPending) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}
     >
       <div className="modal-card sgq-lote-modal-card">
         <div className="modal-header">
-          <h3>Inclusão em Tabela — Pesquisa de Satisfação</h3>
-          <button type="button" className="btn-icon" onClick={onClose} aria-label="Fechar" disabled={bulkCreate.isPending}>
+          <div>
+            <h3>Inclusão em Tabela — Pesquisa de Satisfação</h3>
+            <p className="sgq-lote-draft-hint">
+              {restoredDraft && draftUpdatedAt ? 'Rascunho restaurado · ' : ''}
+              {draftHint}
+            </p>
+          </div>
+          <button type="button" className="btn-icon" onClick={onClose} aria-label="Fechar" disabled={busy}>
             <i className="bi bi-x-lg" />
           </button>
         </div>
@@ -150,38 +271,42 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
                 <col className="sgq-lote-col-motorista" />
                 <col className="sgq-lote-col-doc" />
                 <col className="sgq-lote-col-doc" />
+                <col className="sgq-lote-col-recusou" />
                 {SGQ_CRITERIOS.map((criterio) => (
                   <col key={criterio.key} className="sgq-lote-col-avaliacao" />
                 ))}
+                <col className="sgq-lote-col-analise" />
                 <col className="sgq-lote-col-remove" />
               </colgroup>
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Data</th>
+                  <th title="Data de entrega">Data entrega</th>
                   <th>Cliente</th>
                   <th>Motorista</th>
                   <th>CT-e</th>
-                  <th>Nota Fiscal</th>
+                  <th title="Nota Fiscal">Nota Fiscal</th>
+                  <th title="Cliente se recusou a avaliar" className="sgq-lote-th-center">Recusou?</th>
                   {SGQ_CRITERIOS.map((criterio) => (
                     <th key={criterio.key} title={criterio.label} className="sgq-lote-th-center">
                       {criterio.shortLabel}
                     </th>
                   ))}
-                  <th></th>
+                  <th title="Análise, tratativa e justificativa">Análise</th>
+                  <th aria-label="Remover" />
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, idx) => (
-                  <tr key={idx}>
+                  <tr key={idx} className={rowErrors[idx] && Object.keys(rowErrors[idx]).length ? 'has-errors' : undefined}>
                     <td className="sgq-lote-index">{idx + 1}</td>
                     <td>
                       <input
                         type="date"
-                        className={cellClass(idx, 'data')}
-                        value={row.data}
-                        title={fieldError(idx, 'data')}
-                        onChange={(e) => updateRow(idx, 'data', e.target.value)}
+                        className={cellClass(idx, 'dataEntrega')}
+                        value={row.dataEntrega}
+                        title={fieldError(idx, 'dataEntrega')}
+                        onChange={(e) => updateRow(idx, 'dataEntrega', e.target.value)}
                       />
                     </td>
                     <td>
@@ -191,8 +316,8 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
                         title={fieldError(idx, 'cliente')}
                         onChange={(e) => updateRow(idx, 'cliente', e.target.value as SgqCliente)}
                       >
-                        {SGQ_CLIENTE_OPTIONS.map((cliente) => (
-                          <option key={cliente} value={cliente}>{cliente}</option>
+                        {SGQ_CLIENTE_OPTIONS.map((clienteOpt) => (
+                          <option key={clienteOpt} value={clienteOpt}>{clienteOpt}</option>
                         ))}
                       </select>
                     </td>
@@ -205,6 +330,7 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
                         title={fieldError(idx, 'motorista')}
                         onChange={(e) => updateRow(idx, 'motorista', e.target.value)}
                         autoComplete="off"
+                        list="sgq-motoristas-sugestoes"
                       />
                     </td>
                     <td>
@@ -229,12 +355,22 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
                         autoComplete="off"
                       />
                     </td>
+                    <td className="sgq-lote-cell-center">
+                      <input
+                        type="checkbox"
+                        className="sgq-lote-checkbox"
+                        checked={row.clienteRecusouAssinar}
+                        title="Cliente se recusou a avaliar — dispensa a avaliação dos critérios"
+                        onChange={(e) => updateRow(idx, 'clienteRecusouAssinar', e.target.checked)}
+                      />
+                    </td>
                     {SGQ_CRITERIOS.map((criterio) => (
                       <td key={criterio.key}>
                         <select
                           className={cellClass(idx, criterio.key)}
                           value={row[criterio.key]}
-                          title={fieldError(idx, criterio.key)}
+                          title={fieldError(idx, criterio.key) || criterio.label}
+                          disabled={row.clienteRecusouAssinar}
                           onChange={(e) => updateRow(idx, criterio.key, e.target.value as SgqAvaliacao)}
                         >
                           <option value="">Selecione</option>
@@ -244,6 +380,17 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
                         </select>
                       </td>
                     ))}
+                    <td>
+                      <input
+                        type="text"
+                        className={cellClass(idx, 'analise')}
+                        placeholder="Opcional"
+                        value={row.analise}
+                        title={fieldError(idx, 'analise') || 'Análise, tratativa e justificativa'}
+                        onChange={(e) => updateRow(idx, 'analise', e.target.value)}
+                        autoComplete="off"
+                      />
+                    </td>
                     <td className="sgq-lote-remove">
                       <button
                         type="button"
@@ -261,23 +408,32 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
             </table>
           </div>
 
-          <button type="button" className="reports-action-btn secondary" style={{ marginTop: '12px' }} onClick={addRow}>
+          <button type="button" className="reports-action-btn secondary sgq-lote-add-row" onClick={addRow}>
             <i className="bi bi-plus-lg" />
             <span>Adicionar Linha</span>
           </button>
 
           {formError && (
-            <div style={{ marginTop: '14px', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', color: '#b91c1c', fontSize: '13px' }}>
-              {formError}
-            </div>
+            <div className="sgq-lote-error">{formError}</div>
           )}
         </div>
 
         <div className="modal-footer">
-          <button type="button" className="reports-action-btn secondary" onClick={onClose} disabled={bulkCreate.isPending}>
-            Cancelar
+          {(draftUpdatedAt || restoredDraft) && (
+            <button
+              type="button"
+              className="reports-action-btn secondary"
+              onClick={discardDraft}
+              disabled={busy}
+              title="Apaga o rascunho da sua conta nesta filial"
+            >
+              Descartar rascunho
+            </button>
+          )}
+          <button type="button" className="reports-action-btn secondary" onClick={onClose} disabled={busy}>
+            Fechar
           </button>
-          <button type="button" className="reports-action-btn primary" onClick={handleSubmit} disabled={bulkCreate.isPending}>
+          <button type="button" className="reports-action-btn primary" onClick={handleSubmit} disabled={busy}>
             {bulkCreate.isPending ? 'Salvando...' : 'Salvar Tudo'}
           </button>
         </div>

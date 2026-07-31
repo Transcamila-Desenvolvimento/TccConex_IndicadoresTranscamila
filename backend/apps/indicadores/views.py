@@ -6,9 +6,11 @@ from apps.accounts.mixins import ModuleScopedViewMixin
 
 from .cashflow_service import build_cashflow_day_detail, build_cashflow_payload, get_financeiro_activity_version
 from .gerencial_email_service import _parse_emails, _parse_reference, send_gerencial_email
+from .meta_faturamento_service import build_meta_faturamento_payload
 from .models import IndicadorFilial, IndicadorKpi
 from .rh_indicador_service import build_rh_movimentacao_payload
 from .serializers import IndicadorFilialSerializer, IndicadorKpiSerializer
+from .sgq_satisfacao_service import build_sgq_satisfacao_payload, get_sgq_activity_version
 
 
 class SendGerencialEmailView(ModuleScopedViewMixin, APIView):
@@ -98,6 +100,41 @@ class RHMovimentacaoIndicadorView(ModuleScopedViewMixin, APIView):
     def get(self, request):
         payload = build_rh_movimentacao_payload(request.query_params)
         return Response(payload)
+
+
+class MetaFaturamentoIndicadorView(ModuleScopedViewMixin, APIView):
+    """Meta de Faturamento — realizado via BillingRecord + metas mensais cadastradas."""
+
+    permission_module = 'Indicadores'
+    permission_requires_filial = False
+
+    def get(self, request):
+        try:
+            payload = build_meta_faturamento_payload(request.query_params)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class SgqSatisfacaoActivityView(ModuleScopedViewMixin, APIView):
+    """Endpoint leve para polling: informa se pesquisas do SGQ mudaram desde a
+    última consulta (ver get_sgq_activity_version)."""
+
+    permission_module = 'Indicadores'
+    permission_requires_filial = False
+
+    def get(self, request):
+        return Response({'version': get_sgq_activity_version()})
+
+
+class SgqSatisfacaoIndicadorView(ModuleScopedViewMixin, APIView):
+    """Satisfação dos clientes — consolida pesquisas do SGQ (Ibiporã + Rondonópolis)."""
+
+    permission_module = 'Indicadores'
+    permission_requires_filial = False
+
+    def get(self, request):
+        return Response(build_sgq_satisfacao_payload(request.query_params))
 
 
 class IndicadorKpiViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):

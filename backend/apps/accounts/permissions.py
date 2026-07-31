@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from rest_framework.permissions import BasePermission
 
-from .constants import ADMIN_ENVIRONMENT, ALL_BRANCHES, normalize_environment, sanitize_environments
+from .constants import ADMIN_ENVIRONMENT, branches_for_module, normalize_environment, sanitize_environments
 
 # Ambientes sem filial obrigatória na sessão (visão consolidada).
-GLOBAL_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'RH', 'Compras', 'Faturamento', 'SGQ'})
+# SGQ exige filial na sessão (como Indicadores) — pesquisas diferem por unidade.
+GLOBAL_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'RH', 'Compras', 'Faturamento'})
 
 # Nomes de filial no banco podem ser abreviados (ex.: faturamento usa "Ibiporã").
 # Relatórios financeiros armazenam códigos ERP (01, 03, 05…) e Aging usa origem (1, 5, 9…).
@@ -29,7 +30,7 @@ def get_request_context(request) -> tuple[str, str]:
 
 def allowed_filiais_for_module(user, module: str) -> list[str]:
     if user.is_admin:
-        return list(ALL_BRANCHES)
+        return branches_for_module(module)
     return list((user.filiais or {}).get(module, []))
 
 
@@ -80,9 +81,15 @@ def check_module_request_access(
     return user_has_filial_access(user, module, filial)
 
 
-def apply_filial_scope(qs, user, module: str, filial_field: str | None, request):
-    """Restringe queryset aos dados permitidos para o usuário/sessão."""
-    if user.is_admin:
+def apply_filial_scope(qs, user, module: str, filial_field: str | None, request, *, admin_bypass: bool = True):
+    """Restringe queryset aos dados permitidos para o usuário/sessão.
+
+    admin_bypass=True (padrão): admin vê o consolidado de todas as filiais, como em
+    Financeiro/Indicadores. admin_bypass=False: mesmo admin fica restrito à filial da
+    sessão — usado quando os registros do módulo devem ficar sempre segregados por
+    filial (ex.: SGQ), sem visão consolidada nem para admin.
+    """
+    if user.is_admin and admin_bypass:
         return qs
 
     allowed_names = allowed_filiais_for_module(user, module)

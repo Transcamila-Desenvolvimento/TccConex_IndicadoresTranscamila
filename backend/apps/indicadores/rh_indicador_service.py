@@ -57,13 +57,31 @@ def _parse_periodo(valor) -> tuple[int, int] | None:
     return ano, mes
 
 
+def _status_bucket() -> dict:
+    return {'count': 0, 'payroll': Decimal('0')}
+
+
+def _bucket_categoria() -> dict:
+    return {
+        'count': 0,
+        'payroll': Decimal('0'),
+        'ativos': _status_bucket(),
+        'afastados': _status_bucket(),
+    }
+
+
 def _bucket_categorias() -> dict:
     return {
-        'administrativo': {'count': 0, 'payroll': Decimal('0')},
-        'operacional': {'count': 0, 'payroll': Decimal('0')},
-        'motorista': {'count': 0, 'payroll': Decimal('0')},
-        'naoMapeado': {'count': 0, 'payroll': Decimal('0')},
+        'administrativo': _bucket_categoria(),
+        'operacional': _bucket_categoria(),
+        'motorista': _bucket_categoria(),
+        'naoMapeado': _bucket_categoria(),
     }
+
+
+def _is_afastado(situacao: str | None) -> bool:
+    """Mesma regra do e-mail de RH: substring 'AFASTADO' na situação."""
+    return bool(situacao) and 'AFASTADO' in situacao.upper()
 
 
 def _bucket_com_percentual(bucket: dict, total: int) -> dict:
@@ -190,6 +208,9 @@ def build_rh_movimentacao_payload(params) -> dict:
             salario = c.salario or Decimal('0')
             bucket[chave]['count'] += 1
             bucket[chave]['payroll'] += salario
+            status = 'afastados' if _is_afastado(c.situacao) else 'ativos'
+            bucket[chave][status]['count'] += 1
+            bucket[chave][status]['payroll'] += salario
             payroll_total += salario
 
         series.append({

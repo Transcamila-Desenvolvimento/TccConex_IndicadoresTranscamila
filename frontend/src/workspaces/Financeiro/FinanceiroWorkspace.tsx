@@ -8,6 +8,7 @@ import FinanceiroReports from './FinanceiroReports';
 import FinanceiroBalances from './FinanceiroBalances';
 import FinanceiroAdjustments from './FinanceiroAdjustments';
 import FinanceiroBilling from './FinanceiroBilling';
+import FinanceiroMetaFaturamentoConfig from './FinanceiroMetaFaturamentoConfig';
 
 const FinanceiroWorkspace: React.FC = () => {
   return (
@@ -18,6 +19,7 @@ const FinanceiroWorkspace: React.FC = () => {
       <Route path="balances" element={<FinanceiroBalances />} />
       <Route path="adjustments" element={<FinanceiroAdjustments />} />
       <Route path="billing" element={<FinanceiroBilling />} />
+      <Route path="configuracoes/meta-faturamento" element={<FinanceiroMetaFaturamentoConfig />} />
       <Route path="*" element={<Navigate to="home" replace />} />
     </Routes>
   );

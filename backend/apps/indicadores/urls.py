@@ -7,8 +7,11 @@ from .views import (
     CashFlowView,
     IndicadorFilialViewSet,
     IndicadorKpiViewSet,
+    MetaFaturamentoIndicadorView,
     RHMovimentacaoIndicadorView,
     SendGerencialEmailView,
+    SgqSatisfacaoActivityView,
+    SgqSatisfacaoIndicadorView,
 )
 
 router = DefaultRouter()
@@ -21,5 +24,8 @@ urlpatterns = [
     path('fluxo-caixa/atividade/', CashFlowActivityView.as_view(), name='indicador-fluxo-caixa-atividade'),
     path('fluxo-caixa/', CashFlowView.as_view(), name='indicador-fluxo-caixa'),
     path('rh/movimentacao/', RHMovimentacaoIndicadorView.as_view(), name='indicador-rh-movimentacao'),
+    path('logistica/meta-faturamento/', MetaFaturamentoIndicadorView.as_view(), name='indicador-meta-faturamento'),
+    path('sgq/satisfacao/atividade/', SgqSatisfacaoActivityView.as_view(), name='indicador-sgq-satisfacao-atividade'),
+    path('sgq/satisfacao/', SgqSatisfacaoIndicadorView.as_view(), name='indicador-sgq-satisfacao'),
     path('', include(router.urls)),
 ]

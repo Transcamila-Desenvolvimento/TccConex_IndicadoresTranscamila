@@ -193,6 +193,25 @@ export interface BillingRecord {
   trend?: 'up' | 'down' | 'equal' | 'none';
 }
 
+export interface MetaFaturamentoConfigMes {
+  id: number | null;
+  mes: number;
+  nomeMes: string;
+  valor: number;
+}
+
+export interface MetaFaturamentoConfigResponse {
+  ano: number;
+  meses: MetaFaturamentoConfigMes[];
+  total: number;
+  anosDisponiveis: number[];
+}
+
+export interface MetaFaturamentoConfigPayload {
+  ano: number;
+  meses: { mes: number; valor: number }[];
+}
+
 export interface CashAdjustment {
   id: number;
   date: string;
@@ -442,10 +461,17 @@ export interface RHIndicadorQueryParams {
   categoria?: string;
 }
 
+export interface RHIndicadorStatusBucket {
+  count: number;
+  payroll: number;
+}
+
 export interface RHIndicadorCategoriaBucket {
   count: number;
   payroll: number;
   percentual: number;
+  ativos: RHIndicadorStatusBucket;
+  afastados: RHIndicadorStatusBucket;
 }
 
 export interface RHIndicadorPorCategoria {
@@ -493,6 +519,153 @@ export interface RHIndicadorResponse {
   };
   summary: RHIndicadorSummary;
   series: RHIndicadorSeriePonto[];
+}
+
+export interface MetaFaturamentoQueryParams {
+  ano?: number;
+  mes?: number;
+}
+
+export interface MetaFaturamentoFilialBucket {
+  filial: string;
+  valor: number;
+  percentual: number;
+  isArmazem: boolean;
+}
+
+export interface MetaFaturamentoSerieMensal {
+  mes: number;
+  ano: number;
+  label: string;
+  nomeMes: string;
+  meta: number;
+  metaAcumulada: number;
+  realizado: number;
+  realizadoAcumulado: number;
+  realizadoAnoAnterior: number;
+  realizadoAnoAnteriorAcumulado: number;
+  diasUteis: number;
+  diasUteisDecorridos: number;
+  metaDia: number;
+  metaAteDia: number;
+  realizadoAteDia: number;
+  gapMetaMes: number;
+  gapMetaAteDia: number;
+  percentualVsMeta: number | null;
+  percentualVsMetaAcumulada: number | null;
+  variacaoAnoAnterior: number | null;
+  metaSuperada: boolean;
+  porFilial: MetaFaturamentoFilialBucket[];
+  totalFretes: number;
+  armazem: number;
+}
+
+export interface MetaFaturamentoSerieDiaria {
+  data: string;
+  dia: number;
+  diaUtilAcumulado: number;
+  isDiaUtil: boolean;
+  ibipora: number;
+  rondonopolis: number;
+  barueri: number;
+  paranagua: number;
+  totalFretes: number;
+  armazem: number;
+  receitaDia: number;
+  acumuladoMes: number;
+  acumuladoMesAnoAnterior: number;
+  /** META 01/jan até o dia (meses anteriores + meta/dia × dias úteis no mês). */
+  metaAnoAteDia: number;
+  realizadoAno: number;
+  realizadoAnoAnteriorAcumulado: number;
+  gapMetaAnoAteDia: number;
+  percentualVsMetaAnoAteDia: number | null;
+  observacao: string;
+  acumuladoAno: number;
+  metaAteDia: number;
+  gapMetaAteDia: number;
+  realizadoAnoAnterior: number;
+  porFilial: MetaFaturamentoFilialBucket[];
+}
+
+export interface MetaFaturamentoDiarioTotais {
+  ibipora: number;
+  rondonopolis: number;
+  barueri: number;
+  paranagua: number;
+  totalFretes: number;
+  armazem: number;
+  receitaDia: number;
+  acumuladoMes: number;
+  acumuladoMesAnoAnterior: number;
+  metaAnoAteDia: number;
+  realizadoAno: number;
+  realizadoAnoAnteriorAcumulado: number;
+  gapMetaAnoAteDia: number;
+  percentualVsMetaAnoAteDia: number | null;
+  observacao: string;
+}
+
+export interface MetaFaturamentoDiarioParticipacao {
+  ibipora: number;
+  rondonopolis: number;
+  barueri: number;
+  paranagua: number;
+  totalFretes: number;
+  armazem: number;
+  variacaoMesAnoAnterior: number | null;
+  variacaoAnoAnterior: number | null;
+}
+
+export interface MetaFaturamentoSerieDiariaPayload {
+  dias: MetaFaturamentoSerieDiaria[];
+  totais: MetaFaturamentoDiarioTotais | null;
+  participacao: MetaFaturamentoDiarioParticipacao | null;
+  metaMesesAnteriores: number;
+  metaDia: number;
+  diasUteis: number;
+}
+
+export interface MetaFaturamentoSummary {
+  metaMes: number;
+  realizadoMes: number;
+  gapMetaMes: number;
+  percentualVsMetaMes: number | null;
+  metaSuperadaMes: boolean;
+  diasUteis: number;
+  diasUteisDecorridos: number;
+  metaDia: number;
+  metaAteDia: number;
+  realizadoAteDia: number;
+  gapMetaAteDia: number;
+  metaAcumulada: number;
+  realizadoAcumulado: number;
+  gapMetaAcumulada: number;
+  percentualVsMetaAcumulada: number | null;
+  metaAno: number;
+  percentualMetaAno: number;
+  realizadoAnoAnterior: number;
+  realizadoAnoAnteriorAcumulado: number;
+  variacaoAnoAnterior: number | null;
+  variacaoAnoAnteriorAcumulada: number | null;
+  totalFretes: number;
+  armazem: number;
+  porFilial: MetaFaturamentoFilialBucket[];
+}
+
+export interface MetaFaturamentoResponse {
+  meta: {
+    ano: number;
+    mes: number | null;
+    mesReferencia: number;
+    nomeMesReferencia: string;
+    filiais: string[];
+    anosDisponiveis: number[];
+    temMetasCadastradas: boolean;
+  };
+  summary: MetaFaturamentoSummary;
+  seriesMensal: MetaFaturamentoSerieMensal[];
+  serieDiaria: MetaFaturamentoSerieDiariaPayload;
 }
 
 export interface SendGerencialEmailParams {
@@ -925,7 +1098,7 @@ export const SGQ_AVALIACAO_OPTIONS = [
 
 export type SgqAvaliacao = (typeof SGQ_AVALIACAO_OPTIONS)[number]['value'];
 
-export const SGQ_CLIENTE_OPTIONS = ['CCAB', 'PRENTISS', 'ALBAUGH', 'UPL', 'OUTROS'] as const;
+export const SGQ_CLIENTE_OPTIONS = ['CCAB', 'PRENTISS', 'ALBAUGH', 'OUTROS'] as const;
 
 export type SgqCliente = (typeof SGQ_CLIENTE_OPTIONS)[number];
 
@@ -943,29 +1116,43 @@ export type SgqCriterioKey = (typeof SGQ_CRITERIOS)[number]['key'];
 
 export interface SgqPesquisa {
   id: string;
+  /** Filial da sessão em que a pesquisa foi lançada — atribuída pelo backend, não pelo cliente. */
+  filial: string;
   motorista: string;
   cte: string;
-  data: string;
+  /** Data em que a pesquisa foi lançada no sistema — atribuída pelo backend. */
+  dataInclusao: string | null;
+  dataEntrega: string;
   notaFiscal: string;
   cliente: SgqCliente;
-  prazoEntrega: SgqAvaliacao;
-  condicoesMercadoria: SgqAvaliacao;
-  condicoesVeiculo: SgqAvaliacao;
-  apresentacaoMotorista: SgqAvaliacao;
-  atendimentoDispensado: SgqAvaliacao;
+  /** Quando true, os critérios abaixo ficam vazios — o cliente se recusou a avaliar a pesquisa. */
+  clienteRecusouAssinar: boolean;
+  prazoEntrega: SgqAvaliacao | '';
+  condicoesMercadoria: SgqAvaliacao | '';
+  condicoesVeiculo: SgqAvaliacao | '';
+  apresentacaoMotorista: SgqAvaliacao | '';
+  atendimentoDispensado: SgqAvaliacao | '';
+  /** Campo único de observação — "Análise, Tratativa e Justificativa". */
   analise: string;
-  tratativaJustificativa: string;
   criadoPor: string;
 }
 
-export type SgqPesquisaPayload = Omit<SgqPesquisa, 'id' | 'criadoPor'>;
+export type SgqPesquisaPayload = Omit<SgqPesquisa, 'id' | 'criadoPor' | 'filial' | 'dataInclusao'>;
 
 export interface SgqPesquisaQueryParams extends ListQueryParams {
   cliente?: string;
+  motorista?: string;
+  criadoPor?: string;
   avaliacao?: string;
   dataInicio?: string;
   dataFim?: string;
-  ordering?: 'data_asc' | 'data_desc';
+  ordering?:
+    | 'data_asc'
+    | 'data_desc'
+    | 'data_entrega_asc'
+    | 'data_entrega_desc'
+    | 'data_inclusao_asc'
+    | 'data_inclusao_desc';
 }
 
 export interface SgqCriterioStats {
@@ -989,7 +1176,75 @@ export interface SgqPesquisaStats {
   criterios: SgqCriterioStats[];
 }
 
+export interface SgqSatisfacaoIndicadorQueryParams {
+  filial?: string;
+  motorista?: string;
+  dataInicio?: string;
+  dataFim?: string;
+  cliente?: string;
+  avaliacao?: string;
+}
+
+export interface SgqSatisfacaoPorFilial {
+  filial: string;
+  totalPesquisas: number;
+  totalAvaliacoes: number;
+  percentualOtimo: number;
+  pontosAtencao: number;
+  scoreMedio: number | null;
+  contagem: Record<SgqAvaliacao, number>;
+}
+
+export interface SgqSatisfacaoSerieMensal {
+  mes: string;
+  label: string;
+  totalPesquisas: number;
+  percentualOtimo: number;
+  scoreMedio: number;
+  contagem: Record<SgqAvaliacao, number>;
+}
+
+/** Resposta do indicador de Satisfação dos Clientes (ambiente Indicadores). */
+export interface SgqSatisfacaoIndicadorResponse extends SgqPesquisaStats {
+  meta: {
+    filiaisDisponiveis: string[];
+    motoristasDisponiveis: string[];
+    anosDisponiveis: number[];
+    filial: string | null;
+  };
+  scoreMedio: number | null;
+  totalRecusas: number;
+  porFilial: SgqSatisfacaoPorFilial[];
+  serieMensal: SgqSatisfacaoSerieMensal[];
+}
+
 /** Erros de validação por linha, retornados pelo endpoint de inclusão em lote. */
 export type SgqPesquisaBulkFieldErrors = Partial<Record<keyof SgqPesquisaPayload, string[]>>;
 export type SgqPesquisaBulkErrors = Record<number, SgqPesquisaBulkFieldErrors>;
+
+/** Linha do rascunho de inclusão em tabela (pode estar incompleta). */
+export type SgqLoteDraftRow = {
+  dataEntrega: string;
+  cliente: SgqCliente;
+  motorista: string;
+  cte: string;
+  notaFiscal: string;
+  clienteRecusouAssinar: boolean;
+  prazoEntrega: SgqAvaliacao | '';
+  condicoesMercadoria: SgqAvaliacao | '';
+  condicoesVeiculo: SgqAvaliacao | '';
+  apresentacaoMotorista: SgqAvaliacao | '';
+  atendimentoDispensado: SgqAvaliacao | '';
+  analise: string;
+};
+
+/** Rascunho server-side — isolado por usuário autenticado + filial da sessão. */
+export interface SgqLoteDraft {
+  version: number;
+  updatedAt: string | null;
+  filial: string;
+  hasDraft: boolean;
+  rows: SgqLoteDraftRow[];
+}
+
 

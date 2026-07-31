@@ -18,7 +18,7 @@ const QUICK_LINKS = [
 
 const SGQHome: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, selectedFilial } = useAuth();
   const firstName = user?.name?.split(' ')[0] ?? 'Usuário';
 
   return (
@@ -26,7 +26,8 @@ const SGQHome: React.FC = () => {
       <div className="welcome-banner">
         <h2>Olá, {firstName}!</h2>
         <p>
-          Bem-vindo ao ambiente de Gestão da Qualidade (SGQ).
+          Bem-vindo ao ambiente de Gestão da Qualidade (SGQ)
+          {selectedFilial ? ` · ${selectedFilial}` : ''}.
         </p>
       </div>
 

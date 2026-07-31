@@ -4,7 +4,6 @@ import { useIndicadorRHMovimentacao } from '../../hooks/useIndicadores';
 import RHPayrollChart from './RHPayrollChart';
 import RHHeadcountChart from './RHHeadcountChart';
 import RHAdmissoesChart from './RHAdmissoesChart';
-import type { RHIndicadorLoteOption } from '../../types/domain';
 
 const CATEGORIA_OPTIONS = [
   { value: '', label: 'Todas' },
@@ -12,6 +11,44 @@ const CATEGORIA_OPTIONS = [
   { value: 'OPERACIONAL', label: 'Operacional' },
   { value: 'MOTORISTA', label: 'Motorista' },
 ];
+
+type PeriodoKey = 'ano' | 't1' | 't2' | 't3' | 't4' | 's1' | 's2' | 'custom';
+
+const PERIODO_OPTIONS: { value: PeriodoKey; label: string }[] = [
+  { value: 'ano', label: 'Ano inteiro' },
+  { value: 't1', label: '1º Trimestre' },
+  { value: 't2', label: '2º Trimestre' },
+  { value: 't3', label: '3º Trimestre' },
+  { value: 't4', label: '4º Trimestre' },
+  { value: 's1', label: '1º Semestre' },
+  { value: 's2', label: '2º Semestre' },
+  { value: 'custom', label: 'Personalizado' },
+];
+
+/** Meses início/fim (YYYY-MM) — o indicador de RH trabalha por lote mensal. */
+const PERIODO_RANGES: Record<Exclude<PeriodoKey, 'custom'>, [string, string]> = {
+  ano: ['01', '12'],
+  t1: ['01', '03'],
+  t2: ['04', '06'],
+  t3: ['07', '09'],
+  t4: ['10', '12'],
+  s1: ['01', '06'],
+  s2: ['07', '12'],
+};
+
+function currentYearStr(): string {
+  return String(new Date().getFullYear());
+}
+
+function rangeForPeriodo(ano: number, periodo: Exclude<PeriodoKey, 'custom'>): { start: string; end: string } {
+  const [inicio, fim] = PERIODO_RANGES[periodo];
+  return { start: `${ano}-${inicio}`, end: `${ano}-${fim}` };
+}
+
+function defaultAnoInteiro() {
+  const year = currentYearStr();
+  return { year, ...rangeForPeriodo(Number(year), 'ano') };
+}
 
 const formatCurrency = (value: number) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -22,43 +59,80 @@ const formatPercent = (value: number | null) => {
   return `${sign}${value.toFixed(1)}%`;
 };
 
-const periodoValue = (lote: RHIndicadorLoteOption) => `${lote.ano}-${String(lote.mes).padStart(2, '0')}`;
-
 const IndicadoresRHMovimentacao: React.FC = () => {
-  const [startPeriod, setStartPeriod] = useState('');
-  const [endPeriod, setEndPeriod] = useState('');
-  const [periodTouched, setPeriodTouched] = useState(false);
+  const defaults = useMemo(() => defaultAnoInteiro(), []);
+  const [ano, setAno] = useState(defaults.year);
+  const [periodo, setPeriodo] = useState<PeriodoKey>('ano');
+  const [startPeriod, setStartPeriod] = useState(defaults.start);
+  const [endPeriod, setEndPeriod] = useState(defaults.end);
   const [filial, setFilial] = useState('');
   const [categoria, setCategoria] = useState('');
 
   const queryParams = useMemo(() => ({
-    ...(periodTouched && startPeriod ? { start: startPeriod } : {}),
-    ...(periodTouched && endPeriod ? { end: endPeriod } : {}),
+    ...(startPeriod ? { start: startPeriod } : {}),
+    ...(endPeriod ? { end: endPeriod } : {}),
     ...(filial ? { filial } : {}),
     ...(categoria ? { categoria } : {}),
-  }), [periodTouched, startPeriod, endPeriod, filial, categoria]);
+  }), [startPeriod, endPeriod, filial, categoria]);
 
   const rhQuery = useIndicadorRHMovimentacao(queryParams);
   const { data } = rhQuery;
 
-  const lotes = data?.meta.lotesDisponiveis ?? [];
   const series = data?.series ?? [];
   const summary = data?.summary;
 
-  React.useEffect(() => {
-    if (periodTouched || !series.length) return;
-    setStartPeriod(periodoValue(series[0]));
-    setEndPeriod(periodoValue(series[series.length - 1]));
-  }, [periodTouched, series]);
+  const anosDisponiveis = useMemo(() => {
+    const yearNum = Number(currentYearStr());
+    const anos = new Set((data?.meta.lotesDisponiveis ?? []).map((lote) => lote.ano));
+    anos.add(yearNum);
+    return Array.from(anos).sort((a, b) => b - a);
+  }, [data?.meta.lotesDisponiveis]);
+
+  const applyPeriodo = (nextAno: string, nextPeriodo: Exclude<PeriodoKey, 'custom'>) => {
+    const yearNum = Number(nextAno);
+    if (!yearNum) return;
+    const range = rangeForPeriodo(yearNum, nextPeriodo);
+    setStartPeriod(range.start);
+    setEndPeriod(range.end);
+  };
+
+  const handleAnoChange = (value: string) => {
+    setAno(value);
+    const nextPeriodo: Exclude<PeriodoKey, 'custom'> = periodo === 'custom' ? 'ano' : periodo;
+    if (periodo === 'custom') setPeriodo('ano');
+    applyPeriodo(value, nextPeriodo);
+  };
+
+  const handlePeriodoChange = (value: PeriodoKey) => {
+    setPeriodo(value);
+    if (value === 'custom') return;
+    const year = ano || currentYearStr();
+    if (!ano) setAno(year);
+    applyPeriodo(year, value);
+  };
+
+  const handleStartChange = (value: string) => {
+    setStartPeriod(value);
+    setPeriodo('custom');
+  };
+
+  const handleEndChange = (value: string) => {
+    setEndPeriod(value);
+    setPeriodo('custom');
+  };
 
   const periodoLabel = data?.meta.periodoInicio && data?.meta.periodoFim
     ? `${data.meta.periodoInicio} — ${data.meta.periodoFim}`
     : '—';
 
   const handleResetFilters = () => {
-    setPeriodTouched(false);
+    const reset = defaultAnoInteiro();
     setFilial('');
     setCategoria('');
+    setAno(reset.year);
+    setPeriodo('ano');
+    setStartPeriod(reset.start);
+    setEndPeriod(reset.end);
   };
 
   return (
@@ -76,41 +150,37 @@ const IndicadoresRHMovimentacao: React.FC = () => {
             <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
             </svg>
-            <span>Período</span>
+            <span>Filtrar</span>
           </div>
 
-          <div className="cashflow-date-filter">
-            <label>
-              <span>De</span>
-              <select
-                className="rh-period-select"
-                value={startPeriod}
-                onChange={(e) => {
-                  setPeriodTouched(true);
-                  setStartPeriod(e.target.value);
-                }}
-              >
-                {lotes.map((lote) => (
-                  <option key={periodoValue(lote)} value={periodoValue(lote)}>{lote.label}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Até</span>
-              <select
-                className="rh-period-select"
-                value={endPeriod}
-                onChange={(e) => {
-                  setPeriodTouched(true);
-                  setEndPeriod(e.target.value);
-                }}
-              >
-                {lotes.map((lote) => (
-                  <option key={periodoValue(lote)} value={periodoValue(lote)}>{lote.label}</option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <select className="rh-period-select" value={ano} onChange={(e) => handleAnoChange(e.target.value)}>
+            {anosDisponiveis.map((y) => (
+              <option key={y} value={String(y)}>{y}</option>
+            ))}
+          </select>
+
+          <select
+            className="rh-period-select"
+            value={periodo}
+            onChange={(e) => handlePeriodoChange(e.target.value as PeriodoKey)}
+          >
+            {PERIODO_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+
+          {periodo === 'custom' && (
+            <div className="cashflow-date-filter">
+              <label>
+                <span>De</span>
+                <input type="month" value={startPeriod} onChange={(e) => handleStartChange(e.target.value)} />
+              </label>
+              <label>
+                <span>Até</span>
+                <input type="month" value={endPeriod} onChange={(e) => handleEndChange(e.target.value)} />
+              </label>
+            </div>
+          )}
 
           <select className="rh-period-select" value={filial} onChange={(e) => setFilial(e.target.value)}>
             <option value="">Todas as filiais</option>
@@ -142,7 +212,7 @@ const IndicadoresRHMovimentacao: React.FC = () => {
       >
         {data && summary && (
           <>
-            <div className="cashflow-kpi-grid">
+            <div className="cashflow-kpi-grid rh-ind-kpi-grid">
               <div className="cashflow-kpi-card">
                 <span className="cashflow-kpi-label">Total de Colaboradores</span>
                 <strong className="cashflow-kpi-value">{summary.totalColaboradores}</strong>
@@ -168,35 +238,35 @@ const IndicadoresRHMovimentacao: React.FC = () => {
                 <strong className="cashflow-kpi-value">{summary.desligadosPeriodo}</strong>
                 <span className="cashflow-kpi-hint">{periodoLabel}</span>
               </div>
-              <div className="cashflow-kpi-card">
-                <span className="cashflow-kpi-label">Turnover</span>
-                <strong className="cashflow-kpi-value">{summary.turnoverPercentual.toFixed(1)}%</strong>
-                <span className="cashflow-kpi-hint">Desligados / headcount médio</span>
-              </div>
             </div>
 
             <div className="rh-ind-categoria-grid">
-              <div className="rh-ind-categoria-card rh-ind-categoria-card--administrativo">
-                <span className="rh-ind-categoria-label">Administrativo</span>
-                <strong className="rh-ind-categoria-value">{summary.porCategoriaAtual.administrativo.count}</strong>
-                <span className="rh-ind-categoria-hint">
-                  {formatCurrency(summary.porCategoriaAtual.administrativo.payroll)} · {summary.porCategoriaAtual.administrativo.percentual.toFixed(1)}%
-                </span>
-              </div>
-              <div className="rh-ind-categoria-card rh-ind-categoria-card--operacional">
-                <span className="rh-ind-categoria-label">Operacional</span>
-                <strong className="rh-ind-categoria-value">{summary.porCategoriaAtual.operacional.count}</strong>
-                <span className="rh-ind-categoria-hint">
-                  {formatCurrency(summary.porCategoriaAtual.operacional.payroll)} · {summary.porCategoriaAtual.operacional.percentual.toFixed(1)}%
-                </span>
-              </div>
-              <div className="rh-ind-categoria-card rh-ind-categoria-card--motorista">
-                <span className="rh-ind-categoria-label">Motorista</span>
-                <strong className="rh-ind-categoria-value">{summary.porCategoriaAtual.motorista.count}</strong>
-                <span className="rh-ind-categoria-hint">
-                  {formatCurrency(summary.porCategoriaAtual.motorista.payroll)} · {summary.porCategoriaAtual.motorista.percentual.toFixed(1)}%
-                </span>
-              </div>
+              {([
+                ['administrativo', 'Administrativo'],
+                ['operacional', 'Operacional'],
+                ['motorista', 'Motorista'],
+              ] as const).map(([key, label]) => {
+                const bucket = summary.porCategoriaAtual[key];
+                return (
+                  <div key={key} className="rh-ind-categoria-card">
+                    <span className="rh-ind-categoria-label">{label}</span>
+                    <strong className="rh-ind-categoria-value">{bucket.count}</strong>
+                    <span className="rh-ind-categoria-hint">
+                      {formatCurrency(bucket.payroll)} · {bucket.percentual.toFixed(1)}%
+                    </span>
+                    <div className="rh-ind-categoria-status">
+                      <span className="rh-ind-categoria-status-item is-ativo">
+                        <span className="rh-ind-categoria-status-label">Ativos</span>
+                        <strong>{bucket.ativos.count}</strong>
+                      </span>
+                      <span className="rh-ind-categoria-status-item is-afastado">
+                        <span className="rh-ind-categoria-status-label">Afastados</span>
+                        <strong>{bucket.afastados.count}</strong>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="rh-ind-charts-grid">

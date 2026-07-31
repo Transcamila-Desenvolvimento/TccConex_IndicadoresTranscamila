@@ -16,12 +16,11 @@ import {
 } from '../../constants/environments';
 import { INDICADOR_ITEMS, type IndicadorKey } from '../../constants/indicadores';
 import { funcoesDoModulo, type FuncaoKey } from '../../constants/funcoes';
+import { branchesForModule } from '../../constants/filiais';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 
 const PAGE_SIZE = 10;
-
-const BRANCHES = ['Ibiporã (Matriz)', 'Rondonópolis', 'Paranaguá'] as const;
 
 const MODULE_ACCESS_GROUPS = [
   { module: 'Financeiro', label: 'Financeiro' },
@@ -175,7 +174,8 @@ const AdminUsersPanel: React.FC = () => {
     const userFiliais = user.filiais || {};
     const nextAccess: Record<string, string[]> = {};
     MODULE_ACCESS_GROUPS.forEach((group) => {
-      const branches = (userFiliais[group.module] || []).filter((b) => (BRANCHES as readonly string[]).includes(b));
+      const allowed = branchesForModule(group.module);
+      const branches = (userFiliais[group.module] || []).filter((b) => allowed.includes(b));
       if (branches.length > 0) nextAccess[group.module] = branches;
     });
 
@@ -324,13 +324,13 @@ const AdminUsersPanel: React.FC = () => {
   const handleToggleModule = (module: string, forceOn = false) => {
     setModuleAccess((prev) => {
       const hasAccess = (prev[module]?.length ?? 0) > 0;
-      return { ...prev, [module]: hasAccess && !forceOn ? [] : [...BRANCHES] };
+      return { ...prev, [module]: hasAccess && !forceOn ? [] : [...branchesForModule(module)] };
     });
   };
 
   const handleSelectAllModules = () => {
     const full: Record<string, string[]> = {};
-    MODULE_ACCESS_GROUPS.forEach((group) => { full[group.module] = [...BRANCHES]; });
+    MODULE_ACCESS_GROUPS.forEach((group) => { full[group.module] = [...branchesForModule(group.module)]; });
     setModuleAccess(full);
   };
 
@@ -721,6 +721,7 @@ const AdminUsersPanel: React.FC = () => {
                 <div className="module-config-list">
                   {MODULE_ACCESS_GROUPS.map((group) => {
                     const branches = moduleAccess[group.module] ?? [];
+                    const moduleBranches = branchesForModule(group.module);
                     const hasAccess = branches.length > 0;
                     const isExpanded = expandedModule === group.module;
                     const funcaoItems = funcoesDoModulo(group.module);
@@ -732,7 +733,7 @@ const AdminUsersPanel: React.FC = () => {
                       summaryParts.push('Sem acesso');
                     } else {
                       summaryParts.push(
-                        branches.length === BRANCHES.length ? 'Todas as filiais' : `${branches.length} de ${BRANCHES.length} filiais`,
+                        branches.length === moduleBranches.length ? 'Todas as filiais' : `${branches.length} de ${moduleBranches.length} filiais`,
                       );
                       if (group.module === 'Indicadores') {
                         summaryParts.push(
@@ -782,16 +783,16 @@ const AdminUsersPanel: React.FC = () => {
                                 <span
                                   className="module-access-quick-action"
                                   onClick={() =>
-                                    branches.length === BRANCHES.length
+                                    branches.length === moduleBranches.length
                                       ? handleToggleModule(group.module)
                                       : handleToggleModule(group.module, true)
                                   }
                                 >
-                                  {branches.length === BRANCHES.length ? 'Desmarcar todas' : 'Marcar todas'}
+                                  {branches.length === moduleBranches.length ? 'Desmarcar todas' : 'Marcar todas'}
                                 </span>
                               </div>
                               <div className="perm-chip-list">
-                                {BRANCHES.map((branch) => {
+                                {moduleBranches.map((branch) => {
                                   const selected = isBranchSelected(group.module, branch);
                                   return (
                                     <button

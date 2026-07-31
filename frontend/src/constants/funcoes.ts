@@ -29,6 +29,24 @@ export const FUNCAO_ITEMS = [
     label: 'Gerenciar clientes',
     description: 'Permite cadastrar, editar e excluir clientes de protocolo e suas filiais.',
   },
+  {
+    module: 'SGQ',
+    key: 'criar-pesquisas',
+    label: 'Criar pesquisas',
+    description: 'Permite registrar novas pesquisas de satisfação (formulário e inclusão em tabela).',
+  },
+  {
+    module: 'SGQ',
+    key: 'editar-pesquisas',
+    label: 'Editar pesquisas',
+    description: 'Permite alterar pesquisas de satisfação já registradas.',
+  },
+  {
+    module: 'SGQ',
+    key: 'excluir-pesquisas',
+    label: 'Excluir pesquisas',
+    description: 'Permite excluir pesquisas de satisfação.',
+  },
 ] as const;
 
 export type FuncaoKey = (typeof FUNCAO_ITEMS)[number]['key'];
