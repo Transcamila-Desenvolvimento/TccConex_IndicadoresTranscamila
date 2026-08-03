@@ -125,6 +125,22 @@ def gerencial_fat_hoje_dates(raw_reference: date) -> tuple[date, ...]:
     return (raw_reference - timedelta(days=1),)
 
 
+def gerencial_fat_mes_bounds(raw_reference: date) -> tuple[date, date]:
+    """Início/fim do período de Fat. Mês, alinhado à defasagem do Fat. Hoje.
+
+    O mês segue a primeira data da janela de Fat. Hoje (sexta na segunda-feira;
+    ontem nos demais dias). Assim, numa segunda após virada de mês (ex.: 03/08
+    com Fat. Dia em 31/07), o mês ainda é julho até o faturamento “do dia”
+    entrar no mês novo. O fim é o último dia dessa janela que ainda está no
+    mesmo mês (na segunda mid-mês inclui sáb/dom).
+    """
+    dates = gerencial_fat_hoje_dates(raw_reference)
+    anchor = dates[0]
+    month_end = max(d for d in dates if (d.year, d.month) == (anchor.year, anchor.month))
+    month_start = anchor.replace(day=1)
+    return month_start, month_end
+
+
 def sum_overdue_titulos(
     qs,
     date_field: str,

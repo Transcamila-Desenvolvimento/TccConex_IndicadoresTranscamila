@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 from django.db.models import Sum
@@ -19,6 +19,7 @@ from .cashflow_utils import (
     filter_pagar_for_cashflow,
     fmt_br,
     gerencial_fat_hoje_dates,
+    gerencial_fat_mes_bounds,
     gerencial_pagar_cutoff,
     parse_br_date,
     sum_bank_balance_on_position_date,
@@ -146,11 +147,10 @@ def build_gerencial_panel(
     saldo_bancos = sum_bank_balance_on_position_date(raw_reference, account_ids)
 
     billing_qs = BillingRecord.objects.filter(reference_date__in=gerencial_fat_hoje_dates(raw_reference))
-    billing_ref_date = raw_reference - timedelta(days=1)
+    month_start, month_end = gerencial_fat_mes_bounds(raw_reference)
     billing_month_qs = BillingRecord.objects.filter(
-        reference_date__year=billing_ref_date.year,
-        reference_date__month=billing_ref_date.month,
-        reference_date__lte=billing_ref_date,
+        reference_date__gte=month_start,
+        reference_date__lte=month_end,
     )
     if filial_codes:
         branches = _billing_branches_for_codes(filial_codes)

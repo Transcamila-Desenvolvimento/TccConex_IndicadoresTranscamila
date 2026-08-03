@@ -349,6 +349,41 @@ class IndicadoresCashflowTests(TestCase):
         )
         self.assertEqual(fat_mes['value'], 100.0)
 
+    def test_gerencial_fat_mes_monday_keeps_previous_month_after_month_turn(self):
+        """Segunda 03/08: Fat. Dia ainda em julho → Fat. Mês continua julho (não zera em agosto)."""
+        batch = ReportBatch.objects.create(
+            label='##POS03AGO',
+            reference_date=date(2026, 8, 3),
+            is_active=True,
+            imported_pagar=True,
+            imported_receber=True,
+        )
+        BillingRecord.objects.create(
+            reference_date=date(2026, 7, 31),
+            branch='Ibiporã',
+            value=Decimal('400.00'),
+        )
+        BillingRecord.objects.create(
+            reference_date=date(2026, 7, 15),
+            branch='Ibiporã',
+            value=Decimal('100.00'),
+        )
+        BillingRecord.objects.create(
+            reference_date=date(2026, 8, 1),
+            branch='Ibiporã',
+            value=Decimal('999.00'),
+        )
+
+        response = self.client.get(
+            f'/api/indicadores/fluxo-caixa/?position={batch.pk}&gerencialDate=2026-08-03',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        disponibilidade = response.data['gerencial']['groups'][0]['items']
+        fat_hoje = next(item for item in disponibilidade if item['label'] == 'Fat. Hoje')
+        fat_mes = next(item for item in disponibilidade if item['label'] == 'Fat. Mês')
+        self.assertEqual(fat_hoje['value'], 1399.0)  # 31/07 + 01/08 (+ 02/08 vazio)
+        self.assertEqual(fat_mes['value'], 500.0)  # só julho (15 + 31)
+
     def test_daily_flow_ignores_adjustments_from_later_import(self):
         older = ReportBatch.objects.create(
             label='##POS16A',
