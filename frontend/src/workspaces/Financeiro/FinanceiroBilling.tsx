@@ -71,6 +71,11 @@ const FinanceiroBilling: React.FC = () => {
   const [formValue, setFormValue] = useState('');
   const [formNotesCount, setFormNotesCount] = useState('');
 
+  // Export Modal States (parâmetros do relatório)
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportBranch, setExportBranch] = useState('Todas');
+  const [exportStartDate, setExportStartDate] = useState('');
+  const [exportEndDate, setExportEndDate] = useState('');
 
   // Close modal when clicking on backdrop
   useEffect(() => {
@@ -83,6 +88,18 @@ const FinanceiroBilling: React.FC = () => {
     document.addEventListener('click', handleOutsideClick);
     return () => document.removeEventListener('click', handleOutsideClick);
   }, []);
+
+  const openExportModal = () => {
+    setExportBranch(branchFilter);
+    setExportStartDate(startDate);
+    setExportEndDate(endDate);
+    setIsExportModalOpen(true);
+  };
+
+  const closeExportModal = () => {
+    if (isExporting) return;
+    setIsExportModalOpen(false);
+  };
 
   const closeImportModal = () => {
     setIsImportModalOpen(false);
@@ -210,32 +227,40 @@ const FinanceiroBilling: React.FC = () => {
     }
   };
 
-  const handleExportExcel = async () => {
+  const handleExportExcel = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (isExporting) return;
+
+    if (!exportStartDate || !exportEndDate) {
+      alert('Selecione o período (data início e data fim) para exportar o relatório.');
+      return;
+    }
+
+    if (exportStartDate > exportEndDate) {
+      alert('A data inicial não pode ser maior que a data final.');
+      return;
+    }
+
     setIsExporting(true);
     try {
-      // 1. Fetch ALL records matching current filters (unpaginated)
       const allRecords = await exportBillingRecords.mutateAsync({
-        search: searchQuery.trim() || undefined,
-        branch: branchFilter !== 'Todas' ? branchFilter : undefined,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
+        branch: exportBranch !== 'Todas' ? exportBranch : undefined,
+        startDate: exportStartDate || undefined,
+        endDate: exportEndDate || undefined,
       });
 
       const records = allRecords.results;
 
       if (!records || records.length === 0) {
-        alert('Nenhum registro encontrado para exportar.');
+        alert('Nenhum registro encontrado para os parâmetros informados.');
         return;
       }
 
-      // 2. Initialize workbook and worksheet
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet('Faturamento', {
         views: [{ showGridLines: true }]
       });
 
-      // 3. Title & Subtitle block
       sheet.mergeCells('A1:D1');
       const titleCell = sheet.getCell('A1');
       titleCell.value = 'Relatório de Faturamento Diário por Filial';
@@ -246,15 +271,17 @@ const FinanceiroBilling: React.FC = () => {
       sheet.mergeCells('A2:D2');
       const subtitleCell = sheet.getCell('A2');
       const nowStr = new Date().toLocaleString('pt-BR');
-      subtitleCell.value = `Exportado em: ${nowStr} | Total de registros: ${records.length}`;
+      const periodLabel = exportStartDate || exportEndDate
+        ? ` | Período: ${exportStartDate ? exportStartDate.split('-').reverse().join('/') : '…'} a ${exportEndDate ? exportEndDate.split('-').reverse().join('/') : '…'}`
+        : '';
+      const branchLabel = exportBranch !== 'Todas' ? ` | Filial: ${exportBranch}` : '';
+      subtitleCell.value = `Exportado em: ${nowStr} | Total de registros: ${records.length}${branchLabel}${periodLabel}`;
       subtitleCell.font = { name: 'Segoe UI', size: 10, italic: true, color: { argb: 'FF64748B' } };
       subtitleCell.alignment = { vertical: 'middle', horizontal: 'left' };
       sheet.getRow(2).height = 20;
 
-      // Empty row
       sheet.getRow(3).height = 10;
 
-      // 4. Headers
       const headerRow = sheet.getRow(4);
       headerRow.height = 26;
       const headers = ['Data', 'Filial', 'Valor (R$)', 'Qtd. Notas'];
@@ -276,13 +303,11 @@ const FinanceiroBilling: React.FC = () => {
         };
       });
 
-      // 5. Populate Data Rows
       records.forEach((rec, index) => {
         const rowIdx = index + 5;
         const row = sheet.getRow(rowIdx);
         row.height = 20;
 
-        // Data (Date) format to DD/MM/YYYY
         let dateVal = rec.date;
         if (dateVal.includes('-')) {
           const [y, m, d] = dateVal.split('-');
@@ -292,24 +317,20 @@ const FinanceiroBilling: React.FC = () => {
         cellDate.value = dateVal;
         cellDate.alignment = { vertical: 'middle', horizontal: 'center' };
 
-        // Filial
         const cellBranch = row.getCell(2);
         cellBranch.value = rec.branch;
         cellBranch.alignment = { vertical: 'middle', horizontal: 'left' };
 
-        // Valor
         const cellValue = row.getCell(3);
         cellValue.value = Number(rec.value);
         cellValue.numFmt = '"R$" #,##0.00;("R$" #,##0.00);"-"';
         cellValue.alignment = { vertical: 'middle', horizontal: 'right' };
 
-        // Qtd Notas
         const cellNotes = row.getCell(4);
         cellNotes.value = Number(rec.notesCount);
         cellNotes.numFmt = '#,##0';
         cellNotes.alignment = { vertical: 'middle', horizontal: 'right' };
 
-        // Zebra striping style & borders
         const isEven = index % 2 === 0;
         const rowBg = isEven ? 'FFFFFFFF' : 'FFF8FAFC';
         [1, 2, 3, 4].forEach((colIdx) => {
@@ -329,7 +350,6 @@ const FinanceiroBilling: React.FC = () => {
         });
       });
 
-      // 6. Total Summary Row
       const totalRowIdx = records.length + 5;
       const totalRow = sheet.getRow(totalRowIdx);
       totalRow.height = 24;
@@ -352,7 +372,6 @@ const FinanceiroBilling: React.FC = () => {
       totalNotesCell.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: 'FF1E293B' } };
       totalNotesCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
-      // Total row background & borders
       [1, 2, 3, 4].forEach((colIdx) => {
         const cell = totalRow.getCell(colIdx);
         cell.fill = {
@@ -368,13 +387,11 @@ const FinanceiroBilling: React.FC = () => {
         };
       });
 
-      // 7. Width sizing adjustment
-      sheet.getColumn(1).width = 16; // Data
-      sheet.getColumn(2).width = 24; // Filial
-      sheet.getColumn(3).width = 22; // Valor (R$)
-      sheet.getColumn(4).width = 16; // Qtd. Notas
+      sheet.getColumn(1).width = 16;
+      sheet.getColumn(2).width = 24;
+      sheet.getColumn(3).width = 22;
+      sheet.getColumn(4).width = 16;
 
-      // 8. Download workbook
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -383,11 +400,12 @@ const FinanceiroBilling: React.FC = () => {
       const link = document.createElement('a');
       link.href = url;
       
-      const filialName = branchFilter !== 'Todas' ? `_${branchFilter.replace(/\s+/g, '_')}` : '';
+      const filialName = exportBranch !== 'Todas' ? `_${exportBranch.replace(/\s+/g, '_')}` : '';
       link.download = `relatorio_faturamento_diario${filialName}_${new Date().toISOString().slice(0,10)}.xlsx`;
       
       link.click();
       URL.revokeObjectURL(url);
+      setIsExportModalOpen(false);
     } catch (err) {
       console.error(err);
       alert('Erro ao extrair relatório em Excel.');
@@ -415,20 +433,13 @@ const FinanceiroBilling: React.FC = () => {
             type="button"
             className="reports-action-btn secondary" 
             style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
-            onClick={handleExportExcel}
+            onClick={openExportModal}
             disabled={isExporting}
           >
-            {isExporting ? (
-              <>
-                <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" style={{ width: '14px', height: '14px', borderLeftColor: 'transparent', borderRadius: '50%', borderStyle: 'solid', borderWidth: '2px', animation: 'spinner-border .75s linear infinite', color: '#10b981' }}></span>
-                <span>Exportando...</span>
-              </>
-            ) : (
-              <>
-                <i className="bi bi-file-earmark-excel" style={{ color: '#10b981', fontSize: '15px' }} />
-                <span>Exportar Excel</span>
-              </>
-            )}
+            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            <span>Exportar Excel</span>
           </button>
           <button
             type="button"
@@ -691,6 +702,137 @@ const FinanceiroBilling: React.FC = () => {
         </button>
       </div>
       </QueryDataPanel>
+
+      {/* MODAL: EXPORTAR RELATÓRIO */}
+      {isExportModalOpen && (
+        <div
+          className="search-backdrop"
+          id="billing-export-modal"
+          style={{ display: 'flex', zIndex: 3000 }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeExportModal();
+          }}
+        >
+          <div className="search-modal-card" style={{ width: '500px' }}>
+            <div className="search-input-wrapper" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#1e293b' }}>
+                Exportar Relatório Excel
+              </h3>
+              <span
+                className="search-close-key"
+                style={{ cursor: isExporting ? 'not-allowed' : 'pointer', fontSize: '12px' }}
+                onClick={closeExportModal}
+              >
+                Fechar (X)
+              </span>
+            </div>
+
+            <form style={{ padding: '20px 24px 24px 24px' }} onSubmit={handleExportExcel}>
+              <p style={{ margin: '0 0 16px 0', fontSize: '12.5px', color: '#64748b', lineHeight: 1.45 }}>
+                Informe o período obrigatório para limitar o volume do relatório. A filial é opcional.
+              </p>
+
+              <div className="login-group" style={{ marginBottom: '14px' }}>
+                <label htmlFor="billing-export-branch">Filial</label>
+                <select
+                  id="billing-export-branch"
+                  value={exportBranch}
+                  onChange={(e) => setExportBranch(e.target.value)}
+                  disabled={isExporting}
+                  style={{ background: '#f8fafc' }}
+                >
+                  <option value="Todas">Todas</option>
+                  {BRANCH_OPTIONS.map((branch) => (
+                    <option key={branch} value={branch}>{branch}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '15px', marginBottom: '14px' }}>
+                <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label htmlFor="billing-export-start">Período início *</label>
+                  <input
+                    type="date"
+                    id="billing-export-start"
+                    required
+                    value={exportStartDate}
+                    onChange={(e) => setExportStartDate(e.target.value)}
+                    disabled={isExporting}
+                    style={{ background: '#f8fafc' }}
+                  />
+                </div>
+                <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label htmlFor="billing-export-end">Período fim *</label>
+                  <input
+                    type="date"
+                    id="billing-export-end"
+                    required
+                    value={exportEndDate}
+                    onChange={(e) => setExportEndDate(e.target.value)}
+                    disabled={isExporting}
+                    style={{ background: '#f8fafc' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                <button
+                  type="button"
+                  className="reports-action-btn secondary"
+                  onClick={closeExportModal}
+                  disabled={isExporting}
+                  style={{ fontSize: '12.5px', height: '36px', borderColor: '#cbd5e1' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="reports-action-btn primary"
+                  disabled={isExporting}
+                  style={{
+                    backgroundColor: '#118CC4',
+                    borderColor: '#118CC4',
+                    fontSize: '12.5px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    opacity: isExporting ? 0.7 : 1,
+                  }}
+                >
+                  {isExporting ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm"
+                        role="status"
+                        aria-hidden="true"
+                        style={{
+                          width: '14px',
+                          height: '14px',
+                          borderLeftColor: 'transparent',
+                          borderRadius: '50%',
+                          borderStyle: 'solid',
+                          borderWidth: '2px',
+                          animation: 'spinner-border .75s linear infinite',
+                          color: '#fff',
+                        }}
+                      />
+                      <span>Gerando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                      </svg>
+                      <span>Gerar Excel</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: IMPORTAR RELATÓRIO */}
       {isImportModalOpen && (

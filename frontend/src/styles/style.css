@@ -350,6 +350,37 @@ body {
   align-items: center;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.header-filial {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background-color: #f1f3f5;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+
+.header-filial .bi {
+  font-size: 13px;
+  flex-shrink: 0;
+  color: #64748b;
+}
+
 .header-user {
   display: flex;
   align-items: center;

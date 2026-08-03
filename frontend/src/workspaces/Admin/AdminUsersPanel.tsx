@@ -12,6 +12,7 @@ import {
 import { useRoles } from '../../hooks/useRoles';
 import {
   ADMIN_ENVIRONMENT,
+  environmentRequiresFilial,
   normalizeEnvironment,
 } from '../../constants/environments';
 import { INDICADOR_ITEMS, type IndicadorKey } from '../../constants/indicadores';
@@ -709,7 +710,7 @@ const AdminUsersPanel: React.FC = () => {
                   </div>
                 </div>
                 <p className="admin-form-hint" style={{ margin: '0 0 8px 0' }}>
-                  Use o interruptor para liberar ou bloquear o módulo. Expanda a linha para escolher filiais e permissões específicas.
+                  Use o interruptor para liberar ou bloquear o módulo. Ambientes com sessão por filial (ex.: SGQ) pedem as unidades; nos globais basta liberar o acesso.
                 </p>
 
                 {isSelectedAdmin && (
@@ -727,36 +728,44 @@ const AdminUsersPanel: React.FC = () => {
                     const funcaoItems = funcoesDoModulo(group.module);
                     const selectedFuncoes = funcoes[group.module] ?? [];
                     const showFuncoes = funcaoItems.length > 0 && !isSelectedAdmin;
+                    const requiresFilial = environmentRequiresFilial(group.module);
+                    const canExpand = requiresFilial || showFuncoes || group.module === 'Indicadores';
 
                     const summaryParts: string[] = [];
                     if (!hasAccess) {
                       summaryParts.push('Sem acesso');
-                    } else {
+                    } else if (requiresFilial) {
                       summaryParts.push(
                         branches.length === moduleBranches.length ? 'Todas as filiais' : `${branches.length} de ${moduleBranches.length} filiais`,
                       );
-                      if (group.module === 'Indicadores') {
-                        summaryParts.push(
-                          indicadoresMode === 'todos' ? 'todos os indicadores' : `${selectedIndicadores.length} indicador(es)`,
-                        );
-                      }
-                      if (showFuncoes) {
-                        summaryParts.push(
-                          selectedFuncoes.length === 0 ? 'somente consulta' : `${selectedFuncoes.length} de ${funcaoItems.length} funções`,
-                        );
-                      }
+                    } else {
+                      summaryParts.push('Acesso liberado');
+                    }
+                    if (hasAccess && group.module === 'Indicadores') {
+                      summaryParts.push(
+                        indicadoresMode === 'todos' ? 'todos os indicadores' : `${selectedIndicadores.length} indicador(es)`,
+                      );
+                    }
+                    if (hasAccess && showFuncoes) {
+                      summaryParts.push(
+                        selectedFuncoes.length === 0 ? 'somente consulta' : `${selectedFuncoes.length} de ${funcaoItems.length} funções`,
+                      );
                     }
 
                     return (
                       <div className={`module-config ${hasAccess ? 'is-active' : ''}`} key={group.module}>
                         <div
                           className="module-config-header"
-                          onClick={() => setExpandedModule(isExpanded ? null : group.module)}
+                          onClick={() => {
+                            if (!canExpand) return;
+                            setExpandedModule(isExpanded ? null : group.module);
+                          }}
+                          style={{ cursor: canExpand ? 'pointer' : 'default' }}
                         >
                           <label
                             className="perm-switch"
                             onClick={(e) => e.stopPropagation()}
-                            title={hasAccess ? 'Remover acesso ao módulo' : 'Liberar módulo (todas as filiais)'}
+                            title={hasAccess ? 'Remover acesso ao módulo' : requiresFilial ? 'Liberar módulo (todas as filiais)' : 'Liberar módulo'}
                           >
                             <input
                               type="checkbox"
@@ -767,16 +776,19 @@ const AdminUsersPanel: React.FC = () => {
                           </label>
                           <span className="module-config-name">{group.label}</span>
                           <span className="module-config-summary">{summaryParts.join(' · ')}</span>
-                          <svg
-                            className={`module-config-chevron ${isExpanded ? 'is-open' : ''}`}
-                            width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                          </svg>
+                          {canExpand && (
+                            <svg
+                              className={`module-config-chevron ${isExpanded ? 'is-open' : ''}`}
+                              width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          )}
                         </div>
 
-                        {isExpanded && (
+                        {isExpanded && canExpand && (
                           <div className="module-config-body">
+                            {requiresFilial && (
                             <div className="module-config-group">
                               <div className="module-config-group-head">
                                 <span className="module-config-group-label">Em quais filiais?</span>
@@ -808,6 +820,7 @@ const AdminUsersPanel: React.FC = () => {
                                 })}
                               </div>
                             </div>
+                            )}
 
                             {group.module === 'Indicadores' && (
                               <div className="module-config-group">

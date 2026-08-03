@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { isAdminEnvironment } from '../constants/environments';
+import { environmentRequiresFilial, isAdminEnvironment } from '../constants/environments';
 import { getAllowedIndicadores } from '../constants/indicadores';
 import logoExpanded from '../assets/Logo_TccConex.png';
 import logoCollapsed from '../assets/Logo_TccConex_Fechado.png';
@@ -29,10 +29,11 @@ function ChevronSubmenu({ open }: { open: boolean }) {
 }
 
 const DashboardLayout: React.FC = () => {
-  const { user, selectedEnvironment, logout, clearEnvironment } = useAuth();
+  const { user, selectedEnvironment, selectedFilial, logout, clearEnvironment } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const allowedIndicadores = getAllowedIndicadores(user);
+  const showSessionFilial = environmentRequiresFilial(selectedEnvironment) && !!selectedFilial;
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -945,6 +946,13 @@ const DashboardLayout: React.FC = () => {
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
           </div>
+          <div className="header-right">
+            {showSessionFilial && (
+              <div className="header-filial" title="Filial da sessão">
+                <i className="bi bi-building" aria-hidden="true" />
+                <span>{selectedFilial}</span>
+              </div>
+            )}
           <div 
             className="header-user" 
             id="btn-header-user" 
@@ -967,6 +975,7 @@ const DashboardLayout: React.FC = () => {
                 <span>Logout</span>
               </div>
             </div>
+          </div>
           </div>
         </header>
         
