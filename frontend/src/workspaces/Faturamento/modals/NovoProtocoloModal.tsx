@@ -32,6 +32,9 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
   const [expedicoes, setExpedicoes] = useState<ProtocoloExpedicao[]>(protocolo?.expedicoes ?? []);
   const [nfInput, setNfInput] = useState('');
   const [filialInput, setFilialInput] = useState('');
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  /** Índice de inserção (0 = antes da 1ª, notas.length = depois da última). */
+  const [dropInsertIndex, setDropInsertIndex] = useState<number | null>(null);
   const [notas, setNotas] = useState<NotaItem[]>(() => {
     if (!protocolo) return [];
     return protocolo.notasFiscais.map((nf) => ({
@@ -73,6 +76,33 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
   };
 
   const removeNota = (nf: string) => setNotas((prev) => prev.filter((item) => item.nf !== nf));
+
+  const reorderNotaToInsert = (from: number, insertAt: number) => {
+    setNotas((prev) => {
+      if (from < 0 || from >= prev.length) return prev;
+      let to = Math.max(0, Math.min(insertAt, prev.length));
+      // Ao remover o item, índices à direita recuam 1.
+      if (to > from) to -= 1;
+      if (to === from) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+
+  const clearDragState = () => {
+    setDragIndex(null);
+    setDropInsertIndex(null);
+  };
+
+  const updateDropInsertFromChip = (event: React.DragEvent<HTMLElement>, index: number) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const rect = event.currentTarget.getBoundingClientRect();
+    const insertAt = event.clientX < rect.left + rect.width / 2 ? index : index + 1;
+    if (dropInsertIndex !== insertAt) setDropInsertIndex(insertAt);
+  };
 
   const toggleExpedicao = (valor: ProtocoloExpedicao) => {
     setExpedicoes((prev) => {
@@ -251,24 +281,97 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
             </div>
 
             {notas.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
-                {notas.map((item) => (
-                  <span
-                    key={item.nf}
-                    className="tag-chip"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    title={item.filial ? `Filial: ${item.filial}` : undefined}
-                  >
-                    <span>{item.nf}</span>
-                    {item.filial && (
-                      <span style={{ color: '#118CC4', fontSize: '10px', fontWeight: 700, background: 'rgba(17,140,196,0.12)', padding: '1px 5px', borderRadius: '8px' }}>
-                        {item.filial}
+              <div
+                className={`tag-chip-list${dragIndex !== null ? ' is-dragging' : ''}`}
+                onDragOver={(e) => {
+                  if (dragIndex === null) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const fromRaw = e.dataTransfer.getData('text/plain');
+                  const from = Number.parseInt(fromRaw, 10);
+                  if (Number.isFinite(from) && dropInsertIndex !== null) {
+                    reorderNotaToInsert(from, dropInsertIndex);
+                  }
+                  clearDragState();
+                }}
+              >
+                {notas.map((item, index) => {
+                  const showMarkerBefore =
+                    dragIndex !== null
+                    && dropInsertIndex === index
+                    && dragIndex !== index
+                    && dragIndex + 1 !== index;
+
+                  const chipClass = [
+                    'tag-chip',
+                    'tag-chip--draggable',
+                    dragIndex === index ? 'tag-chip--dragging' : '',
+                  ].filter(Boolean).join(' ');
+
+                  return (
+                    <React.Fragment key={item.nf}>
+                      {showMarkerBefore && (
+                        <span className="tag-chip-insert-marker" aria-hidden="true" />
+                      )}
+                      <span
+                        className={chipClass}
+                        draggable
+                        onDragStart={(e) => {
+                          setDragIndex(index);
+                          setDropInsertIndex(index);
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', String(index));
+                        }}
+                        onDragEnd={clearDragState}
+                        onDragOver={(e) => updateDropInsertFromChip(e, index)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const fromRaw = e.dataTransfer.getData('text/plain');
+                          const from = Number.parseInt(fromRaw, 10);
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const insertAt = e.clientX < rect.left + rect.width / 2 ? index : index + 1;
+                          if (Number.isFinite(from)) reorderNotaToInsert(from, insertAt);
+                          clearDragState();
+                        }}
+                        title={
+                          item.filial
+                            ? `Filial: ${item.filial} — arraste para antes, entre ou depois`
+                            : 'Arraste para antes, entre ou depois'
+                        }
+                      >
+                        <span>{item.nf}</span>
+                        {item.filial && (
+                          <span className="tag-chip__filial">{item.filial}</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeNota(item.nf)}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          aria-label={`Remover ${item.nf}`}
+                        >
+                          ×
+                        </button>
                       </span>
-                    )}
-                    <button type="button" onClick={() => removeNota(item.nf)} aria-label={`Remover ${item.nf}`}>×</button>
-                  </span>
-                ))}
+                    </React.Fragment>
+                  );
+                })}
+                {dragIndex !== null
+                  && dropInsertIndex === notas.length
+                  && dragIndex !== notas.length - 1 && (
+                  <span className="tag-chip-insert-marker" aria-hidden="true" />
+                )}
               </div>
+            )}
+
+            {notas.length > 1 && (
+              <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '8px', marginBottom: 0 }}>
+                <i className="bi bi-arrows-move" style={{ marginRight: '4px' }} />
+                Arraste a NF e solte antes, entre ou depois das outras. A ordem define a sequência no PDF.
+              </p>
             )}
 
             {exigeFilial && notas.length > 0 && (
