@@ -6,6 +6,7 @@ from .models import (
     InconsistenciaColaborador,
     CargoMapping,
     ColaboradorPJ,
+    ColaboradorPJHistorico,
 )
 
 
@@ -87,12 +88,31 @@ class CargoMappingSerializer(serializers.ModelSerializer):
         fields = ['id', 'cargo', 'categoria', 'categoriaDisplay', 'dataCriacao', 'ultimaAtualizacao']
 
 
+class ColaboradorPJHistoricoSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source='pk', read_only=True)
+    pjId = serializers.PrimaryKeyRelatedField(source='pj', read_only=True)
+    dataCriacao = serializers.DateTimeField(source='data_criacao', format='%d/%m/%Y %H:%M:%S', read_only=True)
+
+    class Meta:
+        model = ColaboradorPJHistorico
+        fields = ['id', 'pjId', 'ano', 'mes', 'salario', 'cargo', 'filial', 'dataCriacao']
+
+    def validate_mes(self, value):
+        if value < 1 or value > 12:
+            raise serializers.ValidationError('Mês deve estar entre 1 e 12.')
+        return value
+
+
 class ColaboradorPJSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='pk', read_only=True)
     dataAdmissao = serializers.DateField(source='data_admissao', format='%Y-%m-%d', required=False, allow_null=True)
+    dataDemissao = serializers.DateField(source='data_demissao', format='%Y-%m-%d', required=False, allow_null=True)
     dataNascimento = serializers.DateField(source='data_nascimento', format='%Y-%m-%d', required=False, allow_null=True)
     dataCriacao = serializers.DateTimeField(source='data_criacao', format='%d/%m/%Y %H:%M:%S', read_only=True)
 
     class Meta:
         model = ColaboradorPJ
-        fields = ['id', 'nome', 'cpf', 'salario', 'filial', 'cargo', 'dataAdmissao', 'dataNascimento', 'ativo', 'dataCriacao']
+        fields = [
+            'id', 'nome', 'cpf', 'salario', 'filial', 'cargo',
+            'dataAdmissao', 'dataDemissao', 'dataNascimento', 'ativo', 'dataCriacao',
+        ]

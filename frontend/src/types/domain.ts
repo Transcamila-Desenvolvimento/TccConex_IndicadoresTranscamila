@@ -850,8 +850,20 @@ export interface ColaboradorPJ {
   filial: string;
   cargo: string;
   dataAdmissao?: string;
+  dataDemissao?: string;
   dataNascimento?: string;
   ativo: boolean;
+  dataCriacao: string;
+}
+
+export interface ColaboradorPJHistorico {
+  id: string;
+  pjId: string;
+  ano: number;
+  mes: number;
+  salario: number;
+  cargo?: string;
+  filial?: string;
   dataCriacao: string;
 }
 

@@ -74,7 +74,13 @@ const RHAdmissoesChart: React.FC<RHAdmissoesChartProps> = ({ series }) => {
     scales: {
       x: {
         grid: { display: false },
-        ticks: { color: '#94a3b8', font: { size: 11 } },
+        ticks: {
+          color: '#94a3b8',
+          font: { size: 11 },
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: 12,
+        },
       },
       y: {
         grid: { color: 'rgba(226, 232, 240, 0.8)' },

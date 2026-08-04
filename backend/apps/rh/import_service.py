@@ -14,9 +14,9 @@ from .models import (
     MovimentacaoColaborador,
     InconsistenciaColaborador,
     CargoMapping,
-    ColaboradorPJ,
 )
 from .utils import definir_categoria_colaborador
+from .pj_sync_service import sync_todos_pjs
 
 
 def _normalize_header(value) -> str:
@@ -53,7 +53,10 @@ def clean_cpf(val) -> str | None:
     if s.endswith('.0'):
         s = s[:-2]
     s = re.sub(r'\D', '', s)
-    return s if s else None
+    # Aceita somente CPF (11 dígitos). Ignora PIS/outros identificadores da planilha.
+    if len(s) != 11:
+        return None
+    return s
 
 
 def clean_money(val) -> Decimal:
@@ -112,52 +115,111 @@ def parse_date(val) -> date | None:
         return None
 
 
+_MES_NOME_ALIASES = {
+    1: ('jan', 'janeiro'),
+    2: ('fev', 'fever'),
+    3: ('mar', 'marco', 'março'),
+    4: ('abr', 'abril'),
+    5: ('mai', 'maio'),
+    6: ('jun', 'junho'),
+    7: ('jul', 'julho'),
+    8: ('ago', 'agosto'),
+    9: ('set', 'setembro'),
+    10: ('out', 'outubro'),
+    11: ('nov', 'novembro'),
+    12: ('dez', 'dezembro'),
+}
+
+
+def _sheet_has_cpf_header(sheet, cpf_aliases) -> bool:
+    sample = []
+    for i, row in enumerate(sheet.iter_rows(max_row=5, values_only=True)):
+        sample.extend(row or [])
+        if i >= 4:
+            break
+    flat = ' '.join(_normalize_header(c) for c in sample)
+    return any(_normalize_header(alias) in flat for alias in cpf_aliases)
+
+
+def _score_sheet_for_lote(sheet_name: str, lote: LoteMovimentacaoRH, has_cpf: bool) -> int:
+    """Pontua aba para o mês/ano do lote (planilhas históricas multi-aba)."""
+    if not has_cpf:
+        return -1
+    name = _normalize_header(sheet_name)
+    # ignora abas auxiliares
+    if 'grafico' in name:
+        return -1
+
+    score = 10  # base: tem CPF
+    mes_aliases = _MES_NOME_ALIASES.get(lote.mes, ())
+    mes_hit = any(
+        name == alias
+        or name.startswith(f'{alias} ')
+        or name.endswith(f' {alias}')
+        or f' {alias} ' in f' {name} '
+        or name.startswith(alias)
+        for alias in mes_aliases
+    )
+    if mes_hit:
+        score += 100
+
+    ano = str(lote.ano)
+    ano2 = ano[-2:]
+    if ano in name or re.search(rf'(^|\D){re.escape(ano2)}(\D|$)', name):
+        score += 50
+
+    return score
+
+
+def _pick_sheet_for_lote(workbook, lote: LoteMovimentacaoRH):
+    cpf_aliases = ['c.p.f.', 'cpf', 'fis_cpf', 'identificador']
+    best_name = workbook.sheetnames[0]
+    best_score = -1
+    # Em empate, a última aba do arquivo costuma ser a competência mais recente
+    # (ex.: várias abas "ABRIL" ao longo dos anos — a última é a vigente).
+    for name in workbook.sheetnames:
+        sheet = workbook[name]
+        has_cpf = _sheet_has_cpf_header(sheet, cpf_aliases)
+        score = _score_sheet_for_lote(name, lote, has_cpf)
+        if score >= best_score:
+            best_score = score
+            best_name = name
+    return workbook[best_name], best_name
+
+
 def import_movimentacao_mensal(lote: LoteMovimentacaoRH, file_bytes: bytes, user) -> dict:
     """Processa a importação de uma planilha para um lote mensal."""
     workbook = openpyxl.load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
-    
-    # Encontrar a aba que contenha CPFs
-    best_sheet_name = workbook.sheetnames[0]
-    best_sheet = workbook[best_sheet_name]
-    best_score = 0
-    
+
     cpf_aliases = ['c.p.f.', 'cpf', 'fis_cpf', 'identificador']
-    
-    for name in workbook.sheetnames:
-        sheet = workbook[name]
-        sample = []
-        for i, row in enumerate(sheet.iter_rows(max_row=5, values_only=True)):
-            sample.extend(row or [])
-        flat = ' '.join(_normalize_header(c) for c in sample)
-        score = sum(1 for alias in cpf_aliases if _normalize_header(alias) in flat)
-        if score > best_score:
-            best_score = score
-            best_sheet = sheet
-            best_sheet_name = name
-            
+    best_sheet, best_sheet_name = _pick_sheet_for_lote(workbook, lote)
+
     rows = list(best_sheet.iter_rows(values_only=True))
     if not rows:
         raise ValueError(f"A aba '{best_sheet_name}' está vazia.")
-        
+
     # Encontrar linha de cabeçalho
     header_idx = 0
     for i, row in enumerate(rows[:10]):
         if any(any(_normalize_header(alias) in _normalize_header(cell) for alias in cpf_aliases) for cell in (row or []) if cell):
             header_idx = i
             break
-            
+
     headers = [str(c).strip() if c is not None else f"Col{idx}" for idx, c in enumerate(rows[header_idx])]
-    
-    # Mapeamento de colunas
+
+    # Mapeamento de colunas (aliases mais específicos primeiro; evita "… CONFERE")
     col_cpf = find_column_index(headers, cpf_aliases)
-    col_nome = find_column_index(headers, ['nome complet', 'nome', 'nome completo', 'funcionario', 'nome do colaborador'])
-    col_salario = find_column_index(headers, ['salario', 'salário', 'remuneracao', 'valor'])
+    col_nome = find_column_index(headers, ['nome complet', 'nome completo', 'funcionario', 'nome do colaborador', 'nome'])
+    col_salario = find_column_index(headers, ['salario atual', 'salário atual', 'salario', 'salário', 'remuneracao', 'valor'])
     col_filial = find_column_index(headers, ['filial', 'unidade', 'empresa', 'estabelecimento'])
     col_cargo = find_column_index(headers, ['desc. cargo', 'cargo', 'funcao', 'função'])
-    col_situacao = find_column_index(headers, ['situacao', 'situação', 'status', 'status do funcionario'])
+    col_situacao = find_column_index(
+        headers,
+        ['status funcionarios', 'status funcionário', 'status do funcionario', 'situacao', 'situação', 'status'],
+    )
     col_estado = find_column_index(headers, ['estado', 'uf', 'u.f.'])
-    col_admissao = find_column_index(headers, ['data admis.', 'admissão', 'data admissão', 'dt. adm.'])
-    col_nasc = find_column_index(headers, ['data nasc.', 'nascimento', 'data nascimento', 'dt. nasc.'])
+    col_admissao = find_column_index(headers, ['data admis.', 'data admissão', 'dt. adm.', 'admissão', 'admissao'])
+    col_nasc = find_column_index(headers, ['data nasc.', 'data nascimento', 'dt. nasc.', 'nascimento', 'nasc'])
     col_matricula = find_column_index(headers, ['matricula', 'matrícula', 'chapa'])
     col_depto = find_column_index(headers, ['depto', 'departamento', 'desc. depto.'])
     col_lider = find_column_index(headers, ['lider', 'líder', 'nome lider', 'nome do lider'])
@@ -286,32 +348,20 @@ def import_movimentacao_mensal(lote: LoteMovimentacaoRH, file_bytes: bytes, user
 
         if novos_objs:
             MovimentacaoColaborador.objects.bulk_create(novos_objs)
-            
-        # Injetar PJs cadastrados e ativos no sistema
-        pjs_para_injetar = ColaboradorPJ.objects.filter(ativo=True).exclude(cpf__in=cpfs_importados)
-        pjs_objs = []
-        for pj in pjs_para_injetar:
-            pjs_objs.append(MovimentacaoColaborador(
-                lote=lote,
-                filial=pj.filial,
-                nome=pj.nome,
-                situacao='ATIVO (PJ)',
-                funcao=pj.cargo,
-                data_admissao=pj.data_admissao,
-                data_nascimento=pj.data_nascimento,
-                cpf=pj.cpf,
-                salario=pj.salario,
-                categoria=definir_categoria_colaborador(pj.cargo)
-            ))
-            
-        if pjs_objs:
-            MovimentacaoColaborador.objects.bulk_create(pjs_objs)
-            
+
+        # Reprojeta PJs em todos os lotes (admissão/demissão + histórico salarial)
+        pj_sync = sync_todos_pjs()
+        pjs_in_lote = MovimentacaoColaborador.objects.filter(
+            lote=lote,
+            situacao__icontains='PJ',
+        ).count()
+
         return {
             'success': True,
             'imported': len(novos_objs),
-            'pjs_injected': len(pjs_objs),
-            'total': len(novos_objs) + len(pjs_objs),
+            'pjs_injected': pjs_in_lote,
+            'pj_sync': pj_sync,
+            'total': len(novos_objs) + pjs_in_lote,
             'aba': best_sheet_name,
         }
 
@@ -464,34 +514,19 @@ def import_movimentacao_lote_completo(file_bytes: bytes, user) -> dict:
                         
             if novos_objs:
                 MovimentacaoColaborador.objects.bulk_create(novos_objs)
-                
-            # Injetar PJs
-            pjs_para_injetar = ColaboradorPJ.objects.filter(ativo=True).exclude(cpf__in=cpfs_importados)
-            pjs_objs = []
-            for pj in pjs_para_injetar:
-                pjs_objs.append(MovimentacaoColaborador(
-                    lote=lote,
-                    filial=pj.filial,
-                    nome=pj.nome,
-                    situacao='ATIVO (PJ)',
-                    funcao=pj.cargo,
-                    data_admissao=pj.data_admissao,
-                    data_nascimento=pj.data_nascimento,
-                    cpf=pj.cpf,
-                    salario=pj.salario,
-                    categoria=definir_categoria_colaborador(pj.cargo)
-                ))
-                
-            if pjs_objs:
-                MovimentacaoColaborador.objects.bulk_create(pjs_objs)
-                
+
             lotes_processados += 1
-            registros_total += (len(novos_objs) + len(pjs_objs))
-            
+            registros_total += len(novos_objs)
+
+    pj_sync = sync_todos_pjs()
+    pjs_total = MovimentacaoColaborador.objects.filter(situacao__icontains='PJ').count()
+    registros_total += pjs_total
+
     return {
         'success': True,
         'lotes_count': lotes_processados,
-        'records_count': registros_total
+        'records_count': registros_total,
+        'pj_sync': pj_sync,
     }
 
 

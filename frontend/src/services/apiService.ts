@@ -21,7 +21,7 @@ import type {
   AuditLogQueryParams,
   AuditLogFacets,
   UserQueryParams,
-  Colaborador, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
+  Colaborador, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
   UnidadeMedida, Setor, ColaboradorCompras, Fornecedor, ItemEstoque, EntradaEstoque, SaidaEstoque,
   RegistrarCompraPayload, RegistrarSaidaPayload,
   ClienteProtocolo, ProtocoloEnvio,
@@ -1270,6 +1270,32 @@ export const apiService = {
 
   async deletePjRH(id: string): Promise<void> {
     await api.delete(`/api/rh/pjs/${id}/`);
+  },
+
+  async getPjHistoricoRH(pjId: string): Promise<ColaboradorPJHistorico[]> {
+    const { data } = await api.get(`/api/rh/pjs/${pjId}/historico/`);
+    return data;
+  },
+
+  async createPjHistoricoRH(
+    pjId: string,
+    payload: { ano: number; mes: number; salario: number; cargo?: string; filial?: string },
+  ): Promise<ColaboradorPJHistorico> {
+    const { data } = await api.post(`/api/rh/pjs/${pjId}/historico/`, payload);
+    return data;
+  },
+
+  async updatePjHistoricoRH(
+    pjId: string,
+    historicoId: string,
+    payload: Partial<{ ano: number; mes: number; salario: number; cargo?: string; filial?: string }>,
+  ): Promise<ColaboradorPJHistorico> {
+    const { data } = await api.patch(`/api/rh/pjs/${pjId}/historico/${historicoId}/`, payload);
+    return data;
+  },
+
+  async deletePjHistoricoRH(pjId: string, historicoId: string): Promise<void> {
+    await api.delete(`/api/rh/pjs/${pjId}/historico/${historicoId}/`);
   },
 
   async getCargosRH(params: { status?: 'pendente' | 'definido'; search?: string } = {}): Promise<CargoMapping[]> {

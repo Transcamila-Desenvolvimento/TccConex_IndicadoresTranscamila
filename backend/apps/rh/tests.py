@@ -9,8 +9,21 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.tests import auth_headers
-from apps.rh.models import LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador
+from datetime import date
+from decimal import Decimal
+
+from apps.rh.models import (
+    LoteMovimentacaoRH,
+    MovimentacaoColaborador,
+    InconsistenciaColaborador,
+    ColaboradorPJ,
+    ColaboradorPJHistorico,
+)
+from apps.rh.pj_sync_service import sync_pj_nos_lotes
+from apps.rh.import_service import clean_cpf, _pick_sheet_for_lote
 from apps.rh.views import _meses_afastado
+import openpyxl
+from io import BytesIO
 
 User = get_user_model()
 
@@ -325,3 +338,264 @@ class ExportarRelatorioMovimentacoesTests(TestCase):
             **auth_headers(self.user, 'RH'),
         )
         self.assertEqual(response.status_code, 404)
+
+
+class CleanCpfImportTests(TestCase):
+    def test_clean_cpf_exige_11_digitos(self):
+        self.assertEqual(clean_cpf('141.684.779-08'), '14168477908')
+        self.assertIsNone(clean_cpf('0'))
+        self.assertIsNone(clean_cpf('31716298850574713'))  # PIS/outro id
+        self.assertIsNone(clean_cpf(''))
+        self.assertIsNone(clean_cpf(None))
+
+    def test_pick_sheet_prioriza_mes_e_ano_do_lote(self):
+        wb = openpyxl.Workbook()
+        # remove default
+        default = wb.active
+        wb.remove(default)
+        for name, header in [
+            ('ABRIL 2015', ['CPF', 'Nome', 'Salario']),
+            ('JAN 2026', ['CPF', 'Nome', 'Salario']),
+            ('ABRIL', ['CPF', 'Nome', 'Salario']),
+            ('GRAFICOS', ['x']),
+        ]:
+            ws = wb.create_sheet(name)
+            ws.append(header)
+            ws.append(['123.456.789-00', 'Fulano', 1000])
+        buffer = BytesIO()
+        wb.save(buffer)
+        loaded = openpyxl.load_workbook(BytesIO(buffer.getvalue()), read_only=True, data_only=True)
+
+        _, abr = _pick_sheet_for_lote(loaded, LoteMovimentacaoRH(mes=4, ano=2026))
+        self.assertEqual(abr, 'ABRIL')
+        _, jan = _pick_sheet_for_lote(loaded, LoteMovimentacaoRH(mes=1, ano=2026))
+        self.assertEqual(jan, 'JAN 2026')
+
+
+class PjSyncNosLotesTests(TestCase):
+    """PJ deve ser projetado nos lotes importados conforme admissão/demissão e histórico."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='rh_pj_sync_tests',
+            password='rh123',
+            role_id='2',
+            environments=['RH'],
+            filiais={},
+        )
+        self.lotes = {}
+        for mes in (1, 2, 3, 4):
+            self.lotes[mes] = LoteMovimentacaoRH.objects.create(
+                mes=mes, ano=2026, usuario=self.user, data_importacao=timezone.now(),
+            )
+
+    def _cpfs_no_lote(self, mes):
+        return set(
+            MovimentacaoColaborador.objects.filter(lote=self.lotes[mes]).values_list('cpf', flat=True)
+        )
+
+    def test_pj_so_entra_a_partir_da_admissao(self):
+        response = self.client.post(
+            '/api/rh/pjs/',
+            data={
+                'nome': 'PJ Consultor',
+                'cpf': '555.555.555-55',
+                'salario': '5000.00',
+                'filial': 'Ibiporã (Matriz)',
+                'cargo': 'Consultor',
+                'dataAdmissao': '2026-03-10',
+                'ativo': True,
+            },
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+        self.assertNotIn('555.555.555-55', self._cpfs_no_lote(1))
+        self.assertNotIn('555.555.555-55', self._cpfs_no_lote(2))
+        self.assertIn('555.555.555-55', self._cpfs_no_lote(3))
+        self.assertIn('555.555.555-55', self._cpfs_no_lote(4))
+
+        mov_mar = MovimentacaoColaborador.objects.get(lote=self.lotes[3], cpf='555.555.555-55')
+        self.assertEqual(mov_mar.situacao, 'ATIVO (PJ)')
+        self.assertEqual(Decimal(mov_mar.salario), Decimal('5000.00'))
+
+    def test_historico_salarial_aplica_por_competencia(self):
+        pj = ColaboradorPJ.objects.create(
+            nome='PJ Histórico',
+            cpf='666.666.666-66',
+            salario=Decimal('4000.00'),
+            filial='Ibiporã (Matriz)',
+            cargo='Analista',
+            data_admissao=date(2026, 1, 1),
+            ativo=True,
+        )
+        ColaboradorPJHistorico.objects.create(pj=pj, ano=2026, mes=3, salario=Decimal('4500.00'))
+        sync_pj_nos_lotes(pj)
+
+        self.assertEqual(
+            Decimal(MovimentacaoColaborador.objects.get(lote=self.lotes[2], cpf=pj.cpf).salario),
+            Decimal('4000.00'),
+        )
+        self.assertEqual(
+            Decimal(MovimentacaoColaborador.objects.get(lote=self.lotes[3], cpf=pj.cpf).salario),
+            Decimal('4500.00'),
+        )
+        self.assertEqual(
+            Decimal(MovimentacaoColaborador.objects.get(lote=self.lotes[4], cpf=pj.cpf).salario),
+            Decimal('4500.00'),
+        )
+
+    def test_demissao_remove_meses_posteriores(self):
+        response = self.client.post(
+            '/api/rh/pjs/',
+            data={
+                'nome': 'PJ Temporário',
+                'cpf': '777.777.777-77',
+                'salario': '3000.00',
+                'filial': 'Rondonópolis',
+                'cargo': 'Apoio',
+                'dataAdmissao': '2026-01-01',
+                'dataDemissao': '2026-02-28',
+                'ativo': True,
+            },
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+        self.assertIn('777.777.777-77', self._cpfs_no_lote(1))
+        self.assertIn('777.777.777-77', self._cpfs_no_lote(2))
+        self.assertNotIn('777.777.777-77', self._cpfs_no_lote(3))
+        self.assertNotIn('777.777.777-77', self._cpfs_no_lote(4))
+
+    def test_nao_sobrescreve_linha_clt_do_mesmo_cpf(self):
+        MovimentacaoColaborador.objects.create(
+            lote=self.lotes[3],
+            filial='Ibiporã (Matriz)',
+            nome='CLT Existente',
+            situacao='ATIVO',
+            funcao='Motorista',
+            cpf='888.888.888-88',
+            salario='2000.00',
+            categoria='MOTORISTA',
+        )
+        response = self.client.post(
+            '/api/rh/pjs/',
+            data={
+                'nome': 'PJ Mesmo CPF',
+                'cpf': '888.888.888-88',
+                'salario': '9000.00',
+                'filial': 'Ibiporã (Matriz)',
+                'cargo': 'Consultor',
+                'dataAdmissao': '2026-01-01',
+                'ativo': True,
+            },
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+        mov = MovimentacaoColaborador.objects.get(lote=self.lotes[3], cpf='888.888.888-88')
+        self.assertEqual(mov.situacao, 'ATIVO')
+        self.assertEqual(mov.nome, 'CLT Existente')
+        self.assertEqual(Decimal(mov.salario), Decimal('2000.00'))
+        # Em meses sem CLT, o PJ entra normalmente
+        self.assertIn('888.888.888-88', self._cpfs_no_lote(1))
+        self.assertEqual(
+            MovimentacaoColaborador.objects.get(lote=self.lotes[1], cpf='888.888.888-88').situacao,
+            'ATIVO (PJ)',
+        )
+
+    def test_cargo_pj_aparece_no_mapeamento_e_categoria_propaga(self):
+        """Cargo do PJ deve entrar na classificação e, ao mapear, atualizar a movimentação."""
+        create = self.client.post(
+            '/api/rh/pjs/',
+            data={
+                'nome': 'PJ Cargo',
+                'cpf': '121.212.212-12',
+                'salario': '2000.00',
+                'filial': 'Ibiporã (Matriz)',
+                'cargo': 'Cargo Teste PJ',
+                'dataAdmissao': '2026-01-01',
+                'ativo': True,
+            },
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(create.status_code, 201, create.data)
+
+        cargos = self.client.get(
+            '/api/rh/cargos/?status=pendente',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(cargos.status_code, 200, cargos.data)
+        nomes = {c['cargo'] for c in cargos.data}
+        self.assertIn('CARGO TESTE PJ', nomes)
+
+        mapping_id = next(c['id'] for c in cargos.data if c['cargo'] == 'CARGO TESTE PJ')
+        patch = self.client.patch(
+            f'/api/rh/cargos/{mapping_id}/',
+            data={'categoria': 'ADMINISTRATIVO'},
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(patch.status_code, 200, patch.data)
+
+        mov = MovimentacaoColaborador.objects.get(lote=self.lotes[3], cpf='121.212.212-12')
+        self.assertEqual(mov.categoria, 'ADMINISTRATIVO')
+        self.assertEqual(mov.funcao, 'CARGO TESTE PJ')
+
+    def test_api_historico_crud_e_resync(self):
+        create = self.client.post(
+            '/api/rh/pjs/',
+            data={
+                'nome': 'PJ API Hist',
+                'cpf': '999.999.999-99',
+                'salario': '1000.00',
+                'filial': 'Ibiporã (Matriz)',
+                'cargo': 'Analista',
+                'dataAdmissao': '2026-01-01',
+                'ativo': True,
+            },
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(create.status_code, 201, create.data)
+        pj_id = create.data['id']
+
+        hist = self.client.post(
+            f'/api/rh/pjs/{pj_id}/historico/',
+            data={'ano': 2026, 'mes': 3, 'salario': '1500.00'},
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(hist.status_code, 201, hist.data)
+        self.assertEqual(
+            Decimal(MovimentacaoColaborador.objects.get(lote=self.lotes[3], cpf='999.999.999-99').salario),
+            Decimal('1500.00'),
+        )
+
+        hid = hist.data['id']
+        patch = self.client.patch(
+            f'/api/rh/pjs/{pj_id}/historico/{hid}/',
+            data={'salario': '1600.00'},
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(patch.status_code, 200, patch.data)
+        self.assertEqual(
+            Decimal(MovimentacaoColaborador.objects.get(lote=self.lotes[3], cpf='999.999.999-99').salario),
+            Decimal('1600.00'),
+        )
+
+        delete = self.client.delete(
+            f'/api/rh/pjs/{pj_id}/historico/{hid}/',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(delete.status_code, 204)
+        self.assertEqual(
+            Decimal(MovimentacaoColaborador.objects.get(lote=self.lotes[3], cpf='999.999.999-99').salario),
+            Decimal('1000.00'),
+        )

@@ -23,6 +23,7 @@ from .models import (
     InconsistenciaColaborador,
     CargoMapping,
     ColaboradorPJ,
+    ColaboradorPJHistorico,
 )
 from .serializers import (
     ColaboradorSerializer,
@@ -31,7 +32,9 @@ from .serializers import (
     InconsistenciaColaboradorSerializer,
     CargoMappingSerializer,
     ColaboradorPJSerializer,
+    ColaboradorPJHistoricoSerializer,
 )
+from .pj_sync_service import sync_pj_nos_lotes, remove_pj_de_todos_lotes
 from .import_service import (
     import_movimentacao_mensal,
     import_movimentacao_lote_completo,
@@ -825,6 +828,122 @@ class ColaboradorPJViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             qs = qs.filter(Q(nome__icontains=search) | Q(cpf__icontains=search) | Q(cargo__icontains=search))
         return qs
 
+    def perform_create(self, serializer):
+        pj = serializer.save()
+        sync = sync_pj_nos_lotes(pj)
+        record_audit(
+            self.request.user,
+            'rh.pj.criado',
+            f'PJ {pj.nome} (CPF: {pj.cpf}) cadastrado e sincronizado nos lotes '
+            f'(upserted={sync["upserted"]}, removed={sync["removed"]}).',
+        )
+
+    def perform_update(self, serializer):
+        pj = serializer.save()
+        sync = sync_pj_nos_lotes(pj)
+        record_audit(
+            self.request.user,
+            'rh.pj.atualizado',
+            f'PJ {pj.nome} (CPF: {pj.cpf}) atualizado e sincronizado nos lotes '
+            f'(upserted={sync["upserted"]}, removed={sync["removed"]}).',
+        )
+
+    def perform_destroy(self, instance):
+        cpf = instance.cpf
+        nome = instance.nome
+        removed = remove_pj_de_todos_lotes(cpf)
+        instance.delete()
+        record_audit(
+            self.request.user,
+            'rh.pj.excluido',
+            f'PJ {nome} (CPF: {cpf}) excluído; {removed} linha(s) removida(s) dos lotes.',
+        )
+
+    @action(detail=True, methods=['get', 'post'], url_path='historico')
+    def historico(self, request, pk=None):
+        pj = self.get_object()
+
+        if request.method == 'GET':
+            qs = pj.historico.all().order_by('-ano', '-mes')
+            return Response(ColaboradorPJHistoricoSerializer(qs, many=True).data)
+
+        serializer = ColaboradorPJHistoricoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ano = serializer.validated_data['ano']
+        mes = serializer.validated_data['mes']
+        if ColaboradorPJHistorico.objects.filter(pj=pj, ano=ano, mes=mes).exists():
+            return Response(
+                {'error': f'Já existe histórico para {mes:02d}/{ano}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        entry = serializer.save(pj=pj)
+        sync = sync_pj_nos_lotes(pj)
+        record_audit(
+            request.user,
+            'rh.pj.historico.criado',
+            f'Histórico {mes:02d}/{ano} do PJ {pj.nome} criado '
+            f'(salário={entry.salario}; sync upserted={sync["upserted"]}).',
+        )
+        return Response(ColaboradorPJHistoricoSerializer(entry).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['patch', 'delete'], url_path=r'historico/(?P<hid>[^/.]+)')
+    def historico_detail(self, request, pk=None, hid=None):
+        pj = self.get_object()
+        entry = get_object_or_404(ColaboradorPJHistorico, pk=hid, pj=pj)
+
+        if request.method == 'DELETE':
+            label = f'{entry.mes:02d}/{entry.ano}'
+            entry.delete()
+            sync = sync_pj_nos_lotes(pj)
+            record_audit(
+                request.user,
+                'rh.pj.historico.excluido',
+                f'Histórico {label} do PJ {pj.nome} excluído '
+                f'(sync upserted={sync["upserted"]}, removed={sync["removed"]}).',
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        serializer = ColaboradorPJHistoricoSerializer(entry, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        ano = serializer.validated_data.get('ano', entry.ano)
+        mes = serializer.validated_data.get('mes', entry.mes)
+        conflict = ColaboradorPJHistorico.objects.filter(pj=pj, ano=ano, mes=mes).exclude(pk=entry.pk).exists()
+        if conflict:
+            return Response(
+                {'error': f'Já existe histórico para {mes:02d}/{ano}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        entry = serializer.save()
+        sync = sync_pj_nos_lotes(pj)
+        record_audit(
+            request.user,
+            'rh.pj.historico.atualizado',
+            f'Histórico {entry.mes:02d}/{entry.ano} do PJ {pj.nome} atualizado '
+            f'(salário={entry.salario}; sync upserted={sync["upserted"]}).',
+        )
+        return Response(ColaboradorPJHistoricoSerializer(entry).data)
+
+
+def _aplicar_categoria_cargo(cargo_nome: str, nova_cat: str | None) -> None:
+    """Propaga categoria para CLT e PJ (comparação case-insensitive)."""
+    if not cargo_nome:
+        return
+    Colaborador.objects.filter(cargo__iexact=cargo_nome).update(categoria=nova_cat)
+    MovimentacaoColaborador.objects.filter(funcao__iexact=cargo_nome).update(categoria=nova_cat)
+
+
+def _garantir_cargos_dos_pjs() -> None:
+    """Garante que cargos cadastrados em PJs existam no mapeamento para classificação."""
+    cargos = (
+        ColaboradorPJ.objects
+        .exclude(cargo__isnull=True)
+        .exclude(cargo='')
+        .values_list('cargo', flat=True)
+        .distinct()
+    )
+    for cargo in cargos:
+        definir_categoria_colaborador(cargo)
+
 
 class CargoMappingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     permission_module = 'RH'
@@ -832,37 +951,35 @@ class CargoMappingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     queryset = CargoMapping.objects.all()
 
     def get_queryset(self):
+        _garantir_cargos_dos_pjs()
         qs = super().get_queryset()
         status_filter = self.request.query_params.get('status')
         search = self.request.query_params.get('search')
-        
+
         if search:
             qs = qs.filter(cargo__icontains=search)
-            
+
         if status_filter == 'pendente':
             qs = qs.filter(categoria__isnull=True)
         elif status_filter == 'definido':
             qs = qs.filter(categoria__isnull=False)
-            
+
         return qs
 
     def perform_create(self, serializer):
         with transaction.atomic():
             mapping = serializer.save()
-            # Replicar em cascata
-            cargo_nome = mapping.cargo
-            nova_cat = mapping.categoria
-            Colaborador.objects.filter(cargo=cargo_nome).update(categoria=nova_cat)
-            MovimentacaoColaborador.objects.filter(funcao=cargo_nome).update(categoria=nova_cat)
+            cargo_nome = str(mapping.cargo or '').strip().upper()
+            if mapping.cargo != cargo_nome:
+                mapping.cargo = cargo_nome
+                mapping.save(update_fields=['cargo'])
+            _aplicar_categoria_cargo(cargo_nome, mapping.categoria)
 
     def perform_update(self, serializer):
         with transaction.atomic():
             mapping = serializer.save()
-            # Replicar em cascata
-            cargo_nome = mapping.cargo
-            nova_cat = mapping.categoria
-            Colaborador.objects.filter(cargo=cargo_nome).update(categoria=nova_cat)
-            MovimentacaoColaborador.objects.filter(funcao=cargo_nome).update(categoria=nova_cat)
+            cargo_nome = str(mapping.cargo or '').strip().upper()
+            _aplicar_categoria_cargo(cargo_nome, mapping.categoria)
 
 
 class ColaboradorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):

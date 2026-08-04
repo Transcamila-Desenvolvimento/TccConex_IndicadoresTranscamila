@@ -152,6 +152,7 @@ class ColaboradorPJ(models.Model):
     filial = models.CharField(max_length=100, null=True, blank=True, verbose_name="Filial")
     cargo = models.CharField(max_length=100, null=True, blank=True, verbose_name="Cargo")
     data_admissao = models.DateField(null=True, blank=True, verbose_name="Data Adm.")
+    data_demissao = models.DateField(null=True, blank=True, verbose_name="Data Dem.")
     data_nascimento = models.DateField(null=True, blank=True, verbose_name="Data Nasc.")
     ativo = models.BooleanField(default=True, verbose_name="Ativo")
     data_criacao = models.DateTimeField(auto_now_add=True)
@@ -163,3 +164,28 @@ class ColaboradorPJ(models.Model):
 
     def __str__(self):
         return self.nome
+
+
+class ColaboradorPJHistorico(models.Model):
+    """Vigência salarial (e opcionalmente cargo/filial) por competência do PJ."""
+    pj = models.ForeignKey(
+        ColaboradorPJ,
+        on_delete=models.CASCADE,
+        related_name='historico',
+        verbose_name="PJ",
+    )
+    ano = models.IntegerField(verbose_name="Ano")
+    mes = models.IntegerField(verbose_name="Mês")
+    salario = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Salário")
+    cargo = models.CharField(max_length=100, null=True, blank=True, verbose_name="Cargo")
+    filial = models.CharField(max_length=100, null=True, blank=True, verbose_name="Filial")
+    data_criacao = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Histórico Salarial PJ"
+        verbose_name_plural = "Históricos Salariais PJ"
+        ordering = ['-ano', '-mes']
+        unique_together = ['pj', 'ano', 'mes']
+
+    def __str__(self):
+        return f"{self.pj.nome} — {self.mes:02d}/{self.ano}"

@@ -18,6 +18,7 @@ export const RH_KEYS = {
   buscarComparar: ['rh', 'buscar-comparar'] as const,
   comparacao: ['rh', 'comparacao'] as const,
   pjs: ['rh', 'pjs'] as const,
+  pjHistorico: ['rh', 'pj-historico'] as const,
   cargos: ['rh', 'cargos'] as const,
   colaboradores: ['rh', 'colaboradores'] as const,
   historicoSalarial: ['rh', 'historico-salarial'] as const,
@@ -141,13 +142,21 @@ export function usePjsRH(params: { search?: string } = {}) {
   });
 }
 
+function invalidatePjRelated(queryClient: ReturnType<typeof useQueryClient>, pjId?: string) {
+  queryClient.invalidateQueries({ queryKey: RH_KEYS.pjs });
+  queryClient.invalidateQueries({ queryKey: RH_KEYS.pjHistorico });
+  queryClient.invalidateQueries({ queryKey: RH_KEYS.cargos });
+  if (pjId) {
+    queryClient.invalidateQueries({ queryKey: [...RH_KEYS.pjHistorico, pjId] });
+  }
+  invalidateRHData(queryClient);
+}
+
 export function useCreatePjRH() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (pj: Omit<ColaboradorPJ, 'id' | 'dataCriacao'>) => apiService.createPjRH(pj),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RH_KEYS.pjs });
-    },
+    onSuccess: () => invalidatePjRelated(queryClient),
   });
 }
 
@@ -155,9 +164,7 @@ export function useUpdatePjRH() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, pj }: { id: string; pj: Partial<ColaboradorPJ> }) => apiService.updatePjRH(id, pj),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RH_KEYS.pjs });
-    },
+    onSuccess: (_data, vars) => invalidatePjRelated(queryClient, vars.id),
   });
 }
 
@@ -165,9 +172,54 @@ export function useDeletePjRH() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiService.deletePjRH(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: RH_KEYS.pjs });
-    },
+    onSuccess: () => invalidatePjRelated(queryClient),
+  });
+}
+
+export function usePjHistoricoRH(pjId: string | null) {
+  return useQuery({
+    queryKey: [...RH_KEYS.pjHistorico, pjId],
+    queryFn: () => apiService.getPjHistoricoRH(pjId!),
+    enabled: !!pjId,
+  });
+}
+
+export function useCreatePjHistoricoRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      pjId,
+      payload,
+    }: {
+      pjId: string;
+      payload: { ano: number; mes: number; salario: number; cargo?: string; filial?: string };
+    }) => apiService.createPjHistoricoRH(pjId, payload),
+    onSuccess: (_data, vars) => invalidatePjRelated(queryClient, vars.pjId),
+  });
+}
+
+export function useUpdatePjHistoricoRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      pjId,
+      historicoId,
+      payload,
+    }: {
+      pjId: string;
+      historicoId: string;
+      payload: Partial<{ ano: number; mes: number; salario: number; cargo?: string; filial?: string }>;
+    }) => apiService.updatePjHistoricoRH(pjId, historicoId, payload),
+    onSuccess: (_data, vars) => invalidatePjRelated(queryClient, vars.pjId),
+  });
+}
+
+export function useDeletePjHistoricoRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pjId, historicoId }: { pjId: string; historicoId: string }) =>
+      apiService.deletePjHistoricoRH(pjId, historicoId),
+    onSuccess: (_data, vars) => invalidatePjRelated(queryClient, vars.pjId),
   });
 }
 

@@ -59,6 +59,12 @@ const formatPercent = (value: number | null) => {
   return `${sign}${value.toFixed(1)}%`;
 };
 
+const CATEGORIA_KEYS = [
+  ['administrativo', 'Administrativo'],
+  ['operacional', 'Operacional'],
+  ['motorista', 'Motorista'],
+] as const;
+
 const IndicadoresRHMovimentacao: React.FC = () => {
   const defaults = useMemo(() => defaultAnoInteiro(), []);
   const [ano, setAno] = useState(defaults.year);
@@ -121,9 +127,12 @@ const IndicadoresRHMovimentacao: React.FC = () => {
     setPeriodo('custom');
   };
 
-  const periodoLabel = data?.meta.periodoInicio && data?.meta.periodoFim
-    ? `${data.meta.periodoInicio} — ${data.meta.periodoFim}`
-    : '—';
+  const periodoLabel = (() => {
+    const inicio = data?.meta.periodoInicio;
+    const fim = data?.meta.periodoFim;
+    if (!inicio || !fim) return '—';
+    return inicio === fim ? inicio : `${inicio} — ${fim}`;
+  })();
 
   const handleResetFilters = () => {
     const reset = defaultAnoInteiro();
@@ -241,29 +250,18 @@ const IndicadoresRHMovimentacao: React.FC = () => {
             </div>
 
             <div className="rh-ind-categoria-grid">
-              {([
-                ['administrativo', 'Administrativo'],
-                ['operacional', 'Operacional'],
-                ['motorista', 'Motorista'],
-              ] as const).map(([key, label]) => {
+              {CATEGORIA_KEYS.map(([key, label]) => {
                 const bucket = summary.porCategoriaAtual[key];
                 return (
-                  <div key={key} className="rh-ind-categoria-card">
-                    <span className="rh-ind-categoria-label">{label}</span>
-                    <strong className="rh-ind-categoria-value">{bucket.count}</strong>
-                    <span className="rh-ind-categoria-hint">
-                      {formatCurrency(bucket.payroll)} · {bucket.percentual.toFixed(1)}%
+                  <div key={key} className="meta-fat-filial-card">
+                    <span className="meta-fat-filial-label">{label}</span>
+                    <strong className="meta-fat-filial-value">{bucket.count}</strong>
+                    <span className="meta-fat-filial-hint">
+                      {formatCurrency(bucket.payroll)} · {bucket.percentual.toFixed(1)}% do total
                     </span>
-                    <div className="rh-ind-categoria-status">
-                      <span className="rh-ind-categoria-status-item is-ativo">
-                        <span className="rh-ind-categoria-status-label">Ativos</span>
-                        <strong>{bucket.ativos.count}</strong>
-                      </span>
-                      <span className="rh-ind-categoria-status-item is-afastado">
-                        <span className="rh-ind-categoria-status-label">Afastados</span>
-                        <strong>{bucket.afastados.count}</strong>
-                      </span>
-                    </div>
+                    <span className="meta-fat-filial-hint">
+                      {bucket.ativos.count} ativos · {bucket.afastados.count} afastados
+                    </span>
                   </div>
                 );
               })}
@@ -279,7 +277,7 @@ const IndicadoresRHMovimentacao: React.FC = () => {
                 <RHHeadcountChart series={series} />
               </div>
               <div className="erp-card cashflow-chart-card rh-ind-chart-card--wide">
-                <h2 className="cashflow-section-title">Admissões x Desligamentos</h2>
+                <h2 className="cashflow-section-title">Admissões × Desligamentos</h2>
                 <RHAdmissoesChart series={series} />
               </div>
             </div>

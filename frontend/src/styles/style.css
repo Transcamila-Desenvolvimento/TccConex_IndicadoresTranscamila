@@ -1042,6 +1042,231 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Cadastro de PJs — modal em etapas (lista / form / histórico) */
+.rh-pj-modal {
+  width: 820px;
+  max-width: 96vw;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.rh-pj-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.rh-pj-modal__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rh-pj-modal__header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.rh-pj-modal__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.rh-pj-modal__back:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.rh-pj-modal__hint {
+  margin: 0;
+  padding: 12px 20px 0;
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.rh-pj-modal__toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 20px 0;
+}
+
+.rh-pj-modal__body {
+  padding: 14px 20px 20px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.rh-pj-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rh-pj-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+.rh-pj-form-grid .login-group {
+  margin-bottom: 0;
+}
+
+.rh-pj-form-grid .login-group label {
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #64748b;
+}
+
+.rh-pj-form-grid .login-group input,
+.rh-pj-form-grid .login-group select {
+  padding: 8px 10px;
+  font-size: 13.5px;
+}
+
+.rh-pj-span-2 {
+  grid-column: span 2;
+}
+
+.rh-pj-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.rh-pj-modal__error {
+  margin: 0;
+  color: #dc2626;
+  font-size: 12.5px;
+}
+
+.rh-pj-modal__empty {
+  text-align: center;
+  padding: 24px 16px !important;
+  color: #64748b;
+  font-style: italic;
+}
+
+.rh-pj-modal__sub {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.rh-pj-modal__vinculo {
+  font-size: 12.5px;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.rh-pj-modal__actions {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+}
+
+.rh-pj-modal__hist-summary {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.rh-pj-modal__hist-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+
+.rh-pj-modal__hist-summary strong {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.rh-pj-modal__hist-summary .reports-action-btn {
+  margin-left: auto;
+}
+
+.rh-pj-hist-form {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr 1fr auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.rh-pj-hist-form .login-group {
+  margin-bottom: 0;
+}
+
+.rh-pj-hist-form .login-group label {
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #64748b;
+}
+
+.rh-pj-hist-form .login-group input,
+.rh-pj-hist-form .login-group select {
+  padding: 8px 10px;
+  font-size: 13.5px;
+}
+
+.rh-pj-hist-form__actions {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 1px;
+}
+
+@media (max-width: 720px) {
+  .rh-pj-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rh-pj-span-2 {
+    grid-column: auto;
+  }
+
+  .rh-pj-hist-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .rh-pj-hist-form__actions {
+    grid-column: 1 / -1;
+  }
+}
+
 @keyframes slideDown {
   from { transform: translateY(-20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
@@ -5419,94 +5644,18 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   min-height: 280px;
 }
 
-/* Indicador Movimentação de RH — cards de categoria */
+/* Indicador Movimentação de RH — mesmo padrão visual de Meta / Satisfação */
 .rh-ind-categoria-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin: 0 0 16px;
+  gap: 12px;
+  margin: 16px 0 20px;
 }
 
 @media (max-width: 900px) {
   .rh-ind-categoria-grid {
     grid-template-columns: 1fr;
   }
-}
-
-.rh-ind-categoria-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-left: 4px solid #118CC4;
-  border-radius: 10px;
-  padding: 16px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-
-.rh-ind-categoria-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.rh-ind-categoria-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-
-.rh-ind-categoria-hint {
-  font-size: 11.5px;
-  color: #94a3b8;
-  font-variant-numeric: tabular-nums;
-}
-
-.rh-ind-categoria-status {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid #eef2f7;
-}
-
-.rh-ind-categoria-status-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: #f8fafc;
-}
-
-.rh-ind-categoria-status-item strong {
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  color: #0f172a;
-}
-
-.rh-ind-categoria-status-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: #94a3b8;
-}
-
-.rh-ind-categoria-status-item.is-ativo strong {
-  color: #16a34a;
-}
-
-.rh-ind-categoria-status-item.is-afastado strong {
-  color: #d97706;
 }
 
 .rh-ind-charts-grid {
@@ -5522,6 +5671,10 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 @media (max-width: 1100px) {
   .rh-ind-charts-grid {
     grid-template-columns: 1fr;
+  }
+
+  .rh-ind-chart-card--wide {
+    grid-column: auto;
   }
 }
 
@@ -7925,4 +8078,3 @@ textarea.form-input {
 .protocolo-pdf-overlay-text span {
   color: #64748b;
 }
-
