@@ -1290,13 +1290,15 @@ class IndicadoresRHMovimentacaoTests(TestCase):
         self.assertEqual(todos.data['summary']['totalColaboradores'], 3)
         self.assertEqual(todos.data['summary']['payrollTotal'], Decimal('8500.00'))
 
+        # Situação normal = tudo que não é AFASTADO TEMP. (inclui FERIAS, ATIVO, etc.).
         normal = self.client.get(
             '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&situacaoGrupo=SITUACAO_NORMAL',
             **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
         )
         self.assertEqual(normal.status_code, 200)
-        self.assertEqual(normal.data['summary']['totalColaboradores'], 1)
-        self.assertEqual(normal.data['summary']['payrollTotal'], Decimal('3200.00'))
+        self.assertEqual(normal.data['summary']['totalColaboradores'], 2)
+        self.assertEqual(normal.data['summary']['payrollTotal'], Decimal('5700.00'))
+        self.assertEqual(normal.data['summary']['porCategoriaAtual']['administrativo']['afastados']['count'], 0)
 
         afastados = self.client.get(
             '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&situacaoGrupo=AFASTADOS',
@@ -1306,6 +1308,21 @@ class IndicadoresRHMovimentacaoTests(TestCase):
         self.assertEqual(afastados.data['summary']['totalColaboradores'], 1)
         self.assertEqual(afastados.data['summary']['payrollTotal'], Decimal('2800.00'))
         self.assertEqual(afastados.data['summary']['porCategoriaAtual']['administrativo']['afastados']['count'], 1)
+
+        # Outras situações com "AFASTADO" no nome (ex.: INSS) não entram como afastado.
+        MovimentacaoColaborador.objects.filter(
+            lote=self.lote_06, cpf='333.333.333-33',
+        ).update(situacao='AFASTADO INSS')
+        so_temp = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&situacaoGrupo=AFASTADOS',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(so_temp.data['summary']['totalColaboradores'], 1)
+        normal_com_inss = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&situacaoGrupo=SITUACAO_NORMAL',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(normal_com_inss.data['summary']['totalColaboradores'], 2)
 
     def test_filtro_por_filial(self):
         response = self.client.get(

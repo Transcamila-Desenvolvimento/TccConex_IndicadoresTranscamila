@@ -79,9 +79,14 @@ def _bucket_categorias() -> dict:
     }
 
 
+# No indicador, só existem dois grupos analíticos:
+# - afastado = situação "AFASTADO TEMP." (e variantes com o mesmo texto)
+# - situação normal = qualquer outra (FERIAS, ATIVO, SITUACAO NORMAL, etc.)
+_AFASTADO_TEMP_TOKEN = 'AFASTADO TEMP'
+
+
 def _is_afastado(situacao: str | None) -> bool:
-    """Mesma regra do e-mail de RH: substring 'AFASTADO' na situação."""
-    return bool(situacao) and 'AFASTADO' in situacao.upper()
+    return bool(situacao) and _AFASTADO_TEMP_TOKEN in situacao.upper()
 
 
 def _bucket_com_percentual(bucket: dict, total: int) -> dict:
@@ -131,9 +136,9 @@ def _colaboradores_filtrados(
     if categoria:
         qs = qs.filter(categoria=categoria)
     if situacao_grupo == _SITUACAO_GRUPO_AFASTADOS:
-        qs = qs.filter(situacao__icontains='AFASTADO')
+        qs = qs.filter(situacao__icontains=_AFASTADO_TEMP_TOKEN)
     elif situacao_grupo == _SITUACAO_GRUPO_NORMAL:
-        qs = qs.filter(situacao__iexact='SITUACAO NORMAL')
+        qs = qs.exclude(situacao__icontains=_AFASTADO_TEMP_TOKEN)
     return qs
 
 
