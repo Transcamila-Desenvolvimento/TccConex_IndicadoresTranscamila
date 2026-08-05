@@ -1018,6 +1018,24 @@ export interface ClienteProtocolo {
   dataCriacao?: string;
 }
 
+export interface ProtocoloNotaDraft {
+  nf: string;
+  filial?: string;
+}
+
+/** Rascunho de novo protocolo — persistido por usuário na API. */
+export interface ProtocoloEnvioDraft {
+  version: number;
+  updatedAt: string | null;
+  hasDraft: boolean;
+  data: string;
+  clienteId: string;
+  expedicoes: ProtocoloExpedicao[];
+  notas: ProtocoloNotaDraft[];
+  nfInput: string;
+  filialInput: string;
+}
+
 export interface ProtocoloEnvio {
   id: string;
   protocoloNumero: string;

@@ -8,8 +8,9 @@ from apps.accounts.mixins import ModuleScopedViewMixin
 from apps.audit.services import record_audit
 from apps.financeiro.pagination import ReportPagination
 
-from .models import ClienteProtocolo, FilialClienteProtocolo, ProtocoloEnvio
+from .models import ClienteProtocolo, FilialClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft
 from .protocol_pdf import render_protocols_pdf
+from .protocolo_draft import draft_payload, has_meaningful_draft, sanitize_draft_payload
 from .protocolo_import_service import (
     ProtocoloImportError,
     build_protocolo_import_template,
@@ -192,7 +193,7 @@ class ProtocoloEnvioViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     serializer_class = ProtocoloEnvioSerializer
     queryset = ProtocoloEnvio.objects.select_related('cliente', 'usuario').all()
     pagination_class = ReportPagination
-    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+    http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -268,6 +269,53 @@ class ProtocoloEnvioViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         instance.delete()
         # Se era o último criado da sequência do cliente, devolve o número.
         liberar_numeros_sequenciais(cliente, [numero])
+
+    @action(detail=False, methods=['get', 'put', 'delete'], url_path='draft')
+    def draft(self, request):
+        """Rascunho de novo protocolo — singleton por usuário autenticado."""
+        draft = ProtocoloEnvioDraft.objects.filter(usuario=request.user).first()
+
+        if request.method == 'GET':
+            return Response(draft_payload(draft))
+
+        if request.method == 'DELETE':
+            denied = _funcao_required_response(request, 'criar-protocolos', _CRIAR_PROTOCOLOS_DETAIL)
+            if denied:
+                return denied
+            if draft:
+                draft.delete()
+                record_audit(
+                    request.user,
+                    'faturamento.protocolo.draft_descartado',
+                    'Rascunho de novo protocolo descartado.',
+                )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        # PUT — upsert; payload sem conteúdo útil apaga o rascunho
+        denied = _funcao_required_response(request, 'criar-protocolos', _CRIAR_PROTOCOLOS_DETAIL)
+        if denied:
+            return denied
+        payload = sanitize_draft_payload(request.data)
+        if not has_meaningful_draft(payload):
+            if draft:
+                draft.delete()
+                record_audit(
+                    request.user,
+                    'faturamento.protocolo.draft_descartado',
+                    'Rascunho de novo protocolo limpo.',
+                )
+            return Response(draft_payload(None))
+
+        draft, _created = ProtocoloEnvioDraft.objects.update_or_create(
+            usuario=request.user,
+            defaults={'version': 1, 'payload': payload},
+        )
+        record_audit(
+            request.user,
+            'faturamento.protocolo.draft_salvo',
+            f'Rascunho de novo protocolo salvo ({len(payload.get("notas") or [])} NF(s)).',
+        )
+        return Response(draft_payload(draft))
 
     @action(detail=False, methods=['post'])
     def bulk_delete(self, request):

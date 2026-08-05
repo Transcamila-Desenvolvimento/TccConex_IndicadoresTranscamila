@@ -89,3 +89,24 @@ class ProtocoloEnvio(models.Model):
 
     def __str__(self):
         return f'{self.cliente.nome} — {self.data}'
+
+
+class ProtocoloEnvioDraft(models.Model):
+    """Rascunho de novo protocolo — um por usuário (Faturamento é ambiente global)."""
+
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='protocolo_envio_draft',
+        verbose_name='Usuário',
+    )
+    version = models.PositiveSmallIntegerField(default=1)
+    payload = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Rascunho de protocolo de envio'
+        verbose_name_plural = 'Rascunhos de protocolo de envio'
+
+    def __str__(self):
+        return f'Rascunho de {self.usuario}'

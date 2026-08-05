@@ -1,11 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getFaturamentoErrorMessage,
   useCreateProtocoloEnvio,
+  useDeleteProtocoloEnvioDraft,
   useProtocoloClientes,
+  useProtocoloEnvioDraft,
+  useSaveProtocoloEnvioDraft,
   useUpdateProtocoloEnvio,
 } from '../../../hooks/useFaturamentoProtocolos';
-import type { ProtocoloEnvio, ProtocoloExpedicao } from '../../../types/domain';
+import type { ProtocoloEnvio, ProtocoloExpedicao, ProtocoloNotaDraft } from '../../../types/domain';
 import { MAX_EXPEDICOES_POR_PROTOCOLO, MAX_NFS_POR_PROTOCOLO, PROTOCOLO_EXPEDICAO_OPTIONS } from '../../../types/domain';
 
 interface NovoProtocoloModalProps {
@@ -16,9 +19,21 @@ interface NovoProtocoloModalProps {
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const MAX_NFS = MAX_NFS_POR_PROTOCOLO;
 
-interface NotaItem {
-  nf: string;
-  filial?: string;
+type NotaItem = ProtocoloNotaDraft;
+
+function formatDraftTime(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
 }
 
 const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protocolo }) => {
@@ -26,6 +41,9 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
   const clientesQuery = useProtocoloClientes();
   const createProtocolo = useCreateProtocoloEnvio();
   const updateProtocolo = useUpdateProtocoloEnvio();
+  const draftQuery = useProtocoloEnvioDraft(!isEditing);
+  const saveDraft = useSaveProtocoloEnvioDraft();
+  const deleteDraft = useDeleteProtocoloEnvioDraft();
 
   const [data, setData] = useState(protocolo?.data ?? todayIso());
   const [clienteId, setClienteId] = useState(protocolo?.clienteId ?? '');
@@ -42,6 +60,10 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
       filial: protocolo.notasFiliais?.[nf],
     }));
   });
+  const [hydrated, setHydrated] = useState(isEditing);
+  const [draftUpdatedAt, setDraftUpdatedAt] = useState<string | null>(null);
+  const [restoredDraft, setRestoredDraft] = useState(false);
+  const skipNextSave = useRef(true);
 
   const clientes = clientesQuery.data ?? [];
   const selectedCliente = useMemo(
@@ -50,6 +72,52 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
   );
   const exigeFilial = selectedCliente?.exigeFilial ?? false;
   const filiaisDisponiveis = selectedCliente?.filiais ?? [];
+
+  useEffect(() => {
+    if (isEditing || hydrated || draftQuery.isLoading || draftQuery.isFetching) return;
+    const draft = draftQuery.data;
+    if (draft?.hasDraft) {
+      setData(draft.data || todayIso());
+      setClienteId(draft.clienteId || '');
+      setExpedicoes((draft.expedicoes ?? []).filter((item): item is ProtocoloExpedicao =>
+        (PROTOCOLO_EXPEDICAO_OPTIONS as readonly string[]).includes(item),
+      ));
+      setNotas(draft.notas ?? []);
+      setNfInput(draft.nfInput || '');
+      setFilialInput(draft.filialInput || '');
+      setDraftUpdatedAt(draft.updatedAt);
+      setRestoredDraft(true);
+    }
+    setHydrated(true);
+    skipNextSave.current = true;
+  }, [isEditing, draftQuery.data, draftQuery.isLoading, draftQuery.isFetching, hydrated]);
+
+  useEffect(() => {
+    if (isEditing || !hydrated) return;
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      saveDraft.mutate(
+        {
+          data,
+          clienteId,
+          expedicoes,
+          notas,
+          nfInput,
+          filialInput,
+        },
+        {
+          onSuccess: (result) => {
+            setDraftUpdatedAt(result.hasDraft ? result.updatedAt : null);
+            if (!result.hasDraft) setRestoredDraft(false);
+          },
+        },
+      );
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [isEditing, hydrated, data, clienteId, expedicoes, notas, nfInput, filialInput]); // eslint-disable-line react-hooks/exhaustive-deps -- debounce saveDraft
 
   const addNota = () => {
     const value = nfInput.trim();
@@ -121,6 +189,16 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
     return map;
   };
 
+  const clearDraftThenClose = () => {
+    if (isEditing) {
+      onClose();
+      return;
+    }
+    deleteDraft.mutate(undefined, {
+      onSettled: () => onClose(),
+    });
+  };
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!clienteId) { alert('Selecione o cliente.'); return; }
@@ -137,7 +215,10 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
     const notaFiscal = notas.map((item) => item.nf).join(', ');
     const notasFiliais = exigeFilial ? buildNotasFiliais() : {};
     const callbacks = {
-      onSuccess: () => onClose(),
+      onSuccess: () => {
+        if (isEditing) onClose();
+        else clearDraftThenClose();
+      },
       onError: (error: unknown) => alert(getFaturamentoErrorMessage(error)),
     };
 
@@ -162,18 +243,86 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
     }
   };
 
-  const isPending = createProtocolo.isPending || updateProtocolo.isPending;
+  const isPending = createProtocolo.isPending || updateProtocolo.isPending || deleteDraft.isPending;
+
+  const hasUnsavedEdit = (() => {
+    if (!isEditing || !protocolo) return false;
+    const nfsOriginais = protocolo.notasFiscais;
+    const nfsAtuais = notas.map((item) => item.nf);
+    if (
+      data !== protocolo.data
+      || clienteId !== protocolo.clienteId
+      || nfsAtuais.length !== nfsOriginais.length
+      || nfsAtuais.some((nf, i) => nf !== nfsOriginais[i])
+    ) {
+      return true;
+    }
+    const expedicoesOriginais = protocolo.expedicoes ?? [];
+    if (
+      expedicoes.length !== expedicoesOriginais.length
+      || expedicoes.some((item, i) => item !== expedicoesOriginais[i])
+    ) {
+      return true;
+    }
+    const filiaisOriginais = protocolo.notasFiliais ?? {};
+    return notas.some(({ nf, filial }) => (filial || '') !== (filiaisOriginais[nf] || ''));
+  })();
+
+  const requestClose = () => {
+    if (isPending) return;
+    // Novo protocolo: o rascunho já está na conta — fecha sem descartar.
+    if (!isEditing) {
+      onClose();
+      return;
+    }
+    if (hasUnsavedEdit) {
+      if (!window.confirm('Há alterações não salvas neste protocolo. Deseja fechar e descartar?')) return;
+    }
+    onClose();
+  };
+
+  const discardDraft = () => {
+    if (!window.confirm('Descartar o rascunho deste protocolo? As NFs e dados salvos serão apagados.')) return;
+    deleteDraft.mutate(undefined, {
+      onSuccess: () => onClose(),
+      onError: (error) => alert(getFaturamentoErrorMessage(error) || 'Não foi possível descartar o rascunho.'),
+    });
+  };
+
+  if (!isEditing && !hydrated) {
+    return (
+      <div
+        className="search-backdrop"
+        style={{ display: 'flex', alignItems: 'center', padding: '24px 16px', zIndex: 3000 }}
+      >
+        <div className="modal-card" style={{ width: 'min(720px, 100%)', padding: '32px', textAlign: 'center' }}>
+          Carregando rascunho...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
       className="search-backdrop"
       style={{ display: 'flex', alignItems: 'center', padding: '24px 16px', zIndex: 3000 }}
-      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) requestClose();
+      }}
     >
-      <div className="modal-card" style={{ width: 'min(720px, 100%)' }}>
+      <div className="modal-card" style={{ width: 'min(720px, 100%)' }} role="dialog" aria-modal="true">
         <div className="modal-header">
-          <h3>{isEditing ? `Editar protocolo #${protocolo.protocoloNumero}` : 'Novo protocolo de envio'}</h3>
-          <button type="button" className="btn-icon" onClick={onClose} aria-label="Fechar">
+          <div>
+            <h3>{isEditing ? `Editar protocolo #${protocolo.protocoloNumero}` : 'Novo protocolo de envio'}</h3>
+            {!isEditing && (restoredDraft || draftUpdatedAt) && (
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
+                Rascunho na sua conta
+                {draftUpdatedAt ? ` · ${formatDraftTime(draftUpdatedAt)}` : ''}
+                {saveDraft.isPending ? ' · salvando…' : ''}
+              </p>
+            )}
+          </div>
+          <button type="button" className="btn-icon" onClick={requestClose} aria-label="Fechar" disabled={isPending}>
             <i className="bi bi-x-lg" />
           </button>
         </div>
@@ -248,11 +397,10 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
             </div>
           )}
 
-          {/* Seção de NFs */}
           <div style={{ marginTop: '16px' }}>
             <label>Notas fiscais ({notas.length}/{MAX_NFS})</label>
 
-            <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+            <div className="protocolo-nf-row">
               <input
                 className="form-input"
                 style={{ flex: 1, minWidth: '140px' }}
@@ -275,7 +423,12 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
                   ))}
                 </select>
               )}
-              <button type="button" className="reports-action-btn secondary" style={{ flexShrink: 0 }} onClick={addNota}>
+              <button
+                type="button"
+                className="protocolo-add-nf-btn"
+                onClick={addNota}
+              >
+                <i className="bi bi-plus-lg" aria-hidden="true" />
                 Adicionar
               </button>
             </div>
@@ -367,13 +520,6 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
               </div>
             )}
 
-            {notas.length > 1 && (
-              <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '8px', marginBottom: 0 }}>
-                <i className="bi bi-arrows-move" style={{ marginRight: '4px' }} />
-                Arraste a NF e solte antes, entre ou depois das outras. A ordem define a sequência no PDF.
-              </p>
-            )}
-
             {exigeFilial && notas.length > 0 && (
               <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '8px', marginBottom: 0 }}>
                 <i className="bi bi-info-circle" style={{ marginRight: '4px' }} />
@@ -383,14 +529,31 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
           </div>
 
           <div className="modal-footer" style={{ marginTop: '20px' }}>
-            <button type="button" className="reports-action-btn secondary" onClick={onClose}>Cancelar</button>
+            {!isEditing && (restoredDraft || draftUpdatedAt) && (
+              <button
+                type="button"
+                className="reports-action-btn secondary"
+                onClick={discardDraft}
+                disabled={isPending}
+                title="Apaga o rascunho da sua conta"
+              >
+                Descartar rascunho
+              </button>
+            )}
+            <button type="button" className="reports-action-btn secondary" onClick={requestClose} disabled={isPending}>
+              {isEditing ? 'Cancelar' : 'Fechar'}
+            </button>
             <button
               type="submit"
               className="reports-action-btn primary"
               style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
               disabled={isPending}
             >
-              {isPending ? 'Salvando...' : isEditing ? 'Salvar alterações' : 'Registrar protocolo'}
+              {isPending && !deleteDraft.isPending
+                ? 'Salvando...'
+                : isEditing
+                  ? 'Salvar alterações'
+                  : 'Registrar protocolo'}
             </button>
           </div>
         </form>

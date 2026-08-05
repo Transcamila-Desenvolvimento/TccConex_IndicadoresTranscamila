@@ -7988,6 +7988,51 @@ textarea.form-input {
   border-color: #ef4444;
 }
 
+/* Linha NF + filial + Adicionar — mesma altura visual que .form-input */
+.protocolo-nf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.protocolo-nf-row .form-input {
+  margin-top: 0;
+}
+
+/* Botão "Adicionar" NF — mesmas métricas verticais do .form-input */
+.protocolo-add-nf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.protocolo-add-nf-btn:hover {
+  border-color: #118CC4;
+  color: #118CC4;
+  background: #f0f9fc;
+  box-shadow: 0 0 0 3px rgba(17, 140, 196, 0.12);
+}
+
+.protocolo-add-nf-btn:active {
+  background: #e0f2fe;
+}
+
 /* Tags / chips de notas fiscais */
 .tag-list {
   display: flex;

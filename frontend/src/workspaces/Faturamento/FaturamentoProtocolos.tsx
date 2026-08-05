@@ -12,6 +12,7 @@ import {
   openPdfPreviewInNewTab,
   openPdfPreviewPlaceholder,
   useProtocoloClientes,
+  useProtocoloEnvioDraft,
   useProtocolosEnvio,
 } from '../../hooks/useFaturamentoProtocolos';
 import type { ProtocoloEnvio, ProtocoloOrdering, ProtocoloQueryParams } from '../../types/domain';
@@ -67,6 +68,8 @@ const FaturamentoProtocolos: React.FC = () => {
   const protocolosQuery = useProtocolosEnvio(filters);
   const { canShowEmpty } = useAsyncQueryState(protocolosQuery);
   const clientesQuery = useProtocoloClientes();
+  const draftQuery = useProtocoloEnvioDraft(canCreateProtocolos);
+  const hasProtocoloDraft = Boolean(draftQuery.data?.hasDraft);
   const bulkDelete = useBulkDeleteProtocolos();
   const downloadBulk = useDownloadProtocolosBulkPdf();
   const downloadBulkExcel = useDownloadProtocolosBulkExcel();
@@ -249,17 +252,30 @@ const FaturamentoProtocolos: React.FC = () => {
           </div>
 
           {canCreateProtocolos && (
-            <button
-              type="button"
-              className="reports-action-btn primary"
-              style={{ backgroundColor: '#118CC4', borderColor: '#118CC4', display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
-              onClick={() => setShowNovo(true)}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              <span>Novo protocolo</span>
-            </button>
+            hasProtocoloDraft ? (
+              <button
+                type="button"
+                className="reports-action-btn primary"
+                style={{ backgroundColor: '#118CC4', borderColor: '#118CC4', display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+                onClick={() => setShowNovo(true)}
+                title="Continuar rascunho do protocolo"
+              >
+                <i className="bi bi-journal-text" aria-hidden="true" />
+                <span>Rascunho</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="reports-action-btn primary"
+                style={{ backgroundColor: '#118CC4', borderColor: '#118CC4', display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+                onClick={() => setShowNovo(true)}
+              >
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <span>Novo protocolo</span>
+              </button>
+            )
           )}
         </div>
       </header>
@@ -490,7 +506,14 @@ const FaturamentoProtocolos: React.FC = () => {
         </div>
       </QueryDataPanel>
 
-      {showNovo && canCreateProtocolos && <NovoProtocoloModal onClose={() => setShowNovo(false)} />}
+      {showNovo && canCreateProtocolos && (
+        <NovoProtocoloModal
+          onClose={() => {
+            setShowNovo(false);
+            draftQuery.refetch();
+          }}
+        />
+      )}
       {editingProtocolo && canEditProtocolos && (
         <NovoProtocoloModal
           protocolo={editingProtocolo}

@@ -24,7 +24,7 @@ import type {
   Colaborador, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
   UnidadeMedida, Setor, ColaboradorCompras, Fornecedor, ItemEstoque, EntradaEstoque, SaidaEstoque,
   RegistrarCompraPayload, RegistrarSaidaPayload,
-  ClienteProtocolo, ProtocoloEnvio,
+  ClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft,
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
   ProtocoloImportParams, ProtocoloImportResult,
   SgqPesquisa, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
@@ -1502,6 +1502,20 @@ export const apiService = {
   async getProtocolosEnvio(params: ProtocoloQueryParams = {}): Promise<PaginatedResponse<ProtocoloEnvio>> {
     const { data } = await api.get('/api/faturamento/protocolos/', { params: buildProtocoloQueryParams(params) });
     return paginatedFromResponse(data, normalizeProtocoloEnvio);
+  },
+
+  async getProtocoloEnvioDraft(): Promise<ProtocoloEnvioDraft> {
+    const { data } = await api.get('/api/faturamento/protocolos/draft/');
+    return data as ProtocoloEnvioDraft;
+  },
+
+  async saveProtocoloEnvioDraft(payload: Omit<ProtocoloEnvioDraft, 'version' | 'updatedAt' | 'hasDraft'>): Promise<ProtocoloEnvioDraft> {
+    const { data } = await api.put('/api/faturamento/protocolos/draft/', payload);
+    return data as ProtocoloEnvioDraft;
+  },
+
+  async deleteProtocoloEnvioDraft(): Promise<void> {
+    await api.delete('/api/faturamento/protocolos/draft/');
   },
 
   async createProtocoloEnvio(payload: CreateProtocoloPayload): Promise<ProtocoloEnvio> {

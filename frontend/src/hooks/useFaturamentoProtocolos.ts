@@ -4,12 +4,55 @@ import type {
   ClienteProtocoloPayload,
   CreateProtocoloPayload,
   UpdateProtocoloPayload,
+  ProtocoloEnvioDraft,
   ProtocoloImportParams,
   ProtocoloQueryParams,
 } from '../types/domain';
 
 export const PROTOCOLO_CLIENTES_KEY = ['faturamento', 'protocolo-clientes'] as const;
 export const PROTOCOLOS_ENVIO_KEY = ['faturamento', 'protocolos'] as const;
+export const PROTOCOLO_DRAFT_KEY = ['faturamento', 'protocolos', 'draft'] as const;
+
+export function useProtocoloEnvioDraft(enabled = true) {
+  return useQuery({
+    queryKey: PROTOCOLO_DRAFT_KEY,
+    queryFn: () => apiService.getProtocoloEnvioDraft(),
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useSaveProtocoloEnvioDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Omit<ProtocoloEnvioDraft, 'version' | 'updatedAt' | 'hasDraft'>) =>
+      apiService.saveProtocoloEnvioDraft(payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(PROTOCOLO_DRAFT_KEY, data);
+    },
+  });
+}
+
+export function useDeleteProtocoloEnvioDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiService.deleteProtocoloEnvioDraft(),
+    onSuccess: () => {
+      queryClient.setQueryData(PROTOCOLO_DRAFT_KEY, {
+        version: 1,
+        updatedAt: null,
+        hasDraft: false,
+        data: '',
+        clienteId: '',
+        expedicoes: [],
+        notas: [],
+        nfInput: '',
+        filialInput: '',
+      } satisfies ProtocoloEnvioDraft);
+      queryClient.invalidateQueries({ queryKey: PROTOCOLO_DRAFT_KEY });
+    },
+  });
+}
 
 export function useProtocoloClientes(enabled = true) {
   return useQuery({

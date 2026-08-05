@@ -3,7 +3,12 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.accounts.tests import auth_headers
-from apps.faturamento.models import ClienteProtocolo, FilialClienteProtocolo, ProtocoloEnvio
+from apps.faturamento.models import (
+    ClienteProtocolo,
+    FilialClienteProtocolo,
+    ProtocoloEnvio,
+    ProtocoloEnvioDraft,
+)
 
 User = get_user_model()
 
@@ -864,3 +869,109 @@ class FaturamentoProtocoloImportTests(TestCase):
                 'Nota Fiscal',
             ],
         )
+
+
+class ProtocoloEnvioDraftTests(TestCase):
+    def setUp(self):
+        self.api = APIClient()
+        self.user_a = User.objects.create_user(
+            username='fat.draft.a',
+            password='test123',
+            role_id='2',
+            environments=['Faturamento'],
+            funcoes={'Faturamento': ['criar-protocolos']},
+        )
+        self.user_b = User.objects.create_user(
+            username='fat.draft.b',
+            password='test123',
+            role_id='2',
+            environments=['Faturamento'],
+            funcoes={'Faturamento': ['criar-protocolos']},
+        )
+        self.leitor = User.objects.create_user(
+            username='fat.draft.leitor',
+            password='test123',
+            role_id='2',
+            environments=['Faturamento'],
+        )
+        self.cliente = ClienteProtocolo.objects.create(nome='Cliente Draft')
+
+    def test_put_salva_e_get_retorna_rascunho(self):
+        response = self.api.put(
+            '/api/faturamento/protocolos/draft/',
+            {
+                'data': '2026-08-05',
+                'clienteId': str(self.cliente.pk),
+                'expedicoes': ['Transcamila Ibiporã'],
+                'notas': [{'nf': '2455', 'filial': 'Filial A'}, {'nf': '999'}],
+                'nfInput': '12',
+                'filialInput': '',
+            },
+            format='json',
+            **auth_headers(self.user_a, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['hasDraft'])
+        self.assertEqual(response.data['clienteId'], str(self.cliente.pk))
+        self.assertEqual(len(response.data['notas']), 2)
+
+        got = self.api.get(
+            '/api/faturamento/protocolos/draft/',
+            **auth_headers(self.user_a, 'Faturamento'),
+        )
+        self.assertEqual(got.status_code, 200)
+        self.assertTrue(got.data['hasDraft'])
+        self.assertEqual(got.data['notas'][0]['nf'], '2455')
+
+    def test_draft_isolado_por_usuario(self):
+        self.api.put(
+            '/api/faturamento/protocolos/draft/',
+            {'clienteId': str(self.cliente.pk), 'notas': [{'nf': '111'}]},
+            format='json',
+            **auth_headers(self.user_a, 'Faturamento'),
+        )
+        response_b = self.api.get(
+            '/api/faturamento/protocolos/draft/',
+            **auth_headers(self.user_b, 'Faturamento'),
+        )
+        self.assertEqual(response_b.status_code, 200)
+        self.assertFalse(response_b.data['hasDraft'])
+        self.assertEqual(response_b.data['notas'], [])
+
+    def test_delete_descarta_rascunho(self):
+        self.api.put(
+            '/api/faturamento/protocolos/draft/',
+            {'notas': [{'nf': '222'}]},
+            format='json',
+            **auth_headers(self.user_a, 'Faturamento'),
+        )
+        deleted = self.api.delete(
+            '/api/faturamento/protocolos/draft/',
+            **auth_headers(self.user_a, 'Faturamento'),
+        )
+        self.assertEqual(deleted.status_code, 204)
+        self.assertFalse(ProtocoloEnvioDraft.objects.filter(usuario=self.user_a).exists())
+
+    def test_put_vazio_remove_rascunho(self):
+        ProtocoloEnvioDraft.objects.create(
+            usuario=self.user_a,
+            payload={'clienteId': '1', 'notas': [{'nf': '1'}]},
+        )
+        response = self.api.put(
+            '/api/faturamento/protocolos/draft/',
+            {'data': '2026-08-05', 'clienteId': '', 'notas': [], 'expedicoes': []},
+            format='json',
+            **auth_headers(self.user_a, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['hasDraft'])
+        self.assertFalse(ProtocoloEnvioDraft.objects.filter(usuario=self.user_a).exists())
+
+    def test_operador_sem_funcao_criar_nao_pode_salvar(self):
+        response = self.api.put(
+            '/api/faturamento/protocolos/draft/',
+            {'notas': [{'nf': '333'}]},
+            format='json',
+            **auth_headers(self.leitor, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 403)
