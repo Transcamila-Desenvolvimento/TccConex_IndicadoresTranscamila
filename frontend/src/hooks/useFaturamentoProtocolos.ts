@@ -19,6 +19,7 @@ export function useProtocoloEnvioDraft(enabled = true) {
     queryFn: () => apiService.getProtocoloEnvioDraft(),
     enabled,
     staleTime: 15_000,
+    retry: 0,
   });
 }
 

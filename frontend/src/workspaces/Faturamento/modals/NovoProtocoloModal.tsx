@@ -63,6 +63,7 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
   const [hydrated, setHydrated] = useState(isEditing);
   const [draftUpdatedAt, setDraftUpdatedAt] = useState<string | null>(null);
   const [restoredDraft, setRestoredDraft] = useState(false);
+  const [draftUnavailable, setDraftUnavailable] = useState(false);
   const skipNextSave = useRef(true);
 
   const clientes = clientesQuery.data ?? [];
@@ -74,7 +75,15 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
   const filiaisDisponiveis = selectedCliente?.filiais ?? [];
 
   useEffect(() => {
-    if (isEditing || hydrated || draftQuery.isLoading || draftQuery.isFetching) return;
+    if (isEditing || hydrated || draftQuery.isLoading) return;
+
+    if (draftQuery.isError) {
+      setDraftUnavailable(true);
+      setHydrated(true);
+      skipNextSave.current = true;
+      return;
+    }
+
     const draft = draftQuery.data;
     if (draft?.hasDraft) {
       setData(draft.data || todayIso());
@@ -87,13 +96,14 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
       setFilialInput(draft.filialInput || '');
       setDraftUpdatedAt(draft.updatedAt);
       setRestoredDraft(true);
+      setDraftUnavailable(false);
     }
     setHydrated(true);
     skipNextSave.current = true;
-  }, [isEditing, draftQuery.data, draftQuery.isLoading, draftQuery.isFetching, hydrated]);
+  }, [isEditing, draftQuery.data, draftQuery.isError, draftQuery.isLoading, hydrated]);
 
   useEffect(() => {
-    if (isEditing || !hydrated) return;
+    if (isEditing || !hydrated || draftUnavailable) return;
     if (skipNextSave.current) {
       skipNextSave.current = false;
       return;
@@ -112,6 +122,10 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
           onSuccess: (result) => {
             setDraftUpdatedAt(result.hasDraft ? result.updatedAt : null);
             if (!result.hasDraft) setRestoredDraft(false);
+            setDraftUnavailable(false);
+          },
+          onError: () => {
+            setDraftUnavailable(true);
           },
         },
       );
@@ -314,7 +328,12 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
         <div className="modal-header">
           <div>
             <h3>{isEditing ? `Editar protocolo #${protocolo.protocoloNumero}` : 'Novo protocolo de envio'}</h3>
-            {!isEditing && (restoredDraft || draftUpdatedAt) && (
+            {!isEditing && draftUnavailable && (
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#b45309' }}>
+                Rascunho indisponível no servidor — você pode preencher normalmente, mas nada será salvo automaticamente.
+              </p>
+            )}
+            {!isEditing && !draftUnavailable && (restoredDraft || draftUpdatedAt) && (
               <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
                 Rascunho na sua conta
                 {draftUpdatedAt ? ` · ${formatDraftTime(draftUpdatedAt)}` : ''}
