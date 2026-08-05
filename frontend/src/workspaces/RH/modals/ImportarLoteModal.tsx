@@ -79,6 +79,26 @@ const ImportarLoteModal: React.FC<ImportarLoteModalProps> = ({ onClose }) => {
               cronologicamente, gerando (ou atualizando) o respectivo lote.
             </p>
 
+            <div
+              role="alert"
+              style={{
+                marginBottom: '16px',
+                padding: '12px 14px',
+                backgroundColor: '#fffbeb',
+                borderRadius: '8px',
+                border: '1px solid #fcd34d',
+                display: 'flex',
+                gap: '10px',
+                alignItems: 'flex-start',
+              }}
+            >
+              <i className="bi bi-exclamation-triangle-fill" style={{ color: '#d97706', fontSize: '16px', marginTop: '1px' }} aria-hidden />
+              <p style={{ margin: 0, fontSize: '12px', color: '#92400e', lineHeight: 1.45 }}>
+                Se a planilha contiver um mês/ano que <strong>já possui dados importados</strong>, esses períodos serão
+                <strong> substituídos</strong>. Confira os meses da planilha antes de processar para evitar sobrescrever dados por engano.
+              </p>
+            </div>
+
             <button
               type="button"
               onClick={handleDownloadModelo}

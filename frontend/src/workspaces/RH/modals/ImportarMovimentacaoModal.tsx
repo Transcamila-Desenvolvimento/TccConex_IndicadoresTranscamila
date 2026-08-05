@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useImportarArquivoRH, getRHErrorMessage } from '../../../hooks/useRH';
+import React, { useMemo, useState } from 'react';
+import { useImportarArquivoRH, useLotesRH, getRHErrorMessage } from '../../../hooks/useRH';
 
 const MONTH_NAMES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -14,6 +14,7 @@ interface ImportarMovimentacaoModalProps {
 
 const ImportarMovimentacaoModal: React.FC<ImportarMovimentacaoModalProps> = ({ defaultMes, defaultAno, onClose }) => {
   const importarArquivo = useImportarArquivoRH();
+  const lotesQuery = useLotesRH();
   const [mes, setMes] = useState(defaultMes);
   const [ano, setAno] = useState(defaultAno);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -21,6 +22,13 @@ const ImportarMovimentacaoModal: React.FC<ImportarMovimentacaoModalProps> = ({ d
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [resultMsg, setResultMsg] = useState<string | null>(null);
+
+  const loteExistente = useMemo(() => {
+    const lotes = lotesQuery.data ?? [];
+    return lotes.find((lote) => Number(lote.mes) === Number(mes) && Number(lote.ano) === Number(ano)) ?? null;
+  }, [lotesQuery.data, mes, ano]);
+
+  const periodoLabel = `${MONTH_NAMES[mes - 1] ?? mes}/${ano}`;
 
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
   const handleDrop = (e: React.DragEvent) => {
@@ -35,6 +43,16 @@ const ImportarMovimentacaoModal: React.FC<ImportarMovimentacaoModalProps> = ({ d
 
   const handleStartImport = () => {
     if (!selectedFile) return;
+
+    if (loteExistente) {
+      const ok = window.confirm(
+        `O mês ${periodoLabel} já possui dados importados`
+        + (loteExistente.dataImportacao ? ` (última importação: ${loteExistente.dataImportacao})` : '')
+        + '.\n\nAo continuar, os dados atuais desse período serão substituídos pela nova planilha.\n\nDeseja continuar?',
+      );
+      if (!ok) return;
+    }
+
     setErrorMsg(null);
     setProgress(0);
     setSuccess(false);
@@ -91,6 +109,34 @@ const ImportarMovimentacaoModal: React.FC<ImportarMovimentacaoModalProps> = ({ d
                 />
               </div>
             </div>
+
+            {loteExistente && (
+              <div
+                role="alert"
+                style={{
+                  marginBottom: '16px',
+                  padding: '12px 14px',
+                  backgroundColor: '#fffbeb',
+                  borderRadius: '8px',
+                  border: '1px solid #fcd34d',
+                  display: 'flex',
+                  gap: '10px',
+                  alignItems: 'flex-start',
+                }}
+              >
+                <i className="bi bi-exclamation-triangle-fill" style={{ color: '#d97706', fontSize: '16px', marginTop: '1px' }} aria-hidden />
+                <div>
+                  <p style={{ margin: 0, fontSize: '12.5px', fontWeight: 700, color: '#92400e' }}>
+                    Este mês já possui dados importados
+                  </p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#a16207', lineHeight: 1.45 }}>
+                    Já existe movimentação para <strong>{periodoLabel}</strong>
+                    {loteExistente.dataImportacao ? `, importada em ${loteExistente.dataImportacao}` : ''}.
+                    Se continuar, os dados atuais desse período serão substituídos. Confira se não é um mês/ano errado antes de processar.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div
               onDragOver={handleDragOver}
@@ -184,9 +230,11 @@ const ImportarMovimentacaoModal: React.FC<ImportarMovimentacaoModalProps> = ({ d
                 height: '36px',
                 opacity: selectedFile ? 1 : 0.5,
                 cursor: selectedFile ? 'pointer' : 'not-allowed',
+                backgroundColor: loteExistente ? '#d97706' : undefined,
+                borderColor: loteExistente ? '#d97706' : undefined,
               }}
             >
-              Processar Movimentações
+              {loteExistente ? 'Substituir dados do mês' : 'Processar Movimentações'}
             </button>
           )}
         </div>

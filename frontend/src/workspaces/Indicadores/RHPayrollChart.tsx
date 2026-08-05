@@ -41,48 +41,59 @@ const RHPayrollChart: React.FC<RHPayrollChartProps> = ({ series }) => {
     ],
   }), [series]);
 
-  const options = useMemo(() => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: { mode: 'index' as const, intersect: false },
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: '#0f172a',
-        titleFont: { size: 12, family: 'inherit' },
-        bodyFont: { size: 12, family: 'inherit' },
-        padding: 12,
-        callbacks: {
-          label: (ctx: { parsed: { y: number | null } }) => formatCurrency(ctx.parsed.y ?? 0),
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: { display: false },
-        ticks: {
-          color: '#94a3b8',
-          font: { size: 11 },
-          maxRotation: 0,
-          autoSkip: true,
-          maxTicksLimit: 12,
-        },
-      },
-      y: {
-        grid: { color: 'rgba(226, 232, 240, 0.8)' },
-        ticks: {
-          color: '#64748b',
-          font: { size: 11 },
-          callback: (val: string | number) => {
-            const n = Number(val);
-            if (Math.abs(n) >= 1_000_000) return `R$ ${(n / 1_000_000).toFixed(1)}M`;
-            if (Math.abs(n) >= 1_000) return `R$ ${(n / 1_000).toFixed(0)}k`;
-            return formatCurrency(n);
+  const options = useMemo(() => {
+    const values = series.map((ponto) => Number(ponto.payroll) || 0);
+    const maxValue = values.length ? Math.max(...values) : 0;
+
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { left: 4, right: 8, top: 4, bottom: 2 } },
+      interaction: { mode: 'index' as const, intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0f172a',
+          titleFont: { size: 12, family: 'inherit' },
+          bodyFont: { size: 12, family: 'inherit' },
+          padding: 12,
+          callbacks: {
+            label: (ctx: { parsed: { y: number | null } }) => formatCurrency(ctx.parsed.y ?? 0),
           },
         },
       },
-    },
-  }), []);
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: '#94a3b8',
+            font: { size: 11 },
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 12,
+          },
+        },
+        y: {
+          // Sem beginAtZero o Chart.js “corta” perto do mínimo (ex.: 310k–335k)
+          // e exagera variações pequenas da folha.
+          beginAtZero: true,
+          suggestedMax: maxValue > 0 ? maxValue * 1.08 : undefined,
+          grid: { color: 'rgba(226, 232, 240, 0.8)' },
+          ticks: {
+            color: '#64748b',
+            font: { size: 11 },
+            maxTicksLimit: 6,
+            callback: (val: string | number) => {
+              const n = Number(val);
+              if (Math.abs(n) >= 1_000_000) return `R$ ${(n / 1_000_000).toFixed(1)}M`;
+              if (Math.abs(n) >= 1_000) return `R$ ${(n / 1_000).toFixed(0)}k`;
+              return formatCurrency(n);
+            },
+          },
+        },
+      },
+    };
+  }, [series]);
 
   if (series.length === 0) {
     return <div className="cashflow-chart-empty">Sem dados no período selecionado.</div>;
