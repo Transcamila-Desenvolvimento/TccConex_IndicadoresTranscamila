@@ -9,6 +9,7 @@ from apps.audit.services import record_audit
 from apps.financeiro.pagination import ReportPagination
 
 from .models import ClienteProtocolo, FilialClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft
+from .protocol_labels_pdf import render_protocol_labels_pdf
 from .protocol_pdf import render_protocols_pdf
 from .protocolo_draft import draft_payload, has_meaningful_draft, sanitize_draft_payload
 from .protocolo_import_service import (
@@ -343,9 +344,9 @@ class ProtocoloEnvioViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         )
         return Response({'deleted': count})
 
-    def _pdf_response(self, protocolos, filename: str):
+    def _pdf_response(self, protocolos, filename: str, *, render_fn=render_protocols_pdf):
         try:
-            pdf_bytes = render_protocols_pdf(list(protocolos))
+            pdf_bytes = render_fn(list(protocolos))
         except Exception as exc:
             return Response(
                 {'detail': f'Erro ao gerar PDF: {exc}'},
@@ -360,6 +361,20 @@ class ProtocoloEnvioViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         response['Content-Disposition'] = f'inline; filename="{filename}"'
         return response
 
+    def _protocolos_by_ids(self, request):
+        ids_raw = (request.query_params.get('ids') or '').strip()
+        if not ids_raw:
+            return None, Response({'detail': 'Informe os IDs dos protocolos.'}, status=status.HTTP_400_BAD_REQUEST)
+        ids = [int(value) for value in ids_raw.split(',') if value.strip().isdigit()]
+        if not ids:
+            return None, Response({'detail': 'IDs inválidos.'}, status=status.HTTP_400_BAD_REQUEST)
+        protocolos_qs = ProtocoloEnvio.objects.filter(pk__in=ids).select_related('cliente', 'usuario')
+        by_id = {p.pk: p for p in protocolos_qs}
+        protocolos = [by_id[i] for i in ids if i in by_id]
+        if not protocolos:
+            return None, Response({'detail': 'Nenhum protocolo encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        return protocolos, None
+
     @action(detail=True, methods=['get'])
     def print_pdf(self, request, pk=None):
         protocolo = self.get_object()
@@ -367,19 +382,21 @@ class ProtocoloEnvioViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def bulk_print(self, request):
-        ids_raw = (request.query_params.get('ids') or '').strip()
-        if not ids_raw:
-            return Response({'detail': 'Informe os IDs dos protocolos.'}, status=status.HTTP_400_BAD_REQUEST)
-        ids = [int(value) for value in ids_raw.split(',') if value.strip().isdigit()]
-        if not ids:
-            return Response({'detail': 'IDs inválidos.'}, status=status.HTTP_400_BAD_REQUEST)
-        # Mantém a ordem dos IDs selecionados na tela.
-        protocolos_qs = ProtocoloEnvio.objects.filter(pk__in=ids).select_related('cliente', 'usuario')
-        by_id = {p.pk: p for p in protocolos_qs}
-        protocolos = [by_id[i] for i in ids if i in by_id]
-        if not protocolos:
-            return Response({'detail': 'Nenhum protocolo encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        protocolos, error = self._protocolos_by_ids(request)
+        if error:
+            return error
         return self._pdf_response(protocolos, 'protocolos.pdf')
+
+    @action(detail=False, methods=['get'], url_path='bulk_print_labels')
+    def bulk_print_labels(self, request):
+        protocolos, error = self._protocolos_by_ids(request)
+        if error:
+            return error
+        return self._pdf_response(
+            protocolos,
+            'protocolos_etiquetas.pdf',
+            render_fn=render_protocol_labels_pdf,
+        )
 
     @action(detail=False, methods=['get'])
     def bulk_export_excel(self, request):

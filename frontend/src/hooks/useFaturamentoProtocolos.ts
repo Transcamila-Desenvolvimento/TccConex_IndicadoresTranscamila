@@ -159,6 +159,12 @@ export function useDownloadProtocolosBulkPdf() {
   });
 }
 
+export function useDownloadProtocolosBulkLabels() {
+  return useMutation({
+    mutationFn: (ids: number[]) => apiService.downloadProtocolosBulkLabels(ids),
+  });
+}
+
 export function useDownloadProtocolosBulkExcel() {
   return useMutation({
     mutationFn: (ids: number[]) => apiService.downloadProtocolosBulkExcel(ids),

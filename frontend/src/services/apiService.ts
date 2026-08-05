@@ -1552,6 +1552,23 @@ export const apiService = {
     return assertPdfBlob(data, headers);
   },
 
+  async downloadProtocolosBulkLabels(ids: number[]): Promise<Blob> {
+    const { data, headers, status } = await api.get('/api/faturamento/protocolos/bulk_print_labels/', {
+      params: { ids: ids.join(',') },
+      responseType: 'blob',
+      validateStatus: () => true,
+    });
+    if (status === 404) {
+      throw new Error(
+        'Recurso de etiquetas não encontrado no servidor. Reinicie o backend (porta 8001) ou aguarde o deploy.',
+      );
+    }
+    if (status < 200 || status >= 300) {
+      throw new Error(await readBlobErrorMessage(data, 'Não foi possível gerar as etiquetas dos protocolos.'));
+    }
+    return assertPdfBlob(data, headers);
+  },
+
   async downloadProtocolosBulkExcel(ids: number[]): Promise<Blob> {
     const { data, headers, status } = await api.get('/api/faturamento/protocolos/bulk_export_excel/', {
       params: { ids: ids.join(',') },

@@ -501,6 +501,33 @@ class FaturamentoProtocoloTests(TestCase):
         self.assertEqual(response['Content-Type'], 'application/pdf')
         self.assertTrue(response.content.startswith(b'%PDF'))
 
+    def test_bulk_print_labels_retorna_pdf(self):
+        protocolo1 = ProtocoloEnvio.objects.create(
+            data='2026-07-10',
+            cliente=self.other_cliente,
+            nota_fiscal='1001',
+            numero_sequencial=1,
+            expedicao='Transcamila Ibiporã',
+            usuario=self.user,
+            usuario_nome='Usuário Faturamento',
+        )
+        protocolo2 = ProtocoloEnvio.objects.create(
+            data='2026-07-11',
+            cliente=self.other_cliente,
+            nota_fiscal='2001',
+            numero_sequencial=2,
+            usuario=self.user,
+            usuario_nome='Usuário Faturamento',
+        )
+        response = self.api.get(
+            '/api/faturamento/protocolos/bulk_print_labels/',
+            {'ids': f'{protocolo1.pk},{protocolo2.pk}'},
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 200, getattr(response, 'data', response.content))
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertTrue(response.content.startswith(b'%PDF'))
+
     def test_bulk_export_excel_retorna_planilha_com_protocolos_selecionados(self):
         protocolo1 = ProtocoloEnvio.objects.create(
             data='2026-07-10',

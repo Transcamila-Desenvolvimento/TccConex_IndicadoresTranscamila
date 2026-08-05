@@ -7,6 +7,7 @@ import {
   resolveFaturamentoErrorMessage,
   useBulkDeleteProtocolos,
   useDownloadProtocolosBulkExcel,
+  useDownloadProtocolosBulkLabels,
   useDownloadProtocolosBulkPdf,
   downloadBlobAsFile,
   openPdfPreviewInNewTab,
@@ -72,6 +73,7 @@ const FaturamentoProtocolos: React.FC = () => {
   const hasProtocoloDraft = Boolean(draftQuery.data?.hasDraft);
   const bulkDelete = useBulkDeleteProtocolos();
   const downloadBulk = useDownloadProtocolosBulkPdf();
+  const downloadLabels = useDownloadProtocolosBulkLabels();
   const downloadBulkExcel = useDownloadProtocolosBulkExcel();
 
   const protocolos = protocolosQuery.data?.results ?? [];
@@ -145,6 +147,30 @@ const FaturamentoProtocolos: React.FC = () => {
     });
   };
 
+  const handlePrintLabelsSelected = () => {
+    if (selectedIds.length === 0 || downloadLabels.isPending) return;
+
+    const previewWindow = openPdfPreviewPlaceholder();
+    if (!previewWindow) {
+      alert(
+        'Não foi possível abrir outra aba. Permita pop-ups para este site e tente novamente.',
+      );
+      return;
+    }
+
+    downloadLabels.mutate(selectedIds, {
+      onSuccess: (blob) => {
+        openPdfPreviewInNewTab(blob, previewWindow);
+      },
+      onError: async (error: unknown) => {
+        previewWindow.close();
+        alert(await resolveFaturamentoErrorMessage(error));
+      },
+    });
+  };
+
+  const isPdfGenerating = downloadBulk.isPending || downloadLabels.isPending;
+
   const openAction = (setter: (open: boolean) => void) => {
     setIsActionsOpen(false);
     setter(true);
@@ -162,16 +188,20 @@ const FaturamentoProtocolos: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '4px', position: 'relative' }}>
-      {downloadBulk.isPending && (
+      {isPdfGenerating && (
         <div className="protocolo-pdf-overlay" role="status" aria-live="polite" aria-busy="true">
           <div className="protocolo-pdf-overlay-card">
             <span className="async-query-spinner" aria-hidden="true" />
             <div className="protocolo-pdf-overlay-text">
-              <strong>Gerando PDF...</strong>
+              <strong>{downloadLabels.isPending ? 'Gerando etiquetas...' : 'Gerando PDF...'}</strong>
               <span>
                 {selectedIds.length === 1
-                  ? 'Preparando o protocolo selecionado'
-                  : `Preparando ${selectedIds.length} protocolos`}
+                  ? downloadLabels.isPending
+                    ? 'Preparando a etiqueta selecionada'
+                    : 'Preparando o protocolo selecionado'
+                  : downloadLabels.isPending
+                    ? `Preparando ${selectedIds.length} etiquetas`
+                    : `Preparando ${selectedIds.length} protocolos`}
               </span>
             </div>
           </div>
@@ -186,20 +216,36 @@ const FaturamentoProtocolos: React.FC = () => {
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {selectedIds.length > 0 && (
-            <button
-              type="button"
-              className="reports-action-btn secondary"
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
-              onClick={handlePrintSelected}
-              disabled={downloadBulk.isPending}
-            >
-              {downloadBulk.isPending ? (
-                <span className="async-query-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} aria-hidden="true" />
-              ) : (
-                <i className="bi bi-eye" />
-              )}
-              <span>{downloadBulk.isPending ? 'Gerando...' : `Visualizar PDF (${selectedIds.length})`}</span>
-            </button>
+            <>
+              <button
+                type="button"
+                className="reports-action-btn secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+                onClick={handlePrintLabelsSelected}
+                disabled={isPdfGenerating}
+              >
+                {downloadLabels.isPending ? (
+                  <span className="async-query-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} aria-hidden="true" />
+                ) : (
+                  <i className="bi bi-printer" />
+                )}
+                <span>{downloadLabels.isPending ? 'Gerando...' : `Imprimir etiquetas (${selectedIds.length})`}</span>
+              </button>
+              <button
+                type="button"
+                className="reports-action-btn secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+                onClick={handlePrintSelected}
+                disabled={isPdfGenerating}
+              >
+                {downloadBulk.isPending ? (
+                  <span className="async-query-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} aria-hidden="true" />
+                ) : (
+                  <i className="bi bi-eye" />
+                )}
+                <span>{downloadBulk.isPending ? 'Gerando...' : `Visualizar PDF (${selectedIds.length})`}</span>
+              </button>
+            </>
           )}
 
           <div className="reports-dropdown-wrapper">
