@@ -547,21 +547,20 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
             )}
           </div>
 
-          <div className="modal-footer" style={{ marginTop: '20px' }}>
-            {!isEditing && (restoredDraft || draftUpdatedAt) && (
-              <button
-                type="button"
-                className="reports-action-btn secondary"
-                onClick={discardDraft}
-                disabled={isPending}
-                title="Apaga o rascunho da sua conta"
-              >
-                Descartar rascunho
-              </button>
-            )}
-            <button type="button" className="reports-action-btn secondary" onClick={requestClose} disabled={isPending}>
-              {isEditing ? 'Cancelar' : 'Fechar'}
-            </button>
+          <div className="modal-footer" style={{ marginTop: '20px', justifyContent: 'space-between' }}>
+            <div>
+              {!isEditing && (restoredDraft || draftUpdatedAt) && (
+                <button
+                  type="button"
+                  className="reports-action-btn secondary"
+                  onClick={discardDraft}
+                  disabled={isPending}
+                  title="Apaga o rascunho da sua conta"
+                >
+                  Descartar rascunho
+                </button>
+              )}
+            </div>
             <button
               type="submit"
               className="reports-action-btn primary"
