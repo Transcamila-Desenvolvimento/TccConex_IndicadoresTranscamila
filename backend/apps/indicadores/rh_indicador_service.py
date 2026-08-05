@@ -92,12 +92,48 @@ def _bucket_com_percentual(bucket: dict, total: int) -> dict:
     return resultado
 
 
-def _colaboradores_filtrados(lote: LoteMovimentacaoRH, *, filial: str, categoria: str, excluidos: set[str]):
+# Filtro de situação do indicador (query param `situacaoGrupo`).
+_SITUACAO_GRUPO_TODOS = ''
+_SITUACAO_GRUPO_AFASTADOS = 'AFASTADOS'
+_SITUACAO_GRUPO_NORMAL = 'SITUACAO_NORMAL'
+_SITUACAO_GRUPOS_VALIDOS = {
+    _SITUACAO_GRUPO_TODOS,
+    _SITUACAO_GRUPO_AFASTADOS,
+    _SITUACAO_GRUPO_NORMAL,
+}
+
+
+def _parse_situacao_grupo(valor) -> str:
+    chave = (valor or '').strip().upper().replace(' ', '_')
+    # Aliases vindos do frontend/legado.
+    if chave in ('TODAS', 'TODOS', 'ALL'):
+        return _SITUACAO_GRUPO_TODOS
+    if chave in ('AFASTADO', 'AFASTADOS'):
+        return _SITUACAO_GRUPO_AFASTADOS
+    if chave in ('SITUACAO_NORMAL', 'SITUACAONORMAL', 'NORMAL'):
+        return _SITUACAO_GRUPO_NORMAL
+    if chave in _SITUACAO_GRUPOS_VALIDOS:
+        return chave
+    return _SITUACAO_GRUPO_TODOS
+
+
+def _colaboradores_filtrados(
+    lote: LoteMovimentacaoRH,
+    *,
+    filial: str,
+    categoria: str,
+    excluidos: set[str],
+    situacao_grupo: str = _SITUACAO_GRUPO_TODOS,
+):
     qs = lote.colaboradores.exclude(cpf__in=excluidos)
     if filial:
         qs = qs.filter(filial=filial)
     if categoria:
         qs = qs.filter(categoria=categoria)
+    if situacao_grupo == _SITUACAO_GRUPO_AFASTADOS:
+        qs = qs.filter(situacao__icontains='AFASTADO')
+    elif situacao_grupo == _SITUACAO_GRUPO_NORMAL:
+        qs = qs.filter(situacao__iexact='SITUACAO NORMAL')
     return qs
 
 
@@ -126,6 +162,10 @@ def build_rh_movimentacao_payload(params) -> dict:
     categoria = (params.get('categoria') or '').strip().upper()
     if categoria not in _CATEGORIAS_VALIDAS:
         categoria = ''
+    raw_situacao = params.get('situacaoGrupo')
+    if raw_situacao is None:
+        raw_situacao = params.get('situacao_grupo')
+    situacao_grupo = _parse_situacao_grupo(raw_situacao)
 
     todos_lotes = list(LoteMovimentacaoRH.objects.order_by('ano', 'mes'))
     lotes_disponiveis = [
@@ -181,17 +221,22 @@ def build_rh_movimentacao_payload(params) -> dict:
         Colaborador.objects.filter(desconsiderado=True).values_list('cpf', flat=True)
     )
 
+    filtro_lote = {
+        'filial': filial,
+        'categoria': categoria,
+        'excluidos': excluidos,
+        'situacao_grupo': situacao_grupo,
+    }
+
     series = []
     for lote in lotes_periodo:
-        colaboradores_lote = list(
-            _colaboradores_filtrados(lote, filial=filial, categoria=categoria, excluidos=excluidos)
-        )
+        colaboradores_lote = list(_colaboradores_filtrados(lote, **filtro_lote))
         cpfs_atual = {c.cpf for c in colaboradores_lote}
 
         lote_ant = lote_anterior_por_id.get(lote.id)
         if lote_ant is not None:
             cpfs_anterior = set(
-                _colaboradores_filtrados(lote_ant, filial=filial, categoria=categoria, excluidos=excluidos)
+                _colaboradores_filtrados(lote_ant, **filtro_lote)
                 .values_list('cpf', flat=True)
             )
             admitidos = len(cpfs_atual - cpfs_anterior)

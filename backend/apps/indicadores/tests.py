@@ -1272,6 +1272,41 @@ class IndicadoresRHMovimentacaoTests(TestCase):
         self.assertEqual(atual['motorista']['ativos']['count'], 1)
         self.assertEqual(atual['motorista']['afastados']['count'], 0)
 
+    def test_filtro_por_situacao_grupo(self):
+        MovimentacaoColaborador.objects.filter(
+            lote=self.lote_06, cpf='444.444.444-44',
+        ).update(situacao='AFASTADO TEMP.', salario=Decimal('2800.00'))
+        MovimentacaoColaborador.objects.filter(
+            lote=self.lote_06, cpf='111.111.111-11',
+        ).update(situacao='SITUACAO NORMAL', salario=Decimal('3200.00'))
+        MovimentacaoColaborador.objects.filter(
+            lote=self.lote_06, cpf='333.333.333-33',
+        ).update(situacao='FERIAS', salario=Decimal('2500.00'))
+
+        todos = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(todos.data['summary']['totalColaboradores'], 3)
+        self.assertEqual(todos.data['summary']['payrollTotal'], Decimal('8500.00'))
+
+        normal = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&situacaoGrupo=SITUACAO_NORMAL',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(normal.status_code, 200)
+        self.assertEqual(normal.data['summary']['totalColaboradores'], 1)
+        self.assertEqual(normal.data['summary']['payrollTotal'], Decimal('3200.00'))
+
+        afastados = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&situacaoGrupo=AFASTADOS',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(afastados.status_code, 200)
+        self.assertEqual(afastados.data['summary']['totalColaboradores'], 1)
+        self.assertEqual(afastados.data['summary']['payrollTotal'], Decimal('2800.00'))
+        self.assertEqual(afastados.data['summary']['porCategoriaAtual']['administrativo']['afastados']['count'], 1)
+
     def test_filtro_por_filial(self):
         response = self.client.get(
             '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&filial=São Paulo (Filial)',
@@ -1484,7 +1519,7 @@ class IndicadoresSgqSatisfacaoTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_total_recusas_conta_em_branco_e_recusa(self):
-        """KPI 'Não avaliou' = pesquisas sem critérios (em branco) + recusou avaliar.
+        """KPI 'Não avaliou' = pesquisas com todos os critérios vazios.
         Essas pesquisas não entram no total nem nas métricas de avaliação."""
         _pesquisa(
             'Ibiporã (Matriz)',
@@ -1514,6 +1549,26 @@ class IndicadoresSgqSatisfacaoTests(TestCase):
         # setUp cria 2 avaliadas; as 2 em branco/recusa ficam só em totalRecusas
         self.assertEqual(response.data['totalPesquisas'], 2)
         self.assertEqual(response.data['totalAvaliacoes'], 10)
+
+    def test_parcial_com_flag_recusa_entra_no_total(self):
+        """Avaliação parcial conta no total — flag sozinho não manda para 'Não avaliou'."""
+        _pesquisa(
+            'Ibiporã (Matriz)',
+            cte='PARCIAL-1',
+            cliente_recusou_assinar=True,
+            prazo_entrega='',
+            condicoes_mercadoria='ruim',
+            condicoes_veiculo='',
+            apresentacao_motorista='',
+            atendimento_dispensado='',
+        )
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['totalPesquisas'], 3)  # 2 do setUp + parcial
+        self.assertEqual(response.data['totalRecusas'], 0)
 
 
 class IndicadoresMetaFaturamentoTests(TestCase):

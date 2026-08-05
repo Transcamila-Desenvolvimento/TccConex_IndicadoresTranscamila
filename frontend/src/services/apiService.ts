@@ -514,6 +514,7 @@ function buildRHIndicadorQueryParams(params: RHIndicadorQueryParams = {}) {
   if (params.end) query.end = params.end;
   if (params.filial && params.filial !== 'Todas') query.filial = params.filial;
   if (params.categoria && params.categoria !== 'Todas') query.categoria = params.categoria;
+  if (params.situacaoGrupo) query.situacaoGrupo = params.situacaoGrupo;
   return query;
 }
 

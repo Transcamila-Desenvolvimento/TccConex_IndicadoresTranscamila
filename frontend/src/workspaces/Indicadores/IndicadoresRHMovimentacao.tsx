@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useIndicadorRHMovimentacao } from '../../hooks/useIndicadores';
+import type { RHIndicadorSituacaoGrupo } from '../../types/domain';
 import RHPayrollChart from './RHPayrollChart';
 import RHHeadcountChart from './RHHeadcountChart';
 import RHAdmissoesChart from './RHAdmissoesChart';
@@ -10,6 +11,12 @@ const CATEGORIA_OPTIONS = [
   { value: 'ADMINISTRATIVO', label: 'Administrativo' },
   { value: 'OPERACIONAL', label: 'Operacional' },
   { value: 'MOTORISTA', label: 'Motorista' },
+];
+
+const SITUACAO_OPTIONS: { value: RHIndicadorSituacaoGrupo; label: string }[] = [
+  { value: '', label: 'Todas as situações' },
+  { value: 'SITUACAO_NORMAL', label: 'Situação normal' },
+  { value: 'AFASTADOS', label: 'Afastados' },
 ];
 
 type PeriodoKey = 'ano' | 't1' | 't2' | 't3' | 't4' | 's1' | 's2' | 'custom';
@@ -73,13 +80,15 @@ const IndicadoresRHMovimentacao: React.FC = () => {
   const [endPeriod, setEndPeriod] = useState(defaults.end);
   const [filial, setFilial] = useState('');
   const [categoria, setCategoria] = useState('');
+  const [situacaoGrupo, setSituacaoGrupo] = useState<RHIndicadorSituacaoGrupo>('');
 
   const queryParams = useMemo(() => ({
     ...(startPeriod ? { start: startPeriod } : {}),
     ...(endPeriod ? { end: endPeriod } : {}),
     ...(filial ? { filial } : {}),
     ...(categoria ? { categoria } : {}),
-  }), [startPeriod, endPeriod, filial, categoria]);
+    ...(situacaoGrupo ? { situacaoGrupo } : {}),
+  }), [startPeriod, endPeriod, filial, categoria, situacaoGrupo]);
 
   const rhQuery = useIndicadorRHMovimentacao(queryParams);
   const { data } = rhQuery;
@@ -138,6 +147,7 @@ const IndicadoresRHMovimentacao: React.FC = () => {
     const reset = defaultAnoInteiro();
     setFilial('');
     setCategoria('');
+    setSituacaoGrupo('');
     setAno(reset.year);
     setPeriodo('ano');
     setStartPeriod(reset.start);
@@ -201,6 +211,17 @@ const IndicadoresRHMovimentacao: React.FC = () => {
           <select className="rh-period-select" value={categoria} onChange={(e) => setCategoria(e.target.value)}>
             {CATEGORIA_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.value ? opt.label : 'Todas as categorias'}</option>
+            ))}
+          </select>
+
+          <select
+            className="rh-period-select"
+            value={situacaoGrupo}
+            onChange={(e) => setSituacaoGrupo(e.target.value as RHIndicadorSituacaoGrupo)}
+            title="Filtra colaboradores pela situação na folha"
+          >
+            {SITUACAO_OPTIONS.map((opt) => (
+              <option key={opt.value || 'todas'} value={opt.value}>{opt.label}</option>
             ))}
           </select>
 
@@ -270,15 +291,15 @@ const IndicadoresRHMovimentacao: React.FC = () => {
             <div className="rh-ind-charts-grid">
               <div className="erp-card cashflow-chart-card">
                 <h2 className="cashflow-section-title">Evolução da Folha Salarial</h2>
-                <RHPayrollChart series={series} />
+                <RHPayrollChart key={`payroll-${situacaoGrupo}-${summary.payrollTotal}`} series={series} />
               </div>
               <div className="erp-card cashflow-chart-card">
                 <h2 className="cashflow-section-title">Evolução do Quantitativo por Categoria</h2>
-                <RHHeadcountChart series={series} />
+                <RHHeadcountChart key={`headcount-${situacaoGrupo}-${summary.totalColaboradores}`} series={series} />
               </div>
               <div className="erp-card cashflow-chart-card rh-ind-chart-card--wide">
                 <h2 className="cashflow-section-title">Admissões × Desligamentos</h2>
-                <RHAdmissoesChart series={series} />
+                <RHAdmissoesChart key={`adm-${situacaoGrupo}-${summary.admitidosPeriodo}-${summary.desligadosPeriodo}`} series={series} />
               </div>
             </div>
           </>

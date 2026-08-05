@@ -454,11 +454,15 @@ export interface CashflowDayDetailResponse {
   receber: CashflowDayReceberRow[];
 }
 
+/** Grupo de situação no indicador de RH: vazio = todos. */
+export type RHIndicadorSituacaoGrupo = '' | 'AFASTADOS' | 'SITUACAO_NORMAL';
+
 export interface RHIndicadorQueryParams {
   start?: string;
   end?: string;
   filial?: string;
   categoria?: string;
+  situacaoGrupo?: RHIndicadorSituacaoGrupo;
 }
 
 export interface RHIndicadorStatusBucket {
