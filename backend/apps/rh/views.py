@@ -294,12 +294,10 @@ class LoteMovimentacaoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             f_key = a.filial or 'Não Informada'
             if f_key not in afastados_por_filial:
                 afastados_por_filial[f_key] = []
-            meses_afastado = _meses_afastado(a.cpf, lote)
             afastados_por_filial[f_key].append({
                 'nome': a.nome.upper(),
                 'cargo': a.funcao or 'N/I',
                 'situacao': a.situacao or 'AFASTADO',
-                'tempo_afastado_str': format_tenure(meses_afastado) if meses_afastado else None,
             })
 
         # 2. Gerar Anexo Excel
@@ -374,6 +372,12 @@ class LoteMovimentacaoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         from .chart_service import gerar_grafico_evolucao_folha
         grafico_folha_bytes = gerar_grafico_evolucao_folha(folha_historico) if len(folha_historico) > 1 else b''
 
+        from django.conf import settings
+        from django.utils import timezone
+
+        dashboard_base = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
+        dashboard_url = f'{dashboard_base}/indicadores/rh/movimentacao'
+
         context = {
             'lote': lote,
             'relatorio': relatorio_filiais,
@@ -393,7 +397,9 @@ class LoteMovimentacaoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             'afastados_por_filial': afastados_por_filial,
             'tem_grafico_folha': bool(grafico_folha_bytes),
             'ano': lote.ano,
-            'mes_nome': mes_nome
+            'mes_nome': mes_nome,
+            'dashboard_url': dashboard_url,
+            'ref_date': timezone.localtime(lote.data_importacao) if lote.data_importacao else timezone.localtime(),
         }
         
         html_body = render_to_string('rh/email_movimentacao.html', context)
@@ -402,7 +408,7 @@ class LoteMovimentacaoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         pdf_bytes = gerar_pdf_relatorio_movimentacoes(context)
 
         email_obj = EmailMessage(
-            subject=f'Relatório de Movimentação RH - {mes_nome}/{lote.ano}',
+            subject=f'Movimentações de RH - {mes_nome}/{lote.ano}',
             body=html_body,
             from_email=None,
             to=to_emails,

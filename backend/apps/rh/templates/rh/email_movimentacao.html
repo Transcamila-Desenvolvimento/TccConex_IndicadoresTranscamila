@@ -4,129 +4,83 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório de Movimentação RH - Transcamila</title>
+    <title>Movimentações de RH - TccConex</title>
     <style>
-        /* Fiel ao design system do TccConex (frontend/src/styles/style.css):
-           - Barra azul quadrada (sem raio) ao lado de títulos
-           - Estrutura (meta-bar, tabelas) com cantos retos e bordas 1px sólidas
-           - Cards (rh-filial-card) com raio 10px
-           - Badges em pill sutil (bg claro + texto colorido)
-           - Azul primário: #118CC4 */
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background-color: #eef2f6;
-            color: #0f172a;
+            background-color: #f4f7f9;
+            color: #2d3436;
             margin: 0;
             padding: 0;
             -webkit-font-smoothing: antialiased;
         }
 
         .wrapper {
-            background-color: #eef2f6;
-            padding: 24px 10px;
+            background-color: #f4f7f9;
+            padding: 20px 10px;
         }
 
         .container {
-            max-width: 620px;
+            max-width: 600px;
             margin: 0 auto;
             background-color: #ffffff;
-            border: 1px solid #e2e8f0;
             border-radius: 12px;
             overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
         }
 
-        /* Cabeçalho — barra azul quadrada + título, igual ao topo das telas do sistema */
         .header {
-            background-color: #ffffff;
-            padding: 26px 32px 20px;
-        }
-
-        .header-title-row {
-            display: table;
-            width: 100%;
-        }
-
-        .header-bar {
-            display: table-cell;
-            width: 12px;
-            vertical-align: middle;
-        }
-
-        .header-bar span {
-            display: inline-block;
-            width: 6px;
-            height: 24px;
             background-color: #118CC4;
-        }
-
-        .header-titles {
-            display: table-cell;
-            vertical-align: middle;
-            padding-left: 10px;
+            padding: 30px 40px;
+            color: #ffffff;
+            text-align: left;
         }
 
         .header h1 {
             margin: 0;
-            font-size: 21px;
+            font-size: 22px;
             font-weight: 700;
-            color: #0f172a;
+            letter-spacing: -0.5px;
+            text-transform: uppercase;
+            line-height: 1.2;
         }
 
-        /* Barra de metadados — igual ao .reports-meta-bar (cantos retos, borda 1px sólida) */
-        .meta-bar {
-            margin: 16px 32px 0;
-            padding: 9px 16px;
-            background-color: #ffffff;
-            border: 1px solid #cbd5e1;
+        .header p {
+            margin: 8px 0 0;
+            font-size: 14px;
+            opacity: 0.9;
+            font-weight: 400;
+        }
+
+        .header-btn {
+            display: inline-block;
+            padding: 8px 18px;
+            border: 1.5px solid #ffffff;
+            border-radius: 25px;
+            color: #ffffff !important;
+            text-decoration: none !important;
             font-size: 12px;
-            color: #475569;
-        }
-
-        .meta-bar span + span {
-            margin-left: 18px;
-        }
-
-        .meta-bar strong {
-            color: #1e293b;
+            font-weight: 600;
+            white-space: nowrap;
         }
 
         .content {
-            padding: 26px 32px 28px;
+            padding: 30px 40px;
         }
 
-        /* Rótulo de seção — barra azul quadrada pequena + texto, mesma linguagem do cabeçalho */
         .section-header {
-            display: table;
-            width: 100%;
+            font-size: 12px;
+            font-weight: 700;
+            color: #b2bec3;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
             margin: 26px 0 14px;
+            border-bottom: 2px solid #f1f3f5;
+            padding-bottom: 8px;
         }
 
         .section-header:first-child {
             margin-top: 0;
-        }
-
-        .section-header-bar {
-            display: table-cell;
-            width: 8px;
-            vertical-align: middle;
-        }
-
-        .section-header-bar span {
-            display: inline-block;
-            width: 4px;
-            height: 13px;
-            background-color: #118CC4;
-        }
-
-        .section-header-text {
-            display: table-cell;
-            vertical-align: middle;
-            padding-left: 8px;
-            font-size: 12px;
-            font-weight: 700;
-            color: #334155;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
         }
 
         /* Card padrão — igual ao .rh-filial-card do sistema */
@@ -302,14 +256,14 @@
 
         .footer {
             background-color: #ffffff;
-            padding: 18px 32px;
+            padding: 18px 40px;
             text-align: center;
-            border-top: 1px solid #e2e8f0;
+            border-top: 1px solid #f1f3f5;
         }
 
         .footer p {
             margin: 0;
-            font-size: 11.5px;
+            font-size: 11px;
             color: #94a3b8;
             line-height: 1.6;
         }
@@ -320,16 +274,17 @@
     <div class="wrapper">
         <div class="container">
             <div class="header">
-                <div class="header-title-row">
-                    <div class="header-bar"><span></span></div>
-                    <div class="header-titles">
-                        <h1>Relatório de Movimentação de Pessoal</h1>
-                    </div>
-                </div>
-            </div>
-
-            <div class="meta-bar">
-                <span>Período: <strong>{{ mes_nome }}/{{ ano }}</strong></span>
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                        <td align="left" valign="middle">
+                            <h1>Movimentações de RH</h1>
+                            <p>{{ mes_nome }}/{{ ano }} &bull; {{ ref_date|date:"d/m/Y" }}</p>
+                        </td>
+                        <td align="right" valign="bottom" style="padding-bottom: 2px;">
+                            <a href="{{ dashboard_url }}" class="header-btn" style="color: #ffffff; text-decoration: none;">Abrir Dashboard</a>
+                        </td>
+                    </tr>
+                </table>
             </div>
 
             <div class="content">
@@ -357,19 +312,13 @@
                 </div>
 
                 {% if tem_grafico_folha %}
-                <div class="section-header">
-                    <div class="section-header-bar"><span></span></div>
-                    <div class="section-header-text">Evolução da Folha Salarial</div>
-                </div>
+                <div class="section-header">Evolução da Folha Salarial</div>
                 <div class="panel chart-panel">
                     <img src="cid:grafico_folha" width="600" alt="Evolução da folha salarial" style="display: block; width: 100%; max-width: 600px; height: auto; margin: 0 auto;" />
                 </div>
                 {% endif %}
 
-                <div class="section-header">
-                    <div class="section-header-bar"><span></span></div>
-                    <div class="section-header-text">Quadro de Pessoal</div>
-                </div>
+                <div class="section-header">Quadro de Pessoal</div>
                 <div class="panel">
                     <table class="personnel-grid">
                         <tr>
@@ -393,10 +342,7 @@
                     </table>
                 </div>
 
-                <div class="section-header">
-                    <div class="section-header-bar"><span></span></div>
-                    <div class="section-header-text">Resumo por Filial</div>
-                </div>
+                <div class="section-header">Resumo por Filial</div>
                 {% for item in relatorio %}
                 <div class="panel">
                     <div class="panel-title">{{ item.nome }}</div>
@@ -428,10 +374,7 @@
                 {% endfor %}
 
                 {% if novos_detalhes %}
-                <div class="section-header">
-                    <div class="section-header-bar"><span></span></div>
-                    <div class="section-header-text">Novos Funcionários</div>
-                </div>
+                <div class="section-header">Novos Funcionários</div>
                 <div class="panel">
                     {% for n in novos_detalhes %}
                     <div class="person-row">
@@ -445,10 +388,7 @@
                 {% endif %}
 
                 {% if desligados_detalhes %}
-                <div class="section-header">
-                    <div class="section-header-bar"><span></span></div>
-                    <div class="section-header-text">Colaboradores Desligados</div>
-                </div>
+                <div class="section-header">Colaboradores Desligados</div>
                 <div class="panel">
                     {% for d in desligados_detalhes %}
                     <div class="person-row">
@@ -462,10 +402,7 @@
                 {% endif %}
 
                 {% if afastados_por_filial %}
-                <div class="section-header">
-                    <div class="section-header-bar"><span></span></div>
-                    <div class="section-header-text">Colaboradores Afastados por Filial</div>
-                </div>
+                <div class="section-header">Colaboradores Afastados por Filial</div>
                 {% for filial, colabs in afastados_por_filial.items %}
                 <div class="filial-tag">{{ filial }} ({{ colabs|length }})</div>
                 <div class="panel">
@@ -473,7 +410,7 @@
                     <div class="person-row">
                         <span class="person-name">{{ a.nome }}</span>
                         <div class="person-role">{{ a.cargo }}</div>
-                        <div class="person-sub">{{ a.situacao }}{% if a.tempo_afastado_str %} &middot; há {{ a.tempo_afastado_str }}{% endif %}</div>
+                        <div class="person-sub">{{ a.situacao }}</div>
                     </div>
                     {% endfor %}
                 </div>
@@ -481,10 +418,7 @@
                 {% endif %}
 
                 {% if alteracoes %}
-                <div class="section-header">
-                    <div class="section-header-bar"><span></span></div>
-                    <div class="section-header-text">Relatório de Alterações</div>
-                </div>
+                <div class="section-header">Relatório de Alterações</div>
                 <div class="panel">
                     <p style="margin: 0; font-weight: 600; color: #1e293b; font-size: 13px;">
                         Foram identificadas {{ alteracoes|length }} alteração(ões) de colaboradores neste período.
@@ -497,7 +431,8 @@
             </div>
 
             <div class="footer">
-                <p>Powered by TccConex &bull; Envio automático de relatório &copy; {{ ano }} Transcamila Cargas e Armazéns Gerais Ltda</p>
+                <p>Envio automático de relatório - TccConex &copy; {{ ano }} Transcamila Cargas e Armazéns Gerais Ltda</p>
+                <p style="margin-top: 10px; font-size: 10px;">Este e-mail é de uso exclusivo e confidencial.</p>
             </div>
         </div>
     </div>
