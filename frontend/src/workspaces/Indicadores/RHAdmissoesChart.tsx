@@ -11,8 +11,22 @@ import {
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 import type { RHIndicadorSeriePonto } from '../../types/domain';
+import { createDatasetValueLabelsPlugin } from './rhChartLabelPlugin';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, BarController, Title, Tooltip, Legend);
+
+const admissoesValueLabels = createDatasetValueLabelsPlugin({
+  id: 'rh-admissoes-value-labels',
+  fontSize: 10,
+  minBarHeight: 8,
+  barLabelPosition: 'outside',
+  color: (datasetIndex) => (datasetIndex === 0 ? '#15803d' : '#b91c1c'),
+  formatLabel: (value) => {
+    const abs = Math.abs(Math.round(value));
+    if (abs === 0) return null;
+    return String(abs);
+  },
+});
 
 interface RHAdmissoesChartProps {
   series: RHIndicadorSeriePonto[];
@@ -46,6 +60,7 @@ const RHAdmissoesChart: React.FC<RHAdmissoesChartProps> = ({ series }) => {
   const options = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
+    layout: { padding: { top: 14, bottom: 14 } },
     interaction: { mode: 'index' as const, intersect: false },
     plugins: {
       legend: {
@@ -100,7 +115,7 @@ const RHAdmissoesChart: React.FC<RHAdmissoesChartProps> = ({ series }) => {
 
   return (
     <div className="cashflow-chart-wrap">
-      <Chart type="bar" data={chartData} options={options} />
+      <Chart type="bar" data={chartData} options={options} plugins={[admissoesValueLabels]} />
     </div>
   );
 };

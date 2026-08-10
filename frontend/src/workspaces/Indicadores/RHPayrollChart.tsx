@@ -9,11 +9,26 @@ import {
   Tooltip,
   Legend,
   Filler,
+  type Plugin,
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import type { RHIndicadorSeriePonto } from '../../types/domain';
+import {
+  createDatasetValueLabelsPlugin,
+  formatPayrollAxisLabel,
+  isLineDataset,
+} from './rhChartLabelPlugin';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+
+const payrollValueLabels = createDatasetValueLabelsPlugin({
+  id: 'rh-payroll-value-labels',
+  fontSize: 10,
+  color: '#118CC4',
+  offsetY: -6,
+  datasetFilter: (datasetIndex, chart) => isLineDataset(chart, datasetIndex),
+  formatLabel: (value) => formatPayrollAxisLabel(value),
+});
 
 const formatCurrency = (value: number) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -48,7 +63,7 @@ const RHPayrollChart: React.FC<RHPayrollChartProps> = ({ series }) => {
     return {
       responsive: true,
       maintainAspectRatio: false,
-      layout: { padding: { left: 4, right: 8, top: 4, bottom: 2 } },
+      layout: { padding: { left: 4, right: 8, top: 18, bottom: 2 } },
       interaction: { mode: 'index' as const, intersect: false },
       plugins: {
         legend: { display: false },
@@ -101,7 +116,7 @@ const RHPayrollChart: React.FC<RHPayrollChartProps> = ({ series }) => {
 
   return (
     <div className="cashflow-chart-wrap">
-      <Line data={chartData} options={options} />
+      <Line data={chartData} options={options} plugins={[payrollValueLabels as Plugin<'line'>]} />
     </div>
   );
 };

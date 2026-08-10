@@ -14,6 +14,11 @@ import {
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 import type { RHIndicadorPorCategoria, RHIndicadorSeriePonto } from '../../types/domain';
+import {
+  createDatasetValueLabelsPlugin,
+  isBarDataset,
+  isLineDataset,
+} from './rhChartLabelPlugin';
 
 ChartJS.register(
   CategoryScale,
@@ -43,6 +48,20 @@ const CATEGORIA_LABELS: Record<keyof RHIndicadorPorCategoria, string> = {
 };
 
 const CATEGORIA_CHAVES: (keyof RHIndicadorPorCategoria)[] = ['administrativo', 'operacional', 'motorista', 'naoMapeado'];
+
+const headcountValueLabels = createDatasetValueLabelsPlugin({
+  id: 'rh-headcount-value-labels',
+  fontSize: 10,
+  minBarHeight: 14,
+  offsetY: -8,
+  color: (datasetIndex, chart) => (isLineDataset(chart, datasetIndex) ? '#0f172a' : '#ffffff'),
+  formatLabel: (value, datasetIndex, _dataIndex, chart) => {
+    if (isLineDataset(chart, datasetIndex) || isBarDataset(chart, datasetIndex)) {
+      return String(Math.round(value));
+    }
+    return null;
+  },
+});
 
 interface RHHeadcountChartProps {
   series: RHIndicadorSeriePonto[];
@@ -84,6 +103,7 @@ const RHHeadcountChart: React.FC<RHHeadcountChartProps> = ({ series }) => {
   const options = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
+    layout: { padding: { top: 16 } },
     interaction: { mode: 'index' as const, intersect: false },
     plugins: {
       legend: {
@@ -126,7 +146,7 @@ const RHHeadcountChart: React.FC<RHHeadcountChartProps> = ({ series }) => {
 
   return (
     <div className="cashflow-chart-wrap">
-      <Chart type="bar" data={chartData} options={options} />
+      <Chart type="bar" data={chartData} options={options} plugins={[headcountValueLabels]} />
     </div>
   );
 };

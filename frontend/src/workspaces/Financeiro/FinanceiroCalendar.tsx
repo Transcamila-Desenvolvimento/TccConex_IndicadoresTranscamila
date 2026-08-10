@@ -18,14 +18,23 @@ const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 const CORES_EVENTO: { key: string; label: string; hex: string }[] = [
   { key: 'azul', label: 'Azul', hex: '#118CC4' },
-  { key: 'verde', label: 'Verde', hex: '#16a34a' },
-  { key: 'amarelo', label: 'Amarelo', hex: '#d97706' },
-  { key: 'vermelho', label: 'Vermelho', hex: '#dc2626' },
-  { key: 'roxo', label: 'Roxo', hex: '#7c3aed' },
+  { key: 'azul-escuro', label: 'Azul escuro', hex: '#0D709D' },
+  { key: 'azul-medio', label: 'Azul médio', hex: '#0369a1' },
+  { key: 'cinza-escuro', label: 'Cinza escuro', hex: '#475569' },
   { key: 'cinza', label: 'Cinza', hex: '#64748b' },
+  { key: 'grafite', label: 'Grafite', hex: '#334155' },
 ];
 
-const corHex = (key: string) => CORES_EVENTO.find((c) => c.key === key)?.hex ?? CORES_EVENTO[0].hex;
+const LEGACY_EVENT_COLORS: Record<string, string> = {
+  verde: '#118CC4',
+  vermelho: '#64748b',
+  amarelo: '#64748b',
+  roxo: '#0D709D',
+  cinza: '#64748b',
+};
+
+const corHex = (key: string) =>
+  CORES_EVENTO.find((c) => c.key === key)?.hex ?? LEGACY_EVENT_COLORS[key] ?? CORES_EVENTO[0].hex;
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -157,69 +166,62 @@ const FinanceiroCalendar: React.FC = () => {
   const todayIso = toIso(hoje);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '4px' }}>
-      {/* Header */}
-      <header className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '6px', height: '22px', backgroundColor: '#118CC4' }}></div>
+    <div className="fin-calendar-page">
+      <header className="view-header fin-calendar-header">
+        <div className="fin-calendar-header-title">
+          <div className="fin-calendar-header-accent" />
           <h1 className="view-page-title">Calendário Financeiro</h1>
-          {batchLabel && (
-            <span style={{ fontSize: '12px', color: '#64748b' }}>Lote {batchLabel}</span>
-          )}
-        </div>
-        <div className="fin-calendar-filters">
-          <button
-            type="button"
-            className={`fin-calendar-pill pagar ${showPagar ? 'is-on' : ''}`}
-            onClick={() => setShowPagar(!showPagar)}
-          >
-            &darr; A Pagar
-          </button>
-          <button
-            type="button"
-            className={`fin-calendar-pill receber ${showReceber ? 'is-on' : ''}`}
-            onClick={() => setShowReceber(!showReceber)}
-          >
-            &uarr; A Receber
-          </button>
-          <button
-            type="button"
-            className={`fin-calendar-pill pessoal ${showPessoal ? 'is-on' : ''}`}
-            onClick={() => setShowPessoal(!showPessoal)}
-          >
-            Pessoal
-          </button>
+          {batchLabel && <span className="fin-calendar-batch">Lote {batchLabel}</span>}
         </div>
       </header>
 
       <QueryDataPanel
         query={systemQuery}
+        className="fin-calendar-query"
         loadingMessage="Carregando calendário financeiro..."
         refreshingMessage="Atualizando calendário..."
         errorMessage="Não foi possível carregar o calendário. Tente novamente."
       >
-      <div className="erp-card" style={{ padding: '16px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Navegação do mês */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0', marginBottom: '10px' }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#334155' }}>
-            {MESES[viewMonth]} {viewYear}
-          </h2>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button type="button" className="reports-action-btn secondary" onClick={goPrev}>&lsaquo; Anterior</button>
+      <div className="erp-card fin-calendar-card">
+        <div className="fin-calendar-toolbar">
+          <div className="fin-calendar-nav">
+            <button type="button" className="reports-action-btn secondary" onClick={goPrev} aria-label="Mês anterior">&lsaquo;</button>
+            <h2 className="fin-calendar-month">{MESES[viewMonth]} {viewYear}</h2>
+            <button type="button" className="reports-action-btn secondary" onClick={goNext} aria-label="Próximo mês">&rsaquo;</button>
             <button
               type="button"
-              className="reports-action-btn primary"
-              style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
+              className="reports-action-btn primary fin-calendar-today-btn"
               onClick={goToday}
             >
               Hoje
             </button>
-            <button type="button" className="reports-action-btn secondary" onClick={goNext}>Próximo &rsaquo;</button>
+          </div>
+          <div className="fin-calendar-filter-bar" role="group" aria-label="Filtrar eventos">
+            <button
+              type="button"
+              className={`fin-calendar-filter-btn ${showPagar ? 'is-active' : ''}`}
+              onClick={() => setShowPagar((v) => !v)}
+            >
+              A Pagar
+            </button>
+            <button
+              type="button"
+              className={`fin-calendar-filter-btn ${showReceber ? 'is-active' : ''}`}
+              onClick={() => setShowReceber((v) => !v)}
+            >
+              A Receber
+            </button>
+            <button
+              type="button"
+              className={`fin-calendar-filter-btn ${showPessoal ? 'is-active' : ''}`}
+              onClick={() => setShowPessoal((v) => !v)}
+            >
+              Pessoal
+            </button>
           </div>
         </div>
 
-        {/* Grade */}
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <div className="fin-calendar-grid-wrap">
           <table className="fin-calendar-table">
             <thead>
               <tr>
@@ -258,19 +260,26 @@ const FinanceiroCalendar: React.FC = () => {
                               title={`${ev.fullTitle}\n${ev.count} título(s) — ${moeda.format(ev.amount)}\n(Clique para detalhar)`}
                               onClick={(e) => { e.stopPropagation(); setSystemDetail(ev); }}
                             >
-                              <span className="fin-calendar-event-arrow">{ev.type === 'pagar' ? '↓' : '↑'}</span>
-                              {ev.title}
+                              <span className="fin-calendar-event-tag">
+                                {ev.type === 'pagar' ? 'Pagar' : 'Receber'}
+                              </span>
+                              <span className="fin-calendar-event-title">{ev.title}</span>
                             </div>
                           ))}
                           {persDay.map((ev) => (
                             <div
                               key={`p-${ev.id}`}
                               className="fin-calendar-event is-pessoal"
-                              style={{ backgroundColor: corHex(ev.color) }}
                               title={ev.description || ev.title}
                               onClick={(e) => { e.stopPropagation(); openEditEventModal(ev); }}
                             >
-                              {ev.title}
+                              <span
+                                className="fin-calendar-event-tag"
+                                style={{ color: corHex(ev.color), borderColor: '#cbd5e1' }}
+                              >
+                                Pessoal
+                              </span>
+                              <span className="fin-calendar-event-title">{ev.title}</span>
                             </div>
                           ))}
                         </div>
