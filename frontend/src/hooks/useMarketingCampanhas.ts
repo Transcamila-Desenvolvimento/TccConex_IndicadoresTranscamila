@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiService } from '../services/apiService';
 
-import type { CampanhaPayload, CampanhaQuadro, CampanhaStatus } from '../types/domain';
+import type { CampanhaPayload, CampanhaStatus } from '../types/domain';
 
 
 
