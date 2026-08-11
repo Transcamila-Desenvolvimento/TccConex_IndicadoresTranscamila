@@ -1,5 +1,7 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
+import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import type { UserDirectoryEntry } from '../types/domain';
 
@@ -10,13 +12,26 @@ function presenceWsUrl(token: string): string {
   return `${protocol}//${window.location.host}/ws/marketing/presence/?token=${encodeURIComponent(token)}`;
 }
 
+type WsCampanhaMessage = {
+  type: 'campanha';
+  event?: string;
+  campanhaId?: string | null;
+  actorUserId?: string | null;
+};
+
 export function useMarketingPresence(enabled = true) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [online, setOnline] = useState<UserDirectoryEntry[]>([]);
   const [status, setStatus] = useState<MarketingPresenceStatus>('connecting');
 
   const attemptRef = useRef(0);
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<number | null>(null);
+  const invalidateTimerRef = useRef<number | null>(null);
+  const userIdRef = useRef(user?.id);
+
+  userIdRef.current = user?.id;
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -37,6 +52,18 @@ export function useMarketingPresence(enabled = true) {
       timerRef.current = window.setTimeout(connect, delay);
     };
 
+    const scheduleMarketingSync = (actorUserId?: string | null) => {
+      if (actorUserId && userIdRef.current && actorUserId === userIdRef.current) {
+        return;
+      }
+      if (invalidateTimerRef.current !== null) {
+        window.clearTimeout(invalidateTimerRef.current);
+      }
+      invalidateTimerRef.current = window.setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['marketing'] });
+      }, 300);
+    };
+
     const connect = () => {
       if (cancelled) return;
       setStatus('connecting');
@@ -55,9 +82,17 @@ export function useMarketingPresence(enabled = true) {
 
       ws.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data) as { type?: string; online?: UserDirectoryEntry[] };
+          const data = JSON.parse(event.data) as
+            | { type?: string; online?: UserDirectoryEntry[] }
+            | WsCampanhaMessage;
+
           if (data.type === 'presence' && Array.isArray(data.online)) {
             setOnline(data.online);
+            return;
+          }
+
+          if (data.type === 'campanha') {
+            scheduleMarketingSync((data as WsCampanhaMessage).actorUserId);
           }
         } catch {
           /* ignore malformed frames */
@@ -80,10 +115,11 @@ export function useMarketingPresence(enabled = true) {
     return () => {
       cancelled = true;
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      if (invalidateTimerRef.current !== null) window.clearTimeout(invalidateTimerRef.current);
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [enabled]);
+  }, [enabled, queryClient]);
 
   return { online, status };
 }

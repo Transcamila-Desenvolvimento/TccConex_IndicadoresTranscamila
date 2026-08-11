@@ -40,6 +40,7 @@ from .serializers import (
 )
 
 from .services import usuario_display
+from .realtime import notify_marketing_changed
 
 User = get_user_model()
 
@@ -229,7 +230,17 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
             return denied
 
-        return super().destroy(request, *args, **kwargs)
+        instance = self.get_object()
+
+        campanha_id = instance.pk
+
+        actor_id = request.user.pk
+
+        response = super().destroy(request, *args, **kwargs)
+
+        notify_marketing_changed(event='deleted', campanha_id=campanha_id, actor_user_id=actor_id)
+
+        return response
 
 
 
@@ -259,6 +270,8 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
             _adicionar_membro(campanha, campanha.responsavel_user, user)
 
+        notify_marketing_changed(event='created', campanha_id=campanha.pk, actor_user_id=user.pk)
+
 
 
     def perform_update(self, serializer):
@@ -272,6 +285,16 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if campanha.responsavel_user_id != old_responsavel_id and campanha.responsavel_user:
 
             _adicionar_membro(campanha, campanha.responsavel_user, self.request.user)
+
+        notify_marketing_changed(
+
+            event='updated',
+
+            campanha_id=campanha.pk,
+
+            actor_user_id=self.request.user.pk,
+
+        )
 
 
 
@@ -325,6 +348,8 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
         campanha.save(update_fields=['status', 'ordem_kanban', 'data_atualizacao'])
 
+        notify_marketing_changed(event='moved', campanha_id=campanha.pk, actor_user_id=request.user.pk)
+
         return Response(CampanhaMarketingSerializer(campanha).data)
 
 
@@ -361,6 +386,8 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
             )
 
+        notify_marketing_changed(event='membro', campanha_id=campanha.pk, actor_user_id=request.user.pk)
+
         return Response(CampanhaMembroSerializer(membro).data, status=status.HTTP_201_CREATED)
 
 
@@ -383,6 +410,8 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
             return Response({'detail': 'Membro não encontrado nesta campanha.'}, status=status.HTTP_404_NOT_FOUND)
 
+        notify_marketing_changed(event='membro', campanha_id=campanha.pk, actor_user_id=request.user.pk)
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -402,6 +431,8 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         campanha.save(update_fields=['responsavel_user', 'responsavel', 'data_atualizacao'])
 
         _adicionar_membro(campanha, user, user)
+
+        notify_marketing_changed(event='updated', campanha_id=campanha.pk, actor_user_id=user.pk)
 
         return Response(CampanhaMarketingSerializer(campanha).data)
 
@@ -424,6 +455,8 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
 
             )
+
+        notify_marketing_changed(event='membro', campanha_id=campanha.pk, actor_user_id=request.user.pk)
 
         return Response(CampanhaMembroSerializer(membro).data, status=status.HTTP_201_CREATED)
 
@@ -478,6 +511,8 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
 
         comentario = CampanhaComentario.objects.select_related('autor_user').prefetch_related('mencoes').get(pk=comentario.pk)
+
+        notify_marketing_changed(event='comment', campanha_id=campanha.pk, actor_user_id=request.user.pk)
 
         return Response(
 

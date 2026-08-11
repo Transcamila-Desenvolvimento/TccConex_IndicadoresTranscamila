@@ -64,7 +64,7 @@ const MarketingCampanhas: React.FC = () => {
 
   const campanhasQuery = useCampanhas({ start: startIso, end: endIso });
   const quadroQuery = useCampanhaQuadro();
-  const { online: onlineTeam } = useMarketingPresence();
+  const { online: onlineTeam, status: liveStatus } = useMarketingPresence();
   const createCampanha = useCreateCampanha();
   const updateCampanha = useUpdateCampanha();
   const deleteCampanha = useDeleteCampanha();
@@ -173,6 +173,21 @@ const MarketingCampanhas: React.FC = () => {
             <span className="mkt-team-strip-label">
               <i className="bi bi-people" aria-hidden="true" />
               Equipe
+              <span
+                className={`mkt-live-dot mkt-live-dot--${liveStatus}`}
+                title={
+                  liveStatus === 'connected'
+                    ? 'Colaboração ao vivo ativa'
+                    : liveStatus === 'connecting'
+                      ? 'Conectando…'
+                      : 'Reconectando colaboração ao vivo'
+                }
+                aria-label={
+                  liveStatus === 'connected'
+                    ? 'Colaboração ao vivo ativa'
+                    : 'Colaboração ao vivo indisponível'
+                }
+              />
             </span>
             {team.length > 0 && (
               <div className="mkt-team-avatars-stack mkt-team-avatars-stack--inline">

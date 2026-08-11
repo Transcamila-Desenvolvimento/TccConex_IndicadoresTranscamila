@@ -3,7 +3,7 @@
 # Portal / CLI: Startup Command = bash startup.sh
 set -e
 
-echo "== TccConex ERP startup.sh v8 =="
+echo "== TccConex ERP startup.sh v9 =="
 export PYTHONUNBUFFERED=1
 cd "$(dirname "$0")"
 
@@ -18,7 +18,7 @@ PORT="${WEBSITES_PORT:-8000}"
 
 verify_python_deps() {
   local target_dir="$1"
-  PYTHONPATH="$target_dir" python -c "import django, asgiref, gunicorn, rest_framework, cryptography, xlrd; from cryptography.hazmat.bindings._rust import exceptions"
+  PYTHONPATH="$target_dir" python -c "import django, asgiref, channels, daphne, rest_framework, cryptography, xlrd; from cryptography.hazmat.bindings._rust import exceptions"
 }
 
 python_deps_ok() {
@@ -60,7 +60,7 @@ echo "== TccConex ERP: PYTHONPATH=$PYTHONPATH =="
 # Por padrão aplica migrations no boot (deploy Azure). Desative com RUN_STARTUP_MIGRATE=False.
 if [ "${RUN_STARTUP_MIGRATE:-True}" = "True" ]; then
   echo "== TccConex ERP: aplicando migrations =="
-  python manage.py migrate --noinput || echo "== AVISO: migrate falhou; seguindo com gunicorn =="
+  python manage.py migrate --noinput || echo "== AVISO: migrate falhou; seguindo com daphne =="
 else
   echo "== TccConex ERP: migrate ignorado (RUN_STARTUP_MIGRATE=False) =="
 fi
@@ -70,10 +70,5 @@ if [ "$USE_CELERY" = "True" ]; then
   python -m celery -A prothon worker -l warning --concurrency=1 &
 fi
 
-echo "== TccConex ERP: iniciando gunicorn na porta ${PORT} =="
-exec python -m gunicorn prothon.wsgi:application \
-  --bind="0.0.0.0:${PORT}" \
-  --timeout 600 \
-  --workers 1 \
-  --access-logfile - \
-  --error-logfile -
+echo "== TccConex ERP: iniciando daphne (ASGI + WebSocket) na porta ${PORT} =="
+exec python -m daphne -b 0.0.0.0 -p "${PORT}" prothon.asgi:application

@@ -63,8 +63,7 @@ Write-Host "  OK." -ForegroundColor Green
 Write-Host ""
 Write-Host "Pronto. No Log stream deve aparecer:" -ForegroundColor Green
 Write-Host "  Site's appCommandLine: bash startup.sh"
-Write-Host "  == TccConex ERP startup.sh v5 =="
-Write-Host "  == TccConex ERP: deps em cache =="
-Write-Host "  Listening at: http://0.0.0.0:8000"
+Write-Host "  == TccConex ERP startup.sh v9 =="
+Write-Host "  == TccConex ERP: iniciando daphne (ASGI + WebSocket) na porta 8000 =="
 Write-Host ""
 Write-Host "NAO altere o Startup Command no portal para bash -c longo." -ForegroundColor DarkYellow

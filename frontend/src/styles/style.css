@@ -5374,6 +5374,39 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   color: #94a3b8;
 }
 
+.mkt-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.mkt-live-dot--connected {
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+}
+
+.mkt-live-dot--connecting {
+  background: #f59e0b;
+  animation: mkt-live-pulse 1.2s ease-in-out infinite;
+}
+
+.mkt-live-dot--disconnected {
+  background: #94a3b8;
+}
+
+@keyframes mkt-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
 .mkt-team-avatars-stack--inline {
   gap: 6px;
 }

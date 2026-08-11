@@ -155,7 +155,7 @@ application setting** (uma por linha). Via CLI, use
 | `EMAIL_USE_TLS` | `True` | |
 | `DEFAULT_FROM_EMAIL` | `digitalmidia@transcamila.com.br` | |
 | `SCM_DO_BUILD_DURING_DEPLOYMENT` | `false` | o build (frontend + deps) já acontece no GitHub Actions |
-| `WEBSITES_PORT` | `8000` | porta que o gunicorn expõe (ver `startup.sh`) |
+| `WEBSITES_PORT` | `8000` | porta que o daphne (ASGI) expõe (ver `startup.sh`) |
 | `WEBSITES_CONTAINER_START_TIME_LIMIT` | `900` | boot com cache ~30s; 900s cobre pip se `requirements.txt` mudar |
 | `RUN_STARTUP_MIGRATE` | `True` | `startup.sh` aplica migrations no boot; use `False` só se migrar manualmente |
 
