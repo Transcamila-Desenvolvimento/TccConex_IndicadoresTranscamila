@@ -4,6 +4,8 @@ import { apiService } from '../services/apiService';
 
 import type { CampanhaPayload, CampanhaStatus } from '../types/domain';
 
+import { syncMarketingQueriesSilently } from './marketingSilentSync';
+
 
 
 export const MARKETING_KEYS = {
@@ -62,16 +64,8 @@ export function useCampanhaQuadro() {
 
 
 
-function invalidateMarketing(qc: ReturnType<typeof useQueryClient>, campanhaId?: string) {
-
-  qc.invalidateQueries({ queryKey: ['marketing'] });
-
-  if (campanhaId) {
-
-    qc.invalidateQueries({ queryKey: MARKETING_KEYS.campanha(campanhaId) });
-
-  }
-
+function refreshMarketing(qc: ReturnType<typeof useQueryClient>, campanhaId?: string, event?: string) {
+  void syncMarketingQueriesSilently(qc, { campanhaId, event });
 }
 
 
@@ -84,7 +78,7 @@ export function useCreateCampanha() {
 
     mutationFn: (payload: CampanhaPayload) => apiService.createCampanha(payload),
 
-    onSuccess: () => invalidateMarketing(qc),
+    onSuccess: () => refreshMarketing(qc),
 
   });
 
@@ -102,7 +96,7 @@ export function useUpdateCampanha() {
 
       apiService.updateCampanha(id, payload),
 
-    onSuccess: (_data, vars) => invalidateMarketing(qc, vars.id),
+    onSuccess: (_data, vars) => refreshMarketing(qc, vars.id),
 
   });
 
@@ -118,7 +112,7 @@ export function useDeleteCampanha() {
 
     mutationFn: (id: string) => apiService.deleteCampanha(id),
 
-    onSuccess: () => invalidateMarketing(qc),
+    onSuccess: (_data, id) => refreshMarketing(qc, id, 'deleted'),
 
   });
 
@@ -136,7 +130,7 @@ export function useMoveCampanhaStatus() {
 
       apiService.moveCampanhaStatus(id, { status, ordemKanban }),
 
-    onSuccess: () => invalidateMarketing(qc),
+    onSuccess: () => refreshMarketing(qc),
 
   });
 
@@ -154,7 +148,7 @@ export function useCreateCampanhaComentario(campanhaId: string) {
 
       apiService.createCampanhaComentario(campanhaId, payload),
 
-    onSuccess: () => invalidateMarketing(qc, campanhaId),
+    onSuccess: () => refreshMarketing(qc, campanhaId),
 
   });
 
@@ -170,7 +164,7 @@ export function useAddCampanhaMembro(campanhaId: string) {
 
     mutationFn: (userId: string) => apiService.addCampanhaMembro(campanhaId, userId),
 
-    onSuccess: () => invalidateMarketing(qc, campanhaId),
+    onSuccess: () => refreshMarketing(qc, campanhaId),
 
   });
 
@@ -186,7 +180,7 @@ export function useRemoveCampanhaMembro(campanhaId: string) {
 
     mutationFn: (userId: string) => apiService.removeCampanhaMembro(campanhaId, userId),
 
-    onSuccess: () => invalidateMarketing(qc, campanhaId),
+    onSuccess: () => refreshMarketing(qc, campanhaId),
 
   });
 
@@ -202,7 +196,7 @@ export function useAtribuirCampanhaAMim(campanhaId: string) {
 
     mutationFn: () => apiService.atribuirCampanhaAMim(campanhaId),
 
-    onSuccess: () => invalidateMarketing(qc, campanhaId),
+    onSuccess: () => refreshMarketing(qc, campanhaId),
 
   });
 
@@ -218,7 +212,7 @@ export function useParticiparCampanha(campanhaId: string) {
 
     mutationFn: () => apiService.participarCampanha(campanhaId),
 
-    onSuccess: () => invalidateMarketing(qc, campanhaId),
+    onSuccess: () => refreshMarketing(qc, campanhaId),
 
   });
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import type { UserDirectoryEntry } from '../types/domain';
+import { syncMarketingQueriesSilently, type MarketingSyncHint } from './marketingSilentSync';
 
 export type MarketingPresenceStatus = 'connecting' | 'connected' | 'disconnected';
 
@@ -18,6 +19,19 @@ type WsCampanhaMessage = {
   campanhaId?: string | null;
   actorUserId?: string | null;
 };
+
+function scheduleSilentMarketingSync(
+  queryClient: ReturnType<typeof useQueryClient>,
+  timerRef: { current: number | null },
+  hint: MarketingSyncHint,
+) {
+  if (timerRef.current !== null) {
+    window.clearTimeout(timerRef.current);
+  }
+  timerRef.current = window.setTimeout(() => {
+    void syncMarketingQueriesSilently(queryClient, hint);
+  }, 300);
+}
 
 export function useMarketingPresence(enabled = true) {
   const { user } = useAuth();
@@ -52,16 +66,14 @@ export function useMarketingPresence(enabled = true) {
       timerRef.current = window.setTimeout(connect, delay);
     };
 
-    const scheduleMarketingSync = (actorUserId?: string | null) => {
-      if (actorUserId && userIdRef.current && actorUserId === userIdRef.current) {
+    const scheduleMarketingSync = (message: WsCampanhaMessage) => {
+      if (message.actorUserId && userIdRef.current && message.actorUserId === userIdRef.current) {
         return;
       }
-      if (invalidateTimerRef.current !== null) {
-        window.clearTimeout(invalidateTimerRef.current);
-      }
-      invalidateTimerRef.current = window.setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['marketing'] });
-      }, 300);
+      scheduleSilentMarketingSync(queryClient, invalidateTimerRef, {
+        campanhaId: message.campanhaId,
+        event: message.event,
+      });
     };
 
     const connect = () => {
@@ -92,7 +104,7 @@ export function useMarketingPresence(enabled = true) {
           }
 
           if (data.type === 'campanha') {
-            scheduleMarketingSync((data as WsCampanhaMessage).actorUserId);
+            scheduleMarketingSync(data as WsCampanhaMessage);
           }
         } catch {
           /* ignore malformed frames */
