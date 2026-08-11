@@ -55,27 +55,21 @@ export const FUNCAO_ITEMS = [
   },
   {
     module: 'Marketing',
-    key: 'criar-posts',
-    label: 'Criar postagens',
-    description: 'Permite registrar novas postagens do Instagram.',
+    key: 'criar-campanhas',
+    label: 'Criar campanhas',
+    description: 'Permite registrar novas campanhas no calendário de marketing.',
   },
   {
     module: 'Marketing',
-    key: 'editar-posts',
-    label: 'Editar postagens',
-    description: 'Permite alterar e programar postagens do Instagram.',
+    key: 'editar-campanhas',
+    label: 'Editar campanhas',
+    description: 'Permite alterar campanhas e movê-las no kanban.',
   },
   {
     module: 'Marketing',
-    key: 'excluir-posts',
-    label: 'Excluir postagens',
-    description: 'Permite excluir postagens do Instagram.',
-  },
-  {
-    module: 'Marketing',
-    key: 'publicar-posts',
-    label: 'Publicar postagens',
-    description: 'Permite vincular a conta Instagram e publicar postagens na rede.',
+    key: 'excluir-campanhas',
+    label: 'Excluir campanhas',
+    description: 'Permite excluir campanhas do calendário.',
   },
 ] as const;
 

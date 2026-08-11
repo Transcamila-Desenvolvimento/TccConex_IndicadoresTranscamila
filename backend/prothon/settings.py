@@ -39,6 +39,7 @@ if not DEBUG:
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -49,6 +50,7 @@ INSTALLED_APPS = [
     # Third party packages
     'rest_framework',
     'corsheaders',
+    'channels',
     
     # Prothon apps
     'apps.accounts',
@@ -228,6 +230,32 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+# WebSocket — presença online (Django Channels; sem polling)
+ASGI_APPLICATION = 'prothon.asgi.application'
+
+_presence_redis = os.environ.get('PRESENCE_REDIS_URL') or os.environ.get('CELERY_BROKER_URL', '')
+_use_presence_redis = os.environ.get('USE_PRESENCE_REDIS', 'auto')
+if _use_presence_redis == 'true' and _presence_redis:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [_presence_redis]},
+        },
+    }
+elif _use_presence_redis == 'auto' and USE_CELERY and _presence_redis:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [_presence_redis]},
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
+
 # E-mail (dev: console; produção: SMTP via .env)
 EMAIL_BACKEND = os.environ.get(
     'EMAIL_BACKEND',
@@ -249,14 +277,4 @@ GOOGLE_OAUTH_REDIRECT_URI = os.environ.get(
     f'{FRONTEND_BASE_URL.rstrip("/")}/auth/google/callback',
 )
 GOOGLE_OAUTH_HD = os.environ.get('GOOGLE_OAUTH_HD', 'transcamila.com.br')
-
-# Meta / Instagram Graph API (Marketing)
-META_APP_ID = os.environ.get('META_APP_ID', '')
-META_APP_SECRET = os.environ.get('META_APP_SECRET', '')
-META_OAUTH_REDIRECT_URI = os.environ.get(
-    'META_OAUTH_REDIRECT_URI',
-    f'{FRONTEND_BASE_URL.rstrip("/")}/marketing/instagram/callback',
-)
-INSTAGRAM_ACCESS_TOKEN = os.environ.get('INSTAGRAM_ACCESS_TOKEN', '')
-INSTAGRAM_ACCOUNT_ID = os.environ.get('INSTAGRAM_ACCOUNT_ID', '')
 

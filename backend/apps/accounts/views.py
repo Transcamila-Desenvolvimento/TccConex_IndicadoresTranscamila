@@ -23,6 +23,7 @@ from .serializers import (
     LoginSerializer,
     RoleSerializer,
     UpdateUserSerializer,
+    UserDirectorySerializer,
     UserSerializer,
 )
 
@@ -80,9 +81,12 @@ def _apply_google_link(user, userinfo: dict, token_data: dict | None = None) -> 
     user.google_email = email
     user.google_sub = google_sub
     user.google_linked_at = timezone.now()
+    user.google_picture_url = (userinfo.get('picture') or '')[:500]
     if token_data:
         user.google_token = build_google_token_record(token_data, userinfo)
-    user.save(update_fields=['google_email', 'google_sub', 'google_linked_at', 'google_token'])
+    user.save(update_fields=[
+        'google_email', 'google_sub', 'google_linked_at', 'google_token', 'google_picture_url',
+    ])
 
 
 def generate_jwt_token(user):
@@ -206,7 +210,10 @@ class GoogleUnlinkAPIView(APIView):
         user.google_sub = None
         user.google_linked_at = None
         user.google_token = None
-        user.save(update_fields=['google_email', 'google_sub', 'google_linked_at', 'google_token'])
+        user.google_picture_url = ''
+        user.save(update_fields=[
+            'google_email', 'google_sub', 'google_linked_at', 'google_token', 'google_picture_url',
+        ])
         return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
 
 
@@ -219,6 +226,34 @@ class GoogleContactsAPIView(APIView):
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'contacts': contacts}, status=status.HTTP_200_OK)
+
+
+class UserDirectoryAPIView(APIView):
+    """Usuários ativos de um módulo — para atribuição colaborativa (ex.: Marketing)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .constants import ACTIVE_ENVIRONMENTS, normalize_environment
+
+        module = normalize_environment((request.query_params.get('module') or 'Marketing').strip())
+        if module not in ACTIVE_ENVIRONMENTS:
+            return Response({'detail': 'Módulo inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_envs = [normalize_environment(e) for e in (request.user.environments or [])]
+        if not request.user.is_admin and module not in user_envs:
+            return Response(
+                {'detail': 'Acesso negado a este diretório de usuários.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        members = []
+        for user in User.objects.filter(status='ativo').order_by('name', 'username'):
+            envs = [normalize_environment(e) for e in (user.environments or [])]
+            if user.is_admin or module in envs:
+                members.append(user)
+
+        return Response(UserDirectorySerializer(members, many=True).data)
 
 
 class RoleViewSet(viewsets.ReadOnlyModelViewSet):

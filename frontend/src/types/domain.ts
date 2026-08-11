@@ -15,7 +15,15 @@ export interface User {
   funcoes: Record<string, string[]>;
   googleEmail: string | null;
   googleLinkedAt: string | null;
+  googlePicture: string | null;
   mustChangePassword: boolean;
+}
+
+export interface UserDirectoryEntry {
+  id: string;
+  name: string;
+  googlePicture: string | null;
+  googleEmail: string | null;
 }
 
 export interface GoogleContact {
@@ -1350,150 +1358,114 @@ export interface SgqLoteDraft {
   rows: SgqLoteDraftRow[];
 }
 
-// --- Marketing (Instagram) TYPES ---
+// --- Marketing — Campanhas ---
 
-export type InstagramPostStatus = 'draft' | 'scheduled' | 'published' | 'cancelled';
-export type InstagramMediaType = 'image' | 'video' | 'none';
-export type InstagramPostFormat = 'feed' | 'carousel' | 'reels' | 'story';
-export type InstagramFeedAspect = 'square' | 'portrait';
+export type CampanhaStatus = 'planejamento' | 'producao' | 'veiculacao' | 'concluida' | 'cancelada';
+export type CampanhaCanal = 'evento' | 'transcamila_news' | 'instagram' | 'outro' | 'email';
 
-export const INSTAGRAM_CAROUSEL_MIN_SLIDES = 2;
-export const INSTAGRAM_CAROUSEL_MAX_SLIDES = 10;
-
-export interface InstagramCarouselSlide {
+export interface CampanhaMarketing {
   id: string;
-  position: number;
-  mediaUrl: string;
-  mediaFileUrl: string;
-  mediaType: InstagramMediaType;
-}
-
-export interface InstagramPost {
-  id: string;
-  title: string;
-  caption: string;
-  hashtags: string;
-  mediaUrl: string;
-  mediaFileUrl: string;
-  mediaType: InstagramMediaType;
-  postFormat: InstagramPostFormat;
-  feedAspect: InstagramFeedAspect;
-  carouselSlides: InstagramCarouselSlide[];
-  slideCount: number;
-  status: InstagramPostStatus;
-  scheduledAt: string | null;
-  publishedAt: string | null;
-  instagramPostId: string;
-  publishError: string;
+  titulo: string;
+  descricao: string;
+  dataInicio: string;
+  dataFim: string;
+  status: CampanhaStatus;
+  canais: CampanhaCanal[];
+  responsavel: string;
+  responsavelUserId?: string | null;
+  responsavelUser: UserDirectoryEntry | null;
+  cor: string;
+  ordemKanban: number;
   criadoPor: string;
+  criadoPorUser: UserDirectoryEntry | null;
+  dataCriacao: string;
+  dataAtualizacao: string;
+  comentariosCount: number;
+  membrosCount: number;
+  comentarios?: CampanhaComentario[];
+  membros?: CampanhaMembro[];
 }
 
-export type InstagramPostPayload = {
-  title: string;
-  caption?: string;
-  hashtags?: string;
-  mediaUrl?: string;
-  postFormat?: InstagramPostFormat;
-  feedAspect?: InstagramFeedAspect;
-  status: InstagramPostStatus;
-  scheduledAt?: string | null;
+export interface CampanhaComentario {
+  id: string;
+  texto: string;
+  autor: UserDirectoryEntry | null;
+  autorNome: string;
+  mencoes: UserDirectoryEntry[];
+  dataCriacao: string;
+}
+
+export interface CampanhaMembro {
+  id: string;
+  user: UserDirectoryEntry;
+  adicionadoPor: UserDirectoryEntry | null;
+  dataCriacao: string;
+}
+
+export type CampanhaPayload = {
+  titulo: string;
+  descricao?: string;
+  dataInicio: string;
+  dataFim: string;
+  status?: CampanhaStatus;
+  canais?: CampanhaCanal[];
+  responsavel?: string;
+  responsavelUserId?: string | null;
+  cor?: string;
+  ordemKanban?: number;
 };
 
-export interface InstagramPostQueryParams extends ListQueryParams {
-  status?: string;
-  search?: string;
-  ordering?: 'scheduled_at' | '-scheduled_at' | 'title' | '-title';
+export type CampanhaQuadro = Record<Exclude<CampanhaStatus, 'cancelada'>, CampanhaMarketing[]>;
+
+export const CAMPANHA_STATUS_LABEL: Record<CampanhaStatus, string> = {
+  planejamento: 'Planejamento',
+  producao: 'Produção',
+  veiculacao: 'Aguardando',
+  concluida: 'Publicado',
+  cancelada: 'Cancelado',
+};
+
+export const CAMPANHA_CANAL_LABEL: Record<CampanhaCanal, string> = {
+  evento: 'Evento',
+  transcamila_news: 'Transcamila News',
+  instagram: 'Instagram',
+  outro: 'Outro',
+  email: 'E-mail marketing',
+};
+
+export const CAMPANHA_CANAL_OPTIONS = Object.entries(CAMPANHA_CANAL_LABEL) as [CampanhaCanal, string][];
+
+export function normalizeCampanhaCanais(value: unknown): CampanhaCanal[] {
+  const allowed = new Set<CampanhaCanal>(CAMPANHA_CANAL_OPTIONS.map(([key]) => key));
+  const raw = Array.isArray(value) ? value : value ? [value] : [];
+  const seen = new Set<CampanhaCanal>();
+  const result: CampanhaCanal[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const canal = item as CampanhaCanal;
+    if (!allowed.has(canal) || seen.has(canal)) continue;
+    seen.add(canal);
+    result.push(canal);
+  }
+  return result;
 }
 
-export const INSTAGRAM_POST_STATUS_OPTIONS: { value: InstagramPostStatus | 'Todos'; label: string }[] = [
-  { value: 'Todos', label: 'Todos os status' },
-  { value: 'draft', label: 'Rascunho' },
-  { value: 'scheduled', label: 'Programada' },
-  { value: 'published', label: 'Publicada' },
-  { value: 'cancelled', label: 'Cancelada' },
+export const CAMPANHA_KANBAN_COLUMNS: { key: Exclude<CampanhaStatus, 'cancelada'>; label: string; hint: string }[] = [
+  { key: 'planejamento', label: 'Planejamento', hint: 'Pauta e ideias de post' },
+  { key: 'producao', label: 'Produção', hint: 'Arte, texto e vídeo' },
+  { key: 'veiculacao', label: 'Aguardando', hint: 'Pronto — aguardando publicação' },
+  { key: 'concluida', label: 'Publicado', hint: 'Já foi ao ar' },
 ];
 
-export const INSTAGRAM_POST_STATUS_LABEL: Record<InstagramPostStatus, string> = {
-  draft: 'Rascunho',
-  scheduled: 'Programada',
-  published: 'Publicada',
-  cancelled: 'Cancelada',
-};
-
-export const INSTAGRAM_POST_FORMAT_LABEL: Record<InstagramPostFormat, string> = {
-  feed: 'Feed',
-  carousel: 'Carrossel',
-  reels: 'Reels',
-  story: 'Story',
-};
-
-export const INSTAGRAM_FEED_ASPECT_OPTIONS: {
-  value: InstagramFeedAspect;
-  label: string;
-  ratio: string;
-}[] = [
-  { value: 'square', label: 'Quadrado', ratio: '1:1' },
-  { value: 'portrait', label: 'Retrato', ratio: '4:5' },
+export const CAMPANHA_COR_OPTIONS: { key: string; label: string; hex: string }[] = [
+  { key: 'azul', label: 'Azul', hex: '#118CC4' },
+  { key: 'azul-escuro', label: 'Azul escuro', hex: '#0D709D' },
+  { key: 'verde', label: 'Verde', hex: '#16a34a' },
+  { key: 'ambar', label: 'Âmbar', hex: '#d97706' },
+  { key: 'roxo', label: 'Roxo', hex: '#7c3aed' },
+  { key: 'grafite', label: 'Grafite', hex: '#475569' },
 ];
 
-export const INSTAGRAM_FEED_ASPECT_LABEL: Record<InstagramFeedAspect, string> = {
-  square: '1:1',
-  portrait: '4:5',
-};
-
-export const INSTAGRAM_POST_FORMAT_OPTIONS: {
-  value: InstagramPostFormat;
-  label: string;
-  description: string;
-  aspect: 'square' | 'vertical';
-  accept: string;
-  videoOnly?: boolean;
-  imagesOnly?: boolean;
-}[] = [
-  {
-    value: 'feed',
-    label: 'Feed',
-    description: 'Foto ou vídeo no perfil',
-    aspect: 'square',
-    accept: 'image/jpeg,image/png,image/webp,video/mp4',
-  },
-  {
-    value: 'carousel',
-    label: 'Carrossel',
-    description: '2–10 imagens no feed',
-    aspect: 'square',
-    accept: 'image/jpeg,image/png,image/webp',
-    imagesOnly: true,
-  },
-  {
-    value: 'reels',
-    label: 'Reels',
-    description: 'Vídeo vertical (9:16)',
-    aspect: 'vertical',
-    accept: 'video/mp4',
-    videoOnly: true,
-  },
-  {
-    value: 'story',
-    label: 'Story',
-    description: 'Imagem ou vídeo 24h',
-    aspect: 'vertical',
-    accept: 'image/jpeg,image/png,image/webp,video/mp4',
-  },
-];
-
-export interface InstagramConnection {
-  configured: boolean;
-  oauthAvailable: boolean;
-  instagramUsername: string;
-  pageName: string;
-  linkedAt: string | null;
-  linkedBy: string;
-  tokenExpiresAt: string | null;
-}
-
-export interface InstagramOAuthCallbackPayload {
-  code: string;
-  state: string;
-}
+export const campanhaCorHex = (key: string) =>
+  CAMPANHA_COR_OPTIONS.find((c) => c.key === key)?.hex ?? '#118CC4';
 

@@ -1,289 +1,489 @@
-import datetime
+from django.contrib.auth import get_user_model
+from django.db.models import Count, Prefetch, Q
 
-import jwt
-from django.conf import settings
-from django.utils import timezone
 from rest_framework import status, viewsets
+
 from rest_framework.decorators import action
+
 from rest_framework.permissions import IsAuthenticated
+
 from rest_framework.response import Response
-from rest_framework.views import APIView
+
+
 
 from apps.accounts.mixins import ModuleScopedViewMixin
+
 from apps.accounts.permissions import ModuleAccessPermission
-from apps.financeiro.pagination import ReportPagination
 
-from django.db.models import Q
 
-from .instagram_oauth import (
-    build_meta_auth_url,
-    exchange_code_for_token,
-    meta_oauth_configured,
-    resolve_instagram_business_account,
-)
-from .instagram_publish import publish_instagram_post
-from .models import InstagramConnection, InstagramPost, InstagramPostSlide
+
+from .models import KANBAN_STATUSES, CampanhaComentario, CampanhaMarketing, CampanhaMembro
+
 from .serializers import (
-    InstagramCarouselSlideReorderSerializer,
-    InstagramCarouselSlideUploadSerializer,
-    InstagramConnectionSerializer,
-    InstagramPostMediaUploadSerializer,
-    InstagramPostSerializer,
+
+    CampanhaComentarioCreateSerializer,
+
+    CampanhaComentarioSerializer,
+
+    CampanhaMarketingDetailSerializer,
+
+    CampanhaMarketingSerializer,
+
+    CampanhaMembroCreateSerializer,
+
+    CampanhaMembroRemoveSerializer,
+
+    CampanhaMembroSerializer,
+
+    CampanhaStatusMoveSerializer,
+
 )
+
+from .services import usuario_display
+
+User = get_user_model()
+
+
+
 
 
 def _funcao_required_response(request, funcao: str, detail: str):
+
     if request.user.has_funcao('Marketing', funcao):
+
         return None
+
     return Response({'detail': detail}, status=status.HTTP_403_FORBIDDEN)
 
 
-_CRIAR_POSTS_DETAIL = 'Acesso negado. Solicite ao administrador a função "Criar postagens" do Marketing.'
-_EDITAR_POSTS_DETAIL = 'Acesso negado. Solicite ao administrador a função "Editar postagens" do Marketing.'
-_EXCLUIR_POSTS_DETAIL = 'Acesso negado. Solicite ao administrador a função "Excluir postagens" do Marketing.'
-_PUBLICAR_POSTS_DETAIL = 'Acesso negado. Solicite ao administrador a função "Publicar postagens" do Marketing.'
 
 
-def _usuario_display(user) -> str:
-    if not user or not user.is_authenticated:
-        return ''
-    return user.name or user.get_full_name() or user.username
+
+_CRIAR_CAMPANHAS_DETAIL = 'Acesso negado. Solicite ao administrador a função "Criar campanhas" do Marketing.'
+
+_EDITAR_CAMPANHAS_DETAIL = 'Acesso negado. Solicite ao administrador a função "Editar campanhas" do Marketing.'
+
+_EXCLUIR_CAMPANHAS_DETAIL = 'Acesso negado. Solicite ao administrador a função "Excluir campanhas" do Marketing.'
 
 
-def _build_oauth_state(user_id: int) -> str:
-    payload = {
-        'purpose': 'meta_instagram_link',
-        'user_id': user_id,
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=15),
-    }
-    return jwt.encode(
-        payload,
-        settings.SECRET_KEY,
-        algorithm=settings.JWT_SETTINGS.get('ALGORITHM', 'HS256'),
+
+
+
+def _adicionar_membro(campanha, user, adicionado_por):
+
+    return CampanhaMembro.objects.get_or_create(
+
+        campanha=campanha,
+
+        user=user,
+
+        defaults={'adicionado_por': adicionado_por},
+
     )
 
 
-def _validate_oauth_state(state: str, user_id: int) -> bool:
-    try:
-        payload = jwt.decode(
-            state,
-            settings.SECRET_KEY,
-            algorithms=[settings.JWT_SETTINGS.get('ALGORITHM', 'HS256')],
-        )
-    except jwt.PyJWTError:
-        return False
-    return payload.get('purpose') == 'meta_instagram_link' and payload.get('user_id') == user_id
 
 
-class MarketingAPIView(APIView):
+
+class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+
     permission_module = 'Marketing'
-    permission_classes = [IsAuthenticated, ModuleAccessPermission]
 
-
-class InstagramConnectionView(MarketingAPIView):
-    def get(self, request):
-        conn, _ = InstagramConnection.objects.get_or_create(pk=1)
-        return Response(InstagramConnectionSerializer(conn).data)
-
-
-class InstagramConnectionLinkView(MarketingAPIView):
-    def get(self, request):
-        denied = _funcao_required_response(request, 'publicar-posts', _PUBLICAR_POSTS_DETAIL)
-        if denied:
-            return denied
-        if not meta_oauth_configured():
-            return Response(
-                {'detail': 'OAuth Meta não configurado no servidor (META_APP_ID / META_APP_SECRET).'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        state = _build_oauth_state(request.user.id)
-        return Response({'authUrl': build_meta_auth_url(state)})
-
-
-class InstagramConnectionCallbackView(MarketingAPIView):
-    def post(self, request):
-        denied = _funcao_required_response(request, 'publicar-posts', _PUBLICAR_POSTS_DETAIL)
-        if denied:
-            return denied
-        code = (request.data.get('code') or '').strip()
-        state = (request.data.get('state') or '').strip()
-        if not code or not state:
-            return Response({'detail': 'Parâmetros OAuth inválidos.'}, status=status.HTTP_400_BAD_REQUEST)
-        if not _validate_oauth_state(state, request.user.id):
-            return Response({'detail': 'State OAuth inválido ou expirado.'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            token_data = exchange_code_for_token(code)
-            ig_data = resolve_instagram_business_account(token_data['access_token'])
-        except ValueError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        expires_in = token_data.get('expires_in')
-        expires_at = None
-        if expires_in:
-            expires_at = timezone.now() + timezone.timedelta(seconds=int(expires_in))
-
-        conn, _ = InstagramConnection.objects.get_or_create(pk=1)
-        conn.access_token = ig_data['access_token']
-        conn.instagram_account_id = ig_data['instagram_account_id']
-        conn.instagram_username = ig_data['instagram_username']
-        conn.page_name = ig_data['page_name']
-        conn.linked_at = timezone.now()
-        conn.linked_by = _usuario_display(request.user)
-        conn.token_expires_at = expires_at
-        conn.save()
-
-        return Response(InstagramConnectionSerializer(conn).data)
-
-
-class InstagramConnectionDisconnectView(MarketingAPIView):
-    def post(self, request):
-        denied = _funcao_required_response(request, 'publicar-posts', _PUBLICAR_POSTS_DETAIL)
-        if denied:
-            return denied
-        conn, _ = InstagramConnection.objects.get_or_create(pk=1)
-        conn.access_token = ''
-        conn.instagram_account_id = ''
-        conn.instagram_username = ''
-        conn.page_name = ''
-        conn.linked_at = None
-        conn.linked_by = ''
-        conn.token_expires_at = None
-        conn.save()
-        return Response(InstagramConnectionSerializer(conn).data)
-
-
-class InstagramPostViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
-    permission_module = 'Marketing'
     permission_requires_filial = False
-    serializer_class = InstagramPostSerializer
-    queryset = InstagramPost.objects.all()
-    pagination_class = ReportPagination
+
+    serializer_class = CampanhaMarketingSerializer
+
+    queryset = CampanhaMarketing.objects.all()
+
     http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
 
-    def get_queryset(self):
-        qs = self.queryset.prefetch_related('slides')
-        params = self.request.query_params
 
-        status_filter = (params.get('status') or '').strip()
-        if status_filter and status_filter != 'Todos':
+
+    def get_queryset(self):
+
+        qs = CampanhaMarketing.objects.select_related(
+
+            'responsavel_user', 'criado_por_user',
+
+        ).annotate(
+
+            comentarios_count=Count('comentarios'),
+
+            membros_count=Count('membros'),
+
+        )
+
+
+
+        start = (self.request.query_params.get('start') or '').strip()
+
+        end = (self.request.query_params.get('end') or '').strip()
+
+        status_filter = (self.request.query_params.get('status') or '').strip()
+
+        search = (self.request.query_params.get('search') or '').strip()
+
+
+
+        if start and end:
+
+            qs = qs.filter(data_inicio__lte=end, data_fim__gte=start)
+
+        elif start:
+
+            qs = qs.filter(data_fim__gte=start)
+
+        elif end:
+
+            qs = qs.filter(data_inicio__lte=end)
+
+
+
+        if status_filter:
+
             qs = qs.filter(status=status_filter)
 
-        search = (params.get('search') or '').strip()
+
+
         if search:
+
             qs = qs.filter(
-                Q(title__icontains=search)
-                | Q(caption__icontains=search)
-                | Q(hashtags__icontains=search)
+
+                Q(titulo__icontains=search)
+
+                | Q(descricao__icontains=search)
+
+                | Q(responsavel__icontains=search)
+
             )
 
-        ordering = (params.get('ordering') or '-scheduled_at').strip()
-        allowed = {
-            'scheduled_at', '-scheduled_at', 'title', '-title',
-            'status', '-status', 'data_criacao', '-data_criacao',
-        }
-        if ordering in allowed:
-            qs = qs.order_by(ordering)
-        else:
-            qs = qs.order_by('-scheduled_at', '-data_criacao')
 
-        return qs
+
+        return qs.order_by('ordem_kanban', '-data_inicio', '-data_criacao')
+
+    def get_object(self):
+        obj = super().get_object()
+        if self.action != 'retrieve':
+            return obj
+        return CampanhaMarketing.objects.select_related(
+            'responsavel_user', 'criado_por_user',
+        ).prefetch_related(
+            Prefetch('comentarios', queryset=CampanhaComentario.objects.select_related('autor_user').prefetch_related('mencoes')),
+            Prefetch('membros', queryset=CampanhaMembro.objects.select_related('user', 'adicionado_por')),
+        ).annotate(
+            comentarios_count=Count('comentarios'),
+            membros_count=Count('membros'),
+        ).get(pk=obj.pk)
+
+    def get_serializer_class(self):
+
+        if self.action == 'retrieve':
+
+            return CampanhaMarketingDetailSerializer
+
+        return CampanhaMarketingSerializer
+
+
 
     def create(self, request, *args, **kwargs):
-        denied = _funcao_required_response(request, 'criar-posts', _CRIAR_POSTS_DETAIL)
+
+        denied = _funcao_required_response(request, 'criar-campanhas', _CRIAR_CAMPANHAS_DETAIL)
+
         if denied:
+
             return denied
+
         return super().create(request, *args, **kwargs)
 
+
+
     def update(self, request, *args, **kwargs):
-        denied = _funcao_required_response(request, 'editar-posts', _EDITAR_POSTS_DETAIL)
+
+        denied = _funcao_required_response(request, 'editar-campanhas', _EDITAR_CAMPANHAS_DETAIL)
+
         if denied:
+
             return denied
+
         return super().update(request, *args, **kwargs)
 
+
+
     def partial_update(self, request, *args, **kwargs):
-        denied = _funcao_required_response(request, 'editar-posts', _EDITAR_POSTS_DETAIL)
+
+        denied = _funcao_required_response(request, 'editar-campanhas', _EDITAR_CAMPANHAS_DETAIL)
+
         if denied:
+
             return denied
+
         return super().partial_update(request, *args, **kwargs)
 
+
+
     def destroy(self, request, *args, **kwargs):
-        denied = _funcao_required_response(request, 'excluir-posts', _EXCLUIR_POSTS_DETAIL)
+
+        denied = _funcao_required_response(request, 'excluir-campanhas', _EXCLUIR_CAMPANHAS_DETAIL)
+
         if denied:
+
             return denied
+
         return super().destroy(request, *args, **kwargs)
 
-    @action(detail=True, methods=['post'], url_path='upload-media')
-    def upload_media(self, request, pk=None):
-        denied = _funcao_required_response(request, 'editar-posts', _EDITAR_POSTS_DETAIL)
-        if denied:
-            return denied
-        post = self.get_object()
-        serializer = InstagramPostMediaUploadSerializer(
-            data=request.data,
-            context={'post': post},
+
+
+    def perform_create(self, serializer):
+
+        user = self.request.user
+
+        extra = {
+
+            'criado_por': usuario_display(user),
+
+            'criado_por_user': user,
+
+        }
+
+        if serializer.validated_data.get('responsavel_user') is None:
+
+            extra['responsavel_user'] = user
+
+            extra['responsavel'] = usuario_display(user)
+
+        campanha = serializer.save(**extra)
+
+        _adicionar_membro(campanha, user, user)
+
+        if campanha.responsavel_user_id and campanha.responsavel_user_id != user.pk:
+
+            _adicionar_membro(campanha, campanha.responsavel_user, user)
+
+
+
+    def perform_update(self, serializer):
+
+        instance = self.get_object()
+
+        old_responsavel_id = instance.responsavel_user_id
+
+        campanha = serializer.save()
+
+        if campanha.responsavel_user_id != old_responsavel_id and campanha.responsavel_user:
+
+            _adicionar_membro(campanha, campanha.responsavel_user, self.request.user)
+
+
+
+    @action(detail=False, methods=['get'], url_path='quadro')
+
+    def quadro(self, request):
+
+        columns = {}
+
+        base_qs = CampanhaMarketing.objects.select_related(
+
+            'responsavel_user', 'criado_por_user',
+
+        ).annotate(
+
+            comentarios_count=Count('comentarios'),
+
+            membros_count=Count('membros'),
+
         )
-        serializer.is_valid(raise_exception=True)
-        serializer.save(post)
-        return Response(InstagramPostSerializer(post, context={'request': request}).data)
 
-    @action(detail=True, methods=['post'], url_path='carousel-slides')
-    def add_carousel_slide(self, request, pk=None):
-        denied = _funcao_required_response(request, 'editar-posts', _EDITAR_POSTS_DETAIL)
+        for status_key in KANBAN_STATUSES:
+
+            items = base_qs.filter(status=status_key).order_by('ordem_kanban', '-data_inicio')
+
+            columns[status_key] = CampanhaMarketingSerializer(items, many=True).data
+
+        return Response(columns)
+
+
+
+    @action(detail=True, methods=['post'], url_path='mover-status')
+
+    def mover_status(self, request, pk=None):
+
+        denied = _funcao_required_response(request, 'editar-campanhas', _EDITAR_CAMPANHAS_DETAIL)
+
         if denied:
+
             return denied
-        post = self.get_object()
-        serializer = InstagramCarouselSlideUploadSerializer(
-            data=request.data,
-            context={'post': post},
+
+        campanha = self.get_object()
+
+        ser = CampanhaStatusMoveSerializer(data=request.data)
+
+        ser.is_valid(raise_exception=True)
+
+        campanha.status = ser.validated_data['status']
+
+        campanha.ordem_kanban = ser.validated_data.get('ordemKanban', 0)
+
+        campanha.save(update_fields=['status', 'ordem_kanban', 'data_atualizacao'])
+
+        return Response(CampanhaMarketingSerializer(campanha).data)
+
+
+
+    @action(detail=True, methods=['get', 'post'], url_path='membros')
+
+    def membros(self, request, pk=None):
+
+        campanha = self.get_object()
+
+        if request.method == 'GET':
+
+            items = campanha.membros.select_related('user', 'adicionado_por').order_by('data_criacao')
+
+            return Response(CampanhaMembroSerializer(items, many=True).data)
+
+
+
+        ser = CampanhaMembroCreateSerializer(data=request.data)
+
+        ser.is_valid(raise_exception=True)
+
+        target_user = ser.validated_data['user']
+
+        membro, created = _adicionar_membro(campanha, target_user, request.user)
+
+        if not created:
+
+            return Response(
+
+                {'detail': 'Usuário já faz parte da equipe desta campanha.'},
+
+                status=status.HTTP_400_BAD_REQUEST,
+
+            )
+
+        return Response(CampanhaMembroSerializer(membro).data, status=status.HTTP_201_CREATED)
+
+
+
+    @action(detail=True, methods=['post'], url_path='membros/remover')
+
+    def remover_membro(self, request, pk=None):
+
+        campanha = self.get_object()
+
+        ser = CampanhaMembroRemoveSerializer(data=request.data)
+
+        ser.is_valid(raise_exception=True)
+
+        target_user = ser.validated_data['user']
+
+        deleted, _ = CampanhaMembro.objects.filter(campanha=campanha, user=target_user).delete()
+
+        if not deleted:
+
+            return Response({'detail': 'Membro não encontrado nesta campanha.'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+
+    @action(detail=True, methods=['post'], url_path='atribuir-me')
+
+    def atribuir_me(self, request, pk=None):
+
+        campanha = self.get_object()
+
+        user = request.user
+
+        campanha.responsavel_user = user
+
+        campanha.responsavel = usuario_display(user)
+
+        campanha.save(update_fields=['responsavel_user', 'responsavel', 'data_atualizacao'])
+
+        _adicionar_membro(campanha, user, user)
+
+        return Response(CampanhaMarketingSerializer(campanha).data)
+
+
+
+    @action(detail=True, methods=['post'], url_path='participar')
+
+    def participar(self, request, pk=None):
+
+        campanha = self.get_object()
+
+        membro, created = _adicionar_membro(campanha, request.user, request.user)
+
+        if not created:
+
+            return Response(
+
+                {'detail': 'Você já participa desta campanha.'},
+
+                status=status.HTTP_400_BAD_REQUEST,
+
+            )
+
+        return Response(CampanhaMembroSerializer(membro).data, status=status.HTTP_201_CREATED)
+
+
+
+    @action(detail=True, methods=['get', 'post'], url_path='comentarios')
+
+    def comentarios(self, request, pk=None):
+
+        campanha = self.get_object()
+
+        if request.method == 'GET':
+
+            items = campanha.comentarios.select_related('autor_user').prefetch_related('mencoes').order_by('data_criacao')
+
+            return Response(CampanhaComentarioSerializer(items, many=True).data)
+
+
+
+        ser = CampanhaComentarioCreateSerializer(data=request.data)
+
+        ser.is_valid(raise_exception=True)
+
+        texto = ser.validated_data['texto']
+
+        mencao_ids = ser.validated_data.get('mencoes') or []
+
+
+
+        comentario = CampanhaComentario.objects.create(
+
+            campanha=campanha,
+
+            autor_user=request.user,
+
+            autor_nome=usuario_display(request.user),
+
+            texto=texto,
+
         )
-        serializer.is_valid(raise_exception=True)
-        serializer.save(post)
-        return Response(InstagramPostSerializer(post, context={'request': request}).data)
 
-    @action(detail=True, methods=['delete'], url_path=r'carousel-slides/(?P<slide_id>[^/.]+)')
-    def remove_carousel_slide(self, request, pk=None, slide_id=None):
-        denied = _funcao_required_response(request, 'editar-posts', _EDITAR_POSTS_DETAIL)
-        if denied:
-            return denied
-        post = self.get_object()
-        slide = post.slides.filter(pk=slide_id).first()
-        if not slide:
-            return Response({'detail': 'Slide não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
-        if slide.media_file:
-            slide.media_file.delete(save=False)
-        slide.delete()
-        for index, remaining in enumerate(post.slides.order_by('position', 'id')):
-            if remaining.position != index:
-                remaining.position = index
-                remaining.save(update_fields=['position'])
-        return Response(InstagramPostSerializer(post, context={'request': request}).data)
+        if mencao_ids:
 
-    @action(detail=True, methods=['post'], url_path='carousel-slides/reorder')
-    def reorder_carousel_slides(self, request, pk=None):
-        denied = _funcao_required_response(request, 'editar-posts', _EDITAR_POSTS_DETAIL)
-        if denied:
-            return denied
-        post = self.get_object()
-        serializer = InstagramCarouselSlideReorderSerializer(
-            data=request.data,
-            context={'post': post},
+            mencionados = list(User.objects.filter(pk__in=mencao_ids))
+
+            comentario.mencoes.set(mencionados)
+
+            for mencionado in mencionados:
+
+                _adicionar_membro(campanha, mencionado, request.user)
+
+
+
+        comentario = CampanhaComentario.objects.select_related('autor_user').prefetch_related('mencoes').get(pk=comentario.pk)
+
+        return Response(
+
+            CampanhaComentarioSerializer(comentario).data,
+
+            status=status.HTTP_201_CREATED,
+
         )
-        serializer.is_valid(raise_exception=True)
-        serializer.save(post)
-        return Response(InstagramPostSerializer(post, context={'request': request}).data)
 
-    @action(detail=True, methods=['post'], url_path='publish')
-    def publish(self, request, pk=None):
-        denied = _funcao_required_response(request, 'publicar-posts', _PUBLICAR_POSTS_DETAIL)
-        if denied:
-            return denied
-        post = self.get_object()
-        if post.status == 'published' and post.instagram_post_id:
-            return Response({'detail': 'Esta postagem já foi publicada no Instagram.'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            publish_instagram_post(post)
-        except ValueError as exc:
-            post.publish_error = str(exc)
-            post.save(update_fields=['publish_error', 'data_atualizacao'])
-            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(InstagramPostSerializer(post, context={'request': request}).data)

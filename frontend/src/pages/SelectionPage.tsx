@@ -13,6 +13,7 @@ import {
 } from '../constants/environments';
 import { branchesForModule } from '../constants/filiais';
 import logoImg from '../assets/Logo_TccConex.png';
+import UserAvatar from '../components/UserAvatar';
 
 const GLOBAL_ENVIRONMENTS = GLOBAL_SESSION_ENVIRONMENTS;
 
@@ -47,11 +48,6 @@ const formatLastLogin = (value: string | null) => {
   });
 };
 
-const getInitials = (name: string) => {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  return parts[0]?.slice(0, 2).toUpperCase() || 'US';
-};
 
 const GoogleIcon: React.FC = () => (
   <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
@@ -196,7 +192,12 @@ const SelectionPage: React.FC = () => {
 
           <div className="selection-profile-card">
             <div className="selection-profile-card-head">
-              <div className="selection-profile-avatar">{getInitials(user?.name ?? user?.username ?? 'US')}</div>
+              <UserAvatar
+                name={user?.name ?? user?.username ?? 'Usuário'}
+                photo={user?.googlePicture}
+                size="lg"
+                className="selection-profile-avatar-chip"
+              />
               <div>
                 <h2 className="selection-profile-card-title">Meu Perfil</h2>
                 <p className="selection-profile-card-subtitle">Dados da conta e integrações</p>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import UserAvatar from '../components/UserAvatar';
 import { environmentRequiresFilial, isAdminEnvironment } from '../constants/environments';
 import { getAllowedIndicadores } from '../constants/indicadores';
 import logoExpanded from '../assets/Logo_TccConex.png';
@@ -47,16 +48,6 @@ const DashboardLayout: React.FC = () => {
   const [, setIsAdminSubmenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
-
-  // Setup initials for avatar
-  const [initials, setInitials] = useState('MR');
-  useEffect(() => {
-    if (user?.name) {
-      const parts = user.name.split(' ');
-      const userInitials = parts.length > 1 ? parts[0][0] + parts[1][0] : parts[0].slice(0, 2);
-      setInitials(userInitials.toUpperCase());
-    }
-  }, [user]);
 
   // Escape key global listener to close command palette
   useEffect(() => {
@@ -374,15 +365,15 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Marketing'
       },
       {
-        title: "Postagens Instagram",
-        path: "Marketing / Postagens Instagram",
+        title: "Calendario Transcamila",
+        path: "Marketing / Calendario Transcamila",
         icon: (
           <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <rect x="3" y="3" width="18" height="18" rx="4" />
-            <circle cx="12" cy="12" r="4" />
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <path d="M16 2v4M8 2v4M3 10h18" />
           </svg>
         ),
-        action: () => navigate('/marketing/instagram-posts'),
+        action: () => navigate('/marketing/campanhas'),
         show: selectedEnvironment === 'Marketing'
       },
     ];
@@ -443,7 +434,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/rh')) return env;
     if (path.startsWith('/sgq/pesquisa-satisfacao')) return `${env} / Pesquisa de Satisfação`;
     if (path.startsWith('/sgq')) return env;
-    if (path.startsWith('/marketing/instagram-posts')) return `${env} / Postagens Instagram`;
+    if (path.startsWith('/marketing/campanhas')) return `${env} / Calendario Transcamila`;
     if (path.startsWith('/marketing')) return env;
     if (path.startsWith('/admin/usuarios')) return `Administração / Controle Geral`;
     if (path.startsWith('/admin')) return `Administração / Home`;
@@ -961,13 +952,13 @@ const DashboardLayout: React.FC = () => {
                 </Link>
 
                 <Link
-                  to="/marketing/instagram-posts"
-                  className={`nav-btn ${isRouteActive('/marketing/instagram-posts') ? 'active' : ''}`}
-                  data-tooltip="Postagens Instagram"
+                  to="/marketing/campanhas"
+                  className={`nav-btn ${isRouteActive('/marketing/campanhas') ? 'active' : ''}`}
+                  data-tooltip="Calendario Transcamila"
                 >
                   <div className="nav-btn-left">
-                    <NavIcon name="instagram" />
-                    <span className="nav-text">Postagens Instagram</span>
+                    <NavIcon name="calendar3" />
+                    <span className="nav-text">Calendario Transcamila</span>
                   </div>
                 </Link>
               </div>
@@ -1009,7 +1000,12 @@ const DashboardLayout: React.FC = () => {
             id="btn-header-user" 
             onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
           >
-            <div className="user-avatar" id="user-avatar-initials">{initials}</div>
+            <UserAvatar
+              name={user?.name ?? 'Usuário'}
+              photo={user?.googlePicture}
+              size="sm"
+              className="header-user-avatar"
+            />
             <div className="user-info">
               <span className="user-name" id="user-display-name">{user?.name}</span>
               <span className="user-role" id="user-display-role">{user?.roleId === '1' ? 'Administrador' : 'Operador'}</span>

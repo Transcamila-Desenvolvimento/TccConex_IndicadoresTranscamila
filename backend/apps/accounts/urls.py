@@ -9,6 +9,7 @@ from .views import (
     GoogleUnlinkAPIView,
     LoginAPIView,
     RoleViewSet,
+    UserDirectoryAPIView,
     UserManagementViewSet,
     UserProfileAPIView,
 )
@@ -25,5 +26,6 @@ urlpatterns = [
     path('profile/google/callback/', GoogleCallbackAPIView.as_view(), name='auth-google-callback'),
     path('profile/google/unlink/', GoogleUnlinkAPIView.as_view(), name='auth-google-unlink'),
     path('google/contacts/', GoogleContactsAPIView.as_view(), name='auth-google-contacts'),
+    path('users/directory/', UserDirectoryAPIView.as_view(), name='auth-users-directory'),
     path('', include(router.urls)),
 ]

@@ -44,6 +44,7 @@ class CustomUser(AbstractUser):
     google_sub = models.CharField(max_length=255, blank=True, null=True)
     google_linked_at = models.DateTimeField(blank=True, null=True)
     google_token = models.JSONField(blank=True, null=True)
+    google_picture_url = models.URLField(max_length=500, blank=True, default='')
 
     # Admin solicita; usuário deve trocar a senha no próximo acesso.
     must_change_password = models.BooleanField(default=False)

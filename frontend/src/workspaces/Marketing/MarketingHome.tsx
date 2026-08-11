@@ -4,15 +4,14 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const QUICK_LINKS = [
   {
-    title: 'Postagens Instagram',
-    description: 'Crie, programe e gerencie postagens do Instagram em um só lugar.',
-    path: '/marketing/instagram-posts',
-    badge: 'Redes sociais',
+    title: 'Calendario Transcamila',
+    description: 'Calendário editorial e fluxo de produção de conteúdo para Instagram, Transcamila News e demais canais.',
+    path: '/marketing/campanhas',
+    badge: 'Conteúdo',
     icon: (
       <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="18" rx="4" />
-        <circle cx="12" cy="12" r="4" />
-        <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+        <rect x="3" y="4" width="18" height="18" rx="2" />
+        <path d="M16 2v4M8 2v4M3 10h18" />
       </svg>
     ),
   },
@@ -69,10 +68,7 @@ const MarketingHome: React.FC = () => {
         lineHeight: '1.6',
       }}>
         <p style={{ margin: 0 }}>
-          Este ambiente está preparado para centralizar a criação, programação e gestão de conteúdo para redes sociais.
-        </p>
-        <p style={{ marginTop: '8px', marginBottom: 0 }}>
-          Use o menu lateral ou o card acima para acessar o gerenciamento de postagens do Instagram.
+          Calendário editorial e fluxo Planejamento → Produção → Aguardando → Publicado, com equipe e conversa por conteúdo.
         </p>
       </div>
     </section>

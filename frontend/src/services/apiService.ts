@@ -28,8 +28,8 @@ import type {
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
   ProtocoloImportParams, ProtocoloImportResult,
   SgqPesquisa, SgqPesquisaImportPreview, SgqPesquisaImportResult, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
-  InstagramPost, InstagramPostPayload, InstagramPostQueryParams,
-  InstagramConnection, InstagramOAuthCallbackPayload,
+  CampanhaMarketing, CampanhaPayload, CampanhaQuadro, CampanhaComentario, CampanhaMembro,
+  UserDirectoryEntry,
   SgqLoteDraft, SgqLoteDraftRow,
 } from '../types/domain';
 import { filterActiveEnvironments, ACTIVE_ENVIRONMENTS } from '../constants/environments';
@@ -75,6 +75,7 @@ function normalizeUser(raw: any): User {
     funcoes: raw.funcoes && typeof raw.funcoes === 'object' ? raw.funcoes : {},
     googleEmail: raw.googleEmail ?? null,
     googleLinkedAt: raw.googleLinkedAt ?? null,
+    googlePicture: raw.googlePicture ?? null,
     mustChangePassword: Boolean(raw.mustChangePassword),
   };
 }
@@ -1697,80 +1698,82 @@ export const apiService = {
     return data as SgqPesquisaImportResult;
   },
 
-  // ─── Marketing — Instagram Posts ───────────────────────────────────────────
-
-  async getInstagramPosts(params: InstagramPostQueryParams = {}): Promise<PaginatedResponse<InstagramPost>> {
-    const { data } = await api.get('/api/marketing/instagram-posts/', { params });
-    return paginatedFromResponse(data, (raw) => raw as InstagramPost);
+  async getUserDirectory(module = 'Marketing'): Promise<UserDirectoryEntry[]> {
+    const { data } = await api.get('/api/auth/users/directory/', { params: { module } });
+    return (data ?? []).map((item: Record<string, unknown>) => ({
+      id: String(item.id),
+      name: String(item.name ?? ''),
+      googlePicture: (item.googlePicture as string) || null,
+      googleEmail: (item.googleEmail as string) || null,
+    }));
   },
 
-  async createInstagramPost(payload: InstagramPostPayload): Promise<InstagramPost> {
-    const { data } = await api.post('/api/marketing/instagram-posts/', payload);
-    return data as InstagramPost;
+  // ─── Marketing — Campanhas ───────────────────────────────────────────────
+
+  async getCampanhas(params: { start?: string; end?: string; status?: string; search?: string } = {}): Promise<CampanhaMarketing[]> {
+    const { data } = await api.get('/api/marketing/campanhas/', { params });
+    return Array.isArray(data) ? data as CampanhaMarketing[] : (data.results ?? []) as CampanhaMarketing[];
   },
 
-  async updateInstagramPost(id: string, payload: Partial<InstagramPostPayload>): Promise<InstagramPost> {
-    const { data } = await api.patch(`/api/marketing/instagram-posts/${id}/`, payload);
-    return data as InstagramPost;
+  async getCampanha(id: string): Promise<CampanhaMarketing> {
+    const { data } = await api.get(`/api/marketing/campanhas/${id}/`);
+    return data as CampanhaMarketing;
   },
 
-  async deleteInstagramPost(id: string): Promise<void> {
-    await api.delete(`/api/marketing/instagram-posts/${id}/`);
+  async getCampanhaQuadro(): Promise<CampanhaQuadro> {
+    const { data } = await api.get('/api/marketing/campanhas/quadro/');
+    return data as CampanhaQuadro;
   },
 
-  async getInstagramConnection(): Promise<InstagramConnection> {
-    const { data } = await api.get('/api/marketing/instagram/connection/');
-    return data as InstagramConnection;
+  async createCampanha(payload: CampanhaPayload): Promise<CampanhaMarketing> {
+    const { data } = await api.post('/api/marketing/campanhas/', payload);
+    return data as CampanhaMarketing;
   },
 
-  async getInstagramConnectionLink(): Promise<{ authUrl: string }> {
-    const { data } = await api.get('/api/marketing/instagram/connection/link/');
-    return data as { authUrl: string };
+  async updateCampanha(id: string, payload: Partial<CampanhaPayload>): Promise<CampanhaMarketing> {
+    const { data } = await api.patch(`/api/marketing/campanhas/${id}/`, payload);
+    return data as CampanhaMarketing;
   },
 
-  async completeInstagramConnection(payload: InstagramOAuthCallbackPayload): Promise<InstagramConnection> {
-    const { data } = await api.post('/api/marketing/instagram/connection/callback/', payload);
-    return data as InstagramConnection;
+  async deleteCampanha(id: string): Promise<void> {
+    await api.delete(`/api/marketing/campanhas/${id}/`);
   },
 
-  async disconnectInstagramConnection(): Promise<InstagramConnection> {
-    const { data } = await api.post('/api/marketing/instagram/connection/disconnect/');
-    return data as InstagramConnection;
+  async moveCampanhaStatus(id: string, payload: { status: string; ordemKanban?: number }): Promise<CampanhaMarketing> {
+    const { data } = await api.post(`/api/marketing/campanhas/${id}/mover-status/`, payload);
+    return data as CampanhaMarketing;
   },
 
-  async uploadInstagramPostMedia(id: string, file: File): Promise<InstagramPost> {
-    const form = new FormData();
-    form.append('mediaFile', file);
-    const { data } = await api.post(`/api/marketing/instagram-posts/${id}/upload-media/`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+  async getCampanhaComentarios(id: string): Promise<CampanhaComentario[]> {
+    const { data } = await api.get(`/api/marketing/campanhas/${id}/comentarios/`);
+    return data as CampanhaComentario[];
+  },
+
+  async createCampanhaComentario(id: string, payload: { texto: string; mencoes?: string[] }): Promise<CampanhaComentario> {
+    const { data } = await api.post(`/api/marketing/campanhas/${id}/comentarios/`, {
+      texto: payload.texto,
+      mencoes: (payload.mencoes ?? []).map((item) => Number(item)),
     });
-    return data as InstagramPost;
+    return data as CampanhaComentario;
   },
 
-  async uploadInstagramCarouselSlide(id: string, file: File): Promise<InstagramPost> {
-    const form = new FormData();
-    form.append('mediaFile', file);
-    const { data } = await api.post(`/api/marketing/instagram-posts/${id}/carousel-slides/`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return data as InstagramPost;
+  async addCampanhaMembro(campanhaId: string, userId: string): Promise<CampanhaMembro> {
+    const { data } = await api.post(`/api/marketing/campanhas/${campanhaId}/membros/`, { userId });
+    return data as CampanhaMembro;
   },
 
-  async deleteInstagramCarouselSlide(postId: string, slideId: string): Promise<InstagramPost> {
-    const { data } = await api.delete(`/api/marketing/instagram-posts/${postId}/carousel-slides/${slideId}/`);
-    return data as InstagramPost;
+  async removeCampanhaMembro(campanhaId: string, userId: string): Promise<void> {
+    await api.post(`/api/marketing/campanhas/${campanhaId}/membros/remover/`, { userId });
   },
 
-  async reorderInstagramCarouselSlides(postId: string, slideIds: string[]): Promise<InstagramPost> {
-    const { data } = await api.post(`/api/marketing/instagram-posts/${postId}/carousel-slides/reorder/`, {
-      slideIds,
-    });
-    return data as InstagramPost;
+  async atribuirCampanhaAMim(campanhaId: string): Promise<CampanhaMarketing> {
+    const { data } = await api.post(`/api/marketing/campanhas/${campanhaId}/atribuir-me/`);
+    return data as CampanhaMarketing;
   },
 
-  async publishInstagramPost(id: string): Promise<InstagramPost> {
-    const { data } = await api.post(`/api/marketing/instagram-posts/${id}/publish/`);
-    return data as InstagramPost;
+  async participarCampanha(campanhaId: string): Promise<CampanhaMembro> {
+    const { data } = await api.post(`/api/marketing/campanhas/${campanhaId}/participar/`);
+    return data as CampanhaMembro;
   },
 
 };

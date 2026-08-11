@@ -42,6 +42,7 @@ class UserSerializer(serializers.ModelSerializer):
     lastLogin = serializers.DateTimeField(source='last_login', read_only=True)
     googleEmail = serializers.EmailField(source='google_email', read_only=True)
     googleLinkedAt = serializers.DateTimeField(source='google_linked_at', read_only=True)
+    googlePicture = serializers.URLField(source='google_picture_url', read_only=True)
     mustChangePassword = serializers.BooleanField(source='must_change_password', read_only=True)
 
     class Meta:
@@ -49,10 +50,10 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'name', 'roleId', 'status',
             'environments', 'filiais', 'indicadores', 'funcoes', 'lastLogin',
-            'googleEmail', 'googleLinkedAt', 'mustChangePassword',
+            'googleEmail', 'googleLinkedAt', 'googlePicture', 'mustChangePassword',
         ]
         read_only_fields = [
-            'id', 'lastLogin', 'googleEmail', 'googleLinkedAt', 'mustChangePassword',
+            'id', 'lastLogin', 'googleEmail', 'googleLinkedAt', 'googlePicture', 'mustChangePassword',
         ]
 
     def to_representation(self, instance):
@@ -67,6 +68,15 @@ class UserSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(required=True)
     password = serializers.CharField(required=True, write_only=True)
+
+
+class UserDirectorySerializer(serializers.ModelSerializer):
+    googlePicture = serializers.URLField(source='google_picture_url', read_only=True)
+    googleEmail = serializers.EmailField(source='google_email', read_only=True)
+
+    class Meta:
+        model = User
+        fields = ['id', 'name', 'googlePicture', 'googleEmail']
 
 
 class CreateUserSerializer(serializers.ModelSerializer):

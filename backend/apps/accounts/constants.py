@@ -49,10 +49,9 @@ FUNCOES_POR_AMBIENTE = {
         'importar-pesquisas',
     }),
     'Marketing': frozenset({
-        'criar-posts',
-        'editar-posts',
-        'excluir-posts',
-        'publicar-posts',
+        'criar-campanhas',
+        'editar-campanhas',
+        'excluir-campanhas',
     }),
 }
 

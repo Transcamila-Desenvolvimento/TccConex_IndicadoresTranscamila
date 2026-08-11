@@ -1,15 +1,13 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import MarketingHome from './MarketingHome';
-import MarketingInstagramPosts from './MarketingInstagramPosts';
-import InstagramCallbackPage from './InstagramCallbackPage';
+import MarketingCampanhas from './MarketingCampanhas';
 
 const MarketingWorkspace: React.FC = () => {
   return (
     <Routes>
       <Route index element={<MarketingHome />} />
-      <Route path="instagram-posts" element={<MarketingInstagramPosts />} />
-      <Route path="instagram/callback" element={<InstagramCallbackPage />} />
+      <Route path="campanhas" element={<MarketingCampanhas />} />
       <Route path="*" element={<Navigate to="" replace />} />
     </Routes>
   );
