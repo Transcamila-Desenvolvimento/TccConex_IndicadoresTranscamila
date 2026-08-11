@@ -83,32 +83,43 @@ export function useDeleteSetorCompras() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiService.deleteSetorCompras(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.setores }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.setores });
+      queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.colaboradores });
+    },
   });
 }
 
 // ─── Colaboradores ──────────────────────────────────────────────────────────
 
-export function useColaboradoresCompras() {
+export function useColaboradoresCompras(setorId?: string) {
   return useQuery({
-    queryKey: COMPRAS_KEYS.colaboradores,
-    queryFn: () => apiService.getColaboradoresCompras(),
+    queryKey: [...COMPRAS_KEYS.colaboradores, setorId ?? 'all'],
+    queryFn: () => apiService.getColaboradoresCompras(setorId),
+    enabled: Boolean(setorId),
   });
 }
 
 export function useCreateColaboradorCompras() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (nome: string) => apiService.createColaboradorCompras(nome),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.colaboradores }),
+    mutationFn: (payload: { nome: string; setorId: string }) => apiService.createColaboradorCompras(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.colaboradores });
+      queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.setores });
+    },
   });
 }
 
 export function useUpdateColaboradorCompras() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, nome }: { id: string; nome: string }) => apiService.updateColaboradorCompras(id, nome),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.colaboradores }),
+    mutationFn: ({ id, nome, setorId }: { id: string; nome: string; setorId?: string }) =>
+      apiService.updateColaboradorCompras(id, { nome, setorId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.colaboradores });
+      queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.setores });
+    },
   });
 }
 
@@ -116,7 +127,10 @@ export function useDeleteColaboradorCompras() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiService.deleteColaboradorCompras(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.colaboradores }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.colaboradores });
+      queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.setores });
+    },
   });
 }
 

@@ -28,14 +28,22 @@ class Setor(models.Model):
 class Colaborador(models.Model):
     """Colaborador responsável pela retirada de materiais no Protocolo de Saída.
 
-    Cadastro simples do módulo Compras — independente do model `Colaborador`
-    de `apps.rh` (que representa o quadro de funcionários da empresa)."""
-    nome = models.CharField(max_length=150, unique=True, verbose_name="Nome")
+    Cadastro do módulo Compras — independente do model `Colaborador` de `apps.rh`."""
+    setor = models.ForeignKey(
+        Setor,
+        on_delete=models.PROTECT,
+        related_name='colaboradores',
+        verbose_name="Setor",
+    )
+    nome = models.CharField(max_length=150, verbose_name="Nome")
 
     class Meta:
         verbose_name = "Colaborador (Compras)"
         verbose_name_plural = "Colaboradores (Compras)"
-        ordering = ['nome']
+        ordering = ['setor__nome', 'nome']
+        constraints = [
+            models.UniqueConstraint(fields=['setor', 'nome'], name='compras_colaborador_setor_nome_unique'),
+        ]
 
     def __str__(self):
         return self.nome

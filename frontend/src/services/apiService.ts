@@ -1390,18 +1390,23 @@ export const apiService = {
     await api.delete(`/api/compras/setores/${id}/`);
   },
 
-  async getColaboradoresCompras(): Promise<ColaboradorCompras[]> {
-    const { data } = await api.get('/api/compras/colaboradores/');
+  async getColaboradoresCompras(setorId?: string): Promise<ColaboradorCompras[]> {
+    const { data } = await api.get('/api/compras/colaboradores/', {
+      params: setorId ? { setorId } : undefined,
+    });
     return data;
   },
 
-  async createColaboradorCompras(nome: string): Promise<ColaboradorCompras> {
-    const { data } = await api.post('/api/compras/colaboradores/', { nome });
+  async createColaboradorCompras(payload: { nome: string; setorId: string }): Promise<ColaboradorCompras> {
+    const { data } = await api.post('/api/compras/colaboradores/', payload);
     return data;
   },
 
-  async updateColaboradorCompras(id: string, nome: string): Promise<ColaboradorCompras> {
-    const { data } = await api.patch(`/api/compras/colaboradores/${id}/`, { nome });
+  async updateColaboradorCompras(
+    id: string,
+    payload: { nome: string; setorId?: string },
+  ): Promise<ColaboradorCompras> {
+    const { data } = await api.patch(`/api/compras/colaboradores/${id}/`, payload);
     return data;
   },
 

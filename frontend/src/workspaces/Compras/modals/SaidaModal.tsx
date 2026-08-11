@@ -20,22 +20,22 @@ interface SaidaModalProps {
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 const SaidaModal: React.FC<SaidaModalProps> = ({ initialItemId, onClose }) => {
-  const itensQuery = useItensEstoque();
-  const setoresQuery = useSetoresCompras();
-  const colaboradoresQuery = useColaboradoresCompras();
-  const registrarSaida = useRegistrarSaida();
-
-  const stockItems = itensQuery.data ?? [];
-  const setores = setoresQuery.data ?? [];
-  const colaboradores = colaboradoresQuery.data ?? [];
-  const isLoadingOptions = itensQuery.isLoading || setoresQuery.isLoading || colaboradoresQuery.isLoading;
-
   const [date, setDate] = useState(todayIso());
   const [setorId, setSetorId] = useState('');
   const [colaboradorId, setColaboradorId] = useState('');
   const [lines, setLines] = useState<SaidaLineForm[]>(() =>
     initialItemId ? [{ itemId: initialItemId, qty: 1 }] : [{ itemId: '', qty: 1 }],
   );
+
+  const itensQuery = useItensEstoque();
+  const setoresQuery = useSetoresCompras();
+  const colaboradoresQuery = useColaboradoresCompras(setorId || undefined);
+  const registrarSaida = useRegistrarSaida();
+
+  const stockItems = itensQuery.data ?? [];
+  const setores = setoresQuery.data ?? [];
+  const colaboradores = colaboradoresQuery.data ?? [];
+  const isLoadingOptions = itensQuery.isLoading || setoresQuery.isLoading || (Boolean(setorId) && colaboradoresQuery.isLoading);
 
   const usedIds = (excludeIndex: number) => lines.filter((_, i) => i !== excludeIndex).map((l) => l.itemId);
 
@@ -113,7 +113,15 @@ const SaidaModal: React.FC<SaidaModalProps> = ({ initialItemId, onClose }) => {
               </div>
               <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
                 <label htmlFor="estoque-saida-setor">Setor *</label>
-                <select id="estoque-saida-setor" value={setorId} onChange={(e) => setSetorId(e.target.value)} required>
+                <select
+                  id="estoque-saida-setor"
+                  value={setorId}
+                  onChange={(e) => {
+                    setSetorId(e.target.value);
+                    setColaboradorId('');
+                  }}
+                  required
+                >
                   <option value="" disabled>
                     {setoresQuery.isLoading ? 'Carregando...' : setores.length === 0 ? 'Nenhum setor cadastrado' : 'Selecione um setor'}
                   </option>
@@ -124,9 +132,21 @@ const SaidaModal: React.FC<SaidaModalProps> = ({ initialItemId, onClose }) => {
               </div>
               <div className="login-group" style={{ flex: 1, marginBottom: 0 }}>
                 <label htmlFor="estoque-saida-colaborador">Colaborador *</label>
-                <select id="estoque-saida-colaborador" value={colaboradorId} onChange={(e) => setColaboradorId(e.target.value)} required>
+                <select
+                  id="estoque-saida-colaborador"
+                  value={colaboradorId}
+                  onChange={(e) => setColaboradorId(e.target.value)}
+                  required
+                  disabled={!setorId}
+                >
                   <option value="" disabled>
-                    {colaboradoresQuery.isLoading ? 'Carregando...' : colaboradores.length === 0 ? 'Nenhum colaborador cadastrado' : 'Selecione um colaborador'}
+                    {!setorId
+                      ? 'Selecione um setor primeiro'
+                      : colaboradoresQuery.isLoading
+                        ? 'Carregando...'
+                        : colaboradores.length === 0
+                          ? 'Nenhum colaborador neste setor'
+                          : 'Selecione um colaborador'}
                   </option>
                   {colaboradores.map((c) => (
                     <option key={c.id} value={c.id}>{c.nome}</option>

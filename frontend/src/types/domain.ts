@@ -936,11 +936,14 @@ export interface UnidadeMedida {
 export interface Setor {
   id: string;
   nome: string;
+  colaboradoresCount?: number;
 }
 
 export interface ColaboradorCompras {
   id: string;
   nome: string;
+  setorId: string;
+  setorNome: string;
 }
 
 export interface Fornecedor {

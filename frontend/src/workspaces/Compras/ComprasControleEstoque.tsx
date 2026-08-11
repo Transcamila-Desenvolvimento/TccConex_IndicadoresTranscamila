@@ -8,18 +8,10 @@ import {
   useEntradasEstoque,
   useSaidasEstoque,
   useUnidadesMedida,
-  useSetoresCompras,
-  useColaboradoresCompras,
   useFornecedores,
   useCreateUnidadeMedida,
   useUpdateUnidadeMedida,
   useDeleteUnidadeMedida,
-  useCreateSetorCompras,
-  useUpdateSetorCompras,
-  useDeleteSetorCompras,
-  useCreateColaboradorCompras,
-  useUpdateColaboradorCompras,
-  useDeleteColaboradorCompras,
   useCreateFornecedor,
   useUpdateFornecedor,
   useDeleteFornecedor,
@@ -27,6 +19,7 @@ import {
 } from '../../hooks/useCompras';
 import SimpleListModal from './modals/SimpleListModal';
 import ItemsManagerModal from './modals/ItemsManagerModal';
+import SetoresColaboradoresModal from './modals/SetoresColaboradoresModal';
 import EntradaModal from './modals/EntradaModal';
 import SaidaModal from './modals/SaidaModal';
 
@@ -40,8 +33,7 @@ const ComprasControleEstoque: React.FC = () => {
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [isItemsManagerOpen, setIsItemsManagerOpen] = useState(false);
   const [isUnidadesOpen, setIsUnidadesOpen] = useState(false);
-  const [isSetoresOpen, setIsSetoresOpen] = useState(false);
-  const [isColaboradoresOpen, setIsColaboradoresOpen] = useState(false);
+  const [isSetoresColaboradoresOpen, setIsSetoresColaboradoresOpen] = useState(false);
   const [isFornecedoresOpen, setIsFornecedoresOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
 
@@ -62,16 +54,6 @@ const ComprasControleEstoque: React.FC = () => {
   const createUnidade = useCreateUnidadeMedida();
   const updateUnidade = useUpdateUnidadeMedida();
   const deleteUnidade = useDeleteUnidadeMedida();
-
-  const setoresQuery = useSetoresCompras();
-  const createSetor = useCreateSetorCompras();
-  const updateSetor = useUpdateSetorCompras();
-  const deleteSetor = useDeleteSetorCompras();
-
-  const colaboradoresQuery = useColaboradoresCompras();
-  const createColaborador = useCreateColaboradorCompras();
-  const updateColaborador = useUpdateColaboradorCompras();
-  const deleteColaborador = useDeleteColaboradorCompras();
 
   const fornecedoresQuery = useFornecedores();
   const createFornecedor = useCreateFornecedor();
@@ -207,9 +189,8 @@ const ComprasControleEstoque: React.FC = () => {
             <div className={`reports-dropdown-menu reports-dropdown-menu--wide ${isActionsOpen ? 'show' : ''}`}>
               <span className="reports-dropdown-item" onClick={() => openAction(setIsItemsManagerOpen)}>Gerenciar Itens Cadastrados</span>
               <div className="reports-dropdown-divider" />
-              <span className="reports-dropdown-item" onClick={() => openAction(setIsUnidadesOpen)}>Cadastrar Unidades</span>
-              <span className="reports-dropdown-item" onClick={() => openAction(setIsSetoresOpen)}>Cadastrar Setores</span>
-              <span className="reports-dropdown-item" onClick={() => openAction(setIsColaboradoresOpen)}>Cadastrar Colaboradores</span>
+              <span className="reports-dropdown-item" onClick={() => openAction(setIsUnidadesOpen)}>Cadastrar Medidas</span>
+              <span className="reports-dropdown-item" onClick={() => openAction(setIsSetoresColaboradoresOpen)}>Setores e Colaboradores</span>
               <span className="reports-dropdown-item" onClick={() => openAction(setIsFornecedoresOpen)}>Cadastrar Fornecedores</span>
               <div className="reports-dropdown-divider" />
               <span className="reports-dropdown-item" onClick={handleExportLowStockPdf}>Relatório PDF: Estoque Baixo/Esgotado</span>
@@ -494,7 +475,7 @@ const ComprasControleEstoque: React.FC = () => {
 
       {isUnidadesOpen && (
         <SimpleListModal
-          title="Cadastrar Unidades de Medida"
+          title="Cadastrar Medidas"
           placeholder="Ex: Un, Resma, Caixa..."
           query={unidadesQuery}
           onAdd={(nome) => createUnidade.mutate(nome)}
@@ -508,36 +489,8 @@ const ComprasControleEstoque: React.FC = () => {
         />
       )}
 
-      {isSetoresOpen && (
-        <SimpleListModal
-          title="Cadastrar Setores"
-          placeholder="Ex: Logística, Frota, ADM..."
-          query={setoresQuery}
-          onAdd={(nome) => createSetor.mutate(nome)}
-          onEdit={(id, nome) => updateSetor.mutate({ id, nome })}
-          onRemove={(id) => deleteSetor.mutate(id)}
-          isAdding={createSetor.isPending}
-          isSaving={updateSetor.isPending}
-          isRemoving={deleteSetor.isPending}
-          errorMessage={createSetor.isError ? getComprasErrorMessage(createSetor.error, 'Não foi possível adicionar o setor.') : null}
-          onClose={() => setIsSetoresOpen(false)}
-        />
-      )}
-
-      {isColaboradoresOpen && (
-        <SimpleListModal
-          title="Cadastrar Colaboradores"
-          placeholder="Ex: Carlos Santos..."
-          query={colaboradoresQuery}
-          onAdd={(nome) => createColaborador.mutate(nome)}
-          onEdit={(id, nome) => updateColaborador.mutate({ id, nome })}
-          onRemove={(id) => deleteColaborador.mutate(id)}
-          isAdding={createColaborador.isPending}
-          isSaving={updateColaborador.isPending}
-          isRemoving={deleteColaborador.isPending}
-          errorMessage={createColaborador.isError ? getComprasErrorMessage(createColaborador.error, 'Não foi possível adicionar o colaborador.') : null}
-          onClose={() => setIsColaboradoresOpen(false)}
-        />
+      {isSetoresColaboradoresOpen && (
+        <SetoresColaboradoresModal onClose={() => setIsSetoresColaboradoresOpen(false)} />
       )}
 
       {isFornecedoresOpen && (

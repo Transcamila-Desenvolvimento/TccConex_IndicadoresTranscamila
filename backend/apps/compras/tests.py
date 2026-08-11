@@ -50,20 +50,31 @@ class CadastrosSimplesCRUDTests(TestCase):
         self.assertFalse(UnidadeMedida.objects.filter(pk=unidade_id).exists())
 
     def test_setor_colaborador_fornecedor_crud(self):
-        for resource, payload in [
-            ('setores', {'nome': 'Manutenção'}),
-            ('colaboradores', {'nome': 'João da Silva'}),
-            ('fornecedores', {'nome': 'Distribuidora ABC'}),
-        ]:
-            response = self.client.post(
-                f'/api/compras/{resource}/', data=payload, format='json',
-                **auth_headers(self.user, 'Compras'),
-            )
-            self.assertEqual(response.status_code, 201, response.data)
+        setor_resp = self.client.post(
+            '/api/compras/setores/', data={'nome': 'Manutenção'}, format='json',
+            **auth_headers(self.user, 'Compras'),
+        )
+        self.assertEqual(setor_resp.status_code, 201, setor_resp.data)
+        setor_id = setor_resp.data['id']
 
-            response = self.client.get(f'/api/compras/{resource}/', **auth_headers(self.user, 'Compras'))
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(len(response.data), 1)
+        response = self.client.post(
+            '/api/compras/colaboradores/',
+            data={'nome': 'João da Silva', 'setorId': setor_id},
+            format='json',
+            **auth_headers(self.user, 'Compras'),
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(str(response.data['setorId']), str(setor_id))
+
+        response = self.client.post(
+            '/api/compras/fornecedores/', data={'nome': 'Distribuidora ABC'}, format='json',
+            **auth_headers(self.user, 'Compras'),
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+        response = self.client.get(f'/api/compras/colaboradores/?setorId={setor_id}', **auth_headers(self.user, 'Compras'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
 
     def test_nome_duplicado_retorna_erro_400(self):
         Setor.objects.create(nome='Almoxarifado')
@@ -159,7 +170,7 @@ class RegistrarSaidaTests(TestCase):
             environments=['Compras'], filiais={},
         )
         self.setor = Setor.objects.create(nome='Administrativo')
-        self.colaborador = Colaborador.objects.create(nome='Maria Souza')
+        self.colaborador = Colaborador.objects.create(nome='Maria Souza', setor=self.setor)
         self.item = ItemEstoque.objects.create(nome='Caneta Azul', unidade='Un', qtd_atual=10, qtd_minima=3)
 
     def test_registrar_saida_decrementa_saldo_e_cria_registro(self):

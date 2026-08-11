@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.models import Count
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -49,11 +50,21 @@ class SetorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     serializer_class = SetorSerializer
     queryset = Setor.objects.all()
 
+    def get_queryset(self):
+        return Setor.objects.annotate(colaboradores_count=Count('colaboradores')).order_by('nome')
+
 
 class ColaboradorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     permission_module = 'Compras'
     serializer_class = ColaboradorSerializer
-    queryset = Colaborador.objects.all()
+    queryset = Colaborador.objects.select_related('setor').all()
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        setor_id = (self.request.query_params.get('setorId') or '').strip()
+        if setor_id:
+            qs = qs.filter(setor_id=setor_id)
+        return qs.order_by('nome')
 
 
 class FornecedorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
@@ -172,6 +183,11 @@ class SaidaEstoqueViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):
             return Response({'error': 'Setor não encontrado.'}, status=status.HTTP_400_BAD_REQUEST)
         if not colaborador:
             return Response({'error': 'Colaborador não encontrado.'}, status=status.HTTP_400_BAD_REQUEST)
+        if colaborador.setor_id != setor.id:
+            return Response(
+                {'error': 'Colaborador não pertence ao setor selecionado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             with transaction.atomic():

@@ -11170,3 +11170,141 @@ textarea.form-input {
 .protocolo-pdf-overlay-text span {
   color: #64748b;
 }
+
+.compras-setores-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  padding: 16px 0 0;
+}
+
+.compras-setores-panel {
+  border-right: 1px solid #e2e8f0;
+  padding: 0 16px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.compras-colaboradores-panel {
+  padding: 0 24px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.compras-setores-panel-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.compras-setores-add-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.compras-setores-add-form input {
+  flex: 1;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+}
+
+.compras-setores-add-form .reports-action-btn.primary {
+  min-width: 42px;
+  padding: 0 12px;
+}
+
+.compras-setores-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.compras-setores-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.compras-setores-list li.is-selected .compras-setores-list-btn {
+  background: #eff6ff;
+  border-color: #118CC4;
+  color: #0f172a;
+}
+
+.compras-setores-list-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  text-align: left;
+}
+
+.compras-setores-list-btn small {
+  background: #f1f5f9;
+  color: #64748b;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.compras-setores-list-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.compras-setores-edit-row {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.compras-setores-edit-row input {
+  flex: 1;
+  border: 1px solid #118CC4;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.compras-setores-empty {
+  color: #94a3b8;
+  font-size: 13px;
+  font-style: italic;
+  padding: 12px 0;
+}
+
+@media (max-width: 720px) {
+  .compras-setores-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .compras-setores-panel {
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 16px;
+  }
+}

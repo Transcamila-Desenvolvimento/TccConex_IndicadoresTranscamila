@@ -21,18 +21,21 @@ class UnidadeMedidaSerializer(serializers.ModelSerializer):
 
 class SetorSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='pk', read_only=True)
+    colaboradoresCount = serializers.IntegerField(source='colaboradores_count', read_only=True)
 
     class Meta:
         model = Setor
-        fields = ['id', 'nome']
+        fields = ['id', 'nome', 'colaboradoresCount']
 
 
 class ColaboradorSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='pk', read_only=True)
+    setorId = serializers.PrimaryKeyRelatedField(source='setor', queryset=Setor.objects.all())
+    setorNome = serializers.CharField(source='setor.nome', read_only=True)
 
     class Meta:
         model = Colaborador
-        fields = ['id', 'nome']
+        fields = ['id', 'nome', 'setorId', 'setorNome']
 
 
 class FornecedorSerializer(serializers.ModelSerializer):
