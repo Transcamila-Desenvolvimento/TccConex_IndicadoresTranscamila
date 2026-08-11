@@ -3,7 +3,7 @@
 ADMIN_ENVIRONMENT = 'Administração/Manutenção'
 LEGACY_ADMIN_ENVIRONMENT = 'Administração'
 
-ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ'})
+ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing'})
 
 DEPRECATED_ENVIRONMENTS = frozenset({'Comercial', 'Frota'})
 
@@ -46,6 +46,13 @@ FUNCOES_POR_AMBIENTE = {
         'criar-pesquisas',
         'editar-pesquisas',
         'excluir-pesquisas',
+        'importar-pesquisas',
+    }),
+    'Marketing': frozenset({
+        'criar-posts',
+        'editar-posts',
+        'excluir-posts',
+        'publicar-posts',
     }),
 }
 

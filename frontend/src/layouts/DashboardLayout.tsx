@@ -362,6 +362,29 @@ const DashboardLayout: React.FC = () => {
         action: () => navigate('/sgq/pesquisa-satisfacao'),
         show: selectedEnvironment === 'SGQ'
       },
+      {
+        title: "Home Marketing",
+        path: "Marketing / Home",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+          </svg>
+        ),
+        action: () => navigate('/marketing'),
+        show: selectedEnvironment === 'Marketing'
+      },
+      {
+        title: "Postagens Instagram",
+        path: "Marketing / Postagens Instagram",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="4" />
+            <circle cx="12" cy="12" r="4" />
+          </svg>
+        ),
+        action: () => navigate('/marketing/instagram-posts'),
+        show: selectedEnvironment === 'Marketing'
+      },
     ];
 
     return list.filter(f => f.show);
@@ -420,6 +443,8 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/rh')) return env;
     if (path.startsWith('/sgq/pesquisa-satisfacao')) return `${env} / Pesquisa de Satisfação`;
     if (path.startsWith('/sgq')) return env;
+    if (path.startsWith('/marketing/instagram-posts')) return `${env} / Postagens Instagram`;
+    if (path.startsWith('/marketing')) return env;
     if (path.startsWith('/admin/usuarios')) return `Administração / Controle Geral`;
     if (path.startsWith('/admin')) return `Administração / Home`;
     if (path.startsWith('/relatorios')) return `${env} / Inclusão de Relatórios`;
@@ -452,7 +477,7 @@ const DashboardLayout: React.FC = () => {
         
         <nav className="sidebar-nav">
           {/* General Home/Dashboard — oculto nos ambientes com home própria */}
-          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && selectedEnvironment !== 'Faturamento' && selectedEnvironment !== 'SGQ' && !isAdminEnvironment(selectedEnvironment) && (
+          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && selectedEnvironment !== 'Faturamento' && selectedEnvironment !== 'SGQ' && selectedEnvironment !== 'Marketing' && !isAdminEnvironment(selectedEnvironment) && (
             <Link 
               to="/" 
               className={`nav-btn ${isRouteActive('/') ? 'active' : ''}`} 
@@ -919,6 +944,32 @@ const DashboardLayout: React.FC = () => {
                   </div>
                 </Link>
 
+              </div>
+            )}
+
+            {selectedEnvironment === 'Marketing' && (
+              <div id="sidebar-marketing-group" style={{ width: '100%' }}>
+                <Link
+                  to="/marketing"
+                  className={`nav-btn ${location.pathname === '/marketing' || location.pathname === '/marketing/' ? 'active' : ''}`}
+                  data-tooltip="Home Marketing"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="house" />
+                    <span className="nav-text">Home Marketing</span>
+                  </div>
+                </Link>
+
+                <Link
+                  to="/marketing/instagram-posts"
+                  className={`nav-btn ${isRouteActive('/marketing/instagram-posts') ? 'active' : ''}`}
+                  data-tooltip="Postagens Instagram"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="instagram" />
+                    <span className="nav-text">Postagens Instagram</span>
+                  </div>
+                </Link>
               </div>
             )}
           </nav>

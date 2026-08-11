@@ -134,6 +134,30 @@ export function useDeleteSgqPesquisa() {
   });
 }
 
+export function useExportSgqPesquisaImportTemplate() {
+  return useMutation({
+    mutationFn: () => apiService.exportSgqPesquisaImportTemplate(),
+  });
+}
+
+export function usePreviewSgqPesquisasSpreadsheet() {
+  return useMutation({
+    mutationFn: (file: File) => apiService.previewSgqPesquisasSpreadsheet(file),
+  });
+}
+
+export function useImportSgqPesquisasSpreadsheet() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => apiService.importSgqPesquisasSpreadsheet(file),
+    onSuccess: (result) => {
+      if (result.success) {
+        invalidateSgqAndIndicador(queryClient);
+      }
+    },
+  });
+}
+
 /** Extrai os erros por linha/campo de uma falha do bulk_create (400 com { errors: {...} }). */
 export function getSgqBulkErrors(error: unknown): SgqPesquisaBulkErrors | null {
   if (axios.isAxiosError(error) && error.response?.status === 400) {

@@ -17,7 +17,7 @@ _CRITERIO_SOURCE_TO_FIELD = {
 
 class PesquisaSatisfacaoSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='pk', read_only=True)
-    notaFiscal = serializers.CharField(source='nota_fiscal', max_length=50)
+    notaFiscal = serializers.CharField(source='nota_fiscal', max_length=500)
     clienteRecusouAssinar = serializers.BooleanField(source='cliente_recusou_assinar', required=False, default=False)
     prazoEntrega = serializers.ChoiceField(
         source='prazo_entrega', choices=PesquisaSatisfacao._meta.get_field('prazo_entrega').choices,

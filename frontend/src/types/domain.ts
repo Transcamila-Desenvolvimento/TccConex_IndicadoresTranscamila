@@ -1148,6 +1148,75 @@ export const SGQ_CRITERIOS = [
 
 export type SgqCriterioKey = (typeof SGQ_CRITERIOS)[number]['key'];
 
+export interface SgqPesquisaImportIssue {
+  row: number;
+  message: string;
+}
+
+export interface SgqPesquisaImportPreviewRow {
+  row: number;
+  valid: boolean;
+  message?: string;
+  dataEnvio: string;
+  motorista: string;
+  cte: string;
+  dataEntrega: string;
+  notaFiscal: string;
+  cliente: string;
+  prazoEntrega: string;
+  condicoesMercadoria: string;
+  condicoesVeiculo: string;
+  apresentacaoMotorista: string;
+  atendimentoDispensado: string;
+  analise: string;
+}
+
+export interface SgqPesquisaImportPreviewStats {
+  processedRows: number;
+  validRows: number;
+  invalidRows: number;
+  skippedEmptyRows: number;
+  validRate: number;
+  readyToImport: boolean;
+  uniqueMotoristas: number;
+  rowsWithAnalise: number;
+  duplicateRowCount: number;
+  duplicateGroupCount: number;
+  byCliente: { cliente: string; count: number }[];
+  deliveryDateRange: { min: string; max: string };
+  inclusionDateRange: { min: string; max: string };
+  avaliacaoCounts: { label: string; count: number }[];
+  errorSummary: { message: string; count: number }[];
+  duplicateGroups: {
+    cte: string;
+    notaFiscal: string;
+    dataEntrega: string;
+    rows: number[];
+    count: number;
+  }[];
+}
+
+export interface SgqPesquisaImportPreview {
+  success: boolean;
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  skipped: number;
+  rows: SgqPesquisaImportPreviewRow[];
+  errors: SgqPesquisaImportIssue[];
+  stats: SgqPesquisaImportPreviewStats;
+  detail?: string;
+}
+
+export interface SgqPesquisaImportResult {
+  success: boolean;
+  dryRun: boolean;
+  created: number;
+  skipped: number;
+  errors: SgqPesquisaImportIssue[];
+  detail?: string;
+}
+
 export interface SgqPesquisa {
   id: string;
   /** Filial da sessão em que a pesquisa foi lançada — atribuída pelo backend, não pelo cliente. */
@@ -1281,4 +1350,150 @@ export interface SgqLoteDraft {
   rows: SgqLoteDraftRow[];
 }
 
+// --- Marketing (Instagram) TYPES ---
+
+export type InstagramPostStatus = 'draft' | 'scheduled' | 'published' | 'cancelled';
+export type InstagramMediaType = 'image' | 'video' | 'none';
+export type InstagramPostFormat = 'feed' | 'carousel' | 'reels' | 'story';
+export type InstagramFeedAspect = 'square' | 'portrait';
+
+export const INSTAGRAM_CAROUSEL_MIN_SLIDES = 2;
+export const INSTAGRAM_CAROUSEL_MAX_SLIDES = 10;
+
+export interface InstagramCarouselSlide {
+  id: string;
+  position: number;
+  mediaUrl: string;
+  mediaFileUrl: string;
+  mediaType: InstagramMediaType;
+}
+
+export interface InstagramPost {
+  id: string;
+  title: string;
+  caption: string;
+  hashtags: string;
+  mediaUrl: string;
+  mediaFileUrl: string;
+  mediaType: InstagramMediaType;
+  postFormat: InstagramPostFormat;
+  feedAspect: InstagramFeedAspect;
+  carouselSlides: InstagramCarouselSlide[];
+  slideCount: number;
+  status: InstagramPostStatus;
+  scheduledAt: string | null;
+  publishedAt: string | null;
+  instagramPostId: string;
+  publishError: string;
+  criadoPor: string;
+}
+
+export type InstagramPostPayload = {
+  title: string;
+  caption?: string;
+  hashtags?: string;
+  mediaUrl?: string;
+  postFormat?: InstagramPostFormat;
+  feedAspect?: InstagramFeedAspect;
+  status: InstagramPostStatus;
+  scheduledAt?: string | null;
+};
+
+export interface InstagramPostQueryParams extends ListQueryParams {
+  status?: string;
+  search?: string;
+  ordering?: 'scheduled_at' | '-scheduled_at' | 'title' | '-title';
+}
+
+export const INSTAGRAM_POST_STATUS_OPTIONS: { value: InstagramPostStatus | 'Todos'; label: string }[] = [
+  { value: 'Todos', label: 'Todos os status' },
+  { value: 'draft', label: 'Rascunho' },
+  { value: 'scheduled', label: 'Programada' },
+  { value: 'published', label: 'Publicada' },
+  { value: 'cancelled', label: 'Cancelada' },
+];
+
+export const INSTAGRAM_POST_STATUS_LABEL: Record<InstagramPostStatus, string> = {
+  draft: 'Rascunho',
+  scheduled: 'Programada',
+  published: 'Publicada',
+  cancelled: 'Cancelada',
+};
+
+export const INSTAGRAM_POST_FORMAT_LABEL: Record<InstagramPostFormat, string> = {
+  feed: 'Feed',
+  carousel: 'Carrossel',
+  reels: 'Reels',
+  story: 'Story',
+};
+
+export const INSTAGRAM_FEED_ASPECT_OPTIONS: {
+  value: InstagramFeedAspect;
+  label: string;
+  ratio: string;
+}[] = [
+  { value: 'square', label: 'Quadrado', ratio: '1:1' },
+  { value: 'portrait', label: 'Retrato', ratio: '4:5' },
+];
+
+export const INSTAGRAM_FEED_ASPECT_LABEL: Record<InstagramFeedAspect, string> = {
+  square: '1:1',
+  portrait: '4:5',
+};
+
+export const INSTAGRAM_POST_FORMAT_OPTIONS: {
+  value: InstagramPostFormat;
+  label: string;
+  description: string;
+  aspect: 'square' | 'vertical';
+  accept: string;
+  videoOnly?: boolean;
+  imagesOnly?: boolean;
+}[] = [
+  {
+    value: 'feed',
+    label: 'Feed',
+    description: 'Foto ou vídeo no perfil',
+    aspect: 'square',
+    accept: 'image/jpeg,image/png,image/webp,video/mp4',
+  },
+  {
+    value: 'carousel',
+    label: 'Carrossel',
+    description: '2–10 imagens no feed',
+    aspect: 'square',
+    accept: 'image/jpeg,image/png,image/webp',
+    imagesOnly: true,
+  },
+  {
+    value: 'reels',
+    label: 'Reels',
+    description: 'Vídeo vertical (9:16)',
+    aspect: 'vertical',
+    accept: 'video/mp4',
+    videoOnly: true,
+  },
+  {
+    value: 'story',
+    label: 'Story',
+    description: 'Imagem ou vídeo 24h',
+    aspect: 'vertical',
+    accept: 'image/jpeg,image/png,image/webp,video/mp4',
+  },
+];
+
+export interface InstagramConnection {
+  configured: boolean;
+  oauthAvailable: boolean;
+  instagramUsername: string;
+  pageName: string;
+  linkedAt: string | null;
+  linkedBy: string;
+  tokenExpiresAt: string | null;
+}
+
+export interface InstagramOAuthCallbackPayload {
+  code: string;
+  state: string;
+}
 

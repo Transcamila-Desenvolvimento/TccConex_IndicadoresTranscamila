@@ -21,6 +21,7 @@ urlpatterns = [
     path('api/compras/', include('apps.compras.urls')),
     path('api/faturamento/', include('apps.faturamento.urls')),
     path('api/sgq/', include('apps.sgq.urls')),
+    path('api/marketing/', include('apps.marketing.urls')),
     # Uploads (ex.: apps.rh.MovimentacaoLote.arquivo) — serve mesmo com DEBUG=False.
     re_path(r'^media/(?P<path>.*)$', static_serve, {'document_root': settings.MEDIA_ROOT}),
 ]

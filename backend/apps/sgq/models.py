@@ -33,9 +33,9 @@ class PesquisaSatisfacao(models.Model):
     # o valor já gravado; indicadores usam sempre data_entrega.
     data_inclusao = models.DateField(null=True, blank=True, verbose_name='Data de Inclusão')
     motorista = models.CharField(max_length=255, verbose_name='Motorista')
-    cte = models.CharField(max_length=50, verbose_name='CT-e')
+    cte = models.CharField(max_length=500, verbose_name='CT-e')
     data_entrega = models.DateField(verbose_name='Data Entrega')
-    nota_fiscal = models.CharField(max_length=50, verbose_name='Nota Fiscal')
+    nota_fiscal = models.CharField(max_length=500, verbose_name='Nota Fiscal')
     cliente = models.CharField(max_length=20, choices=CLIENTE_CHOICES, default='OUTROS', verbose_name='Cliente')
 
     # Quando o cliente se recusa a assinar a pesquisa, os critérios abaixo ficam

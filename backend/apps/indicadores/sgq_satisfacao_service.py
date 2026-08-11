@@ -114,11 +114,16 @@ def _anos_disponiveis(qs) -> list[int]:
 
 
 def _q_sem_avaliacao() -> Q:
-    """Em branco (todos os critérios vazios) ou marcada como recusou avaliar."""
+    """Sem avaliação = todos os critérios vazios.
+
+    Pesquisas parciais (alguns critérios preenchidos) entram no total, mesmo
+    que o flag cliente_recusou_assinar esteja marcado. O flag sozinho não
+    define o KPI — o que importa é se há nota lançada.
+    """
     vazios = Q()
     for field in _CRITERIO_FIELDS:
         vazios &= Q(**{field: ''})
-    return Q(cliente_recusou_assinar=True) | vazios
+    return vazios
 
 
 def _qs_sem_avaliacao(qs):
@@ -126,7 +131,7 @@ def _qs_sem_avaliacao(qs):
 
 
 def _qs_com_avaliacao(qs):
-    """Só pesquisas com notas — em branco/recusa ficam fora dos KPIs e gráficos."""
+    """Só pesquisas com pelo menos uma nota — em branco ficam fora dos KPIs."""
     return qs.exclude(_q_sem_avaliacao())
 
 

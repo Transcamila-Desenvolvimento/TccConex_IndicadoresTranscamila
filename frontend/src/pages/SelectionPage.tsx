@@ -31,6 +31,7 @@ const ENV_META: Record<string, { code: string; color: string; text: string }> = 
   RH: { code: ENVIRONMENT_CODES.RH, color: ENV_BADGE_COLOR, text: 'Recursos Humanos' },
   Faturamento: { code: ENVIRONMENT_CODES.Faturamento, color: ENV_BADGE_COLOR, text: 'Módulo de Faturamento' },
   SGQ: { code: ENVIRONMENT_CODES.SGQ, color: ENV_BADGE_COLOR, text: 'Gestão da Qualidade' },
+  Marketing: { code: ENVIRONMENT_CODES.Marketing, color: ENV_BADGE_COLOR, text: 'Marketing' },
 };
 
 const formatLastLogin = (value: string | null) => {

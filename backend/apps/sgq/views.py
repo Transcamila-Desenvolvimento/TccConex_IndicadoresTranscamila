@@ -1,8 +1,10 @@
 from collections import Counter
 
 from django.db import transaction
+from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.accounts.mixins import ModuleScopedViewMixin
@@ -16,6 +18,12 @@ from apps.financeiro.pagination import ReportPagination
 
 from .lote_draft import draft_payload, has_meaningful_draft, sanitize_draft_rows
 from .models import PesquisaSatisfacao, PesquisaSatisfacaoLoteDraft
+from .pesquisa_import_service import (
+    PesquisaImportError,
+    build_pesquisa_import_template,
+    import_pesquisas_from_spreadsheet,
+    preview_pesquisas_from_spreadsheet,
+)
 from .pesquisa_query import filter_pesquisas_queryset
 from .serializers import PesquisaSatisfacaoSerializer
 from .stats_service import build_pesquisa_stats
@@ -42,6 +50,9 @@ _EDITAR_PESQUISAS_DETAIL = (
 )
 _EXCLUIR_PESQUISAS_DETAIL = (
     'Acesso negado. Solicite ao administrador a função "Excluir pesquisas" do SGQ.'
+)
+_IMPORTAR_PESQUISAS_DETAIL = (
+    'Acesso negado. Solicite ao administrador a função "Importar pesquisas" do SGQ.'
 )
 
 
@@ -254,3 +265,96 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             f'Rascunho de inclusão em tabela salvo ({filial}, {len(rows)} linha(s)).',
         )
         return Response(draft_payload(draft, filial))
+
+    @action(detail=False, methods=['get'], url_path='exportar-modelo')
+    def exportar_modelo(self, request):
+        denied = _funcao_required_response(request, 'importar-pesquisas', _IMPORTAR_PESQUISAS_DETAIL)
+        if denied:
+            return denied
+        try:
+            content = build_pesquisa_import_template()
+        except Exception as exc:
+            return Response(
+                {'detail': f'Não foi possível gerar o modelo: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        response = HttpResponse(
+            content,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = 'attachment; filename="modelo_importacao_pesquisas_sgq.xlsx"'
+        response['Content-Length'] = str(len(content))
+        return response
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='import-preview',
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_preview(self, request):
+        denied = _funcao_required_response(request, 'importar-pesquisas', _IMPORTAR_PESQUISAS_DETAIL)
+        if denied:
+            return denied
+
+        arquivo = request.FILES.get('file') or request.FILES.get('arquivo')
+        if not arquivo:
+            return Response(
+                {'detail': 'Arquivo Excel (.xlsx) não fornecido.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            result = preview_pesquisas_from_spreadsheet(arquivo.read())
+        except PesquisaImportError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='import-spreadsheet',
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_spreadsheet(self, request):
+        denied = _funcao_required_response(request, 'importar-pesquisas', _IMPORTAR_PESQUISAS_DETAIL)
+        if denied:
+            return denied
+
+        arquivo = request.FILES.get('file') or request.FILES.get('arquivo')
+        if not arquivo:
+            return Response(
+                {'detail': 'Arquivo Excel (.xlsx) não fornecido.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        raw_dry = request.data.get('dryRun') or request.data.get('dry_run')
+        dry_run = str(raw_dry).strip().lower() in ('1', 'true', 'yes', 'on', 'sim') if raw_dry is not None else False
+
+        filial = self._session_filial()
+        if not filial:
+            return Response(
+                {'detail': 'Filial da sessão é obrigatória para importação.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            file_bytes = arquivo.read()
+            result = import_pesquisas_from_spreadsheet(
+                file_bytes,
+                filial=filial,
+                dry_run=dry_run,
+            )
+        except PesquisaImportError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        if result.get('success') and not dry_run:
+            record_audit(
+                request.user,
+                'sgq.pesquisa.importada',
+                f'{result["created"]} pesquisa(s) importadas ({filial}).',
+            )
+
+        status_code = status.HTTP_200_OK if result.get('success') else status.HTTP_400_BAD_REQUEST
+        return Response(result, status=status_code)

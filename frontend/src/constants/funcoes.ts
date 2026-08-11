@@ -47,6 +47,36 @@ export const FUNCAO_ITEMS = [
     label: 'Excluir pesquisas',
     description: 'Permite excluir pesquisas de satisfação.',
   },
+  {
+    module: 'SGQ',
+    key: 'importar-pesquisas',
+    label: 'Importar pesquisas',
+    description: 'Permite importar pesquisas de satisfação a partir de planilha Excel.',
+  },
+  {
+    module: 'Marketing',
+    key: 'criar-posts',
+    label: 'Criar postagens',
+    description: 'Permite registrar novas postagens do Instagram.',
+  },
+  {
+    module: 'Marketing',
+    key: 'editar-posts',
+    label: 'Editar postagens',
+    description: 'Permite alterar e programar postagens do Instagram.',
+  },
+  {
+    module: 'Marketing',
+    key: 'excluir-posts',
+    label: 'Excluir postagens',
+    description: 'Permite excluir postagens do Instagram.',
+  },
+  {
+    module: 'Marketing',
+    key: 'publicar-posts',
+    label: 'Publicar postagens',
+    description: 'Permite vincular a conta Instagram e publicar postagens na rede.',
+  },
 ] as const;
 
 export type FuncaoKey = (typeof FUNCAO_ITEMS)[number]['key'];

@@ -34,8 +34,8 @@ def sanitize_draft_row(raw) -> dict | None:
         'dataEntrega': _as_str(raw.get('dataEntrega'), 32),
         'cliente': cliente,
         'motorista': _as_str(raw.get('motorista'), 255),
-        'cte': _as_str(raw.get('cte'), 50),
-        'notaFiscal': _as_str(raw.get('notaFiscal'), 50),
+        'cte': _as_str(raw.get('cte'), 500),
+        'notaFiscal': _as_str(raw.get('notaFiscal'), 500),
         'clienteRecusouAssinar': bool(raw.get('clienteRecusouAssinar')),
         'analise': _as_str(raw.get('analise'), 5000),
     }

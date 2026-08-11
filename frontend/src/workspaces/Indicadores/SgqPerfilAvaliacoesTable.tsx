@@ -22,18 +22,21 @@ function pctOf(count: number, total: number): number {
   return (count / total) * 100;
 }
 
+function respondidasCriterio(criterio: SgqCriterioStats): number {
+  return AVALIACOES.reduce((sum, aval) => sum + criterio[aval], 0);
+}
+
 interface Props {
-  totalPesquisas: number;
   criterios: SgqCriterioStats[];
 }
 
 /**
- * Mesmos cálculos do relatório clássico de satisfação, com a estética das
- * tabelas dos indicadores (erp-table / reports-table).
- * - % por critério = quantidade / total de pesquisas
- * - Perfil geral = soma; % = soma / (total pesquisas × nº critérios)
+ * Alinhado ao relatório clássico de satisfação (Excel):
+ * - Total de avaliações = média das respondidas por critério (arredondada)
+ * - % por critério = quantidade / esse total
+ * - Perfil geral = soma; % = soma / (total × nº critérios)
  */
-const SgqPerfilAvaliacoesTable: React.FC<Props> = ({ totalPesquisas, criterios }) => {
+const SgqPerfilAvaliacoesTable: React.FC<Props> = ({ criterios }) => {
   const perfil = useMemo(() => {
     const totais: Record<SgqAvaliacao, number> = {
       otimo: 0,
@@ -41,20 +44,28 @@ const SgqPerfilAvaliacoesTable: React.FC<Props> = ({ totalPesquisas, criterios }
       regular: 0,
       ruim: 0,
     };
+    let somaRespondidas = 0;
     for (const c of criterios) {
       totais.otimo += c.otimo;
       totais.bom += c.bom;
       totais.regular += c.regular;
       totais.ruim += c.ruim;
+      somaRespondidas += respondidasCriterio(c);
     }
-    return { totais, denomPerfil: totalPesquisas * criterios.length };
-  }, [criterios, totalPesquisas]);
+    const totalAvaliacoes =
+      criterios.length > 0 ? Math.round(somaRespondidas / criterios.length) : 0;
+    return {
+      totais,
+      totalAvaliacoes,
+      denomPerfil: totalAvaliacoes * criterios.length,
+    };
+  }, [criterios]);
 
   return (
     <div className="sgq-perfil-block">
       <div className="sgq-perfil-meta">
         <span className="sgq-perfil-meta-label">Total de avaliações</span>
-        <strong className="sgq-perfil-meta-value">{formatInt(totalPesquisas)}</strong>
+        <strong className="sgq-perfil-meta-value">{formatInt(perfil.totalAvaliacoes)}</strong>
       </div>
 
       <div className="table-container">
@@ -87,7 +98,7 @@ const SgqPerfilAvaliacoesTable: React.FC<Props> = ({ totalPesquisas, criterios }
                   return (
                     <React.Fragment key={`${criterio.campo}-${aval}`}>
                       <td className="num sgq-perfil-group-start">{formatInt(qtd)}</td>
-                      <td className="num sgq-perfil-pct">{formatPct(pctOf(qtd, totalPesquisas))}</td>
+                      <td className="num sgq-perfil-pct">{formatPct(pctOf(qtd, perfil.totalAvaliacoes))}</td>
                     </React.Fragment>
                   );
                 })}

@@ -525,3 +525,124 @@ class PesquisaSatisfacaoLoteDraftTests(APITestCase):
             **_headers(IBIPORA),
         )
         self.assertEqual(response.status_code, 403)
+
+
+class PesquisaImportacaoTests(APITestCase):
+    def setUp(self):
+        from .pesquisa_import_service import build_pesquisa_import_template
+
+        self.template_bytes = build_pesquisa_import_template()
+        self.importador = User.objects.create_user(
+            username='sgq.importador',
+            password='x',
+            name='Importador SGQ',
+            role_id='2',
+            status='ativo',
+            environments=['SGQ'],
+            filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['importar-pesquisas']},
+        )
+        self.sem_importacao = User.objects.create_user(
+            username='sgq.sem.import',
+            password='x',
+            name='Sem Import',
+            role_id='2',
+            status='ativo',
+            environments=['SGQ'],
+            filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['criar-pesquisas']},
+        )
+
+    def _upload(self, user, data: bytes, dry_run=False):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_authenticate(user)
+        file = SimpleUploadedFile(
+            'pesquisas.xlsx',
+            data,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        payload = {'file': file}
+        if dry_run:
+            payload['dryRun'] = 'true'
+        return self.client.post(
+            '/api/sgq/pesquisas-satisfacao/import-spreadsheet/',
+            payload,
+            format='multipart',
+            **_headers(IBIPORA),
+        )
+
+    def test_operador_sem_funcao_importar_recebe_403(self):
+        response = self._upload(self.sem_importacao, self.template_bytes)
+        self.assertEqual(response.status_code, 403)
+
+    def test_importador_grava_com_criado_por_importacao(self):
+        before = PesquisaSatisfacao.objects.filter(filial=IBIPORA).count()
+        response = self._upload(self.importador, self.template_bytes)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['created'], 1)
+        self.assertEqual(PesquisaSatisfacao.objects.filter(filial=IBIPORA).count(), before + 1)
+        created = PesquisaSatisfacao.objects.order_by('-id').first()
+        self.assertEqual(created.criado_por, 'Importação')
+
+    def test_exportar_modelo_exige_funcao_importar(self):
+        self.client.force_authenticate(self.sem_importacao)
+        denied = self.client.get('/api/sgq/pesquisas-satisfacao/exportar-modelo/', **_headers(IBIPORA))
+        self.assertEqual(denied.status_code, 403)
+
+        self.client.force_authenticate(self.importador)
+        ok = self.client.get('/api/sgq/pesquisas-satisfacao/exportar-modelo/', **_headers(IBIPORA))
+        self.assertEqual(ok.status_code, 200)
+        self.assertIn(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ok['Content-Type'],
+        )
+
+    def test_importa_planilha_com_linhas_vazias_antes_do_cabecalho(self):
+        import openpyxl
+        from io import BytesIO
+
+        from .pesquisa_import_service import _TEMPLATE_HEADERS, _TEMPLATE_SAMPLE_ROW
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append([])
+        ws.append(['Relatório de pesquisas'])
+        ws.append([])
+        ws.append(_TEMPLATE_HEADERS)
+        ws.append(_TEMPLATE_SAMPLE_ROW)
+        buffer = BytesIO()
+        wb.save(buffer)
+
+        response = self._upload(self.importador, buffer.getvalue())
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['created'], 1)
+
+    def test_preview_retorna_linhas_antes_de_importar(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_authenticate(self.importador)
+        file = SimpleUploadedFile(
+            'pesquisas.xlsx',
+            self.template_bytes,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response = self.client.post(
+            '/api/sgq/pesquisas-satisfacao/import-preview/',
+            {'file': file},
+            format='multipart',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['validRows'], 1)
+        self.assertEqual(len(response.data['rows']), 1)
+        self.assertEqual(response.data['rows'][0]['motorista'], 'EVALDO JOSE')
+        stats = response.data['stats']
+        self.assertEqual(stats['validRows'], 1)
+        self.assertEqual(stats['processedRows'], 1)
+        self.assertEqual(stats['validRate'], 100.0)
+        self.assertTrue(stats['readyToImport'])
+        self.assertEqual(stats['uniqueMotoristas'], 1)
+        self.assertEqual(len(stats['byCliente']), 1)

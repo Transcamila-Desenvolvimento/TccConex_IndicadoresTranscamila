@@ -15,6 +15,7 @@ import {
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import SGQPesquisaLoteModal from './SGQPesquisaLoteModal';
+import SGQPesquisaImportModal from './SGQPesquisaImportModal';
 import { clearLegacySgqLoteDrafts } from './sgqLoteDraft';
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -149,6 +150,7 @@ const EMPTY_FORM: FormState = {
 const SGQPesquisaSatisfacao: React.FC = () => {
   const { user, selectedFilial } = useAuth();
   const canCreatePesquisas = userHasFuncao(user, 'SGQ', 'criar-pesquisas');
+  const canImportPesquisas = userHasFuncao(user, 'SGQ', 'importar-pesquisas');
   const canEditPesquisas = userHasFuncao(user, 'SGQ', 'editar-pesquisas');
   const canDeletePesquisas = userHasFuncao(user, 'SGQ', 'excluir-pesquisas');
   const canMutatePesquisas = canEditPesquisas || canDeletePesquisas;
@@ -207,6 +209,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   // Dropdown "Incluir" (Formulário / Inclusão em Tabela)
   const [isIncluirOpen, setIsIncluirOpen] = useState(false);
   const [isLoteModalOpen, setIsLoteModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const loteDraftQuery = useSgqLoteDraft(selectedFilial);
   const hasLoteDraft = Boolean(loteDraftQuery.data?.hasDraft);
 
@@ -416,7 +419,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
             </div>
           )}
 
-          {canCreatePesquisas && (hasLoteDraft ? (
+          {canCreatePesquisas && hasLoteDraft ? (
             <button
               type="button"
               className="reports-action-btn primary"
@@ -431,7 +434,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
               <i className="bi bi-journal-text" aria-hidden="true" />
               <span>Rascunho</span>
             </button>
-          ) : (
+          ) : (canCreatePesquisas || canImportPesquisas) && (
             <div className="reports-dropdown-wrapper">
               <button
                 type="button"
@@ -442,33 +445,48 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"></path>
                 </svg>
-                <span>Incluir</span>
+                <span>{canCreatePesquisas ? 'Incluir' : 'Importar'}</span>
                 <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               <div className={`reports-dropdown-menu ${isIncluirOpen ? 'show' : ''}`}>
-                <span
-                  className="reports-dropdown-item"
-                  onClick={() => { setIsIncluirOpen(false); openCreateModal(); }}
-                >
-                  <span className="reports-dropdown-item-left">
-                    <i className="bi bi-file-earmark-text" />
-                    Formulário
+                {canCreatePesquisas && (
+                  <>
+                    <span
+                      className="reports-dropdown-item"
+                      onClick={() => { setIsIncluirOpen(false); openCreateModal(); }}
+                    >
+                      <span className="reports-dropdown-item-left">
+                        <i className="bi bi-file-earmark-text" />
+                        Formulário
+                      </span>
+                    </span>
+                    <span
+                      className="reports-dropdown-item"
+                      onClick={() => { setIsIncluirOpen(false); setIsLoteModalOpen(true); }}
+                    >
+                      <span className="reports-dropdown-item-left">
+                        <i className="bi bi-table" />
+                        Inclusão em Tabela
+                      </span>
+                    </span>
+                  </>
+                )}
+                {canImportPesquisas && (
+                  <span
+                    className="reports-dropdown-item"
+                    onClick={() => { setIsIncluirOpen(false); setIsImportModalOpen(true); }}
+                  >
+                    <span className="reports-dropdown-item-left">
+                      <i className="bi bi-file-earmark-arrow-up" />
+                      Importar planilha
+                    </span>
                   </span>
-                </span>
-                <span
-                  className="reports-dropdown-item"
-                  onClick={() => { setIsIncluirOpen(false); setIsLoteModalOpen(true); }}
-                >
-                  <span className="reports-dropdown-item-left">
-                    <i className="bi bi-table" />
-                    Inclusão em Tabela
-                  </span>
-                </span>
+                )}
               </div>
             </div>
-          ))}
+          )}
         </div>
       </header>
 
@@ -878,6 +896,10 @@ const SGQPesquisaSatisfacao: React.FC = () => {
             void loteDraftQuery.refetch();
           }}
         />
+      )}
+
+      {isImportModalOpen && canImportPesquisas && (
+        <SGQPesquisaImportModal onClose={() => setIsImportModalOpen(false)} />
       )}
     </div>
   );

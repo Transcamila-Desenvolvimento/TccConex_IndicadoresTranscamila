@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'apps.compras',
     'apps.faturamento',
     'apps.sgq',
+    'apps.marketing',
 ]
 
 MIDDLEWARE = [
@@ -239,6 +240,7 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'digitalmidia@transcamila.com.br')
 FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:5173')
+PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL', 'http://localhost:8001')
 
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '')
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '')
@@ -247,4 +249,14 @@ GOOGLE_OAUTH_REDIRECT_URI = os.environ.get(
     f'{FRONTEND_BASE_URL.rstrip("/")}/auth/google/callback',
 )
 GOOGLE_OAUTH_HD = os.environ.get('GOOGLE_OAUTH_HD', 'transcamila.com.br')
+
+# Meta / Instagram Graph API (Marketing)
+META_APP_ID = os.environ.get('META_APP_ID', '')
+META_APP_SECRET = os.environ.get('META_APP_SECRET', '')
+META_OAUTH_REDIRECT_URI = os.environ.get(
+    'META_OAUTH_REDIRECT_URI',
+    f'{FRONTEND_BASE_URL.rstrip("/")}/marketing/instagram/callback',
+)
+INSTAGRAM_ACCESS_TOKEN = os.environ.get('INSTAGRAM_ACCESS_TOKEN', '')
+INSTAGRAM_ACCOUNT_ID = os.environ.get('INSTAGRAM_ACCOUNT_ID', '')
 

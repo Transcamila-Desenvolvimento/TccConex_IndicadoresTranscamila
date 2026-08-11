@@ -24,6 +24,7 @@ const IndicadoresWorkspace = lazyWithMinDuration(() => import('../workspaces/Ind
 const ComprasWorkspace = lazyWithMinDuration(() => import('../workspaces/Compras/ComprasWorkspace'));
 const RHWorkspace = lazyWithMinDuration(() => import('../workspaces/RH/RHWorkspace'));
 const FaturamentoWorkspace = lazyWithMinDuration(() => import('../workspaces/Faturamento/FaturamentoWorkspace'));
+const MarketingWorkspace = lazyWithMinDuration(() => import('../workspaces/Marketing/MarketingWorkspace'));
 const SGQWorkspace = lazyWithMinDuration(() => import('../workspaces/SGQ/SGQWorkspace'));
 // Autenticado, sem bloquear quem precisa trocar a senha (usado em /change-password).
 const ProtectedRouteAllowPasswordChange: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -92,6 +93,9 @@ const DashboardIndexRedirect: React.FC = () => {
   }
   if (selectedEnvironment === 'SGQ') {
     return <Navigate to="/sgq" replace />;
+  }
+  if (selectedEnvironment === 'Marketing') {
+    return <Navigate to="/marketing" replace />;
   }
   
   return (
@@ -190,6 +194,12 @@ const AppRoutes: React.FC = () => {
           <Route path="sgq/*" element={
             <Suspense fallback={<PageLoader />}>
               <SGQWorkspace />
+            </Suspense>
+          } />
+
+          <Route path="marketing/*" element={
+            <Suspense fallback={<PageLoader />}>
+              <MarketingWorkspace />
             </Suspense>
           } />
 

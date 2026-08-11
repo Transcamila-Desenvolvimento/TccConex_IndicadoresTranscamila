@@ -157,7 +157,7 @@ application setting** (uma por linha). Via CLI, use
 | `SCM_DO_BUILD_DURING_DEPLOYMENT` | `false` | o build (frontend + deps) já acontece no GitHub Actions |
 | `WEBSITES_PORT` | `8000` | porta que o gunicorn expõe (ver `startup.sh`) |
 | `WEBSITES_CONTAINER_START_TIME_LIMIT` | `900` | boot com cache ~30s; 900s cobre pip se `requirements.txt` mudar |
-| `RUN_STARTUP_MIGRATE` | *(não definir)* | migrate só manualmente ou `RUN_STARTUP_MIGRATE=True` pontual |
+| `RUN_STARTUP_MIGRATE` | `True` | `startup.sh` aplica migrations no boot; use `False` só se migrar manualmente |
 
 Depois de salvar, em **Configuration → General settings**:
 

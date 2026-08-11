@@ -40,8 +40,9 @@ Write-Host "[3/5] App settings de boot/deploy" -ForegroundColor Yellow
 az webapp config appsettings set --resource-group $ResourceGroup --name $AppName --settings `
     SCM_DO_BUILD_DURING_DEPLOYMENT=false `
     WEBSITES_PORT=8000 `
-    WEBSITES_CONTAINER_START_TIME_LIMIT=900 | Out-Null
-Write-Host "  OK (Oryx build off, porta 8000, timeout boot 900s)." -ForegroundColor Green
+    WEBSITES_CONTAINER_START_TIME_LIMIT=900 `
+    RUN_STARTUP_MIGRATE=True | Out-Null
+Write-Host "  OK (Oryx build off, porta 8000, timeout boot 900s, migrate no boot)." -ForegroundColor Green
 
 Write-Host ""
 Write-Host "[4/5] Health check -> /health/" -ForegroundColor Yellow

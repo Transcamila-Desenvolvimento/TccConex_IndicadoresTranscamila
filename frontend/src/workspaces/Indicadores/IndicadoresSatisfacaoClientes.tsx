@@ -290,10 +290,7 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
             <div className="erp-card reports-table-card cashflow-table-card" style={{ marginTop: '16px', flex: 'none', minHeight: 'auto' }}>
               <h2 className="cashflow-section-title cashflow-section-title--table">Perfil das Avaliações</h2>
               <div style={{ padding: '0 16px 16px' }}>
-                <SgqPerfilAvaliacoesTable
-                  totalPesquisas={data.totalPesquisas}
-                  criterios={data.criterios}
-                />
+                <SgqPerfilAvaliacoesTable criterios={data.criterios} />
               </div>
             </div>
           </>

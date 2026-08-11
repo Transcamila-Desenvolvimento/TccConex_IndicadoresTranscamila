@@ -27,7 +27,9 @@ import type {
   ClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft,
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
   ProtocoloImportParams, ProtocoloImportResult,
-  SgqPesquisa, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
+  SgqPesquisa, SgqPesquisaImportPreview, SgqPesquisaImportResult, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
+  InstagramPost, InstagramPostPayload, InstagramPostQueryParams,
+  InstagramConnection, InstagramOAuthCallbackPayload,
   SgqLoteDraft, SgqLoteDraftRow,
 } from '../types/domain';
 import { filterActiveEnvironments, ACTIVE_ENVIRONMENTS } from '../constants/environments';
@@ -1665,6 +1667,110 @@ export const apiService = {
 
   async deleteSgqLoteDraft(): Promise<void> {
     await api.delete('/api/sgq/pesquisas-satisfacao/lote-draft/');
+  },
+
+  async exportSgqPesquisaImportTemplate(): Promise<Blob> {
+    const { data, headers } = await api.get('/api/sgq/pesquisas-satisfacao/exportar-modelo/', {
+      responseType: 'blob',
+    });
+    if (data instanceof Blob && data.type.includes('json')) {
+      throw new Error(await readBlobErrorMessage(data, 'Não foi possível baixar o modelo.'));
+    }
+    return assertSpreadsheetBlob(data, headers);
+  },
+
+  async previewSgqPesquisasSpreadsheet(file: File): Promise<SgqPesquisaImportPreview> {
+    const form = new FormData();
+    form.append('file', file);
+    const { data } = await api.post('/api/sgq/pesquisas-satisfacao/import-preview/', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data as SgqPesquisaImportPreview;
+  },
+
+  async importSgqPesquisasSpreadsheet(file: File): Promise<SgqPesquisaImportResult> {
+    const form = new FormData();
+    form.append('file', file);
+    const { data } = await api.post('/api/sgq/pesquisas-satisfacao/import-spreadsheet/', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data as SgqPesquisaImportResult;
+  },
+
+  // ─── Marketing — Instagram Posts ───────────────────────────────────────────
+
+  async getInstagramPosts(params: InstagramPostQueryParams = {}): Promise<PaginatedResponse<InstagramPost>> {
+    const { data } = await api.get('/api/marketing/instagram-posts/', { params });
+    return paginatedFromResponse(data, (raw) => raw as InstagramPost);
+  },
+
+  async createInstagramPost(payload: InstagramPostPayload): Promise<InstagramPost> {
+    const { data } = await api.post('/api/marketing/instagram-posts/', payload);
+    return data as InstagramPost;
+  },
+
+  async updateInstagramPost(id: string, payload: Partial<InstagramPostPayload>): Promise<InstagramPost> {
+    const { data } = await api.patch(`/api/marketing/instagram-posts/${id}/`, payload);
+    return data as InstagramPost;
+  },
+
+  async deleteInstagramPost(id: string): Promise<void> {
+    await api.delete(`/api/marketing/instagram-posts/${id}/`);
+  },
+
+  async getInstagramConnection(): Promise<InstagramConnection> {
+    const { data } = await api.get('/api/marketing/instagram/connection/');
+    return data as InstagramConnection;
+  },
+
+  async getInstagramConnectionLink(): Promise<{ authUrl: string }> {
+    const { data } = await api.get('/api/marketing/instagram/connection/link/');
+    return data as { authUrl: string };
+  },
+
+  async completeInstagramConnection(payload: InstagramOAuthCallbackPayload): Promise<InstagramConnection> {
+    const { data } = await api.post('/api/marketing/instagram/connection/callback/', payload);
+    return data as InstagramConnection;
+  },
+
+  async disconnectInstagramConnection(): Promise<InstagramConnection> {
+    const { data } = await api.post('/api/marketing/instagram/connection/disconnect/');
+    return data as InstagramConnection;
+  },
+
+  async uploadInstagramPostMedia(id: string, file: File): Promise<InstagramPost> {
+    const form = new FormData();
+    form.append('mediaFile', file);
+    const { data } = await api.post(`/api/marketing/instagram-posts/${id}/upload-media/`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data as InstagramPost;
+  },
+
+  async uploadInstagramCarouselSlide(id: string, file: File): Promise<InstagramPost> {
+    const form = new FormData();
+    form.append('mediaFile', file);
+    const { data } = await api.post(`/api/marketing/instagram-posts/${id}/carousel-slides/`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data as InstagramPost;
+  },
+
+  async deleteInstagramCarouselSlide(postId: string, slideId: string): Promise<InstagramPost> {
+    const { data } = await api.delete(`/api/marketing/instagram-posts/${postId}/carousel-slides/${slideId}/`);
+    return data as InstagramPost;
+  },
+
+  async reorderInstagramCarouselSlides(postId: string, slideIds: string[]): Promise<InstagramPost> {
+    const { data } = await api.post(`/api/marketing/instagram-posts/${postId}/carousel-slides/reorder/`, {
+      slideIds,
+    });
+    return data as InstagramPost;
+  },
+
+  async publishInstagramPost(id: string): Promise<InstagramPost> {
+    const { data } = await api.post(`/api/marketing/instagram-posts/${id}/publish/`);
+    return data as InstagramPost;
   },
 
 };
