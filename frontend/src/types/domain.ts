@@ -1361,6 +1361,37 @@ export interface SgqLoteDraft {
   rows: SgqLoteDraftRow[];
 }
 
+// --- Marketing — Banco de mídias (Google Drive) ---
+
+export type DriveBankMediaKind = 'image' | 'video';
+export type DriveBankFilterKind = 'all' | 'image' | 'video';
+
+export interface DriveBankConfig {
+  configured: boolean;
+  authMode: 'service_account' | 'user';
+  googleLinked: boolean;
+  hasDriveScope: boolean;
+  needsGoogleLink: boolean;
+}
+
+export interface DriveBankFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  kind: DriveBankMediaKind;
+  modifiedTime: string | null;
+  size: number | null;
+  webViewLink: string | null;
+  thumbnailUrl: string | null;
+  hasThumbnail: boolean;
+}
+
+export interface DriveBankListResponse {
+  files: DriveBankFile[];
+  nextPageToken: string | null;
+  authMode: 'service_account' | 'user';
+}
+
 // --- Marketing — Campanhas ---
 
 export type CampanhaStatus = 'planejamento' | 'producao' | 'veiculacao' | 'concluida' | 'cancelada';

@@ -29,6 +29,7 @@ import type {
   ProtocoloImportParams, ProtocoloImportResult,
   SgqPesquisa, SgqPesquisaImportPreview, SgqPesquisaImportResult, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
   CampanhaMarketing, CampanhaPayload, CampanhaQuadro, CampanhaComentario, CampanhaMembro,
+  DriveBankConfig, DriveBankListResponse, DriveBankFilterKind,
   UserDirectoryEntry,
   SgqLoteDraft, SgqLoteDraftRow,
 } from '../types/domain';
@@ -1779,6 +1780,29 @@ export const apiService = {
   async participarCampanha(campanhaId: string): Promise<CampanhaMembro> {
     const { data } = await api.post(`/api/marketing/campanhas/${campanhaId}/participar/`);
     return data as CampanhaMembro;
+  },
+
+  async getMarketingDriveBankConfig(): Promise<DriveBankConfig> {
+    const { data } = await api.get('/api/marketing/drive-bank/config/');
+    return data as DriveBankConfig;
+  },
+
+  async getMarketingDriveBank(params: {
+    kind?: DriveBankFilterKind;
+    search?: string;
+    pageToken?: string;
+    pageSize?: number;
+  } = {}): Promise<DriveBankListResponse> {
+    const { data } = await api.get('/api/marketing/drive-bank/files/', { params });
+    return data as DriveBankListResponse;
+  },
+
+  async getMarketingDriveBankThumbnailBlob(fileId: string): Promise<Blob> {
+    const { data } = await api.get('/api/marketing/drive-bank/thumbnail/', {
+      params: { fileId },
+      responseType: 'blob',
+    });
+    return data as Blob;
   },
 
 };

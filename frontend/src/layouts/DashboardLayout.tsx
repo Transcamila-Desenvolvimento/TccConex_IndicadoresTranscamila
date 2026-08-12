@@ -376,6 +376,19 @@ const DashboardLayout: React.FC = () => {
         action: () => navigate('/marketing/campanhas'),
         show: selectedEnvironment === 'Marketing'
       },
+      {
+        title: "Banco de Mídias",
+        path: "Marketing / Banco de Mídias",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="M21 15l-5-5L5 21" />
+          </svg>
+        ),
+        action: () => navigate('/marketing/banco-midias'),
+        show: selectedEnvironment === 'Marketing'
+      },
     ];
 
     return list.filter(f => f.show);
@@ -435,6 +448,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/sgq/pesquisa-satisfacao')) return `${env} / Pesquisa de Satisfação`;
     if (path.startsWith('/sgq')) return env;
     if (path.startsWith('/marketing/campanhas')) return `${env} / Calendario Transcamila`;
+    if (path.startsWith('/marketing/banco-midias')) return `${env} / Banco de Mídias`;
     if (path.startsWith('/marketing')) return env;
     if (path.startsWith('/admin/usuarios')) return `Administração / Controle Geral`;
     if (path.startsWith('/admin')) return `Administração / Home`;
@@ -959,6 +973,17 @@ const DashboardLayout: React.FC = () => {
                   <div className="nav-btn-left">
                     <NavIcon name="calendar3" />
                     <span className="nav-text">Calendario Transcamila</span>
+                  </div>
+                </Link>
+
+                <Link
+                  to="/marketing/banco-midias"
+                  className={`nav-btn ${isRouteActive('/marketing/banco-midias') ? 'active' : ''}`}
+                  data-tooltip="Banco de Mídias"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="images" />
+                    <span className="nav-text">Banco de Mídias</span>
                   </div>
                 </Link>
               </div>

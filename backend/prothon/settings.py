@@ -278,3 +278,7 @@ GOOGLE_OAUTH_REDIRECT_URI = os.environ.get(
 )
 GOOGLE_OAUTH_HD = os.environ.get('GOOGLE_OAUTH_HD', 'transcamila.com.br')
 
+# Marketing — banco de mídias (Google Drive)
+MARKETING_DRIVE_FOLDER_ID = os.environ.get('MARKETING_DRIVE_FOLDER_ID', '')
+GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = os.environ.get('GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON', '')
+

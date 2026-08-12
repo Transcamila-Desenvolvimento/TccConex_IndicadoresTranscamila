@@ -12,6 +12,7 @@ GOOGLE_LINK_SCOPES = [
     'profile',
     'https://www.googleapis.com/auth/contacts.readonly',
     'https://www.googleapis.com/auth/contacts.other.readonly',
+    'https://www.googleapis.com/auth/drive.readonly',
 ]
 
 
