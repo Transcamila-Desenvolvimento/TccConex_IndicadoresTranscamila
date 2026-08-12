@@ -463,7 +463,7 @@ export interface CashflowDayDetailResponse {
 }
 
 /** Grupo de situação no indicador de RH: vazio = todos. */
-export type RHIndicadorSituacaoGrupo = '' | 'AFASTADOS' | 'SITUACAO_NORMAL';
+export type RHIndicadorSituacaoGrupo = '' | 'AFASTADOS' | 'FERIAS' | 'SITUACAO_NORMAL';
 
 export interface RHIndicadorQueryParams {
   start?: string;
@@ -484,6 +484,7 @@ export interface RHIndicadorCategoriaBucket {
   percentual: number;
   ativos: RHIndicadorStatusBucket;
   afastados: RHIndicadorStatusBucket;
+  ferias: RHIndicadorStatusBucket;
 }
 
 export interface RHIndicadorPorCategoria {
@@ -514,6 +515,7 @@ export interface RHIndicadorSummary {
   totalColaboradores: number;
   payrollTotal: number;
   salarioMedio: number;
+  feriasAtual: number;
   admitidosPeriodo: number;
   desligadosPeriodo: number;
   turnoverPercentual: number;

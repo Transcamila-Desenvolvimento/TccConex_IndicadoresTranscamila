@@ -71,6 +71,12 @@ export function useIndicadorRHMovimentacao(params: RHIndicadorQueryParams) {
   });
 }
 
+export function useExportarIndicadorRHMovimentacao() {
+  return useMutation({
+    mutationFn: (referencia: string) => apiService.exportarIndicadorRHMovimentacao(referencia),
+  });
+}
+
 export function useIndicadorSgqSatisfacao(params: SgqSatisfacaoIndicadorQueryParams) {
   return useQuery({
     queryKey: [...INDICADORES_SGQ_SATISFACAO_KEY, params],

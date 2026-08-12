@@ -8815,22 +8815,32 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   }
 }
 
-/* Indicadores com 5 KPIs (RH / Satisfação) — uma fileira equilibrada */
-.sgq-ind-kpi-grid,
-.rh-ind-kpi-grid {
+/* Indicadores com 6 KPIs (RH) ou 5 (Satisfação) */
+.sgq-ind-kpi-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.rh-ind-kpi-grid {
+  grid-template-columns: repeat(6, minmax(136px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.rh-ind-kpi-grid .cashflow-kpi-card {
+  min-width: 0;
+}
+
 @media (max-width: 1200px) {
-  .sgq-ind-kpi-grid,
-  .rh-ind-kpi-grid {
+  .sgq-ind-kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 720px) {
-  .sgq-ind-kpi-grid,
-  .rh-ind-kpi-grid {
+  .sgq-ind-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

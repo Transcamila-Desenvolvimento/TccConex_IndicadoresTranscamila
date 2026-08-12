@@ -10,7 +10,10 @@ repetida para cada mês da série, não só para o último lote.
 
 from __future__ import annotations
 
+import io
 from decimal import Decimal
+
+from django.db.models import Q
 
 from apps.rh.models import Colaborador, LoteMovimentacaoRH, MovimentacaoColaborador
 
@@ -67,6 +70,7 @@ def _bucket_categoria() -> dict:
         'payroll': Decimal('0'),
         'ativos': _status_bucket(),
         'afastados': _status_bucket(),
+        'ferias': _status_bucket(),
     }
 
 
@@ -79,14 +83,31 @@ def _bucket_categorias() -> dict:
     }
 
 
-# No indicador, só existem dois grupos analíticos:
-# - afastado = situação "AFASTADO TEMP." (e variantes com o mesmo texto)
-# - situação normal = qualquer outra (FERIAS, ATIVO, SITUACAO NORMAL, etc.)
+# Grupos analíticos na folha:
+# - afastado = situação contendo "AFASTADO TEMP."
+# - férias = situação contendo "FERIAS" / "FÉRIAS"
+# - ativo = demais (SITUACAO NORMAL, ATIVO, AFASTADO INSS, etc.)
 _AFASTADO_TEMP_TOKEN = 'AFASTADO TEMP'
+_FERIAS_Q = Q(situacao__icontains='FERIAS') | Q(situacao__icontains='FÉRIAS')
 
 
 def _is_afastado(situacao: str | None) -> bool:
     return bool(situacao) and _AFASTADO_TEMP_TOKEN in situacao.upper()
+
+
+def _is_ferias(situacao: str | None) -> bool:
+    if not situacao:
+        return False
+    normalizado = situacao.upper().replace('É', 'E')
+    return 'FERIAS' in normalizado
+
+
+def _classificar_situacao(situacao: str | None) -> str:
+    if _is_afastado(situacao):
+        return 'afastados'
+    if _is_ferias(situacao):
+        return 'ferias'
+    return 'ativos'
 
 
 def _bucket_com_percentual(bucket: dict, total: int) -> dict:
@@ -100,10 +121,12 @@ def _bucket_com_percentual(bucket: dict, total: int) -> dict:
 # Filtro de situação do indicador (query param `situacaoGrupo`).
 _SITUACAO_GRUPO_TODOS = ''
 _SITUACAO_GRUPO_AFASTADOS = 'AFASTADOS'
+_SITUACAO_GRUPO_FERIAS = 'FERIAS'
 _SITUACAO_GRUPO_NORMAL = 'SITUACAO_NORMAL'
 _SITUACAO_GRUPOS_VALIDOS = {
     _SITUACAO_GRUPO_TODOS,
     _SITUACAO_GRUPO_AFASTADOS,
+    _SITUACAO_GRUPO_FERIAS,
     _SITUACAO_GRUPO_NORMAL,
 }
 
@@ -115,6 +138,8 @@ def _parse_situacao_grupo(valor) -> str:
         return _SITUACAO_GRUPO_TODOS
     if chave in ('AFASTADO', 'AFASTADOS'):
         return _SITUACAO_GRUPO_AFASTADOS
+    if chave in ('FERIAS', 'FÉRIAS', 'FERIA'):
+        return _SITUACAO_GRUPO_FERIAS
     if chave in ('SITUACAO_NORMAL', 'SITUACAONORMAL', 'NORMAL'):
         return _SITUACAO_GRUPO_NORMAL
     if chave in _SITUACAO_GRUPOS_VALIDOS:
@@ -137,8 +162,10 @@ def _colaboradores_filtrados(
         qs = qs.filter(categoria=categoria)
     if situacao_grupo == _SITUACAO_GRUPO_AFASTADOS:
         qs = qs.filter(situacao__icontains=_AFASTADO_TEMP_TOKEN)
+    elif situacao_grupo == _SITUACAO_GRUPO_FERIAS:
+        qs = qs.filter(_FERIAS_Q)
     elif situacao_grupo == _SITUACAO_GRUPO_NORMAL:
-        qs = qs.exclude(situacao__icontains=_AFASTADO_TEMP_TOKEN)
+        qs = qs.exclude(situacao__icontains=_AFASTADO_TEMP_TOKEN).exclude(_FERIAS_Q)
     return qs
 
 
@@ -153,6 +180,7 @@ def _empty_summary() -> dict:
         'totalColaboradores': 0,
         'payrollTotal': Decimal('0'),
         'salarioMedio': Decimal('0'),
+        'feriasAtual': 0,
         'admitidosPeriodo': 0,
         'desligadosPeriodo': 0,
         'turnoverPercentual': 0.0,
@@ -258,7 +286,7 @@ def build_rh_movimentacao_payload(params) -> dict:
             salario = c.salario or Decimal('0')
             bucket[chave]['count'] += 1
             bucket[chave]['payroll'] += salario
-            status = 'afastados' if _is_afastado(c.situacao) else 'ativos'
+            status = _classificar_situacao(c.situacao)
             bucket[chave][status]['count'] += 1
             bucket[chave][status]['payroll'] += salario
             payroll_total += salario
@@ -284,10 +312,17 @@ def build_rh_movimentacao_payload(params) -> dict:
     headcount_medio = sum(p['headcount'] for p in series) / len(series)
     turnover_percentual = round((desligados_periodo / headcount_medio) * 100, 1) if headcount_medio else 0.0
 
+    por_categoria_atual = _bucket_com_percentual(ultimo['porCategoria'], total_colaboradores)
+    ferias_atual = sum(
+        por_categoria_atual[chave]['ferias']['count']
+        for chave in por_categoria_atual
+    )
+
     summary = {
         'totalColaboradores': total_colaboradores,
         'payrollTotal': payroll_total_atual,
         'salarioMedio': round(salario_medio, 2),
+        'feriasAtual': ferias_atual,
         'admitidosPeriodo': admitidos_periodo,
         'desligadosPeriodo': desligados_periodo,
         'turnoverPercentual': turnover_percentual,
@@ -297,7 +332,7 @@ def build_rh_movimentacao_payload(params) -> dict:
         'variacaoPayrollPercentual': (
             _variacao_percentual(ultimo['payroll'], primeiro['payroll']) if len(series) > 1 else None
         ),
-        'porCategoriaAtual': _bucket_com_percentual(ultimo['porCategoria'], total_colaboradores),
+        'porCategoriaAtual': por_categoria_atual,
     }
 
     return {
@@ -305,3 +340,100 @@ def build_rh_movimentacao_payload(params) -> dict:
         'summary': summary,
         'series': series,
     }
+
+
+_GRUPO_SITUACAO_LABEL = {
+    'ativos': 'Ativo',
+    'afastados': 'Afastado',
+    'ferias': 'Férias',
+}
+
+
+def parse_mes_ano_export_params(params) -> tuple[int, int]:
+    """Resolve mes/ano a partir de query params (mes+ano ou referencia YYYY-MM)."""
+    referencia = (params.get('referencia') or '').strip()
+    if referencia:
+        parsed = _parse_periodo(referencia)
+        if not parsed:
+            raise ValueError('Referência inválida. Use o formato YYYY-MM.')
+        return parsed
+
+    mes_raw = params.get('mes')
+    ano_raw = params.get('ano')
+    if mes_raw is None or ano_raw is None or mes_raw == '' or ano_raw == '':
+        raise ValueError('Informe mes e ano, ou referencia no formato YYYY-MM.')
+
+    try:
+        mes, ano = int(mes_raw), int(ano_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Mês e ano inválidos.') from exc
+
+    if mes < 1 or mes > 12:
+        raise ValueError('Mês inválido.')
+    return ano, mes
+
+
+def build_rh_movimentacao_export(mes: int, ano: int) -> tuple[bytes, str]:
+    """Gera planilha Excel com dados brutos do lote mensal (base do indicador)."""
+    lote = LoteMovimentacaoRH.objects.filter(mes=mes, ano=ano).first()
+    if not lote:
+        raise ValueError('Nenhum lote encontrado para o período informado.')
+
+    excluidos = set(
+        Colaborador.objects.filter(desconsiderado=True).values_list('cpf', flat=True)
+    )
+    colaboradores = (
+        lote.colaboradores
+        .exclude(cpf__in=excluidos)
+        .order_by('filial', 'categoria', 'nome')
+    )
+
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Dados brutos'
+
+    headers = [
+        'Filial', 'Nome', 'CPF', 'Categoria', 'Situação', 'Grupo indicador',
+        'Salário', 'Função', 'Admissão', 'Nascimento', 'UF', 'PIS/PASEP', 'RG',
+    ]
+    ws.append(headers)
+    header_fill = PatternFill(start_color='118CC4', end_color='118CC4', fill_type='solid')
+    header_font = Font(color='FFFFFF', bold=True)
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+
+    for colaborador in colaboradores:
+        grupo = _classificar_situacao(colaborador.situacao)
+        ws.append([
+            colaborador.filial or 'Não Informada',
+            (colaborador.nome or '').upper(),
+            colaborador.cpf,
+            colaborador.categoria or '-',
+            colaborador.situacao or '-',
+            _GRUPO_SITUACAO_LABEL.get(grupo, grupo),
+            float(colaborador.salario) if colaborador.salario is not None else None,
+            colaborador.funcao or '-',
+            colaborador.data_admissao.strftime('%d/%m/%Y') if colaborador.data_admissao else '-',
+            colaborador.data_nascimento.strftime('%d/%m/%Y') if colaborador.data_nascimento else '-',
+            colaborador.uf_estado or '-',
+            colaborador.pis_pasep or '-',
+            colaborador.rg or '-',
+        ])
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    filename = f'Indicador_RH_Movimentacao_{mes:02d}_{ano}.xlsx'
+    return output.read(), filename

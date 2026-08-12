@@ -1,3 +1,4 @@
+from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -8,7 +9,11 @@ from .cashflow_service import build_cashflow_day_detail, build_cashflow_payload,
 from .gerencial_email_service import _parse_emails, _parse_reference, send_gerencial_email
 from .meta_faturamento_service import build_meta_faturamento_payload
 from .models import IndicadorFilial, IndicadorKpi
-from .rh_indicador_service import build_rh_movimentacao_payload
+from .rh_indicador_service import (
+    build_rh_movimentacao_export,
+    build_rh_movimentacao_payload,
+    parse_mes_ano_export_params,
+)
 from .serializers import IndicadorFilialSerializer, IndicadorKpiSerializer
 from .sgq_satisfacao_service import build_sgq_satisfacao_payload, get_sgq_activity_version
 
@@ -101,6 +106,31 @@ class RHMovimentacaoIndicadorView(ModuleScopedViewMixin, APIView):
         # dict() evita surpresas com QueryDict mutável entre reloads no Windows.
         payload = build_rh_movimentacao_payload(request.query_params.dict())
         return Response(payload)
+
+
+class RHMovimentacaoExportView(ModuleScopedViewMixin, APIView):
+    permission_module = 'Indicadores'
+    permission_requires_filial = False
+
+    def get(self, request):
+        try:
+            ano, mes = parse_mes_ano_export_params(request.query_params)
+            content, filename = build_rh_movimentacao_export(mes, ano)
+        except ValueError as exc:
+            detail = str(exc)
+            status_code = (
+                status.HTTP_404_NOT_FOUND
+                if 'Nenhum lote encontrado' in detail
+                else status.HTTP_400_BAD_REQUEST
+            )
+            return Response({'detail': detail}, status=status_code)
+
+        response = HttpResponse(
+            content,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
 
 class MetaFaturamentoIndicadorView(ModuleScopedViewMixin, APIView):

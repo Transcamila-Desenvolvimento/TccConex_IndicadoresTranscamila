@@ -1,6 +1,8 @@
 from datetime import date
 from decimal import Decimal
+from io import BytesIO
 
+import openpyxl
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import TestCase, override_settings
@@ -1272,6 +1274,20 @@ class IndicadoresRHMovimentacaoTests(TestCase):
         self.assertEqual(atual['motorista']['ativos']['count'], 1)
         self.assertEqual(atual['motorista']['afastados']['count'], 0)
 
+    def test_ferias_por_categoria(self):
+        MovimentacaoColaborador.objects.filter(
+            lote=self.lote_06, cpf='333.333.333-33',
+        ).update(situacao='FERIAS')
+
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        atual = response.data['summary']['porCategoriaAtual']
+        self.assertEqual(atual['motorista']['ferias']['count'], 1)
+        self.assertEqual(atual['administrativo']['ativos']['count'], 2)
+        self.assertEqual(response.data['summary']['feriasAtual'], 1)
+
     def test_filtro_por_situacao_grupo(self):
         MovimentacaoColaborador.objects.filter(
             lote=self.lote_06, cpf='444.444.444-44',
@@ -1290,15 +1306,25 @@ class IndicadoresRHMovimentacaoTests(TestCase):
         self.assertEqual(todos.data['summary']['totalColaboradores'], 3)
         self.assertEqual(todos.data['summary']['payrollTotal'], Decimal('8500.00'))
 
-        # Situação normal = tudo que não é AFASTADO TEMP. (inclui FERIAS, ATIVO, etc.).
+        # Situação normal = ativos em exercício (exclui AFASTADO TEMP. e FERIAS).
         normal = self.client.get(
             '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&situacaoGrupo=SITUACAO_NORMAL',
             **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
         )
         self.assertEqual(normal.status_code, 200)
-        self.assertEqual(normal.data['summary']['totalColaboradores'], 2)
-        self.assertEqual(normal.data['summary']['payrollTotal'], Decimal('5700.00'))
+        self.assertEqual(normal.data['summary']['totalColaboradores'], 1)
+        self.assertEqual(normal.data['summary']['payrollTotal'], Decimal('3200.00'))
         self.assertEqual(normal.data['summary']['porCategoriaAtual']['administrativo']['afastados']['count'], 0)
+
+        ferias = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&situacaoGrupo=FERIAS',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(ferias.status_code, 200)
+        self.assertEqual(ferias.data['summary']['totalColaboradores'], 1)
+        self.assertEqual(ferias.data['summary']['payrollTotal'], Decimal('2500.00'))
+        self.assertEqual(ferias.data['summary']['feriasAtual'], 1)
+        self.assertEqual(ferias.data['summary']['porCategoriaAtual']['motorista']['ferias']['count'], 1)
 
         afastados = self.client.get(
             '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06&situacaoGrupo=AFASTADOS',
@@ -1375,6 +1401,32 @@ class IndicadoresRHMovimentacaoTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['series'][0]['headcount'], 3)
+
+    def test_exportar_dados_brutos_por_referencia(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/exportar/?referencia=2026-06',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            response['Content-Type'],
+        )
+
+        workbook = openpyxl.load_workbook(BytesIO(response.content))
+        ws = workbook.active
+        rows = list(ws.iter_rows(values_only=True))
+        self.assertEqual(rows[0][0], 'Filial')
+        cpfs = {row[2] for row in rows[1:]}
+        self.assertEqual(cpfs, {'111.111.111-11', '333.333.333-33', '444.444.444-44'})
+        self.assertNotIn('000.000.000-00', cpfs)
+
+    def test_exportar_sem_lote_retorna_404(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/exportar/?referencia=2020-01',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 404)
 
 
 def _pesquisa(filial, **overrides):

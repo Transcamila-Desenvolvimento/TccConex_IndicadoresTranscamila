@@ -460,6 +460,7 @@ function normalizeRHIndicadorCategoriaBucket(raw: any): RHIndicadorCategoriaBuck
     percentual: Number(raw?.percentual ?? 0),
     ativos: normalizeRHIndicadorStatusBucket(raw?.ativos),
     afastados: normalizeRHIndicadorStatusBucket(raw?.afastados),
+    ferias: normalizeRHIndicadorStatusBucket(raw?.ferias),
   };
 }
 
@@ -488,6 +489,7 @@ function normalizeRHIndicadorResponse(raw: any): RHIndicadorResponse {
       totalColaboradores: Number(raw?.summary?.totalColaboradores ?? 0),
       payrollTotal: Number(raw?.summary?.payrollTotal ?? 0),
       salarioMedio: Number(raw?.summary?.salarioMedio ?? 0),
+      feriasAtual: Number(raw?.summary?.feriasAtual ?? 0),
       admitidosPeriodo: Number(raw?.summary?.admitidosPeriodo ?? 0),
       desligadosPeriodo: Number(raw?.summary?.desligadosPeriodo ?? 0),
       turnoverPercentual: Number(raw?.summary?.turnoverPercentual ?? 0),
@@ -1070,6 +1072,14 @@ export const apiService = {
       params: buildRHIndicadorQueryParams(params),
     });
     return normalizeRHIndicadorResponse(data);
+  },
+
+  async exportarIndicadorRHMovimentacao(referencia: string): Promise<Blob> {
+    const { data } = await api.get('/api/indicadores/rh/movimentacao/exportar/', {
+      params: { referencia },
+      responseType: 'blob',
+    });
+    return data;
   },
 
   async getIndicadorSgqSatisfacao(

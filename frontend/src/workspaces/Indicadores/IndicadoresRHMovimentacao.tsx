@@ -5,6 +5,7 @@ import type { RHIndicadorSituacaoGrupo } from '../../types/domain';
 import RHPayrollChart from './RHPayrollChart';
 import RHHeadcountChart from './RHHeadcountChart';
 import RHAdmissoesChart from './RHAdmissoesChart';
+import RHMovimentacaoExportModal from './RHMovimentacaoExportModal';
 
 const CATEGORIA_OPTIONS = [
   { value: '', label: 'Todas' },
@@ -17,6 +18,7 @@ const SITUACAO_OPTIONS: { value: RHIndicadorSituacaoGrupo; label: string }[] = [
   { value: '', label: 'Todas as situações' },
   { value: 'SITUACAO_NORMAL', label: 'Situação normal' },
   { value: 'AFASTADOS', label: 'Afastados' },
+  { value: 'FERIAS', label: 'Férias' },
 ];
 
 type PeriodoKey = 'ano' | 't1' | 't2' | 't3' | 't4' | 's1' | 's2' | 'custom';
@@ -81,6 +83,7 @@ const IndicadoresRHMovimentacao: React.FC = () => {
   const [filial, setFilial] = useState('');
   const [categoria, setCategoria] = useState('');
   const [situacaoGrupo, setSituacaoGrupo] = useState<RHIndicadorSituacaoGrupo>('');
+  const [exportOpen, setExportOpen] = useState(false);
 
   const queryParams = useMemo(() => ({
     ...(startPeriod ? { start: startPeriod } : {}),
@@ -163,6 +166,14 @@ const IndicadoresRHMovimentacao: React.FC = () => {
         </div>
       </header>
 
+      {exportOpen && (
+        <RHMovimentacaoExportModal
+          lotes={data?.meta.lotesDisponiveis ?? []}
+          defaultReferencia={endPeriod || startPeriod}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
+
       <div className="reports-filters-bar">
         <div className="reports-filter-left">
           <div className="reports-filter-icon-label">
@@ -229,6 +240,21 @@ const IndicadoresRHMovimentacao: React.FC = () => {
             Limpar
           </button>
         </div>
+
+        <div className="reports-filter-right">
+          <button
+            type="button"
+            className="reports-action-btn-icon"
+            style={{ width: 36, height: 36 }}
+            onClick={() => setExportOpen(true)}
+            title="Baixar planilha com dados brutos do indicador"
+            aria-label="Baixar planilha com dados brutos do indicador"
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <QueryDataPanel
@@ -258,6 +284,11 @@ const IndicadoresRHMovimentacao: React.FC = () => {
                 <strong className="cashflow-kpi-value">{formatCurrency(summary.salarioMedio)}</strong>
                 <span className="cashflow-kpi-hint">Último mês da série</span>
               </div>
+              <div className="cashflow-kpi-card">
+                <span className="cashflow-kpi-label">Em férias</span>
+                <strong className="cashflow-kpi-value">{summary.feriasAtual}</strong>
+                <span className="cashflow-kpi-hint">Último mês da série</span>
+              </div>
               <div className="cashflow-kpi-card cashflow-kpi-card--in">
                 <span className="cashflow-kpi-label">Admitidos no Período</span>
                 <strong className="cashflow-kpi-value">{summary.admitidosPeriodo}</strong>
@@ -281,7 +312,7 @@ const IndicadoresRHMovimentacao: React.FC = () => {
                       {formatCurrency(bucket.payroll)} · {bucket.percentual.toFixed(1)}% do total
                     </span>
                     <span className="meta-fat-filial-hint">
-                      {bucket.ativos.count} ativos · {bucket.afastados.count} afastados
+                      {bucket.ativos.count} ativos · {bucket.afastados.count} afastados · {bucket.ferias.count} férias
                     </span>
                   </div>
                 );
