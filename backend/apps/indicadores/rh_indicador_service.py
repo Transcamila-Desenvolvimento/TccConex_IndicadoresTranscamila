@@ -11,6 +11,8 @@ repetida para cada mês da série, não só para o último lote.
 from __future__ import annotations
 
 import io
+import re
+import unicodedata
 from decimal import Decimal
 
 from django.db.models import Q
@@ -85,21 +87,32 @@ def _bucket_categorias() -> dict:
 
 # Grupos analíticos na folha:
 # - afastado = situação contendo "AFASTADO TEMP."
-# - férias = situação contendo "FERIAS" / "FÉRIAS"
+# - férias = situação contendo "FERIAS" / "FÉRIAS" (com ou sem acento)
 # - ativo = demais (SITUACAO NORMAL, ATIVO, AFASTADO INSS, etc.)
 _AFASTADO_TEMP_TOKEN = 'AFASTADO TEMP'
-_FERIAS_Q = Q(situacao__icontains='FERIAS') | Q(situacao__icontains='FÉRIAS')
+_FERIAS_TOKENS = ('FERIAS', 'FÉRIAS', 'FERIA')
+_FERIAS_Q = Q()
+for _token in _FERIAS_TOKENS:
+    _FERIAS_Q |= Q(situacao__icontains=_token)
+
+
+def _normalizar_situacao_texto(situacao: str | None) -> str:
+    if not situacao:
+        return ''
+    texto = unicodedata.normalize('NFKD', str(situacao))
+    texto = ''.join(c for c in texto if not unicodedata.combining(c))
+    return re.sub(r'\s+', ' ', texto.upper()).strip()
 
 
 def _is_afastado(situacao: str | None) -> bool:
-    return bool(situacao) and _AFASTADO_TEMP_TOKEN in situacao.upper()
+    return _AFASTADO_TEMP_TOKEN in _normalizar_situacao_texto(situacao)
 
 
 def _is_ferias(situacao: str | None) -> bool:
-    if not situacao:
+    normalizado = _normalizar_situacao_texto(situacao)
+    if not normalizado:
         return False
-    normalizado = situacao.upper().replace('É', 'E')
-    return 'FERIAS' in normalizado
+    return bool(re.search(r'\bFERIAS?\b', normalizado))
 
 
 def _classificar_situacao(situacao: str | None) -> str:

@@ -215,7 +215,11 @@ def import_movimentacao_mensal(lote: LoteMovimentacaoRH, file_bytes: bytes, user
     col_cargo = find_column_index(headers, ['desc. cargo', 'cargo', 'funcao', 'função'])
     col_situacao = find_column_index(
         headers,
-        ['status funcionarios', 'status funcionário', 'status do funcionario', 'situacao', 'situação', 'status'],
+        [
+            'status funcionarios', 'status funcionário', 'status do funcionario',
+            'status do colaborador', 'status colaborador', 'situacao funcionario',
+            'situação funcionário', 'situacao', 'situação', 'status',
+        ],
     )
     col_estado = find_column_index(headers, ['estado', 'uf', 'u.f.'])
     col_admissao = find_column_index(headers, ['data admis.', 'data admissão', 'dt. adm.', 'admissão', 'admissao'])

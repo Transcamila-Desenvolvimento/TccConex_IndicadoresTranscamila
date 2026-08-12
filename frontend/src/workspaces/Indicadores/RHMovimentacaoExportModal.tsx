@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useExportarIndicadorRHMovimentacao } from '../../hooks/useIndicadores';
 import type { RHIndicadorLoteOption } from '../../types/domain';
@@ -18,16 +18,44 @@ function loteLabel(lote: RHIndicadorLoteOption): string {
 }
 
 async function getExportErrorMessage(error: unknown, fallback: string): Promise<string> {
-  if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
-    try {
-      const text = await error.response.data.text();
-      const parsed = JSON.parse(text) as { detail?: string };
-      if (typeof parsed.detail === 'string') return parsed.detail;
-    } catch {
-      /* mantém fallback */
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data;
+    if (data instanceof Blob) {
+      try {
+        const text = await data.text();
+        const parsed = JSON.parse(text) as { detail?: string };
+        if (typeof parsed.detail === 'string') return parsed.detail;
+      } catch {
+        /* mantém fallback */
+      }
+    } else if (data && typeof data === 'object' && 'detail' in data) {
+      const detail = (data as { detail?: unknown }).detail;
+      if (typeof detail === 'string') return detail;
     }
   }
   return fallback;
+}
+
+async function assertExcelBlob(blob: Blob): Promise<Blob> {
+  if (blob.size < 4) {
+    throw new Error('O servidor retornou um arquivo vazio.');
+  }
+  const header = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+  if (header[0] === 0x50 && header[1] === 0x4B) {
+    return blob;
+  }
+  try {
+    const text = await blob.text();
+    const parsed = JSON.parse(text) as { detail?: string };
+    if (typeof parsed.detail === 'string') {
+      throw new Error(parsed.detail);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message !== 'Unexpected token') {
+      throw error;
+    }
+  }
+  throw new Error('Resposta inválida ao gerar a planilha.');
 }
 
 const RHMovimentacaoExportModal: React.FC<RHMovimentacaoExportModalProps> = ({
@@ -40,12 +68,28 @@ const RHMovimentacaoExportModal: React.FC<RHMovimentacaoExportModalProps> = ({
     [lotes],
   );
 
-  const [referencia, setReferencia] = useState(
-    defaultReferencia ?? (lotesOrdenados[0] ? loteReferencia(lotesOrdenados[0]) : ''),
+  const referenciasValidas = useMemo(
+    () => new Set(lotesOrdenados.map(loteReferencia)),
+    [lotesOrdenados],
   );
+
+  const referenciaInicial = useMemo(() => {
+    if (defaultReferencia && referenciasValidas.has(defaultReferencia)) {
+      return defaultReferencia;
+    }
+    return lotesOrdenados[0] ? loteReferencia(lotesOrdenados[0]) : '';
+  }, [defaultReferencia, referenciasValidas, lotesOrdenados]);
+
+  const [referencia, setReferencia] = useState(referenciaInicial);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const exportar = useExportarIndicadorRHMovimentacao();
   const isExporting = exportar.isPending;
+
+  useEffect(() => {
+    setReferencia((atual) => (
+      atual && referenciasValidas.has(atual) ? atual : referenciaInicial
+    ));
+  }, [referenciaInicial, referenciasValidas]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +106,8 @@ const RHMovimentacaoExportModal: React.FC<RHMovimentacaoExportModalProps> = ({
 
     try {
       const blob = await exportar.mutateAsync(referencia);
-      const url = URL.createObjectURL(blob);
+      const arquivo = await assertExcelBlob(blob);
+      const url = URL.createObjectURL(arquivo);
       const link = document.createElement('a');
       link.href = url;
       link.download = `Indicador_RH_Movimentacao_${mes}_${ano}.xlsx`;
@@ -70,6 +115,10 @@ const RHMovimentacaoExportModal: React.FC<RHMovimentacaoExportModalProps> = ({
       URL.revokeObjectURL(url);
       onClose();
     } catch (error) {
+      if (error instanceof Error && !axios.isAxiosError(error)) {
+        setErrorMsg(error.message);
+        return;
+      }
       setErrorMsg(await getExportErrorMessage(error, 'Não foi possível exportar os dados brutos do indicador.'));
     }
   };

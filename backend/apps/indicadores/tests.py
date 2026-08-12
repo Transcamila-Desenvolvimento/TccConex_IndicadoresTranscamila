@@ -1278,6 +1278,9 @@ class IndicadoresRHMovimentacaoTests(TestCase):
         MovimentacaoColaborador.objects.filter(
             lote=self.lote_06, cpf='333.333.333-33',
         ).update(situacao='FERIAS')
+        MovimentacaoColaborador.objects.filter(
+            lote=self.lote_06, cpf='444.444.444-44',
+        ).update(situacao='FÉRIAS')
 
         response = self.client.get(
             '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06',
@@ -1285,8 +1288,9 @@ class IndicadoresRHMovimentacaoTests(TestCase):
         )
         atual = response.data['summary']['porCategoriaAtual']
         self.assertEqual(atual['motorista']['ferias']['count'], 1)
-        self.assertEqual(atual['administrativo']['ativos']['count'], 2)
-        self.assertEqual(response.data['summary']['feriasAtual'], 1)
+        self.assertEqual(atual['administrativo']['ferias']['count'], 1)
+        self.assertEqual(atual['administrativo']['ativos']['count'], 1)
+        self.assertEqual(response.data['summary']['feriasAtual'], 2)
 
     def test_filtro_por_situacao_grupo(self):
         MovimentacaoColaborador.objects.filter(

@@ -124,6 +124,11 @@ class RHMovimentacaoExportView(ModuleScopedViewMixin, APIView):
                 else status.HTTP_400_BAD_REQUEST
             )
             return Response({'detail': detail}, status=status_code)
+        except Exception:
+            return Response(
+                {'detail': 'Não foi possível gerar a planilha. Tente novamente.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         response = HttpResponse(
             content,

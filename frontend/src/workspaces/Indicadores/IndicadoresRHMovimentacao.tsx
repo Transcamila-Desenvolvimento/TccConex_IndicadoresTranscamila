@@ -146,6 +146,15 @@ const IndicadoresRHMovimentacao: React.FC = () => {
     return inicio === fim ? inicio : `${inicio} — ${fim}`;
   })();
 
+  const defaultExportReferencia = useMemo(() => {
+    const lotes = data?.meta.lotesDisponiveis ?? [];
+    if (!lotes.length) return endPeriod || startPeriod;
+    const latest = [...lotes].sort((a, b) => (
+      a.ano !== b.ano ? b.ano - a.ano : b.mes - a.mes
+    ))[0];
+    return `${latest.ano}-${String(latest.mes).padStart(2, '0')}`;
+  }, [data?.meta.lotesDisponiveis, endPeriod, startPeriod]);
+
   const handleResetFilters = () => {
     const reset = defaultAnoInteiro();
     setFilial('');
@@ -169,7 +178,7 @@ const IndicadoresRHMovimentacao: React.FC = () => {
       {exportOpen && (
         <RHMovimentacaoExportModal
           lotes={data?.meta.lotesDisponiveis ?? []}
-          defaultReferencia={endPeriod || startPeriod}
+          defaultReferencia={defaultExportReferencia}
           onClose={() => setExportOpen(false)}
         />
       )}
