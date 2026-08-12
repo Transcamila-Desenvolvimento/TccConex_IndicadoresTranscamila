@@ -66,7 +66,6 @@ export function useIndicadorRHMovimentacao(params: RHIndicadorQueryParams) {
   return useQuery({
     queryKey: [...INDICADORES_RH_MOVIMENTACAO_KEY, params],
     queryFn: () => apiService.getIndicadorRHMovimentacao(params),
-    placeholderData: (prev) => prev,
     retry: 1,
   });
 }

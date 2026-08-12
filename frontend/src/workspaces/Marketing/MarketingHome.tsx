@@ -15,19 +15,6 @@ const QUICK_LINKS = [
       </svg>
     ),
   },
-  {
-    title: 'Banco de Mídias',
-    description: 'Fotos e vídeos da pasta do Google Drive — catálogo leve para a equipe de Marketing.',
-    path: '/marketing/banco-midias',
-    badge: 'Drive',
-    icon: (
-      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <circle cx="8.5" cy="8.5" r="1.5" />
-        <path d="M21 15l-5-5L5 21" />
-      </svg>
-    ),
-  },
 ] as const;
 
 const MarketingHome: React.FC = () => {

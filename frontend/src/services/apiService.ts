@@ -29,7 +29,6 @@ import type {
   ProtocoloImportParams, ProtocoloImportResult,
   SgqPesquisa, SgqPesquisaImportPreview, SgqPesquisaImportResult, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
   CampanhaMarketing, CampanhaPayload, CampanhaQuadro, CampanhaComentario, CampanhaMembro,
-  DriveBankConfig, DriveBankListResponse, DriveBankFilterKind,
   UserDirectoryEntry,
   SgqLoteDraft, SgqLoteDraftRow,
 } from '../types/domain';
@@ -1075,11 +1074,19 @@ export const apiService = {
   },
 
   async exportarIndicadorRHMovimentacao(referencia: string): Promise<Blob> {
-    const { data } = await api.get('/api/indicadores/rh/movimentacao/exportar/', {
+    const response = await api.get('/api/indicadores/rh/movimentacao/exportar/', {
       params: { referencia },
-      responseType: 'blob',
+      responseType: 'arraybuffer',
     });
-    return data;
+    const contentType = String(response.headers['content-type'] ?? '');
+    if (contentType.includes('application/json')) {
+      const text = new TextDecoder().decode(response.data as ArrayBuffer);
+      const parsed = JSON.parse(text) as { detail?: string };
+      throw new Error(parsed.detail ?? 'Não foi possível exportar os dados brutos do indicador.');
+    }
+    return new Blob([response.data], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
   },
 
   async getIndicadorSgqSatisfacao(
@@ -1790,29 +1797,6 @@ export const apiService = {
   async participarCampanha(campanhaId: string): Promise<CampanhaMembro> {
     const { data } = await api.post(`/api/marketing/campanhas/${campanhaId}/participar/`);
     return data as CampanhaMembro;
-  },
-
-  async getMarketingDriveBankConfig(): Promise<DriveBankConfig> {
-    const { data } = await api.get('/api/marketing/drive-bank/config/');
-    return data as DriveBankConfig;
-  },
-
-  async getMarketingDriveBank(params: {
-    kind?: DriveBankFilterKind;
-    search?: string;
-    pageToken?: string;
-    pageSize?: number;
-  } = {}): Promise<DriveBankListResponse> {
-    const { data } = await api.get('/api/marketing/drive-bank/files/', { params });
-    return data as DriveBankListResponse;
-  },
-
-  async getMarketingDriveBankThumbnailBlob(fileId: string): Promise<Blob> {
-    const { data } = await api.get('/api/marketing/drive-bank/thumbnail/', {
-      params: { fileId },
-      responseType: 'blob',
-    });
-    return data as Blob;
   },
 
 };
