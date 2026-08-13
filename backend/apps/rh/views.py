@@ -40,7 +40,7 @@ from .import_service import (
     import_movimentacao_lote_completo,
     importar_historico_salarial_completo,
 )
-from .utils import definir_categoria_colaborador
+from .utils import contar_grupos_situacao, definir_categoria_colaborador, montar_quadro_categorias_pessoal
 
 
 def _parse_emails(value) -> list[str]:
@@ -264,6 +264,7 @@ class LoteMovimentacaoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             avg_age = sum(idades) / len(idades) if idades else 0
             avg_tenure = sum(tempos) / len(tempos) if tempos else 0
             
+            situacao_filial = contar_grupos_situacao(colabs_f.values_list('situacao', flat=True))
             relatorio_filiais.append({
                 'nome': f_nome or 'Não Informada',
                 'qty': qty,
@@ -272,14 +273,16 @@ class LoteMovimentacaoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 'avg_age': round(avg_age, 1),
                 'avg_tenure_str': format_tenure(avg_tenure),
                 'novos': novos_f.count(),
-                'desligados': des_count
+                'desligados': des_count,
+                'ativos': situacao_filial['ativos'],
+                'afastados': situacao_filial['afastados'],
+                'ferias': situacao_filial['ferias'],
             })
 
         total_colabs = colaboradores.count()
-        total_adm = colaboradores.filter(categoria='ADMINISTRATIVO').count()
-        total_oper = colaboradores.filter(categoria='OPERACIONAL').count()
-        total_mot_ativos = colaboradores.filter(categoria='MOTORISTA').exclude(situacao__icontains='AFASTADO').count()
-        total_mot_afastados = colaboradores.filter(categoria='MOTORISTA', situacao__icontains='AFASTADO').count()
+        registros_pessoal = list(colaboradores.values_list('categoria', 'situacao'))
+        situacao_geral = contar_grupos_situacao(s for _, s in registros_pessoal)
+        categorias_pessoal = montar_quadro_categorias_pessoal(registros_pessoal)
         total_folha = colaboradores.aggregate(Sum('salario'))['salario__sum'] or Decimal('0')
         avg_age_g = sum(total_idades_geral) / len(total_idades_geral) if total_idades_geral else 0
         avg_tenure_g = sum(total_tempos_geral) / len(total_tempos_geral) if total_tempos_geral else 0
@@ -383,14 +386,14 @@ class LoteMovimentacaoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             'relatorio': relatorio_filiais,
             'geral': {
                 'total_colabs': total_colabs,
-                'total_adm': total_adm,
-                'total_oper': total_oper,
-                'total_mot_ativos': total_mot_ativos,
-                'total_mot_afastados': total_mot_afastados,
+                'total_ativos': situacao_geral['ativos'],
+                'total_afastados': situacao_geral['afastados'],
+                'total_ferias': situacao_geral['ferias'],
                 'total_folha_str': format_currency_br(total_folha),
                 'avg_age': round(avg_age_g, 1),
                 'avg_tenure_str': format_tenure(avg_tenure_g)
             },
+            'categorias_pessoal': categorias_pessoal,
             'novos_detalhes': novos_detalhes,
             'desligados_detalhes': desligados_detalhes,
             'alteracoes': alteracoes,

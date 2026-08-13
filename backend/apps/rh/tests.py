@@ -189,6 +189,47 @@ class EnviarEmailMovimentacaoTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('error', response.data)
 
+    def test_enviar_email_quadro_pessoal_exibe_grupos_situacao(self):
+        MovimentacaoColaborador.objects.create(
+            lote=self.lote,
+            filial='Rondonópolis',
+            nome='Afastado Temporario',
+            situacao='AFASTADO TEMP.',
+            funcao='Auxiliar',
+            cpf='11111111111',
+            salario='1800.00',
+            categoria='OPERACIONAL',
+        )
+        MovimentacaoColaborador.objects.create(
+            lote=self.lote,
+            filial='Ibiporã (Matriz)',
+            nome='Em Ferias',
+            situacao='FERIAS',
+            funcao='Analista',
+            cpf='22222222222',
+            salario='3000.00',
+            categoria='ADMINISTRATIVO',
+        )
+
+        response = self.client.post(
+            f'/api/rh/lotes/{self.lote.id}/enviar_email/',
+            data={'to': ['destino@transcamila.com.br']},
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        body = mail.outbox[0].body
+        self.assertIn('Total de Colaboradores', body)
+        self.assertIn('personnel-label">Administrativo', body)
+        self.assertIn('personnel-label">Operacional', body)
+        self.assertIn('personnel-label">Motorista', body)
+        self.assertIn('<strong>1</strong> ativos', body)
+        self.assertIn('<strong>1</strong> afastados', body)
+        self.assertIn('<strong>1</strong> em f', body)
+        self.assertIn('personnel-value text-blue">3<', body)
+        self.assertIn('personnel-value text-blue">1<', body)
+
 
 class MesesAfastadoTests(TestCase):
     """A planilha mensal não guarda a data em que o afastamento começou, então

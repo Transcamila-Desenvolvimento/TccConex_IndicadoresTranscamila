@@ -179,6 +179,10 @@
             border-left: 1px solid #eef2f6;
         }
 
+        .personnel-grid.personnel-grid--situacao td {
+            width: 33.33%;
+        }
+
         .personnel-grid td:first-child {
             border-left: none;
         }
@@ -195,6 +199,46 @@
             text-transform: uppercase;
             letter-spacing: 0.3px;
             margin-top: 3px;
+        }
+
+        .personnel-subheader {
+            font-size: 10px;
+            font-weight: 700;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            text-align: center;
+            padding: 12px 0 6px;
+            border-top: 1px solid #eef2f6;
+            margin-top: 8px;
+        }
+
+        .personnel-breakdown {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 4px;
+            line-height: 1.5;
+        }
+
+        .personnel-breakdown strong {
+            color: #0f172a;
+            font-weight: 700;
+        }
+
+        .personnel-category {
+            padding: 12px 0;
+            border-top: 1px solid #eef2f6;
+            text-align: center;
+        }
+
+        .personnel-category:first-of-type {
+            border-top: none;
+            padding-top: 4px;
+        }
+
+        .personnel-total-block {
+            text-align: center;
+            padding-bottom: 8px;
         }
 
         /* Linhas de colaborador */
@@ -320,26 +364,26 @@
 
                 <div class="section-header">Quadro de Pessoal</div>
                 <div class="panel">
-                    <table class="personnel-grid">
-                        <tr>
-                            <td>
-                                <div class="personnel-value text-blue">{{ geral.total_adm }}</div>
-                                <div class="personnel-label">Administrativo</div>
-                            </td>
-                            <td>
-                                <div class="personnel-value text-blue">{{ geral.total_oper }}</div>
-                                <div class="personnel-label">Operacional</div>
-                            </td>
-                            <td>
-                                <div class="personnel-value text-green">{{ geral.total_mot_ativos }}</div>
-                                <div class="personnel-label">Motoristas Ativos</div>
-                            </td>
-                            <td>
-                                <div class="personnel-value text-red">{{ geral.total_mot_afastados }}</div>
-                                <div class="personnel-label">Motoristas Afastados</div>
-                            </td>
-                        </tr>
-                    </table>
+                    <div class="personnel-total-block">
+                        <div class="personnel-value text-blue">{{ geral.total_colabs }}</div>
+                        <div class="personnel-label">Total de Colaboradores</div>
+                        <div class="personnel-breakdown">
+                            <strong>{{ geral.total_ativos }}</strong> ativos &bull;
+                            <strong>{{ geral.total_afastados }}</strong> afastados &bull;
+                            <strong>{{ geral.total_ferias }}</strong> em férias
+                        </div>
+                    </div>
+                    {% for cat in categorias_pessoal %}
+                    <div class="personnel-category">
+                        <div class="personnel-value text-blue">{{ cat.total }}</div>
+                        <div class="personnel-label">{{ cat.label }}</div>
+                        <div class="personnel-breakdown">
+                            <strong>{{ cat.ativos }}</strong> ativos &bull;
+                            <strong>{{ cat.afastados }}</strong> afastados &bull;
+                            <strong>{{ cat.ferias }}</strong> em férias
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
 
                 <div class="section-header">Resumo por Filial</div>
@@ -349,7 +393,14 @@
                     <table class="row">
                         <tr>
                             <td class="label">Colaboradores</td>
-                            <td class="value">{{ item.qty }}</td>
+                            <td class="value">
+                                {{ item.qty }}
+                                <div class="personnel-breakdown">
+                                    <strong>{{ item.ativos }}</strong> ativos &bull;
+                                    <strong>{{ item.afastados }}</strong> afastados &bull;
+                                    <strong>{{ item.ferias }}</strong> em férias
+                                </div>
+                            </td>
                         </tr>
                         <tr>
                             <td class="label">Folha da Filial</td>
