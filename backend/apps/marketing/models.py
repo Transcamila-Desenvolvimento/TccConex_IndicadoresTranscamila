@@ -148,3 +148,39 @@ class CampanhaMembro(models.Model):
 
     def __str__(self):
         return f'{self.user_id} em {self.campanha_id}'
+
+
+class CampanhaMidia(models.Model):
+    """Arquivo do Google Drive vinculado a uma campanha."""
+
+    campanha = models.ForeignKey(
+        CampanhaMarketing,
+        on_delete=models.CASCADE,
+        related_name='midias',
+        verbose_name='Campanha',
+    )
+    drive_file_id = models.CharField(max_length=128, db_index=True, verbose_name='ID no Drive')
+    adicionado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='campanha_midias_adicionadas',
+        verbose_name='Adicionado por',
+    )
+    ordem = models.PositiveIntegerField(default=0, verbose_name='Ordem')
+    data_criacao = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Arquivo da campanha'
+        verbose_name_plural = 'Arquivos da campanha'
+        ordering = ['ordem', 'data_criacao']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['campanha', 'drive_file_id'],
+                name='uniq_campanha_midia',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.drive_file_id} em {self.campanha_id}'

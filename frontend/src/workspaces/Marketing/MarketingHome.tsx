@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import MarketingHomeWeekCalendar from './MarketingHomeWeekCalendar';
 
 const QUICK_LINKS = [
   {
@@ -28,6 +29,8 @@ const MarketingHome: React.FC = () => {
         <h2>Olá, {firstName}!</h2>
         <p>Bem-vindo ao ambiente de Marketing da Transcamila.</p>
       </div>
+
+      <MarketingHomeWeekCalendar />
 
       <div className="quick-access-bar" style={{ marginTop: '24px' }}>
         <h3 className="quick-access-title">Acesso rápido</h3>
@@ -57,20 +60,6 @@ const MarketingHome: React.FC = () => {
         ))}
       </div>
 
-      <div style={{
-        marginTop: '20px',
-        padding: '20px 24px',
-        background: '#ffffff',
-        borderRadius: '8px',
-        border: '1px solid #e2e8f0',
-        color: '#64748b',
-        fontSize: '13px',
-        lineHeight: '1.6',
-      }}>
-        <p style={{ margin: 0 }}>
-          Calendário editorial e fluxo Planejamento → Produção → Aguardando → Publicado, com equipe e conversa por conteúdo.
-        </p>
-      </div>
     </section>
   );
 };

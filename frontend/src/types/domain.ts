@@ -1387,8 +1387,10 @@ export interface CampanhaMarketing {
   dataAtualizacao: string;
   comentariosCount: number;
   membrosCount: number;
+  midiasCount: number;
   comentarios?: CampanhaComentario[];
   membros?: CampanhaMembro[];
+  midias?: CampanhaMidia[];
 }
 
 export interface CampanhaComentario {
@@ -1405,6 +1407,59 @@ export interface CampanhaMembro {
   user: UserDirectoryEntry;
   adicionadoPor: UserDirectoryEntry | null;
   dataCriacao: string;
+}
+
+export type CampanhaMidiaKind = 'image' | 'video' | 'pdf' | 'folder' | 'other';
+
+export interface CampanhaMidia {
+  id: number;
+  driveFileId: string;
+  name: string;
+  kind: CampanhaMidiaKind;
+  mimeType: string;
+  thumbnailUrl: string | null;
+  previewUrl: string | null;
+  adicionadoPor: UserDirectoryEntry | null;
+  dataCriacao: string;
+}
+
+export interface GoogleDriveStatus {
+  googleLinked: boolean;
+  hasDriveScope: boolean;
+  needsGoogleLink: boolean;
+}
+
+export interface GoogleDriveItem {
+  id: string;
+  name: string;
+  mimeType: string;
+  kind: CampanhaMidiaKind;
+  modifiedTime: string | null;
+  size: number | null;
+  webViewLink: string | null;
+  thumbnailUrl: string | null;
+  attachable: boolean;
+  virtual?: boolean;
+  driveId?: string | null;
+}
+
+export interface GoogleDriveBrowseResponse {
+  folderId: string;
+  driveId?: string | null;
+  items: GoogleDriveItem[];
+  nextPageToken: string | null;
+}
+
+export interface GoogleDriveBreadcrumb {
+  id: string;
+  name: string;
+  driveId?: string | null;
+}
+
+export interface GoogleDriveDefaultFolder {
+  folderId: string;
+  driveId: string | null;
+  breadcrumbs: GoogleDriveBreadcrumb[];
 }
 
 export type CampanhaPayload = {

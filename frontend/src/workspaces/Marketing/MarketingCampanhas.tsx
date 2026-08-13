@@ -351,6 +351,11 @@ const MarketingCampanhas: React.FC = () => {
                                   <i className="bi bi-people" /> {c.membrosCount}
                                 </span>
                               )}
+                              {(c.midiasCount ?? 0) > 0 && (
+                                <span className="mkt-kanban-card-comments" title="Arquivos anexados">
+                                  <i className="bi bi-paperclip" /> {c.midiasCount}
+                                </span>
+                              )}
                               {c.comentariosCount > 0 && (
                                 <span className="mkt-kanban-card-comments">
                                   <i className="bi bi-chat-dots" /> {c.comentariosCount}

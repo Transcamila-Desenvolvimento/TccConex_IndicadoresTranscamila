@@ -69,7 +69,7 @@ def _refresh_access_token(token_info: dict) -> dict:
 def ensure_valid_google_token(user):
     token_info = user.google_token
     if not token_info or not token_info.get('token'):
-        raise ValueError('Conta Google não vinculada ou sem permissão de contatos.')
+        raise ValueError('Conta Google não vinculada ou token expirado. Vincule novamente no perfil.')
 
     expires_at = token_info.get('expires_at', 0)
     if expires_at and expires_at > time.time() + 60:

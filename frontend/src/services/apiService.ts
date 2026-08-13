@@ -28,7 +28,8 @@ import type {
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
   ProtocoloImportParams, ProtocoloImportResult,
   SgqPesquisa, SgqPesquisaImportPreview, SgqPesquisaImportResult, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
-  CampanhaMarketing, CampanhaPayload, CampanhaQuadro, CampanhaComentario, CampanhaMembro,
+  CampanhaMarketing, CampanhaPayload, CampanhaQuadro, CampanhaComentario, CampanhaMembro, CampanhaMidia,
+  GoogleDriveStatus, GoogleDriveBrowseResponse,
   UserDirectoryEntry,
   SgqLoteDraft, SgqLoteDraftRow,
 } from '../types/domain';
@@ -1797,6 +1798,46 @@ export const apiService = {
   async participarCampanha(campanhaId: string): Promise<CampanhaMembro> {
     const { data } = await api.post(`/api/marketing/campanhas/${campanhaId}/participar/`);
     return data as CampanhaMembro;
+  },
+
+  async getGoogleDriveStatus(): Promise<GoogleDriveStatus> {
+    const { data } = await api.get('/api/marketing/drive/status/');
+    return data as GoogleDriveStatus;
+  },
+
+  async browseGoogleDrive(params: {
+    folderId?: string;
+    pageToken?: string;
+    pageSize?: number;
+    driveId?: string;
+  } = {}): Promise<GoogleDriveBrowseResponse> {
+    const { data } = await api.get('/api/marketing/drive/browse/', { params });
+    return data as GoogleDriveBrowseResponse;
+  },
+
+  async fetchGoogleDriveThumbnail(fileId: string): Promise<string> {
+    const { data } = await api.get('/api/marketing/drive/thumbnail/', {
+      params: { fileId },
+      responseType: 'blob',
+    });
+    return URL.createObjectURL(data as Blob);
+  },
+
+  async fetchGoogleDrivePreview(fileId: string): Promise<string> {
+    const { data } = await api.get('/api/marketing/drive/preview/', {
+      params: { fileId },
+      responseType: 'blob',
+    });
+    return URL.createObjectURL(data as Blob);
+  },
+
+  async addCampanhaMidia(campanhaId: string, driveFileId: string): Promise<CampanhaMidia> {
+    const { data } = await api.post(`/api/marketing/campanhas/${campanhaId}/midias/`, { driveFileId });
+    return data as CampanhaMidia;
+  },
+
+  async removeCampanhaMidia(campanhaId: string, driveFileId: string): Promise<void> {
+    await api.post(`/api/marketing/campanhas/${campanhaId}/midias/remover/`, { driveFileId });
   },
 
 };

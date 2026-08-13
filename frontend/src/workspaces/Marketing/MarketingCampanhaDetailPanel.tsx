@@ -12,14 +12,18 @@ import {
   useMarketingDirectory,
   useParticiparCampanha,
   useRemoveCampanhaMembro,
+  useRemoveCampanhaMidia,
 } from '../../hooks/useMarketingCampanhas';
-import type { CampanhaMarketing, UserDirectoryEntry } from '../../types/domain';
+import type { CampanhaMarketing, CampanhaMidia, UserDirectoryEntry } from '../../types/domain';
 import {
   CAMPANHA_CANAL_LABEL,
   CAMPANHA_STATUS_LABEL,
   campanhaCorHex,
   normalizeCampanhaCanais,
 } from '../../types/domain';
+import MarketingCampanhaDrivePicker from './MarketingCampanhaDrivePicker';
+import GoogleDriveThumbnail from '../../components/GoogleDriveThumbnail';
+import GoogleDrivePreviewModal from '../../components/GoogleDrivePreviewModal';
 
 type MarketingCampanhaDetailPanelProps = {
   campanhaId: string;
@@ -27,7 +31,7 @@ type MarketingCampanhaDetailPanelProps = {
   onClose: () => void;
 };
 
-type DetailTab = 'conversa' | 'equipe';
+type DetailTab = 'conversa' | 'equipe' | 'arquivos';
 
 const formatDateBr = (iso: string) => {
   const [y, m, d] = iso.split('-');
@@ -56,11 +60,14 @@ const MarketingCampanhaDetailPanel: React.FC<MarketingCampanhaDetailPanelProps> 
   const participar = useParticiparCampanha(campanhaId);
   const addMembro = useAddCampanhaMembro(campanhaId);
   const removeMembro = useRemoveCampanhaMembro(campanhaId);
+  const removeMidia = useRemoveCampanhaMidia(campanhaId);
 
   const [tab, setTab] = useState<DetailTab>('equipe');
   const [comentario, setComentario] = useState('');
   const [mencoes, setMencoes] = useState<string[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showDrivePicker, setShowDrivePicker] = useState(false);
+  const [previewMidia, setPreviewMidia] = useState<CampanhaMidia | null>(null);
 
   const campanha = detailQuery.data;
   const team = directoryQuery.data ?? [];
@@ -75,6 +82,11 @@ const MarketingCampanhaDetailPanel: React.FC<MarketingCampanhaDetailPanelProps> 
     const memberIds = new Set((campanha?.membros ?? []).map((m) => m.user.id));
     return team.filter((m) => !memberIds.has(m.id));
   }, [campanha?.membros, team]);
+
+  const linkedDriveFileIds = useMemo(
+    () => (campanha?.midias ?? []).map((item) => item.driveFileId),
+    [campanha?.midias],
+  );
 
   const handleComment = () => {
     const texto = comentario.trim();
@@ -176,6 +188,18 @@ const MarketingCampanhaDetailPanel: React.FC<MarketingCampanhaDetailPanelProps> 
                 <button
                   type="button"
                   role="tab"
+                  aria-selected={tab === 'arquivos'}
+                  className={`mkt-detail-tab ${tab === 'arquivos' ? 'is-active' : ''}`}
+                  onClick={() => setTab('arquivos')}
+                >
+                  Arquivos
+                  {(campanha.midiasCount ?? 0) > 0 && (
+                    <span className="mkt-comments-count">{campanha.midiasCount}</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
                   aria-selected={tab === 'conversa'}
                   className={`mkt-detail-tab ${tab === 'conversa' ? 'is-active' : ''}`}
                   onClick={() => setTab('conversa')}
@@ -246,6 +270,58 @@ const MarketingCampanhaDetailPanel: React.FC<MarketingCampanhaDetailPanelProps> 
                 </div>
               )}
 
+              {tab === 'arquivos' && (
+                <div className="mkt-campanha-arquivos-panel">
+                  <div className="mkt-campanha-arquivos-toolbar">
+                    <button
+                      type="button"
+                      className="reports-action-btn secondary"
+                      onClick={() => setShowDrivePicker(true)}
+                    >
+                      <i className="bi bi-google" aria-hidden="true" />
+                      Anexar do Drive
+                    </button>
+                  </div>
+                  <ul className="mkt-campanha-arquivo-list">
+                    {(campanha.midias ?? []).length === 0 && (
+                      <li className="mkt-activity-empty">
+                        Nenhum arquivo anexado. Navegue no seu Google Drive para vincular fotos, vídeos ou PDFs.
+                      </li>
+                    )}
+                    {(campanha.midias ?? []).map((midia: CampanhaMidia) => (
+                      <li key={midia.id} className="mkt-campanha-arquivo-row">
+                        <button
+                          type="button"
+                          className="mkt-campanha-arquivo-open"
+                          onClick={() => setPreviewMidia(midia)}
+                        >
+                          <span className="mkt-campanha-arquivo-thumb" aria-hidden="true">
+                            <GoogleDriveThumbnail fileId={midia.driveFileId} kind={midia.kind} />
+                          </span>
+                          <div className="mkt-campanha-arquivo-info">
+                            <strong>{midia.name}</strong>
+                            <span className="mkt-campanha-arquivo-kind">
+                              {midia.kind === 'video' ? 'Vídeo' : midia.kind === 'pdf' ? 'PDF' : 'Imagem'}
+                            </span>
+                          </div>
+                        </button>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            className="mkt-campanha-arquivo-action"
+                            aria-label={`Remover ${midia.name}`}
+                            disabled={removeMidia.isPending}
+                            onClick={() => removeMidia.mutate(midia.driveFileId)}
+                          >
+                            <i className="bi bi-x-lg" aria-hidden="true" />
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {tab === 'conversa' && (
                 <div className="mkt-comments-section">
                   <div className="mkt-comments-list">
@@ -299,6 +375,20 @@ const MarketingCampanhaDetailPanel: React.FC<MarketingCampanhaDetailPanelProps> 
                 </div>
               )}
             </div>
+
+            <MarketingCampanhaDrivePicker
+              campanhaId={campanhaId}
+              linkedDriveFileIds={linkedDriveFileIds}
+              open={showDrivePicker}
+              onClose={() => setShowDrivePicker(false)}
+              onAttached={() => setTab('arquivos')}
+            />
+
+            <GoogleDrivePreviewModal
+              midia={previewMidia}
+              open={Boolean(previewMidia)}
+              onClose={() => setPreviewMidia(null)}
+            />
           </>
         )}
       </QueryDataPanel>

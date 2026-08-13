@@ -16,6 +16,8 @@ from .models import (
 
     CampanhaMembro,
 
+    CampanhaMidia,
+
 )
 
 
@@ -152,6 +154,8 @@ class CampanhaMarketingSerializer(serializers.ModelSerializer):
 
     membrosCount = serializers.SerializerMethodField()
 
+    midiasCount = serializers.SerializerMethodField()
+
     canais = serializers.ListField(
         child=serializers.ChoiceField(choices=CAMPANHA_CANAL_VALUES),
         allow_empty=False,
@@ -202,6 +206,8 @@ class CampanhaMarketingSerializer(serializers.ModelSerializer):
 
             'membrosCount',
 
+            'midiasCount',
+
         ]
 
 
@@ -223,6 +229,16 @@ class CampanhaMarketingSerializer(serializers.ModelSerializer):
             return obj.membros_count
 
         return obj.membros.count()
+
+
+
+    def get_midiasCount(self, obj) -> int:
+
+        if hasattr(obj, 'midias_count'):
+
+            return obj.midias_count
+
+        return obj.midias.count()
 
 
 
@@ -292,11 +308,27 @@ class CampanhaMarketingDetailSerializer(CampanhaMarketingSerializer):
 
     membros = CampanhaMembroSerializer(many=True, read_only=True)
 
+    midias = serializers.SerializerMethodField()
+
 
 
     class Meta(CampanhaMarketingSerializer.Meta):
 
-        fields = [*CampanhaMarketingSerializer.Meta.fields, 'comentarios', 'membros']
+        fields = [*CampanhaMarketingSerializer.Meta.fields, 'comentarios', 'membros', 'midias']
+
+
+
+    def get_midias(self, obj) -> list[dict]:
+
+        request = self.context.get('request')
+
+        if not request or not getattr(request.user, 'is_authenticated', False):
+
+            return []
+
+        from .campanha_midias import build_campanha_midia_payloads
+
+        return build_campanha_midia_payloads(obj, request.user)
 
 
 
@@ -323,4 +355,44 @@ class CampanhaMembroCreateSerializer(serializers.Serializer):
 class CampanhaMembroRemoveSerializer(serializers.Serializer):
 
     userId = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), source='user')
+
+
+
+
+
+class CampanhaMidiaCreateSerializer(serializers.Serializer):
+
+    driveFileId = serializers.CharField(max_length=128)
+
+
+
+    def validate_driveFileId(self, value):
+
+        cleaned = (value or '').strip()
+
+        if not cleaned:
+
+            raise serializers.ValidationError('Informe o arquivo do Drive.')
+
+        return cleaned
+
+
+
+
+
+class CampanhaMidiaRemoveSerializer(serializers.Serializer):
+
+    driveFileId = serializers.CharField(max_length=128)
+
+
+
+    def validate_driveFileId(self, value):
+
+        cleaned = (value or '').strip()
+
+        if not cleaned:
+
+            raise serializers.ValidationError('Informe o arquivo do Drive.')
+
+        return cleaned
 

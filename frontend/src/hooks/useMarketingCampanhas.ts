@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiService } from '../services/apiService';
 
-import type { CampanhaPayload, CampanhaStatus } from '../types/domain';
+import type { CampanhaPayload, CampanhaStatus, CampanhaMarketing } from '../types/domain';
 
 import { syncMarketingQueriesSilently } from './marketingSilentSync';
 
@@ -213,6 +213,67 @@ export function useParticiparCampanha(campanhaId: string) {
     mutationFn: () => apiService.participarCampanha(campanhaId),
 
     onSuccess: () => refreshMarketing(qc, campanhaId),
+
+  });
+
+}
+
+
+
+export function useAddCampanhaMidia(campanhaId: string) {
+
+  const qc = useQueryClient();
+
+  return useMutation({
+
+    mutationFn: (driveFileId: string) => apiService.addCampanhaMidia(campanhaId, driveFileId),
+
+    onSuccess: (newMidia) => {
+      qc.setQueryData<CampanhaMarketing | undefined>(
+        MARKETING_KEYS.campanha(campanhaId),
+        (prev) => {
+          if (!prev) return prev;
+          const midias = prev.midias ?? [];
+          if (midias.some((item) => item.driveFileId === newMidia.driveFileId)) return prev;
+          return {
+            ...prev,
+            midias: [...midias, newMidia],
+            midiasCount: (prev.midiasCount ?? midias.length) + 1,
+          };
+        },
+      );
+      refreshMarketing(qc, campanhaId, 'midia');
+    },
+
+  });
+
+}
+
+
+
+export function useRemoveCampanhaMidia(campanhaId: string) {
+
+  const qc = useQueryClient();
+
+  return useMutation({
+
+    mutationFn: (driveFileId: string) => apiService.removeCampanhaMidia(campanhaId, driveFileId),
+
+    onSuccess: (_data, driveFileId) => {
+      qc.setQueryData<CampanhaMarketing | undefined>(
+        MARKETING_KEYS.campanha(campanhaId),
+        (prev) => {
+          if (!prev) return prev;
+          const midias = (prev.midias ?? []).filter((item) => item.driveFileId !== driveFileId);
+          return {
+            ...prev,
+            midias,
+            midiasCount: Math.max(0, midias.length),
+          };
+        },
+      );
+      refreshMarketing(qc, campanhaId, 'midia');
+    },
 
   });
 

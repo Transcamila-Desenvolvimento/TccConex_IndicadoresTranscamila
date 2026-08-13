@@ -17,7 +17,7 @@ from apps.accounts.permissions import ModuleAccessPermission
 
 
 
-from .models import KANBAN_STATUSES, CampanhaComentario, CampanhaMarketing, CampanhaMembro
+from .models import KANBAN_STATUSES, CampanhaComentario, CampanhaMarketing, CampanhaMembro, CampanhaMidia
 
 from .serializers import (
 
@@ -35,12 +35,17 @@ from .serializers import (
 
     CampanhaMembroSerializer,
 
+    CampanhaMidiaCreateSerializer,
+
+    CampanhaMidiaRemoveSerializer,
+
     CampanhaStatusMoveSerializer,
 
 )
 
 from .services import usuario_display
 from .realtime import notify_marketing_changed
+from .campanha_midias import build_campanha_midia_payloads, create_campanha_midia
 
 User = get_user_model()
 
@@ -112,6 +117,8 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
             membros_count=Count('membros'),
 
+            midias_count=Count('midias'),
+
         )
 
 
@@ -171,9 +178,11 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         ).prefetch_related(
             Prefetch('comentarios', queryset=CampanhaComentario.objects.select_related('autor_user').prefetch_related('mencoes')),
             Prefetch('membros', queryset=CampanhaMembro.objects.select_related('user', 'adicionado_por')),
+            Prefetch('midias', queryset=CampanhaMidia.objects.select_related('adicionado_por')),
         ).annotate(
             comentarios_count=Count('comentarios'),
             membros_count=Count('membros'),
+            midias_count=Count('midias'),
         ).get(pk=obj.pk)
 
     def get_serializer_class(self):
@@ -313,6 +322,8 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             comentarios_count=Count('comentarios'),
 
             membros_count=Count('membros'),
+
+            midias_count=Count('midias'),
 
         )
 
@@ -521,4 +532,88 @@ class CampanhaMarketingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
 
         )
+
+
+
+    @action(detail=True, methods=['get', 'post'], url_path='midias')
+
+    def midias(self, request, pk=None):
+
+        campanha = self.get_object()
+
+        if request.method == 'GET':
+
+            return Response(build_campanha_midia_payloads(campanha, request.user))
+
+
+
+        ser = CampanhaMidiaCreateSerializer(data=request.data)
+
+        ser.is_valid(raise_exception=True)
+
+        drive_file_id = ser.validated_data['driveFileId']
+
+        if CampanhaMidia.objects.filter(campanha=campanha, drive_file_id=drive_file_id).exists():
+
+            return Response(
+
+                {'detail': 'Este arquivo já está anexado à campanha.'},
+
+                status=status.HTTP_400_BAD_REQUEST,
+
+            )
+
+        try:
+
+            link = create_campanha_midia(
+
+                campanha=campanha,
+
+                drive_file_id=drive_file_id,
+
+                user=request.user,
+
+            )
+
+        except ValueError as exc:
+
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        notify_marketing_changed(event='midia', campanha_id=campanha.pk, actor_user_id=request.user.pk)
+
+        payloads = build_campanha_midia_payloads(campanha, request.user)
+
+        created = next((item for item in payloads if item['id'] == link.pk), None)
+
+        return Response(created or payloads[-1], status=status.HTTP_201_CREATED)
+
+
+
+    @action(detail=True, methods=['post'], url_path='midias/remover')
+
+    def remover_midia(self, request, pk=None):
+
+        campanha = self.get_object()
+
+        ser = CampanhaMidiaRemoveSerializer(data=request.data)
+
+        ser.is_valid(raise_exception=True)
+
+        drive_file_id = ser.validated_data['driveFileId']
+
+        deleted, _ = CampanhaMidia.objects.filter(
+
+            campanha=campanha,
+
+            drive_file_id=drive_file_id,
+
+        ).delete()
+
+        if not deleted:
+
+            return Response({'detail': 'Arquivo não vinculado a esta campanha.'}, status=status.HTTP_404_NOT_FOUND)
+
+        notify_marketing_changed(event='midia', campanha_id=campanha.pk, actor_user_id=request.user.pk)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
