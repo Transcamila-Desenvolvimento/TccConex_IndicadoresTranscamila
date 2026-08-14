@@ -935,12 +935,12 @@ export const apiService = {
   },
 
   async getMetasFaturamento(ano: number): Promise<MetaFaturamentoConfigResponse> {
-    const { data } = await api.get('/api/financeiro/metas-faturamento/', { params: { ano } });
+    const { data } = await api.get('/api/logistica/metas-faturamento/', { params: { ano } });
     return data as MetaFaturamentoConfigResponse;
   },
 
   async saveMetasFaturamento(payload: MetaFaturamentoConfigPayload): Promise<MetaFaturamentoConfigResponse> {
-    const { data } = await api.put('/api/financeiro/metas-faturamento/', payload);
+    const { data } = await api.put('/api/logistica/metas-faturamento/', payload);
     return data as MetaFaturamentoConfigResponse;
   },
 

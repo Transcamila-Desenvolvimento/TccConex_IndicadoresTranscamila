@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'apps.faturamento',
     'apps.sgq',
     'apps.marketing',
+    'apps.logistica',
 ]
 
 MIDDLEWARE = [

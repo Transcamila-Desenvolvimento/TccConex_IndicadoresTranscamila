@@ -273,10 +273,7 @@ const FinanceiroCalendar: React.FC = () => {
                               title={ev.description || ev.title}
                               onClick={(e) => { e.stopPropagation(); openEditEventModal(ev); }}
                             >
-                              <span
-                                className="fin-calendar-event-tag"
-                                style={{ color: corHex(ev.color), borderColor: '#cbd5e1' }}
-                              >
+                              <span className="fin-calendar-event-tag">
                                 Pessoal
                               </span>
                               <span className="fin-calendar-event-title">{ev.title}</span>

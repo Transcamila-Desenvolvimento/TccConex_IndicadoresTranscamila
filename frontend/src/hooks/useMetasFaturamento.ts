@@ -3,7 +3,7 @@ import { apiService } from '../services/apiService';
 import type { MetaFaturamentoConfigPayload } from '../types/domain';
 import { INDICADORES_META_FATURAMENTO_KEY } from './useIndicadores';
 
-export const METAS_FATURAMENTO_KEY = ['financeiro', 'metas-faturamento'] as const;
+export const METAS_FATURAMENTO_KEY = ['logistica', 'metas-faturamento'] as const;
 
 export function useMetasFaturamento(ano: number) {
   return useQuery({

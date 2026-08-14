@@ -3,7 +3,7 @@
 ADMIN_ENVIRONMENT = 'Administração/Manutenção'
 LEGACY_ADMIN_ENVIRONMENT = 'Administração'
 
-ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing'})
+ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística'})
 
 DEPRECATED_ENVIRONMENTS = frozenset({'Comercial', 'Frota'})
 

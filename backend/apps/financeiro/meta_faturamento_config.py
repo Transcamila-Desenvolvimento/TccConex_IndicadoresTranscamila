@@ -1,6 +1,6 @@
 """Configuração das metas mensais de faturamento (usada pelo indicador).
 
-Persiste em `indicadores.MetaFaturamentoMensal`. A tela fica no Financeiro;
+Persiste em `indicadores.MetaFaturamentoMensal`. A tela fica no ambiente Logística;
 o realizado continua vindo dos `BillingRecord`.
 """
 

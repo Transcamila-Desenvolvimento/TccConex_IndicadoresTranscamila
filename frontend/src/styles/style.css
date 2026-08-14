@@ -4344,50 +4344,99 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 
 .fin-calendar-event {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 20px;
-  padding: 1px 0;
+  align-items: stretch;
+  gap: 0;
+  min-height: 22px;
+  padding: 0;
   cursor: pointer;
   flex-shrink: 0;
   min-width: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  transition: box-shadow 0.15s ease, transform 0.12s ease;
+}
+
+.fin-calendar-event.is-pagar,
+.fin-calendar-event.is-receber,
+.fin-calendar-event.is-pessoal {
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+}
+
+.fin-calendar-event.is-pagar:hover,
+.fin-calendar-event.is-receber:hover,
+.fin-calendar-event.is-pessoal:hover {
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
+  transform: translateY(-1px);
+}
+
+.fin-calendar-event.is-pagar {
+  background: #fff5f5;
+  border: 1px solid #fecaca;
+}
+
+.fin-calendar-event.is-receber {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.fin-calendar-event.is-pessoal {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
 }
 
 .fin-calendar-event-tag {
   flex-shrink: 0;
-  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 2px 7px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #64748b;
-  line-height: 1.4;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 0;
+  line-height: 1;
+}
+
+.fin-calendar-event.is-pagar .fin-calendar-event-tag {
+  background: #dc2626;
+  color: #ffffff;
 }
 
 .fin-calendar-event.is-receber .fin-calendar-event-tag {
-  color: #118CC4;
+  background: #16a34a;
+  color: #ffffff;
 }
 
 .fin-calendar-event.is-pessoal .fin-calendar-event-tag {
-  color: #0D709D;
+  background: #118CC4;
+  color: #ffffff;
 }
 
 .fin-calendar-event-title {
   flex: 1;
   min-width: 0;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 600;
   color: #475569;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding: 4px 7px 4px 6px;
+  line-height: 1.2;
 }
 
-.fin-calendar-event:hover .fin-calendar-event-title {
-  color: #118CC4;
+.fin-calendar-event.is-pagar .fin-calendar-event-title {
+  color: #991b1b;
+}
+
+.fin-calendar-event.is-receber .fin-calendar-event-title {
+  color: #166534;
+}
+
+.fin-calendar-event.is-pessoal .fin-calendar-event-title {
+  color: #0c4a6e;
 }
 
 .fin-calendar-color-picker {
@@ -9900,6 +9949,381 @@ button.mkt-drive-browser-row:hover {
   font-weight: 700;
   border-top: 2px solid #cbd5e1;
   background: #f8fafc;
+}
+
+.logistica-config-section {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.logistica-settings-page {
+  max-width: 880px;
+  padding: 4px 4px 28px;
+}
+
+.logistica-settings-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.logistica-settings-header p {
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.logistica-settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.logistica-settings-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logistica-settings-accordion-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.logistica-settings-accordion-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: none;
+  background: #f8fafc;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.logistica-settings-accordion-trigger:hover {
+  background: #f1f5f9;
+}
+
+.logistica-settings-accordion-item.is-open .logistica-settings-accordion-trigger {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.logistica-settings-accordion-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.logistica-settings-accordion-prefix {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.logistica-settings-accordion-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.logistica-settings-accordion-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.logistica-settings-accordion-chevron {
+  flex-shrink: 0;
+  color: #64748b;
+  transition: transform 0.2s ease;
+}
+
+.logistica-settings-accordion-item.is-open .logistica-settings-accordion-chevron {
+  transform: rotate(90deg);
+}
+
+.logistica-settings-accordion-body-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s ease;
+}
+
+.logistica-settings-accordion-item.is-open .logistica-settings-accordion-body-wrap {
+  grid-template-rows: 1fr;
+}
+
+.logistica-settings-accordion-body {
+  overflow: hidden;
+}
+
+.logistica-settings-panel-inner {
+  padding: 10px 12px 12px;
+}
+
+.logistica-settings-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.logistica-settings-group-label {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.logistica-settings-group-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.logistica-settings-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.logistica-settings-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+
+.logistica-settings-panel-head-main {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.logistica-settings-panel-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.logistica-settings-panel-meta {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.logistica-settings-panel-meta strong {
+  font-weight: 600;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.logistica-settings-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.logistica-settings-year-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.logistica-settings-year-select {
+  height: 28px;
+  min-width: 72px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.logistica-settings-icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.logistica-settings-icon-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #118CC4;
+}
+
+.logistica-settings-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.logistica-settings-btn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #118CC4;
+  border-radius: 6px;
+  background: #118CC4;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.logistica-settings-btn:hover:not(:disabled) {
+  background: #0D709D;
+  border-color: #0D709D;
+}
+
+.logistica-settings-btn.secondary {
+  background: #ffffff;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.logistica-settings-btn.secondary:hover:not(:disabled) {
+  background: #f8fafc;
+  color: #334155;
+}
+
+.logistica-settings-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.logistica-settings-feedback {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.logistica-settings-feedback.is-ok {
+  color: #16a34a;
+}
+
+.logistica-settings-feedback.is-error {
+  color: #dc2626;
+}
+
+.logistica-settings-panel-body {
+  padding: 10px 12px 12px;
+}
+
+.logistica-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 14px;
+}
+
+@media (min-width: 640px) {
+  .logistica-meta-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.logistica-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12px;
+  color: #475569;
+}
+
+.logistica-meta-row span {
+  flex-shrink: 0;
+}
+
+.logistica-meta-input {
+  width: 100%;
+  max-width: 118px;
+  padding: 4px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: right;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  background: #ffffff;
+}
+
+.logistica-meta-input:focus {
+  outline: none;
+  border-color: #118CC4;
+  box-shadow: 0 0 0 2px rgba(17, 140, 196, 0.12);
+}
+
+.logistica-config-section-head h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.logistica-config-section-head p {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.logistica-config-subsection {
+  padding: 20px 22px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.logistica-config-subsection-head h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.logistica-config-subsection-head p {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
 }
 
 /* Tabela Perfil das Avaliações — estética alinhada aos indicadores */

@@ -10,7 +10,6 @@ from .views import (
     CalendarSystemEventsView,
     CalendarioEventoViewSet,
     CashAdjustmentViewSet,
-    MetaFaturamentoConfigView,
     PagarDiffAnalysisView,
     PrActionView,
     PrAnalysisView,
@@ -40,6 +39,5 @@ urlpatterns = [
     path('tasks/<str:task_id>/', CeleryTaskStatusView.as_view(), name='celery-task-status'),
     path('bank-data/sync/', BankDataSyncView.as_view(), name='bank-data-sync'),
     path('calendario/sistema/', CalendarSystemEventsView.as_view(), name='calendario-sistema'),
-    path('metas-faturamento/', MetaFaturamentoConfigView.as_view(), name='metas-faturamento'),
     path('', include(router.urls)),
 ]

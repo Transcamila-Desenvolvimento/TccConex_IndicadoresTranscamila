@@ -33,6 +33,7 @@ const ENV_META: Record<string, { code: string; color: string; text: string }> = 
   Faturamento: { code: ENVIRONMENT_CODES.Faturamento, color: ENV_BADGE_COLOR, text: 'Módulo de Faturamento' },
   SGQ: { code: ENVIRONMENT_CODES.SGQ, color: ENV_BADGE_COLOR, text: 'Gestão da Qualidade' },
   Marketing: { code: ENVIRONMENT_CODES.Marketing, color: ENV_BADGE_COLOR, text: 'Marketing' },
+  Logística: { code: ENVIRONMENT_CODES.Logística, color: ENV_BADGE_COLOR, text: 'Logística' },
 };
 
 const formatLastLogin = (value: string | null) => {
