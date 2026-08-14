@@ -249,10 +249,7 @@ const FinanceiroCalendar: React.FC = () => {
                               title={`${ev.fullTitle}\n${ev.count} título(s) — ${moeda.format(ev.amount)}\n(Clique para detalhar)`}
                               onClick={(e) => { e.stopPropagation(); setSystemDetail(ev); }}
                             >
-                              <span className="fin-calendar-event-tag">
-                                {ev.type === 'pagar' ? 'Pagar' : 'Receber'}
-                              </span>
-                              <span className="fin-calendar-event-title">{ev.title}</span>
+                              <span className="fin-calendar-event-label">{ev.title}</span>
                             </div>
                           ))}
                           {persDay.map((ev) => (
@@ -262,10 +259,7 @@ const FinanceiroCalendar: React.FC = () => {
                               title={ev.description || ev.title}
                               onClick={(e) => { e.stopPropagation(); openEditEventModal(ev); }}
                             >
-                              <span className="fin-calendar-event-tag">
-                                Pessoal
-                              </span>
-                              <span className="fin-calendar-event-title">{ev.title}</span>
+                              <span className="fin-calendar-event-label">{ev.title}</span>
                             </div>
                           ))}
                         </div>

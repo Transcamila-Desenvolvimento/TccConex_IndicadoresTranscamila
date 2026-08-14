@@ -25,12 +25,11 @@ ENV_HEADER = 'HTTP_X_PROTHON_ENVIRONMENT'
 FILIAL_HEADER = 'HTTP_X_PROTHON_FILIAL'
 
 
-def _decode_filial_header(raw: str) -> str:
-    """Decodifica filial do header (ASCII percent-encoded ou texto cru)."""
+def _decode_context_header(raw: str) -> str:
+    """Decodifica valor de header de contexto (percent-encoded ou texto cru)."""
     value = (raw or '').strip()
     if not value:
         return ''
-    # Frontend envia encodeURIComponent para sobreviver a proxies que quebram UTF-8 em headers.
     if '%' in value:
         try:
             value = unquote(value)
@@ -39,8 +38,13 @@ def _decode_filial_header(raw: str) -> str:
     return unicodedata.normalize('NFC', value)
 
 
+def _decode_filial_header(raw: str) -> str:
+    """Decodifica filial do header (ASCII percent-encoded ou texto cru)."""
+    return _decode_context_header(raw)
+
+
 def get_request_context(request) -> tuple[str, str]:
-    env = (request.META.get(ENV_HEADER) or '').strip()
+    env = _decode_context_header(request.META.get(ENV_HEADER) or '')
     filial = _decode_filial_header(request.META.get(FILIAL_HEADER) or '')
     return env, filial
 

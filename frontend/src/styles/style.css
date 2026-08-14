@@ -4344,99 +4344,52 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 
 .fin-calendar-event {
   display: flex;
-  align-items: stretch;
-  gap: 0;
-  min-height: 22px;
-  padding: 0;
+  align-items: center;
+  min-height: 20px;
+  padding: 3px 7px;
   cursor: pointer;
   flex-shrink: 0;
   min-width: 0;
-  border-radius: 6px;
-  overflow: hidden;
-  transition: box-shadow 0.15s ease, transform 0.12s ease;
+  border-radius: 5px;
+  border: none;
+  transition: box-shadow 0.15s ease, filter 0.12s ease;
 }
 
 .fin-calendar-event.is-pagar,
 .fin-calendar-event.is-receber,
 .fin-calendar-event.is-pessoal {
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
 }
 
 .fin-calendar-event.is-pagar:hover,
 .fin-calendar-event.is-receber:hover,
 .fin-calendar-event.is-pessoal:hover {
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
-  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.14);
+  filter: brightness(1.05);
 }
 
 .fin-calendar-event.is-pagar {
-  background: #fff5f5;
-  border: 1px solid #fecaca;
+  background: #dc2626;
 }
 
 .fin-calendar-event.is-receber {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background: #16a34a;
 }
 
 .fin-calendar-event.is-pessoal {
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-}
-
-.fin-calendar-event-tag {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 4px 6px;
-  border: none;
-  border-radius: 0;
-  line-height: 1;
-}
-
-.fin-calendar-event.is-pagar .fin-calendar-event-tag {
-  background: #dc2626;
-  color: #ffffff;
-}
-
-.fin-calendar-event.is-receber .fin-calendar-event-tag {
-  background: #16a34a;
-  color: #ffffff;
-}
-
-.fin-calendar-event.is-pessoal .fin-calendar-event-tag {
   background: #118CC4;
-  color: #ffffff;
 }
 
-.fin-calendar-event-title {
+.fin-calendar-event-label {
   flex: 1;
   min-width: 0;
   font-size: 10px;
   font-weight: 600;
-  color: #475569;
+  color: #ffffff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 4px 7px 4px 6px;
-  line-height: 1.2;
-}
-
-.fin-calendar-event.is-pagar .fin-calendar-event-title {
-  color: #991b1b;
-}
-
-.fin-calendar-event.is-receber .fin-calendar-event-title {
-  color: #166534;
-}
-
-.fin-calendar-event.is-pessoal .fin-calendar-event-title {
-  color: #0c4a6e;
+  line-height: 1.25;
 }
 
 .fin-calendar-color-picker {
