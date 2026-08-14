@@ -25,17 +25,6 @@ const CORES_EVENTO: { key: string; label: string; hex: string }[] = [
   { key: 'grafite', label: 'Grafite', hex: '#334155' },
 ];
 
-const LEGACY_EVENT_COLORS: Record<string, string> = {
-  verde: '#118CC4',
-  vermelho: '#64748b',
-  amarelo: '#64748b',
-  roxo: '#0D709D',
-  cinza: '#64748b',
-};
-
-const corHex = (key: string) =>
-  CORES_EVENTO.find((c) => c.key === key)?.hex ?? LEGACY_EVENT_COLORS[key] ?? CORES_EVENTO[0].hex;
-
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function toIso(d: Date): string {
