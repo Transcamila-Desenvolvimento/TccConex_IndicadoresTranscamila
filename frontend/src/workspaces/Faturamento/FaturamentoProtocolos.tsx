@@ -456,7 +456,13 @@ const FaturamentoProtocolos: React.FC = () => {
                         <td style={{ color: 'var(--text-secondary)', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={protocolo.notasFiscais.join(', ')}>
                           {protocolo.notasFiscais.join(', ')}
                         </td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{protocolo.usuarioNome}</td>
+                        <td title={protocolo.usuarioNome || undefined}>
+                          {protocolo.usuarioNome ? (
+                            <span className="sgq-lancado-por-badge">{protocolo.usuarioNome}</span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                         <td>
                           {canEditProtocolos && (
                             <button
