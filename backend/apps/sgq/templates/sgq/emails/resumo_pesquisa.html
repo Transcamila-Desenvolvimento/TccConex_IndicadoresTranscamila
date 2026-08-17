@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pesquisa de Satisfação - TccConex</title>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f4f7f9;
+            color: #2d3436;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .wrapper {
+            background-color: #f4f7f9;
+            padding: 20px 10px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        }
+
+        .header {
+            background-color: #118CC4;
+            padding: 30px 40px;
+            color: #ffffff;
+            text-align: left;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            text-transform: uppercase;
+            line-height: 1.2;
+        }
+
+        .header p {
+            margin: 8px 0 0;
+            font-size: 14px;
+            opacity: 0.9;
+            font-weight: 400;
+        }
+
+        .header-btn {
+            display: inline-block;
+            padding: 8px 18px;
+            border: 1.5px solid #ffffff;
+            border-radius: 25px;
+            color: #ffffff !important;
+            text-decoration: none !important;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .content {
+            padding: 30px 40px;
+        }
+
+        .section-header {
+            font-size: 12px;
+            font-weight: 700;
+            color: #b2bec3;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin: 26px 0 14px;
+            border-bottom: 2px solid #f1f3f5;
+            padding-bottom: 8px;
+        }
+
+        .section-header:first-child {
+            margin-top: 0;
+        }
+
+        .panel {
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 15px 18px;
+            margin-bottom: 12px;
+        }
+
+        .panel-highlight {
+            background-color: #f0f9ff;
+            border: 1px solid #118CC4;
+        }
+
+        .panel-title {
+            margin: 0 0 8px;
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #0f172a;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .kpi-grid {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .kpi-grid td {
+            width: 20%;
+            text-align: center;
+            padding: 6px 4px;
+            border-left: 1px solid #eef2f6;
+        }
+
+        .kpi-grid td:first-child {
+            border-left: none;
+        }
+
+        .kpi-value {
+            font-size: 22px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: #118CC4;
+        }
+
+        .kpi-label {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            margin-top: 4px;
+        }
+
+        .detail-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 8px;
+        }
+
+        .detail-table th,
+        .detail-table td {
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f3f5;
+            font-size: 12.5px;
+        }
+
+        .detail-table th {
+            text-align: left;
+            color: #64748b;
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .detail-table td.value {
+            text-align: right;
+            font-weight: 700;
+            color: #1e293b;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .text-green { color: #059669; }
+        .text-orange { color: #d97706; }
+        .text-red { color: #dc2626; }
+
+        .meta-line {
+            font-size: 12.5px;
+            color: #64748b;
+            margin: 0 0 6px;
+        }
+
+        .footer {
+            background-color: #f8fafc;
+            padding: 20px 40px;
+            text-align: center;
+            border-top: 1px solid #eef2f6;
+        }
+
+        .footer p {
+            margin: 0;
+            font-size: 11px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrapper">
+        <div class="container">
+            <div class="header">
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                        <td>
+                            <h1>Pesquisa de Satisfação</h1>
+                            <p>{{ filial }} &bull; {{ periodo }}</p>
+                            <p style="margin-top: 10px;">Enviado por <strong>{{ enviado_por }}</strong> em {{ ref_date|date:"d/m/Y H:i" }}</p>
+                        </td>
+                        <td align="right" valign="top">
+                            <a href="{{ dashboard_url }}" class="header-btn">Abrir no sistema</a>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="content">
+                <div class="section-header">Resumo Geral</div>
+                <div class="panel panel-highlight">
+                    <table class="kpi-grid">
+                        <tr>
+                            <td>
+                                <div class="kpi-value">{{ stats.totalPesquisas }}</div>
+                                <div class="kpi-label">Pesquisas</div>
+                            </td>
+                            <td>
+                                <div class="kpi-value">{{ pct_otimo|floatformat:1 }}%</div>
+                                <div class="kpi-label">Ótimo</div>
+                            </td>
+                            <td>
+                                <div class="kpi-value">{{ score_medio|floatformat:2 }}</div>
+                                <div class="kpi-label">Score médio</div>
+                            </td>
+                            <td>
+                                <div class="kpi-value text-orange">{{ stats.pontosAtencao }}</div>
+                                <div class="kpi-label">Pontos de atenção</div>
+                            </td>
+                            <td>
+                                <div class="kpi-value">{{ total_em_branco }}</div>
+                                <div class="kpi-label">Em branco</div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="section-header">Distribuição das Avaliações</div>
+                <table class="detail-table">
+                    <tr>
+                        <th>Avaliação</th>
+                        <th style="text-align: right;">Qtd</th>
+                        <th style="text-align: right;">%</th>
+                    </tr>
+                    <tr>
+                        <td class="text-green">Ótimo</td>
+                        <td class="value">{{ stats.contagem.otimo }}</td>
+                        <td class="value">{{ stats.percentual.otimo|floatformat:1 }}%</td>
+                    </tr>
+                    <tr>
+                        <td>Bom</td>
+                        <td class="value">{{ stats.contagem.bom }}</td>
+                        <td class="value">{{ stats.percentual.bom|floatformat:1 }}%</td>
+                    </tr>
+                    <tr>
+                        <td class="text-orange">Regular</td>
+                        <td class="value">{{ stats.contagem.regular }}</td>
+                        <td class="value">{{ stats.percentual.regular|floatformat:1 }}%</td>
+                    </tr>
+                    <tr>
+                        <td class="text-red">Ruim</td>
+                        <td class="value">{{ stats.contagem.ruim }}</td>
+                        <td class="value">{{ stats.percentual.ruim|floatformat:1 }}%</td>
+                    </tr>
+                </table>
+
+                {% if criterios %}
+                <div class="section-header">Desempenho por Critério</div>
+                <table class="detail-table">
+                    <tr>
+                        <th>Critério</th>
+                        <th style="text-align: right;">Ótimo</th>
+                        <th style="text-align: right;">Bom</th>
+                        <th style="text-align: right;">Regular</th>
+                        <th style="text-align: right;">Ruim</th>
+                        <th style="text-align: right;">Score</th>
+                    </tr>
+                    {% for item in criterios %}
+                    <tr>
+                        <td>{{ item.label }}</td>
+                        <td class="value">{{ item.otimo }}</td>
+                        <td class="value">{{ item.bom }}</td>
+                        <td class="value">{{ item.regular }}</td>
+                        <td class="value">{{ item.ruim }}</td>
+                        <td class="value">{{ item.score|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+
+                {% if por_cliente %}
+                <div class="section-header">Pesquisas por Cliente</div>
+                <table class="detail-table">
+                    <tr>
+                        <th>Cliente</th>
+                        <th style="text-align: right;">Quantidade</th>
+                    </tr>
+                    {% for item in por_cliente %}
+                    <tr>
+                        <td>{{ item.label }}</td>
+                        <td class="value">{{ item.total }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+
+                <p class="meta-line" style="margin-top: 18px;">
+                    Meta de avaliações "Ótimo": <strong>{{ stats.metaOtimo }}%</strong>.
+                </p>
+            </div>
+
+            <div class="footer">
+                <p>Envio automático de relatório - TccConex &copy; 2026 Transcamila Cargas e Armazéns Gerais Ltda</p>
+                <p style="margin-top: 10px; font-size: 10px;">Este e-mail é de uso exclusivo e confidencial.</p>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

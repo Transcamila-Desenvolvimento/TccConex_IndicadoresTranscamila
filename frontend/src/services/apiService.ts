@@ -28,6 +28,7 @@ import type {
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
   ProtocoloImportParams, ProtocoloImportResult,
   SgqPesquisa, SgqPesquisaImportPreview, SgqPesquisaImportResult, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
+  SendSgqResumoEmailParams, SendSgqResumoEmailResponse,
   CampanhaMarketing, CampanhaPayload, CampanhaQuadro, CampanhaComentario, CampanhaMembro, CampanhaMidia,
   GoogleDriveStatus, GoogleDriveBrowseResponse,
   UserDirectoryEntry,
@@ -1722,6 +1723,11 @@ export const apiService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return data as SgqPesquisaImportResult;
+  },
+
+  async enviarResumoSgqPesquisas(payload: SendSgqResumoEmailParams): Promise<SendSgqResumoEmailResponse> {
+    const { data } = await api.post('/api/sgq/pesquisas-satisfacao/enviar-resumo/', payload);
+    return data as SendSgqResumoEmailResponse;
   },
 
   async getUserDirectory(module = 'Marketing'): Promise<UserDirectoryEntry[]> {

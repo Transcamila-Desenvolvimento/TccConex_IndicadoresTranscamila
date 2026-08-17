@@ -1292,6 +1292,16 @@ export interface SgqPesquisaStats {
   criterios: SgqCriterioStats[];
 }
 
+export interface SendSgqResumoEmailParams {
+  to: string[];
+  cc?: string[];
+}
+
+export interface SendSgqResumoEmailResponse {
+  success: boolean;
+  message: string;
+}
+
 export interface SgqSatisfacaoIndicadorQueryParams {
   filial?: string;
   motorista?: string;

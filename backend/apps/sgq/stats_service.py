@@ -1,11 +1,25 @@
 """Agregação de KPIs das pesquisas de satisfação — usada pelo SGQ operacional
 e pelo indicador em Indicadores (visão consolidada por filial)."""
 
+from django.db.models import Q
+
 from .models import AVALIACAO_CHOICES, CRITERIOS_AVALIACAO
 
 _AVALIACAO_KEYS = [key for key, _ in AVALIACAO_CHOICES]
 _CRITERIO_FIELDS = [field for field, _ in CRITERIOS_AVALIACAO]
 _SCORE_MAP = {'ruim': 1, 'regular': 2, 'bom': 3, 'otimo': 4}
+
+
+def _q_sem_avaliacao() -> Q:
+    """Pesquisa em branco = todos os critérios de avaliação vazios."""
+    condition = Q()
+    for field in _CRITERIO_FIELDS:
+        condition &= Q(**{field: ''})
+    return condition
+
+
+def count_pesquisas_em_branco(qs) -> int:
+    return qs.filter(_q_sem_avaliacao()).count()
 
 
 def build_pesquisa_stats(qs) -> dict:

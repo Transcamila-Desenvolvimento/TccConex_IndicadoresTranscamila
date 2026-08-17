@@ -18,6 +18,7 @@ from apps.financeiro.pagination import ReportPagination
 
 from .lote_draft import draft_payload, has_meaningful_draft, sanitize_draft_rows
 from .models import PesquisaSatisfacao, PesquisaSatisfacaoLoteDraft
+from .pesquisa_email_service import parse_emails, send_pesquisa_resumo_email
 from .pesquisa_import_service import (
     PesquisaImportError,
     build_pesquisa_import_template,
@@ -206,6 +207,47 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         qs = self.scope_queryset(PesquisaSatisfacao.objects.all(), filial_field='filial', admin_bypass=False)
         qs = filter_pesquisas_queryset(qs, request.query_params)
         return Response(build_pesquisa_stats(qs))
+
+    @action(detail=False, methods=['post'], url_path='enviar-resumo')
+    def enviar_resumo(self, request):
+        """Envia resumo das pesquisas da filial da sessão (ignora filtros da tabela)."""
+        to_emails = parse_emails(request.data.get('to') or request.data.get('email'))
+        cc_emails = parse_emails(request.data.get('cc') or request.data.get('emailCopia'))
+
+        if not to_emails:
+            return Response({'detail': 'Informe ao menos um destinatário.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        filial = self._session_filial()
+        if not filial:
+            return Response(
+                {'detail': 'Filial da sessão é obrigatória para enviar o resumo.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            send_pesquisa_resumo_email(
+                request.user,
+                request,
+                to_emails=to_emails,
+                cc_emails=cc_emails,
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response(
+                {'error': f'Falha ao enviar e-mail: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        record_audit(
+            request.user,
+            'sgq.pesquisa.resumo_enviado',
+            f'Resumo de pesquisas de satisfação ({filial}) enviado para {", ".join(to_emails)}.',
+        )
+        return Response(
+            {'success': True, 'message': f'Resumo enviado para {", ".join(to_emails)}.'},
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=['get', 'put', 'delete'], url_path='lote-draft')
     def lote_draft(self, request):

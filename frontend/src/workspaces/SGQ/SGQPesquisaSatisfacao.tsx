@@ -16,6 +16,7 @@ import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import SGQPesquisaLoteModal from './SGQPesquisaLoteModal';
 import SGQPesquisaImportModal from './SGQPesquisaImportModal';
+import SGQResumoEmailModal from './SGQResumoEmailModal';
 import { clearLegacySgqLoteDrafts } from './sgqLoteDraft';
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -206,8 +207,8 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formError, setFormError] = useState('');
 
-  // Dropdown "Incluir" (Formulário / Inclusão em Tabela)
-  const [isIncluirOpen, setIsIncluirOpen] = useState(false);
+  // Dropdown "Incluir" removido — formulário direto no botão; lote/importação em "Ações"
+  const [isResumoEmailOpen, setIsResumoEmailOpen] = useState(false);
   const [isLoteModalOpen, setIsLoteModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const loteDraftQuery = useSgqLoteDraft(selectedFilial);
@@ -226,7 +227,6 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!(e.target as HTMLElement).closest('.reports-dropdown-wrapper')) {
-        setIsIncluirOpen(false);
         setIsActionsOpen(false);
       }
     };
@@ -385,48 +385,111 @@ const SGQPesquisaSatisfacao: React.FC = () => {
           <h1 className="view-page-title">Pesquisa de Satisfação</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {canMutatePesquisas && (
-            <div className="reports-dropdown-wrapper">
-              <button
-                type="button"
-                className="reports-action-btn secondary"
-                disabled={selectedIds.length === 0}
-                onClick={() => { setIsIncluirOpen(false); setIsActionsOpen((open) => !open); }}
-              >
-                <span>Ações{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}</span>
-                <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              <div className={`reports-dropdown-menu ${isActionsOpen ? 'show' : ''}`}>
-                {canEditPesquisas && selectedRows.length === 1 && (
-                  <span className="reports-dropdown-item" onClick={handleEditSelected}>
+          <div className="reports-dropdown-wrapper">
+            <button
+              type="button"
+              className="reports-action-btn secondary"
+              onClick={() => setIsActionsOpen((open) => !open)}
+            >
+              <span>Ações{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}</span>
+              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div className={`reports-dropdown-menu ${isActionsOpen ? 'show' : ''}`}>
+              {selectedIds.length === 0 ? (
+                <>
+                  <span
+                    className="reports-dropdown-item"
+                    onClick={() => {
+                      setIsActionsOpen(false);
+                      setIsResumoEmailOpen(true);
+                    }}
+                  >
                     <span className="reports-dropdown-item-left">
-                      <i className="bi bi-pencil" />
-                      Editar
+                      <i className="bi bi-envelope" />
+                      Enviar resumo
                     </span>
                   </span>
-                )}
-                {canDeletePesquisas && (
-                  <span className="reports-dropdown-item is-danger" onClick={handleBulkDelete}>
-                    <span className="reports-dropdown-item-left">
-                      <i className="bi bi-trash" />
-                      Excluir
+                  {(((canCreatePesquisas && !hasLoteDraft) || canImportPesquisas)) && (
+                    <div className="reports-dropdown-divider" />
+                  )}
+                  {canCreatePesquisas && !hasLoteDraft && (
+                    <span
+                      className="reports-dropdown-item"
+                      onClick={() => {
+                        setIsActionsOpen(false);
+                        setIsLoteModalOpen(true);
+                      }}
+                    >
+                      <span className="reports-dropdown-item-left">
+                        <i className="bi bi-table" />
+                        Inclusão em Tabela
+                      </span>
                     </span>
-                  </span>
-                )}
-              </div>
+                  )}
+                  {canImportPesquisas && (
+                    <span
+                      className="reports-dropdown-item"
+                      onClick={() => {
+                        setIsActionsOpen(false);
+                        setIsImportModalOpen(true);
+                      }}
+                    >
+                      <span className="reports-dropdown-item-left">
+                        <i className="bi bi-file-earmark-arrow-up" />
+                        Importar planilha
+                      </span>
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  {canEditPesquisas && selectedRows.length === 1 && (
+                    <span className="reports-dropdown-item" onClick={handleEditSelected}>
+                      <span className="reports-dropdown-item-left">
+                        <i className="bi bi-pencil" />
+                        Editar
+                      </span>
+                    </span>
+                  )}
+                  {canDeletePesquisas && selectedRows.length > 0 && (
+                    <span className="reports-dropdown-item is-danger" onClick={handleBulkDelete}>
+                      <span className="reports-dropdown-item-left">
+                        <i className="bi bi-trash" />
+                        Excluir
+                      </span>
+                    </span>
+                  )}
+                </>
+              )}
             </div>
-          )}
+          </div>
 
-          {canCreatePesquisas && hasLoteDraft ? (
+          {canCreatePesquisas && !hasLoteDraft && (
             <button
               type="button"
               className="reports-action-btn primary"
               style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
               onClick={() => {
                 setIsActionsOpen(false);
-                setIsIncluirOpen(false);
+                openCreateModal();
+              }}
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              <span>Incluir</span>
+            </button>
+          )}
+
+          {canCreatePesquisas && hasLoteDraft && (
+            <button
+              type="button"
+              className="reports-action-btn primary"
+              style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
+              onClick={() => {
+                setIsActionsOpen(false);
                 setIsLoteModalOpen(true);
               }}
               title="Continuar rascunho da inclusão em tabela"
@@ -434,58 +497,6 @@ const SGQPesquisaSatisfacao: React.FC = () => {
               <i className="bi bi-journal-text" aria-hidden="true" />
               <span>Rascunho</span>
             </button>
-          ) : (canCreatePesquisas || canImportPesquisas) && (
-            <div className="reports-dropdown-wrapper">
-              <button
-                type="button"
-                className="reports-action-btn primary"
-                style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
-                onClick={() => { setIsActionsOpen(false); setIsIncluirOpen((open) => !open); }}
-              >
-                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"></path>
-                </svg>
-                <span>{canCreatePesquisas ? 'Incluir' : 'Importar'}</span>
-                <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              <div className={`reports-dropdown-menu ${isIncluirOpen ? 'show' : ''}`}>
-                {canCreatePesquisas && (
-                  <>
-                    <span
-                      className="reports-dropdown-item"
-                      onClick={() => { setIsIncluirOpen(false); openCreateModal(); }}
-                    >
-                      <span className="reports-dropdown-item-left">
-                        <i className="bi bi-file-earmark-text" />
-                        Formulário
-                      </span>
-                    </span>
-                    <span
-                      className="reports-dropdown-item"
-                      onClick={() => { setIsIncluirOpen(false); setIsLoteModalOpen(true); }}
-                    >
-                      <span className="reports-dropdown-item-left">
-                        <i className="bi bi-table" />
-                        Inclusão em Tabela
-                      </span>
-                    </span>
-                  </>
-                )}
-                {canImportPesquisas && (
-                  <span
-                    className="reports-dropdown-item"
-                    onClick={() => { setIsIncluirOpen(false); setIsImportModalOpen(true); }}
-                  >
-                    <span className="reports-dropdown-item-left">
-                      <i className="bi bi-file-earmark-arrow-up" />
-                      Importar planilha
-                    </span>
-                  </span>
-                )}
-              </div>
-            </div>
           )}
         </div>
       </header>
@@ -900,6 +911,13 @@ const SGQPesquisaSatisfacao: React.FC = () => {
 
       {isImportModalOpen && canImportPesquisas && (
         <SGQPesquisaImportModal onClose={() => setIsImportModalOpen(false)} />
+      )}
+
+      {isResumoEmailOpen && (
+        <SGQResumoEmailModal
+          filial={selectedFilial}
+          onClose={() => setIsResumoEmailOpen(false)}
+        />
       )}
     </div>
   );

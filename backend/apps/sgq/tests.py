@@ -428,6 +428,70 @@ class PesquisaSatisfacaoTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data['criadoPor'], 'Operador SGQ')
 
+    def test_enviar_resumo_filtra_por_filial_da_sessao(self):
+        from django.core import mail
+
+        self._create(filial=IBIPORA, cte='111')
+        self._create(
+            filial=IBIPORA,
+            cte='BLANK',
+            clienteRecusouAssinar=True,
+            prazoEntrega='',
+            condicoesMercadoria='',
+            condicoesVeiculo='',
+            apresentacaoMotorista='',
+            atendimentoDispensado='',
+        )
+        self._create(filial=RONDONOPOLIS, cte='222')
+
+        response = self.client.post(
+            '/api/sgq/pesquisas-satisfacao/enviar-resumo/',
+            {'to': ['destino@example.com']},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(len(mail.outbox), 1)
+
+        message = mail.outbox[0]
+        self.assertIn('Pesquisa de Satisfação', message.subject)
+        self.assertIn('Admin SGQ', message.body)
+        self.assertIn('indicadores/gestao-qualidade/satisfacao-clientes', message.body)
+        self.assertIn('Em branco', message.body)
+        self.assertIn('>1<', message.body)
+        self.assertEqual(message.to, ['destino@example.com'])
+        self.assertEqual(len(message.attachments), 0)
+
+        self.assertEqual(PesquisaSatisfacao.objects.filter(filial=IBIPORA).count(), 2)
+        self.assertEqual(PesquisaSatisfacao.objects.filter(filial=RONDONOPOLIS).count(), 1)
+
+    def test_enviar_resumo_ignora_filtros_da_tabela(self):
+        from django.core import mail
+
+        self._create(filial=IBIPORA, cte='111', cliente='CCAB')
+        self._create(filial=IBIPORA, cte='222', cliente='Braskem')
+
+        response = self.client.post(
+            '/api/sgq/pesquisas-satisfacao/enviar-resumo/',
+            {'to': ['destino@example.com'], 'cliente': 'CCAB'},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+        message = mail.outbox[0]
+        self.assertIn('>2<', message.body)
+
+    def test_enviar_resumo_exige_destinatario(self):
+        response = self.client.post(
+            '/api/sgq/pesquisas-satisfacao/enviar-resumo/',
+            {'to': []},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 400)
+
 
 class PesquisaSatisfacaoLoteDraftTests(APITestCase):
     def setUp(self):

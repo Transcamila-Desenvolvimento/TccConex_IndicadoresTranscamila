@@ -7,6 +7,7 @@ import type {
   SgqPesquisaBulkErrors,
   SgqPesquisaPayload,
   SgqPesquisaQueryParams,
+  SendSgqResumoEmailParams,
 } from '../types/domain';
 
 // A filial da sessão entra na queryKey (não é enviada como filtro à API — o
@@ -155,6 +156,12 @@ export function useImportSgqPesquisasSpreadsheet() {
         invalidateSgqAndIndicador(queryClient);
       }
     },
+  });
+}
+
+export function useEnviarResumoSgqPesquisas() {
+  return useMutation({
+    mutationFn: (payload: SendSgqResumoEmailParams) => apiService.enviarResumoSgqPesquisas(payload),
   });
 }
 
