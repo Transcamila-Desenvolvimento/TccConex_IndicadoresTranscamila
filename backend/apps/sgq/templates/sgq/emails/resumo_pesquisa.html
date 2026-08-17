@@ -175,6 +175,55 @@
             margin: 0 0 6px;
         }
 
+        .filial-panel {
+            margin-bottom: 14px;
+        }
+
+        .filial-panel:last-child {
+            margin-bottom: 0;
+        }
+
+        .filial-meta {
+            font-size: 11px;
+            color: #64748b;
+            white-space: nowrap;
+        }
+
+        .filial-kpi-grid {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+
+        .filial-kpi-grid td {
+            width: 20%;
+            text-align: center;
+            padding: 10px 8px;
+            border-left: 1px solid #eef2f6;
+            vertical-align: top;
+        }
+
+        .filial-kpi-grid td:first-child {
+            border-left: none;
+        }
+
+        .filial-kpi-value {
+            font-size: 18px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: #118CC4;
+            line-height: 1.2;
+        }
+
+        .filial-kpi-label {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.35px;
+            margin-top: 6px;
+            line-height: 1.35;
+        }
+
         .footer {
             background-color: #f8fafc;
             padding: 20px 40px;
@@ -198,7 +247,7 @@
                     <tr>
                         <td>
                             <h1>Pesquisa de Satisfação</h1>
-                            <p>{{ filial }} &bull; {{ periodo }}</p>
+                            <p>{{ filiais_label }} &bull; {{ periodo }}</p>
                             <p style="margin-top: 10px;">Enviado por <strong>{{ enviado_por }}</strong> em {{ ref_date|date:"d/m/Y H:i" }}</p>
                         </td>
                         <td align="right" valign="top">
@@ -288,6 +337,48 @@
                     </tr>
                     {% endfor %}
                 </table>
+                {% endif %}
+
+                {% if por_filial %}
+                <div class="section-header">Por Filial</div>
+                {% for item in por_filial %}
+                <div class="panel filial-panel">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                            <td valign="top">
+                                <div class="panel-title" style="margin-bottom: 0;">{{ item.filial_curta }}</div>
+                            </td>
+                            <td align="right" valign="top">
+                                <span class="filial-meta">Última inclusão: <strong style="color: #334155;">{{ item.ultimaInclusao }}</strong></span>
+                            </td>
+                        </tr>
+                    </table>
+                    <table class="filial-kpi-grid">
+                        <tr>
+                            <td>
+                                <div class="filial-kpi-value">{{ item.totalPesquisas }}</div>
+                                <div class="filial-kpi-label">Pesquisas</div>
+                            </td>
+                            <td>
+                                <div class="filial-kpi-value">{{ item.percentualOtimo|floatformat:1 }}%</div>
+                                <div class="filial-kpi-label">Ótimo</div>
+                            </td>
+                            <td>
+                                <div class="filial-kpi-value">{{ item.scoreMedio|floatformat:2 }}</div>
+                                <div class="filial-kpi-label">Score</div>
+                            </td>
+                            <td>
+                                <div class="filial-kpi-value text-orange">{{ item.pontosAtencao }}</div>
+                                <div class="filial-kpi-label">Atenção</div>
+                            </td>
+                            <td>
+                                <div class="filial-kpi-value">{{ item.totalEmBranco }}</div>
+                                <div class="filial-kpi-label">Em branco</div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                {% endfor %}
                 {% endif %}
 
                 {% if por_cliente %}

@@ -18,7 +18,7 @@ from apps.financeiro.pagination import ReportPagination
 
 from .lote_draft import draft_payload, has_meaningful_draft, sanitize_draft_rows
 from .models import PesquisaSatisfacao, PesquisaSatisfacaoLoteDraft
-from .pesquisa_email_service import parse_emails, send_pesquisa_resumo_email
+from .pesquisa_email_service import filiais_label, parse_emails, resolve_resumo_filiais, send_pesquisa_resumo_email
 from .pesquisa_import_service import (
     PesquisaImportError,
     build_pesquisa_import_template,
@@ -210,17 +210,17 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='enviar-resumo')
     def enviar_resumo(self, request):
-        """Envia resumo das pesquisas da filial da sessão (ignora filtros da tabela)."""
+        """Envia resumo consolidado das filiais SGQ do usuário (ignora filtros da tabela)."""
         to_emails = parse_emails(request.data.get('to') or request.data.get('email'))
         cc_emails = parse_emails(request.data.get('cc') or request.data.get('emailCopia'))
 
         if not to_emails:
             return Response({'detail': 'Informe ao menos um destinatário.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        filial = self._session_filial()
-        if not filial:
+        filiais = resolve_resumo_filiais(request.user)
+        if not filiais:
             return Response(
-                {'detail': 'Filial da sessão é obrigatória para enviar o resumo.'},
+                {'detail': 'Usuário sem acesso a filiais do SGQ para enviar o resumo.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -239,10 +239,11 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        label_filiais = filiais_label(filiais)
         record_audit(
             request.user,
             'sgq.pesquisa.resumo_enviado',
-            f'Resumo de pesquisas de satisfação ({filial}) enviado para {", ".join(to_emails)}.',
+            f'Resumo de pesquisas de satisfação ({label_filiais}) enviado para {", ".join(to_emails)}.',
         )
         return Response(
             {'success': True, 'message': f'Resumo enviado para {", ".join(to_emails)}.'},

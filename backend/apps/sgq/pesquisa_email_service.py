@@ -6,11 +6,12 @@ import re
 
 from django.conf import settings
 from django.core.mail import EmailMessage
-from django.db.models import Count
+from django.db.models import Count, Max
 from django.template.loader import render_to_string
 from django.utils import timezone
 
-from apps.accounts.permissions import allowed_filiais_for_module, get_request_context, resolve_filial_name
+from apps.accounts.constants import branches_for_module
+from apps.accounts.permissions import allowed_filiais_for_module
 
 from .models import CLIENTE_CHOICES, PesquisaSatisfacao
 from .stats_service import build_pesquisa_stats, count_pesquisas_em_branco
@@ -34,10 +35,58 @@ def _usuario_display(user) -> str:
     return user.name or user.get_full_name() or user.username
 
 
-def _resolve_session_filial(user, request) -> str:
-    _, filial_header = get_request_context(request)
-    allowed = allowed_filiais_for_module(user, 'SGQ')
-    return resolve_filial_name(filial_header, allowed) or (filial_header or '').strip()
+def resolve_resumo_filiais(user) -> list[str]:
+    """Filiais SGQ incluídas no resumo — ordem canônica, respeitando permissão do usuário."""
+    allowed = set(allowed_filiais_for_module(user, 'SGQ'))
+    return [nome for nome in branches_for_module('SGQ') if nome in allowed]
+
+
+def _filial_curta(nome: str) -> str:
+    if 'Ibiporã' in nome:
+        return 'Ibiporã'
+    if nome == 'Rondonópolis':
+        return 'Rondonópolis'
+    return nome
+
+
+def _fmt_data_br(value) -> str:
+    if not value:
+        return '—'
+    return value.strftime('%d/%m/%Y')
+
+
+def filiais_label(filiais: list[str]) -> str:
+    if len(filiais) == 1:
+        return filiais[0]
+    if len(filiais) == 2:
+        return f'{_filial_curta(filiais[0])} e {_filial_curta(filiais[1])}'
+    nomes = [_filial_curta(nome) for nome in filiais]
+    return ', '.join(nomes[:-1]) + f' e {nomes[-1]}'
+
+
+def _score_medio_criterios(criterios: list[dict]) -> float:
+    if not criterios:
+        return 0.0
+    return round(sum(item['score'] for item in criterios) / len(criterios), 2)
+
+
+def _build_por_filial(filiais: list[str]) -> list[dict]:
+    por_filial = []
+    for nome in filiais:
+        f_qs = PesquisaSatisfacao.objects.filter(filial=nome)
+        f_stats = build_pesquisa_stats(f_qs)
+        ultima_inclusao = f_qs.aggregate(ultima=Max('data_inclusao'))['ultima']
+        por_filial.append({
+            'filial': nome,
+            'filial_curta': _filial_curta(nome),
+            'totalPesquisas': f_stats['totalPesquisas'],
+            'percentualOtimo': f_stats['percentual']['otimo'],
+            'scoreMedio': _score_medio_criterios(f_stats['criterios']),
+            'pontosAtencao': f_stats['pontosAtencao'],
+            'totalEmBranco': count_pesquisas_em_branco(f_qs),
+            'ultimaInclusao': _fmt_data_br(ultima_inclusao),
+        })
+    return por_filial
 
 
 def send_pesquisa_resumo_email(
@@ -47,16 +96,19 @@ def send_pesquisa_resumo_email(
     to_emails: list[str],
     cc_emails: list[str] | None = None,
 ) -> None:
+    del request  # resumo consolidado — não depende da filial da sessão
+
     if not to_emails:
         raise ValueError('Informe ao menos um destinatário.')
 
-    filial = _resolve_session_filial(user, request)
-    if not filial:
-        raise ValueError('Filial da sessão é obrigatória para enviar o resumo.')
+    filiais = resolve_resumo_filiais(user)
+    if not filiais:
+        raise ValueError('Usuário sem acesso a filiais do SGQ para enviar o resumo.')
 
-    qs = PesquisaSatisfacao.objects.filter(filial=filial)
+    qs = PesquisaSatisfacao.objects.filter(filial__in=filiais)
     stats = build_pesquisa_stats(qs)
     total_em_branco = count_pesquisas_em_branco(qs)
+    por_filial = _build_por_filial(filiais)
 
     por_cliente = [
         {
@@ -72,15 +124,12 @@ def send_pesquisa_resumo_email(
         total = item['otimo'] + item['bom'] + item['regular'] + item['ruim']
         criterios.append({**item, 'total': total})
 
-    score_medio = (
-        round(sum(item['score'] for item in stats['criterios']) / len(stats['criterios']), 2)
-        if stats['criterios'] else 0
-    )
-
+    score_medio = _score_medio_criterios(stats['criterios'])
+    filiais_label_text = filiais_label(filiais)
     dashboard_base = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
 
     context = {
-        'filial': filial,
+        'filiais_label': filiais_label_text,
         'periodo': 'Todos os registros',
         'enviado_por': _usuario_display(user),
         'ref_date': timezone.localtime(),
@@ -89,13 +138,14 @@ def send_pesquisa_resumo_email(
         'pct_otimo': stats['percentual']['otimo'],
         'score_medio': score_medio,
         'criterios': criterios,
+        'por_filial': por_filial,
         'por_cliente': por_cliente,
         'dashboard_url': f'{dashboard_base}/indicadores/gestao-qualidade/satisfacao-clientes',
     }
 
     html_body = render_to_string('sgq/emails/resumo_pesquisa.html', context)
 
-    subject = f'Pesquisa de Satisfação — {filial}'
+    subject = f'Pesquisa de Satisfação — {filiais_label_text}'
 
     email_obj = EmailMessage(
         subject=subject,

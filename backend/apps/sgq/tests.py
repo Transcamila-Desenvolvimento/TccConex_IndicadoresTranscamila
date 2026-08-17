@@ -428,7 +428,9 @@ class PesquisaSatisfacaoTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data['criadoPor'], 'Operador SGQ')
 
-    def test_enviar_resumo_filtra_por_filial_da_sessao(self):
+    def test_enviar_resumo_consolida_filiais_sgq(self):
+        from datetime import date
+
         from django.core import mail
 
         self._create(filial=IBIPORA, cte='111')
@@ -443,6 +445,8 @@ class PesquisaSatisfacaoTests(APITestCase):
             atendimentoDispensado='',
         )
         self._create(filial=RONDONOPOLIS, cte='222')
+        PesquisaSatisfacao.objects.filter(filial=IBIPORA).update(data_inclusao=date(2026, 7, 10))
+        PesquisaSatisfacao.objects.filter(filial=RONDONOPOLIS).update(data_inclusao=date(2026, 8, 5))
 
         response = self.client.post(
             '/api/sgq/pesquisas-satisfacao/enviar-resumo/',
@@ -455,16 +459,18 @@ class PesquisaSatisfacaoTests(APITestCase):
         self.assertEqual(len(mail.outbox), 1)
 
         message = mail.outbox[0]
-        self.assertIn('Pesquisa de Satisfação', message.subject)
+        self.assertIn('Pesquisa de Satisfação — Ibiporã e Rondonópolis', message.subject)
         self.assertIn('Admin SGQ', message.body)
         self.assertIn('indicadores/gestao-qualidade/satisfacao-clientes', message.body)
+        self.assertIn('Por Filial', message.body)
+        self.assertIn('Última inclusão', message.body)
+        self.assertIn('10/07/2026', message.body)
+        self.assertIn('05/08/2026', message.body)
         self.assertIn('Em branco', message.body)
+        self.assertIn('>3<', message.body)
         self.assertIn('>1<', message.body)
         self.assertEqual(message.to, ['destino@example.com'])
         self.assertEqual(len(message.attachments), 0)
-
-        self.assertEqual(PesquisaSatisfacao.objects.filter(filial=IBIPORA).count(), 2)
-        self.assertEqual(PesquisaSatisfacao.objects.filter(filial=RONDONOPOLIS).count(), 1)
 
     def test_enviar_resumo_ignora_filtros_da_tabela(self):
         from django.core import mail

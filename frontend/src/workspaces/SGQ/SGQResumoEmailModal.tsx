@@ -4,11 +4,10 @@ import { useGoogleContacts } from '../../hooks/useGoogleContacts';
 import { useEnviarResumoSgqPesquisas } from '../../hooks/useSgqPesquisas';
 
 interface SGQResumoEmailModalProps {
-  filial: string | null;
   onClose: () => void;
 }
 
-const SGQResumoEmailModal: React.FC<SGQResumoEmailModalProps> = ({ filial, onClose }) => {
+const SGQResumoEmailModal: React.FC<SGQResumoEmailModalProps> = ({ onClose }) => {
   const enviarResumo = useEnviarResumoSgqPesquisas();
   const [toTags, setToTags] = useState<EmailTagValue[]>([]);
   const [ccTags, setCcTags] = useState<EmailTagValue[]>([]);
@@ -72,8 +71,9 @@ const SGQResumoEmailModal: React.FC<SGQResumoEmailModalProps> = ({ filial, onClo
         ) : (
           <form style={{ padding: '20px 24px 24px 24px' }} onSubmit={handleSubmit}>
             <p style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.6, marginTop: 0 }}>
-              O resumo será enviado com <strong>todas as pesquisas</strong> da filial <strong>{filial ?? '—'}</strong>,
-              independentemente dos filtros aplicados na tabela.
+              O resumo será enviado com <strong>todas as pesquisas</strong> de{' '}
+              <strong>Ibiporã e Rondonópolis</strong> no mesmo e-mail,
+              independentemente da filial selecionada na sessão e dos filtros da tabela.
             </p>
 
             <EmailTagsInput

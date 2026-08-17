@@ -915,7 +915,6 @@ const SGQPesquisaSatisfacao: React.FC = () => {
 
       {isResumoEmailOpen && (
         <SGQResumoEmailModal
-          filial={selectedFilial}
           onClose={() => setIsResumoEmailOpen(false)}
         />
       )}
