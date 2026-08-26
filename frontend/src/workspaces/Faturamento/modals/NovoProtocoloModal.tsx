@@ -66,7 +66,10 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
   const [draftUnavailable, setDraftUnavailable] = useState(false);
   const skipNextSave = useRef(true);
 
-  const clientes = clientesQuery.data ?? [];
+  const clientes = useMemo(() => {
+    const all = clientesQuery.data ?? [];
+    return all.filter((c) => c.emitirProtocoloCanhotos || c.id === protocolo?.clienteId);
+  }, [clientesQuery.data, protocolo?.clienteId]);
   const selectedCliente = useMemo(
     () => clientes.find((c) => c.id === clienteId),
     [clientes, clienteId],

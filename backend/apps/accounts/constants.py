@@ -47,6 +47,7 @@ FUNCOES_POR_AMBIENTE = {
         'editar-pesquisas',
         'excluir-pesquisas',
         'importar-pesquisas',
+        'gerenciar-escopos',
     }),
     'Marketing': frozenset({
         'criar-campanhas',

@@ -60,7 +60,7 @@ echo "== TccConex ERP: PYTHONPATH=$PYTHONPATH =="
 # Por padrão aplica migrations no boot (deploy Azure). Desative com RUN_STARTUP_MIGRATE=False.
 if [ "${RUN_STARTUP_MIGRATE:-True}" = "True" ]; then
   echo "== TccConex ERP: aplicando migrations =="
-  python manage.py migrate --noinput || echo "== AVISO: migrate falhou; seguindo com daphne =="
+  python manage.py migrate --noinput
 else
   echo "== TccConex ERP: migrate ignorado (RUN_STARTUP_MIGRATE=False) =="
 fi

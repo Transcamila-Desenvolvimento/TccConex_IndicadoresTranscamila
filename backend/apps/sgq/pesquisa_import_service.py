@@ -12,7 +12,9 @@ from django.db import transaction
 from django.utils import timezone
 from openpyxl.styles import Alignment, Font, PatternFill
 
-from .models import CLIENTE_CHOICES, PesquisaSatisfacao
+from .clientes_cadastro import clientes_pesquisa_ativos
+from .escopo_analise import format_escopo_analise_display, normalize_escopo_analise
+from .models import PesquisaSatisfacao
 from .serializers import PesquisaSatisfacaoSerializer
 
 CRIADO_POR_IMPORTACAO = 'Importação'
@@ -32,6 +34,7 @@ _TEMPLATE_HEADERS = [
     'ATENDIMENTO DISPENSADO',
     'CLIENTE',
     'ANÁLISE, TRATATIVA E JUSTIFICATIVA',
+    'ESCOPO DA ANÁLISE',
 ]
 
 _TEMPLATE_SAMPLE_ROW = [
@@ -46,6 +49,7 @@ _TEMPLATE_SAMPLE_ROW = [
     'OTIMO',
     'OTIMO',
     'OUTROS',
+    '',
     '',
 ]
 
@@ -79,6 +83,12 @@ _COLUMN_ALIASES: dict[str, list[str]] = {
         'analise',
         'tratativa',
     ],
+    'escopoAnalise': [
+        'escopo da analise',
+        'escopo da análise',
+        'escopo analise',
+        'escopo',
+    ],
 }
 
 _HEADER_PROBE_FIELDS = ('dataEntrega', 'motorista', 'cte', 'notaFiscal', 'cliente')
@@ -89,9 +99,6 @@ _AVALIACAO_MAP = {
     'regular': 'regular',
     'ruim': 'ruim',
 }
-
-_CLIENTE_VALUES = {choice[0].upper(): choice[0] for choice in CLIENTE_CHOICES}
-
 
 class PesquisaImportError(Exception):
     """Erro estrutural da planilha (cabeçalho inválido, arquivo corrompido)."""
@@ -135,10 +142,15 @@ def _parse_avaliacao(value) -> str:
 
 
 def _parse_cliente(value) -> str:
-    raw = str(value or '').strip().upper()
+    raw = str(value or '').strip()
     if not raw:
+        return ''
+    if raw.casefold() == 'outros':
         return 'OUTROS'
-    return _CLIENTE_VALUES.get(raw, '')
+    for nome in clientes_pesquisa_ativos():
+        if nome.casefold() == raw.casefold():
+            return nome
+    return ''
 
 
 def _parse_text(value) -> str:
@@ -314,6 +326,7 @@ def parse_pesquisas_spreadsheet(file_bytes: bytes) -> dict:
                 'apresentacaoMotorista': _parse_text(_cell(row, columns.get('apresentacaoMotorista'))),
                 'atendimentoDispensado': _parse_text(_cell(row, columns.get('atendimentoDispensado'))),
                 'analise': _parse_text(_cell(row, columns.get('analise'))),
+                'escopoAnalise': _parse_text(_cell(row, columns.get('escopoAnalise'))),
             })
             break
 
@@ -327,6 +340,15 @@ def parse_pesquisas_spreadsheet(file_bytes: bytes) -> dict:
         veiculo = _parse_avaliacao(_cell(row, columns.get('condicoesVeiculo')))
         apresentacao = _parse_avaliacao(_cell(row, columns.get('apresentacaoMotorista')))
         atendimento = _parse_avaliacao(_cell(row, columns.get('atendimentoDispensado')))
+        avaliacoes = [prazo, mercadoria, veiculo, apresentacao, atendimento]
+        recusou_planilha = _parse_bool(_cell(row, columns.get('clienteRecusouAssinar')))
+        avaliacoes_parciais = any(avaliacoes) and not all(avaliacoes) and not recusou_planilha
+        recusou = recusou_planilha or not any(avaliacoes)
+        if recusou:
+            prazo = mercadoria = veiculo = apresentacao = atendimento = ''
+
+        escopo_analise = normalize_escopo_analise(_cell(row, columns.get('escopoAnalise')))
+        escopo_display = format_escopo_analise_display(escopo_analise) or _parse_text(_cell(row, columns.get('escopoAnalise')))
 
         preview_base = {
             'row': offset,
@@ -335,18 +357,32 @@ def parse_pesquisas_spreadsheet(file_bytes: bytes) -> dict:
             'cte': _parse_text(_cell(row, columns.get('cte'))),
             'dataEntrega': _format_date_br(_parse_date(raw_data_entrega)) or _parse_text(raw_data_entrega),
             'notaFiscal': _parse_text(_cell(row, columns.get('notaFiscal'))),
-            'cliente': cliente_raw or 'OUTROS',
+            'cliente': cliente_raw,
             'prazoEntrega': _format_avaliacao_display(prazo) or _parse_text(_cell(row, columns.get('prazoEntrega'))),
             'condicoesMercadoria': _format_avaliacao_display(mercadoria) or _parse_text(_cell(row, columns.get('condicoesMercadoria'))),
             'condicoesVeiculo': _format_avaliacao_display(veiculo) or _parse_text(_cell(row, columns.get('condicoesVeiculo'))),
             'apresentacaoMotorista': _format_avaliacao_display(apresentacao) or _parse_text(_cell(row, columns.get('apresentacaoMotorista'))),
             'atendimentoDispensado': _format_avaliacao_display(atendimento) or _parse_text(_cell(row, columns.get('atendimentoDispensado'))),
             'analise': _parse_text(_cell(row, columns.get('analise'))),
+            'escopoAnalise': escopo_display,
+            'clienteRecusouAssinar': recusou,
         }
 
         row_error = None
-        if cliente_raw and not cliente:
-            row_error = f'Cliente inválido: "{cliente_raw}". Use CCAB, PRENTISS, ALBAUGH ou OUTROS.'
+        if avaliacoes_parciais:
+            row_error = (
+                'Preencha todos os critérios de avaliação ou deixe-os em branco '
+                '(cliente recusou avaliar).'
+            )
+        if not row_error and not cliente:
+            if cliente_raw:
+                permitidos = ', '.join([*clientes_pesquisa_ativos(), 'OUTROS'])
+                row_error = (
+                    f'Cliente inválido: "{cliente_raw}". '
+                    f'Use um cliente habilitado para pesquisa de satisfação ou OUTROS ({permitidos}).'
+                )
+            else:
+                row_error = 'Cliente ausente. Informe um cliente habilitado ou OUTROS.'
 
         data_entrega = _parse_date(raw_data_entrega)
         if not row_error and not data_entrega:
@@ -356,20 +392,24 @@ def parse_pesquisas_spreadsheet(file_bytes: bytes) -> dict:
             'motorista': preview_base['motorista'],
             'cte': preview_base['cte'],
             'notaFiscal': preview_base['notaFiscal'],
-            'cliente': cliente or 'OUTROS',
-            'clienteRecusouAssinar': _parse_bool(_cell(row, columns.get('clienteRecusouAssinar'))),
+            'cliente': cliente,
+            'clienteRecusouAssinar': recusou,
             'prazoEntrega': prazo,
             'condicoesMercadoria': mercadoria,
             'condicoesVeiculo': veiculo,
             'apresentacaoMotorista': apresentacao,
             'atendimentoDispensado': atendimento,
             'analise': preview_base['analise'],
+            'escopoAnalise': escopo_analise,
         }
         if data_entrega:
             payload['dataEntrega'] = data_entrega.isoformat()
 
         if not row_error:
-            serializer = PesquisaSatisfacaoSerializer(data=payload)
+            serializer = PesquisaSatisfacaoSerializer(
+                data=payload,
+                context={'permitir_outros': True, 'exigir_escopo': False},
+            )
             if not serializer.is_valid():
                 parts = []
                 for field_errors in serializer.errors.values():
@@ -472,6 +512,7 @@ def _build_preview_stats(
 
     error_counter = Counter(error['message'] for error in errors)
     rows_with_analise = sum(1 for item in payloads if (item.get('analise') or '').strip())
+    rows_recusou = sum(1 for item in payloads if item.get('cliente_recusou_assinar'))
 
     return {
         'processedRows': processed,
@@ -482,6 +523,7 @@ def _build_preview_stats(
         'readyToImport': success,
         'uniqueMotoristas': len(motoristas),
         'rowsWithAnalise': rows_with_analise,
+        'rowsClienteRecusou': rows_recusou,
         'duplicateRowCount': sum(len(group['rows']) - 1 for group in duplicate_groups),
         'duplicateGroupCount': len(duplicate_groups),
         'byCliente': [
@@ -528,6 +570,7 @@ def import_pesquisas_from_spreadsheet(
     *,
     filial: str,
     dry_run: bool = False,
+    criado_por: str | None = None,
 ) -> dict:
     parsed = parse_pesquisas_spreadsheet(file_bytes)
     skipped = parsed['skipped']
@@ -558,7 +601,7 @@ def import_pesquisas_from_spreadsheet(
                 PesquisaSatisfacao.objects.create(
                     filial=filial,
                     data_inclusao=data_inclusao,
-                    criado_por=CRIADO_POR_IMPORTACAO,
+                    criado_por=(criado_por or '').strip() or CRIADO_POR_IMPORTACAO,
                     **item,
                 )
             )

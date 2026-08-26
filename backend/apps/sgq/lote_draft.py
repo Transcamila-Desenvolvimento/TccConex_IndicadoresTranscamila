@@ -1,9 +1,9 @@
 """Sanitização e helpers do rascunho de inclusão em tabela (SGQ)."""
 
-from .models import AVALIACAO_CHOICES, CLIENTE_CHOICES
+from .escopo_analise import has_escopo_opcoes, normalize_escopo_analise
+from .models import AVALIACAO_CHOICES
 
 _AVALIACOES = {key for key, _ in AVALIACAO_CHOICES} | {''}
-_CLIENTES = {key for key, _ in CLIENTE_CHOICES}
 _CRITERIOS_CAMEL = {
     'prazo_entrega': 'prazoEntrega',
     'condicoes_mercadoria': 'condicoesMercadoria',
@@ -26,9 +26,7 @@ def sanitize_draft_row(raw) -> dict | None:
     if not isinstance(raw, dict):
         return None
 
-    cliente = raw.get('cliente')
-    if cliente not in _CLIENTES:
-        cliente = 'OUTROS'
+    cliente = _as_str(raw.get('cliente'), 200)
 
     row = {
         'dataEntrega': _as_str(raw.get('dataEntrega'), 32),
@@ -38,6 +36,7 @@ def sanitize_draft_row(raw) -> dict | None:
         'notaFiscal': _as_str(raw.get('notaFiscal'), 500),
         'clienteRecusouAssinar': bool(raw.get('clienteRecusouAssinar')),
         'analise': _as_str(raw.get('analise'), 5000),
+        'escopoAnalise': normalize_escopo_analise(raw.get('escopoAnalise')),
     }
 
     for _source, camel in _CRITERIOS_CAMEL.items():
@@ -64,6 +63,7 @@ def draft_row_is_empty(row: dict) -> bool:
         or row.get('cte')
         or row.get('notaFiscal')
         or row.get('analise')
+        or has_escopo_opcoes(row.get('escopoAnalise'))
         or row.get('dataEntrega')
     )
 

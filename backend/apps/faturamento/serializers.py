@@ -15,7 +15,13 @@ class FilialClienteProtocoloSerializer(serializers.ModelSerializer):
 
 class ClienteProtocoloSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='pk', read_only=True)
-    requerExpedicao = serializers.BooleanField(source='requer_expedicao')
+    codigo = serializers.CharField(read_only=True)
+    razaoSocial = serializers.CharField(source='razao_social', required=False, allow_blank=True)
+    nomeFantasia = serializers.CharField(source='nome_fantasia', required=False, allow_blank=True)
+    nomeInterno = serializers.CharField(source='nome_interno', required=False, allow_blank=True)
+    emitirProtocoloCanhotos = serializers.BooleanField(source='emitir_protocolo_canhotos', required=False)
+    considerarPesquisaSatisfacao = serializers.BooleanField(source='considerar_pesquisa_satisfacao', required=False)
+    requerExpedicao = serializers.BooleanField(source='requer_expedicao', required=False)
     exigeFilial = serializers.BooleanField(source='exige_filial', required=False)
     filiais = FilialClienteProtocoloSerializer(many=True, read_only=True)
     # Usado apenas na criação: permite cadastrar as filiais junto com o cliente,
@@ -29,13 +35,20 @@ class ClienteProtocoloSerializer(serializers.ModelSerializer):
     emailsEnvio = serializers.CharField(source='emails_envio', allow_blank=True, required=False)
     emailsCopia = serializers.CharField(source='emails_copia', allow_blank=True, required=False)
     dataCriacao = serializers.DateTimeField(source='data_criacao', read_only=True)
+    dataAtualizacao = serializers.DateTimeField(source='data_atualizacao', read_only=True)
 
     class Meta:
         model = ClienteProtocolo
         fields = [
             'id',
+            'codigo',
             'nome',
+            'razaoSocial',
+            'nomeFantasia',
+            'nomeInterno',
             'cnpj',
+            'emitirProtocoloCanhotos',
+            'considerarPesquisaSatisfacao',
             'requerExpedicao',
             'exigeFilial',
             'filiais',
@@ -43,7 +56,22 @@ class ClienteProtocoloSerializer(serializers.ModelSerializer):
             'emailsEnvio',
             'emailsCopia',
             'dataCriacao',
+            'dataAtualizacao',
         ]
+        extra_kwargs = {'nome': {'required': False, 'allow_blank': True}}
+
+    def validate(self, attrs):
+        razao = (attrs.get('razao_social') or getattr(self.instance, 'razao_social', '') or '').strip()
+        interno = (attrs.get('nome_interno') or getattr(self.instance, 'nome_interno', '') or '').strip()
+        nome = (attrs.get('nome') or getattr(self.instance, 'nome', '') or '').strip()
+        if not (interno or razao or nome):
+            raise serializers.ValidationError({
+                'razaoSocial': ['Informe a razão social ou o nome interno.'],
+            })
+        attrs['razao_social'] = razao or interno or nome
+        attrs['nome_interno'] = interno or razao or nome
+        attrs['nome'] = attrs['nome_interno']
+        return attrs
 
     def create(self, validated_data):
         nomes = validated_data.pop('filiaisIniciais', [])
@@ -155,6 +183,15 @@ class ProtocoloEnvioCreateSerializer(ProtocoloEnvioSerializer):
     class Meta(ProtocoloEnvioSerializer.Meta):
         read_only_fields = ['expedicao']
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        cliente = attrs.get('cliente')
+        if cliente and not cliente.emitir_protocolo_canhotos:
+            raise serializers.ValidationError({
+                'clienteId': ['Este cliente não está habilitado para emitir protocolo de canhotos.'],
+            })
+        return attrs
+
     def create(self, validated_data):
         # Cada cliente tem sua própria sequência numérica de protocolos.
         validated_data['numero_sequencial'] = gerar_numero_sequencial(validated_data['cliente'])
@@ -177,6 +214,16 @@ class ProtocoloEnvioUpdateSerializer(ProtocoloEnvioSerializer):
 
     class Meta(ProtocoloEnvioSerializer.Meta):
         read_only_fields = ['expedicao']
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        cliente = attrs.get('cliente') or getattr(self.instance, 'cliente', None)
+        atual_id = getattr(getattr(self.instance, 'cliente', None), 'pk', None)
+        if cliente and not cliente.emitir_protocolo_canhotos and cliente.pk != atual_id:
+            raise serializers.ValidationError({
+                'clienteId': ['Este cliente não está habilitado para emitir protocolo de canhotos.'],
+            })
+        return attrs
 
 
 class ProtocoloBulkDeleteSerializer(serializers.Serializer):

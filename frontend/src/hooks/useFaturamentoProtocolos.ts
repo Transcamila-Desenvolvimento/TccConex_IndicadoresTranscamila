@@ -55,11 +55,17 @@ export function useDeleteProtocoloEnvioDraft() {
   });
 }
 
-export function useProtocoloClientes(enabled = true) {
+export function useProtocoloClientes(uso?: 'protocolo' | 'sgq', enabled = true) {
   return useQuery({
-    queryKey: PROTOCOLO_CLIENTES_KEY,
-    queryFn: () => apiService.getProtocoloClientes(),
+    queryKey: [...PROTOCOLO_CLIENTES_KEY, uso ?? 'all'],
+    queryFn: () => apiService.getProtocoloClientes(uso),
     enabled,
+  });
+}
+
+export function useConsultarCnpj() {
+  return useMutation({
+    mutationFn: (cnpj: string) => apiService.consultarCnpj(cnpj),
   });
 }
 
@@ -67,7 +73,10 @@ export function useCreateProtocoloCliente() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: ClienteProtocoloPayload) => apiService.createProtocoloCliente(payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: PROTOCOLO_CLIENTES_KEY }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PROTOCOLO_CLIENTES_KEY });
+      queryClient.invalidateQueries({ queryKey: ['sgq', 'clientes'] });
+    },
   });
 }
 
@@ -76,7 +85,10 @@ export function useUpdateProtocoloCliente() {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: Partial<ClienteProtocoloPayload> }) =>
       apiService.updateProtocoloCliente(id, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: PROTOCOLO_CLIENTES_KEY }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PROTOCOLO_CLIENTES_KEY });
+      queryClient.invalidateQueries({ queryKey: ['sgq', 'clientes'] });
+    },
   });
 }
 
@@ -84,7 +96,10 @@ export function useDeleteProtocoloCliente() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiService.deleteProtocoloCliente(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: PROTOCOLO_CLIENTES_KEY }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PROTOCOLO_CLIENTES_KEY });
+      queryClient.invalidateQueries({ queryKey: ['sgq', 'clientes'] });
+    },
   });
 }
 
@@ -93,7 +108,10 @@ export function useCreateFilial() {
   return useMutation({
     mutationFn: ({ clienteId, nome }: { clienteId: string; nome: string }) =>
       apiService.createFilial(clienteId, nome),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: PROTOCOLO_CLIENTES_KEY }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PROTOCOLO_CLIENTES_KEY });
+      queryClient.invalidateQueries({ queryKey: ['sgq', 'clientes'] });
+    },
   });
 }
 
@@ -102,7 +120,10 @@ export function useDeleteFilial() {
   return useMutation({
     mutationFn: ({ clienteId, filialId }: { clienteId: string; filialId: string }) =>
       apiService.deleteFilial(clienteId, filialId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: PROTOCOLO_CLIENTES_KEY }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PROTOCOLO_CLIENTES_KEY });
+      queryClient.invalidateQueries({ queryKey: ['sgq', 'clientes'] });
+    },
   });
 }
 

@@ -656,6 +656,10 @@ def import_protocolos_from_workbook(
     Retorna dict camelCase pronto para a API. Em falha estrutural, levanta
     ProtocoloImportError. Em falha de negócio com rollback, `success=False`.
     """
+    if not cliente.emitir_protocolo_canhotos:
+        raise ProtocoloImportError(
+            'Este cliente não está habilitado para emitir protocolo de canhotos.'
+        )
     _ = skip_duplicatas  # mantido por compatibilidade da API; duplicatas são sempre importadas
     ws = _load_worksheet(file_bytes, sheet)
     headers_row, header_row_num = _read_headers(ws)

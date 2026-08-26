@@ -9,6 +9,7 @@ from django.db.models.functions import TruncMonth
 
 from apps.accounts.constants import branches_for_module
 from apps.audit.models import AuditLog
+from apps.sgq.escopo_analise import format_escopo_analise_display, rotulos_escopo
 from apps.sgq.models import CRITERIOS_AVALIACAO, PesquisaSatisfacao
 from apps.sgq.pesquisa_query import filter_pesquisas_queryset
 from apps.sgq.stats_service import build_pesquisa_stats
@@ -135,6 +136,53 @@ def _qs_com_avaliacao(qs):
     return qs.exclude(_q_sem_avaliacao())
 
 
+def _build_recorrencias_escopo(qs) -> list[dict]:
+    """Conta opções gravadas nas pesquisas. Catálogo excluído/inativo não apaga o histórico."""
+    escopo_labels, opcao_labels = rotulos_escopo()
+    counters: dict[str, Counter] = defaultdict(Counter)
+
+    for payload in qs.values_list('escopo_analise', flat=True):
+        if not isinstance(payload, dict):
+            continue
+        for escopo, opcoes in payload.items():
+            if not isinstance(opcoes, (list, tuple)):
+                continue
+            for opcao in opcoes:
+                chave = str(opcao).strip()
+                if chave:
+                    counters[escopo][chave] += 1
+
+    ordered = list(escopo_labels.keys())
+    for escopo in counters:
+        if escopo not in ordered:
+            ordered.append(escopo)
+
+    grupos = []
+    for escopo in ordered:
+        counts = counters.get(escopo)
+        if not counts:
+            continue
+        labels_map = opcao_labels.get(escopo, {})
+        itens = []
+        seen = set()
+        for chave in labels_map:
+            total = counts.get(chave, 0)
+            if total:
+                itens.append({'chave': chave, 'label': labels_map[chave], 'total': total})
+                seen.add(chave)
+        for chave, total in counts.items():
+            if chave not in seen and total:
+                itens.append({'chave': chave, 'label': labels_map.get(chave, chave), 'total': total})
+        if itens:
+            grupos.append({
+                'escopo': escopo,
+                'label': escopo_labels.get(escopo, escopo),
+                'total': sum(item['total'] for item in itens),
+                'itens': itens,
+            })
+    return grupos
+
+
 def build_sgq_satisfacao_payload(params) -> dict:
     sgq_filiais = branches_for_module('SGQ')
     filial = (params.get('filial') or '').strip()
@@ -189,4 +237,39 @@ def build_sgq_satisfacao_payload(params) -> dict:
         'totalRecusas': total_recusas,
         'porFilial': por_filial,
         'serieMensal': _build_serie_mensal(qs_avaliadas),
+        'recorrenciasEscopo': _build_recorrencias_escopo(qs),
     }
+
+
+def _filtered_pesquisas_qs(params):
+    sgq_filiais = branches_for_module('SGQ')
+    filial = (params.get('filial') or '').strip()
+    qs = PesquisaSatisfacao.objects.filter(filial__in=sgq_filiais)
+    if filial:
+        qs = qs.filter(filial=filial) if filial in sgq_filiais else qs.none()
+    return filter_pesquisas_queryset(qs, params)
+
+
+def serialize_sgq_satisfacao_detalhe(pesquisa: PesquisaSatisfacao) -> dict:
+    return {
+        'id': str(pesquisa.pk),
+        'filial': pesquisa.filial,
+        'dataEntrega': pesquisa.data_entrega.isoformat() if pesquisa.data_entrega else None,
+        'cliente': pesquisa.cliente,
+        'motorista': pesquisa.motorista,
+        'cte': pesquisa.cte,
+        'notaFiscal': pesquisa.nota_fiscal,
+        'clienteRecusouAssinar': pesquisa.cliente_recusou_assinar,
+        'prazoEntrega': pesquisa.prazo_entrega,
+        'condicoesMercadoria': pesquisa.condicoes_mercadoria,
+        'condicoesVeiculo': pesquisa.condicoes_veiculo,
+        'apresentacaoMotorista': pesquisa.apresentacao_motorista,
+        'atendimentoDispensado': pesquisa.atendimento_dispensado,
+        'analise': pesquisa.analise or '',
+        'escopoAnaliseTexto': format_escopo_analise_display(pesquisa.escopo_analise),
+    }
+
+
+def build_sgq_satisfacao_detalhes_qs(params):
+    """Mesmo recorte do indicador (filiais SGQ + filtros), para a aba Detalhes."""
+    return _filtered_pesquisas_qs(params)

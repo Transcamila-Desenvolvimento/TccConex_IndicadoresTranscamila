@@ -44,6 +44,7 @@ const DashboardLayout: React.FC = () => {
   const [isIndRHSubmenuOpen, setIsIndRHSubmenuOpen] = useState(false);
   const [isIndSgqSubmenuOpen, setIsIndSgqSubmenuOpen] = useState(false);
   const [isEnvioDocumentosSubmenuOpen, setIsEnvioDocumentosSubmenuOpen] = useState(false);
+  const [isCadastrosFaturamentoSubmenuOpen, setIsCadastrosFaturamentoSubmenuOpen] = useState(false);
   const [, setIsAdminSubmenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
@@ -80,6 +81,9 @@ const DashboardLayout: React.FC = () => {
     }
     if (location.pathname.startsWith('/faturamento/protocolos')) {
       setIsEnvioDocumentosSubmenuOpen(true);
+    }
+    if (location.pathname.startsWith('/faturamento/cadastros')) {
+      setIsCadastrosFaturamentoSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/admin')) {
       setIsAdminSubmenuOpen(true);
@@ -226,6 +230,17 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/faturamento/protocolos'),
+        show: selectedEnvironment === 'Faturamento'
+      },
+      {
+        title: "Cadastro cliente",
+        path: "Faturamento / Cadastros / Cadastro cliente",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        ),
+        action: () => navigate('/faturamento/cadastros/clientes'),
         show: selectedEnvironment === 'Faturamento'
       },
       {
@@ -419,6 +434,7 @@ const DashboardLayout: React.FC = () => {
   const IND_RH_PATHS = ['/indicadores/rh/movimentacao'];
   const IND_SGQ_PATHS = ['/indicadores/gestao-qualidade/satisfacao-clientes'];
   const FATURAMENTO_ENVIO_PATHS = ['/faturamento/protocolos'];
+  const FATURAMENTO_CADASTROS_PATHS = ['/faturamento/cadastros/clientes'];
 
   // Get Breadcrumb text based on active route and environment
   const getBreadcrumbText = () => {
@@ -451,6 +467,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/financeiro/balances')) return `${env} / Fluxo de Caixa / Saldos Bancários`;
     if (path.startsWith('/financeiro/adjustments')) return `${env} / Fluxo de Caixa / Ajustes de Caixa`;
     if (path.startsWith('/financeiro/billing')) return `${env} / Fluxo de Caixa / Faturamento`;
+    if (path.startsWith('/faturamento/cadastros/clientes')) return `${env} / Cadastros / Cadastro cliente`;
     if (path.startsWith('/faturamento/protocolos')) return `${env} / Envio de documentos / Envio NF Cliente`;
     if (path.startsWith('/faturamento')) return `${env} / Home`;
     if (path.startsWith('/indicadores/logistica/meta-faturamento')) return `${env} / Logística / Meta de faturamento`;
@@ -815,6 +832,42 @@ const DashboardLayout: React.FC = () => {
                       <div className="nav-btn-left">
                         <NavIcon name="file-earmark-text" sub />
                         <span className="nav-text">Envio NF Cliente</span>
+                      </div>
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="nav-group-wrapper" id="btn-menu-faturamento-cadastros">
+                  <button
+                    type="button"
+                    className={`nav-btn ${isParentNavActive(FATURAMENTO_CADASTROS_PATHS) ? 'active-parent' : ''}`}
+                    onClick={() => setIsCadastrosFaturamentoSubmenuOpen(!isCadastrosFaturamentoSubmenuOpen)}
+                    data-tooltip="Cadastros"
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="journal-text" />
+                      <span className="nav-text">Cadastros</span>
+                    </div>
+                    <ChevronSubmenu open={isCadastrosFaturamentoSubmenuOpen} />
+                  </button>
+
+                  <div
+                    className="submenu-container"
+                    style={{
+                      display: isSidebarCollapsed ? undefined : 'block',
+                      maxHeight: isSidebarCollapsed ? undefined : (isCadastrosFaturamentoSubmenuOpen ? '80px' : '0px'),
+                      overflow: 'hidden',
+                      transition: 'max-height 0.25s ease',
+                    }}
+                  >
+                    <Link
+                      to="/faturamento/cadastros/clientes"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/faturamento/cadastros/clientes') ? 'active' : ''}`}
+                      data-tooltip="Cadastro cliente"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="people" sub />
+                        <span className="nav-text">Cadastro cliente</span>
                       </div>
                     </Link>
                   </div>

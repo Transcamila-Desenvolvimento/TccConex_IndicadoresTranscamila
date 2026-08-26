@@ -12,6 +12,7 @@ from .views import (
     RHMovimentacaoIndicadorView,
     SendGerencialEmailView,
     SgqSatisfacaoActivityView,
+    SgqSatisfacaoDetalhesView,
     SgqSatisfacaoIndicadorView,
 )
 
@@ -28,6 +29,7 @@ urlpatterns = [
     path('rh/movimentacao/', RHMovimentacaoIndicadorView.as_view(), name='indicador-rh-movimentacao'),
     path('logistica/meta-faturamento/', MetaFaturamentoIndicadorView.as_view(), name='indicador-meta-faturamento'),
     path('sgq/satisfacao/atividade/', SgqSatisfacaoActivityView.as_view(), name='indicador-sgq-satisfacao-atividade'),
+    path('sgq/satisfacao/detalhes/', SgqSatisfacaoDetalhesView.as_view(), name='indicador-sgq-satisfacao-detalhes'),
     path('sgq/satisfacao/', SgqSatisfacaoIndicadorView.as_view(), name='indicador-sgq-satisfacao'),
     path('', include(router.urls)),
 ]

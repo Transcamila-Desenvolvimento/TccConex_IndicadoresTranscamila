@@ -54,6 +54,12 @@ export const FUNCAO_ITEMS = [
     description: 'Permite importar pesquisas de satisfação a partir de planilha Excel.',
   },
   {
+    module: 'SGQ',
+    key: 'gerenciar-escopos',
+    label: 'Gerenciar escopos',
+    description: 'Permite cadastrar, editar, ocultar e excluir escopos e opções da análise nas pesquisas de satisfação.',
+  },
+  {
     module: 'Marketing',
     key: 'criar-campanhas',
     label: 'Criar campanhas',

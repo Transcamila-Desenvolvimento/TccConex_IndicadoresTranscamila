@@ -85,6 +85,19 @@ export function useIndicadorSgqSatisfacao(params: SgqSatisfacaoIndicadorQueryPar
   });
 }
 
+export function useIndicadorSgqSatisfacaoDetalhes(
+  params: SgqSatisfacaoIndicadorQueryParams,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: [...INDICADORES_SGQ_SATISFACAO_KEY, 'detalhes', params],
+    queryFn: () => apiService.getIndicadorSgqSatisfacaoDetalhes(params),
+    enabled,
+    placeholderData: (prev) => prev,
+    retry: 1,
+  });
+}
+
 export function useIndicadorMetaFaturamento(params: MetaFaturamentoQueryParams) {
   return useQuery({
     queryKey: [...INDICADORES_META_FATURAMENTO_KEY, params],

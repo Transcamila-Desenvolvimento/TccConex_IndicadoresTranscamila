@@ -73,7 +73,8 @@ const SGQResumoEmailModal: React.FC<SGQResumoEmailModalProps> = ({ onClose }) =>
             <p style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.6, marginTop: 0 }}>
               O resumo será enviado com <strong>todas as pesquisas</strong> de{' '}
               <strong>Ibiporã e Rondonópolis</strong> no mesmo e-mail,
-              independentemente da filial selecionada na sessão e dos filtros da tabela.
+              independentemente da filial selecionada na sessão, dos filtros da tabela
+              e das filiais liberadas no seu acesso ao SGQ.
             </p>
 
             <EmailTagsInput

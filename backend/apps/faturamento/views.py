@@ -8,6 +8,7 @@ from apps.accounts.mixins import ModuleScopedViewMixin
 from apps.audit.services import record_audit
 from apps.financeiro.pagination import ReportPagination
 
+from .cnpj_service import CnpjLookupError, consultar_cnpj, only_digits
 from .models import ClienteProtocolo, FilialClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft
 from .protocol_labels_pdf import render_protocol_labels_pdf
 from .protocol_pdf import render_protocols_pdf
@@ -96,6 +97,26 @@ class ClienteProtocoloViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     queryset = ClienteProtocolo.objects.all()
     pagination_class = None
     http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        uso = (self.request.query_params.get('uso') or '').strip().lower()
+        if uso == 'protocolo':
+            qs = qs.filter(emitir_protocolo_canhotos=True)
+        elif uso == 'sgq':
+            qs = qs.filter(considerar_pesquisa_satisfacao=True)
+        return qs
+
+    @action(detail=False, methods=['get'], url_path='consultar-cnpj')
+    def consultar_cnpj_action(self, request):
+        denied = _funcao_required_response(request, 'gerenciar-clientes', _GERENCIAR_CLIENTES_DETAIL)
+        if denied:
+            return denied
+        cnpj = only_digits(request.query_params.get('cnpj') or '')
+        try:
+            return Response(consultar_cnpj(cnpj))
+        except CnpjLookupError as exc:
+            return Response({'detail': str(exc)}, status=exc.status)
 
     def create(self, request, *args, **kwargs):
         denied = _funcao_required_response(request, 'gerenciar-clientes', _GERENCIAR_CLIENTES_DETAIL)

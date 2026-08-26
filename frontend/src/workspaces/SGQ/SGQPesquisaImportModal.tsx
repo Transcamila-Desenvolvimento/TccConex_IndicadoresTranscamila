@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   useExportSgqPesquisaImportTemplate,
   useImportSgqPesquisasSpreadsheet,
   usePreviewSgqPesquisasSpreadsheet,
+  useSgqUserDirectory,
 } from '../../hooks/useSgqPesquisas';
 import type {
   SgqPesquisaImportPreview,
@@ -30,6 +32,7 @@ const PREVIEW_COLUMNS: { key: keyof SgqPesquisaImportPreview['rows'][number]; la
   { key: 'condicoesVeiculo', label: 'Veíc.' },
   { key: 'apresentacaoMotorista', label: 'Apres.' },
   { key: 'atendimentoDispensado', label: 'Atend.' },
+  { key: 'escopoAnalise', label: 'Escopo' },
 ];
 
 function formatDateRange(range: { min: string; max: string }): string {
@@ -72,6 +75,13 @@ const ImportPreviewStatsPanel: React.FC<{ stats: SgqPesquisaImportPreviewStats }
       <div className="sgq-import-stat-card">
         <span className="sgq-import-stat-label">Com análise</span>
         <span className="sgq-import-stat-value">{stats.rowsWithAnalise}</span>
+      </div>
+      <div className={`sgq-import-stat-card ${stats.rowsClienteRecusou > 0 ? 'is-warn' : ''}`}>
+        <span className="sgq-import-stat-label">Em branco (recusou avaliar)</span>
+        <span className="sgq-import-stat-value">{stats.rowsClienteRecusou ?? 0}</span>
+        {stats.rowsClienteRecusou > 0 && (
+          <span className="sgq-import-stat-hint">Critérios vazios tratados como recusa</span>
+        )}
       </div>
       <div className={`sgq-import-stat-card ${stats.duplicateRowCount > 0 ? 'is-warn' : ''}`}>
         <span className="sgq-import-stat-label">Duplicatas na planilha</span>
@@ -151,6 +161,9 @@ const ImportPreviewStatsPanel: React.FC<{ stats: SgqPesquisaImportPreviewStats }
 );
 
 const SGQPesquisaImportModal: React.FC<SGQPesquisaImportModalProps> = ({ onClose }) => {
+  const { user } = useAuth();
+  const isAdmin = user?.roleId === '1';
+  const directoryQuery = useSgqUserDirectory(isAdmin);
   const exportModelo = useExportSgqPesquisaImportTemplate();
   const previewMutation = usePreviewSgqPesquisasSpreadsheet();
   const importMutation = useImportSgqPesquisasSpreadsheet();
@@ -160,6 +173,41 @@ const SGQPesquisaImportModal: React.FC<SGQPesquisaImportModalProps> = ({ onClose
   const [preview, setPreview] = useState<SgqPesquisaImportPreview | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [result, setResult] = useState<SgqPesquisaImportResult | null>(null);
+  const [lancadoPorUserId, setLancadoPorUserId] = useState(user?.id ?? '');
+
+  const directory = directoryQuery.data ?? [];
+  const lancadoPorLabel = useMemo(() => {
+    const selected = directory.find((item) => item.id === lancadoPorUserId);
+    if (selected?.name?.trim()) return selected.name.trim();
+    if (user?.id === lancadoPorUserId) return user.name?.trim() || user.username;
+    return '';
+  }, [directory, lancadoPorUserId, user]);
+
+  useEffect(() => {
+    if (user?.id && !lancadoPorUserId) setLancadoPorUserId(user.id);
+  }, [user?.id, lancadoPorUserId]);
+
+  const lancadoPorSelect = isAdmin ? (
+    <div className="sgq-import-lancado-por">
+      <label htmlFor="sgq-import-lancado-por">Lançado por</label>
+      <select
+        id="sgq-import-lancado-por"
+        value={lancadoPorUserId}
+        onChange={(e) => setLancadoPorUserId(e.target.value)}
+      >
+        {directory.length === 0 && user ? (
+          <option value={user.id}>{user.name?.trim() || user.username}</option>
+        ) : (
+          directory.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name.trim() || item.googleEmail || `Usuário ${item.id}`}
+            </option>
+          ))
+        )}
+      </select>
+      <p>As pesquisas importadas aparecerão com este nome no campo Lançado por.</p>
+    </div>
+  ) : null;
 
   const resetFileState = () => {
     setPreview(null);
@@ -227,7 +275,9 @@ const SGQPesquisaImportModal: React.FC<SGQPesquisaImportModalProps> = ({ onClose
   const handleImport = () => {
     if (!selectedFile || !preview?.success) return;
     setErrorMsg(null);
-    importMutation.mutate(selectedFile, {
+    importMutation.mutate(
+      { file: selectedFile, criadoPorUserId: isAdmin ? lancadoPorUserId || undefined : undefined },
+      {
       onSuccess: (res) => {
         setResult(res);
         if (res.success) {
@@ -281,6 +331,8 @@ const SGQPesquisaImportModal: React.FC<SGQPesquisaImportModalProps> = ({ onClose
                 Nºs NOTAS FISCAL, critérios (BOM/OTIMO/REGULAR/RUIM), CLIENTE e ANÁLISE.
               </p>
 
+              {lancadoPorSelect}
+
               <button
                 type="button"
                 className="reports-action-btn secondary"
@@ -327,6 +379,8 @@ const SGQPesquisaImportModal: React.FC<SGQPesquisaImportModalProps> = ({ onClose
 
           {step === 'preview' && preview && (
             <>
+              {lancadoPorSelect}
+
               {preview.stats && <ImportPreviewStatsPanel stats={preview.stats} />}
 
               <div className="sgq-import-preview-table-wrap">
@@ -350,7 +404,9 @@ const SGQPesquisaImportModal: React.FC<SGQPesquisaImportModalProps> = ({ onClose
                           </td>
                         ))}
                         <td style={{ color: row.valid ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
-                          {row.valid ? 'OK' : 'Erro'}
+                          {row.valid
+                            ? (row.clienteRecusouAssinar ? 'Em branco' : 'OK')
+                            : 'Erro'}
                         </td>
                       </tr>
                     ))}
@@ -370,7 +426,8 @@ const SGQPesquisaImportModal: React.FC<SGQPesquisaImportModalProps> = ({ onClose
 
           {step === 'done' && result?.success && (
             <p style={{ color: '#15803d', fontSize: '14px', margin: 0 }}>
-              {result.created} pesquisa(s) importada(s) com sucesso. Lançamento: <strong>Importação</strong>.
+              {result.created} pesquisa(s) importada(s) com sucesso. Lançado por:{' '}
+              <strong>{result.criadoPor || lancadoPorLabel || 'Importação'}</strong>.
             </p>
           )}
 
@@ -418,7 +475,7 @@ const SGQPesquisaImportModal: React.FC<SGQPesquisaImportModalProps> = ({ onClose
                   <button
                     type="button"
                     className="reports-action-btn primary"
-                    disabled={!preview?.success || busy}
+                    disabled={!preview?.success || busy || (isAdmin && !lancadoPorUserId)}
                     onClick={handleImport}
                   >
                     {importMutation.isPending

@@ -4,16 +4,25 @@ import QueryDataPanel from '../../components/QueryDataPanel';
 import {
   INDICADORES_SGQ_SATISFACAO_KEY,
   useIndicadorSgqSatisfacao,
+  useIndicadorSgqSatisfacaoDetalhes,
   useSgqSatisfacaoActivityVersion,
 } from '../../hooks/useIndicadores';
-import { SGQ_CLIENTE_OPTIONS } from '../../types/domain';
+import { useSgqClientes } from '../../hooks/useSgqPesquisas';
 import SgqDistribuicaoChart from './SgqDistribuicaoChart';
 import SgqCriteriosChart from './SgqCriteriosChart';
 import SgqEvolucaoChart from './SgqEvolucaoChart';
 import SgqFiliaisChart from './SgqFiliaisChart';
 import SgqPerfilAvaliacoesTable from './SgqPerfilAvaliacoesTable';
+import SgqRecorrenciasEscopoTable from './SgqRecorrenciasEscopoTable';
+import SgqSatisfacaoDetalhesTable from './SgqSatisfacaoDetalhesTable';
 
 type PeriodoKey = 'ano' | 't1' | 't2' | 't3' | 't4' | 's1' | 's2' | 'custom';
+type SatisfacaoTab = 'visao-geral' | 'detalhes';
+
+const TABS: { id: SatisfacaoTab; label: string }[] = [
+  { id: 'visao-geral', label: 'Visão Geral' },
+  { id: 'detalhes', label: 'Detalhes' },
+];
 
 const PERIODO_OPTIONS: { value: PeriodoKey; label: string }[] = [
   { value: 'ano', label: 'Ano inteiro' },
@@ -60,6 +69,9 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
   const [cliente, setCliente] = useState('');
   const [ano, setAno] = useState(defaults.year);
   const [periodo, setPeriodo] = useState<PeriodoKey>('ano');
+  const [activeTab, setActiveTab] = useState<SatisfacaoTab>('visao-geral');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const queryParams = useMemo(() => ({
     ...(filial ? { filial } : {}),
@@ -71,6 +83,12 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
 
   const query = useIndicadorSgqSatisfacao(queryParams);
   const data = query.data;
+  const detalhesQuery = useIndicadorSgqSatisfacaoDetalhes(
+    { ...queryParams, page, pageSize },
+    activeTab === 'detalhes',
+  );
+  const clientesQuery = useSgqClientes(true);
+  const clientesFiltro = clientesQuery.data ?? [];
 
   // Sistema multiusuário: se alguém lançar/alterar/excluir pesquisas no SGQ
   // enquanto esta tela estiver aberta, o indicador atualiza sozinho — mesmo
@@ -140,9 +158,14 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
     setPeriodo('ano');
     setDataInicio(reset.dataInicio);
     setDataFim(reset.dataFim);
+    setPage(1);
   };
 
   const metaHint = filial || 'Ibiporã + Rondonópolis';
+
+  useEffect(() => {
+    setPage(1);
+  }, [filial, motorista, cliente, dataInicio, dataFim]);
 
   return (
     <div className="cashflow-page">
@@ -152,6 +175,19 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
           <p>Pesquisas de satisfação · {metaHint}</p>
         </div>
       </header>
+
+      <div className="reports-tabs-bar">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`reports-tab-btn${activeTab === tab.id ? ' active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       <div className="reports-filters-bar">
         <div className="reports-filter-left">
@@ -185,8 +221,8 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
 
           <select className="rh-period-select" value={cliente} onChange={(e) => setCliente(e.target.value)}>
             <option value="">Cliente: Todos</option>
-            {SGQ_CLIENTE_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
+            {clientesFiltro.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
 
@@ -225,6 +261,7 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
         </div>
       </div>
 
+      {activeTab === 'visao-geral' ? (
       <QueryDataPanel
         query={query}
         variant="compact"
@@ -293,9 +330,28 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
                 <SgqPerfilAvaliacoesTable criterios={data.criterios} />
               </div>
             </div>
+
+            <div className="erp-card reports-table-card cashflow-table-card" style={{ marginTop: '16px', flex: 'none', minHeight: 'auto' }}>
+              <h2 className="cashflow-section-title cashflow-section-title--table">Recorrências por Escopo</h2>
+              <div style={{ padding: '0 16px 16px' }}>
+                <SgqRecorrenciasEscopoTable grupos={data.recorrenciasEscopo ?? []} />
+              </div>
+            </div>
           </>
         )}
       </QueryDataPanel>
+      ) : (
+        <SgqSatisfacaoDetalhesTable
+          query={detalhesQuery}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
+      )}
     </div>
   );
 };

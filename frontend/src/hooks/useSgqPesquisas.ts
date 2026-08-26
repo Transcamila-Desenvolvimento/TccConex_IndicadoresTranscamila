@@ -3,12 +3,14 @@ import axios from 'axios';
 import { apiService } from '../services/apiService';
 import { INDICADORES_SGQ_SATISFACAO_KEY } from './useIndicadores';
 import type {
+  SgqFormDraft,
   SgqLoteDraftRow,
   SgqPesquisaBulkErrors,
   SgqPesquisaPayload,
   SgqPesquisaQueryParams,
   SendSgqResumoEmailParams,
 } from '../types/domain';
+import { catalogFromSgqEscopos, SGQ_ESCOPO_ANALISE_CATALOG } from '../types/domain';
 
 // A filial da sessão entra na queryKey (não é enviada como filtro à API — o
 // escopo real é aplicado no backend via header X-Prothon-Filial). Sem isso, o
@@ -20,9 +22,13 @@ export const SGQ_KEYS = {
     ['sgq', 'pesquisas', filial, params] as const,
   stats: (filial: string | null, params: SgqPesquisaQueryParams) =>
     ['sgq', 'pesquisas-stats', filial, params] as const,
-  motoristas: (filial: string | null) => ['sgq', 'motoristas', filial] as const,
+  motoristas: ['sgq', 'motoristas'] as const,
   lancadores: (filial: string | null) => ['sgq', 'lancadores', filial] as const,
+  clientes: (incluirHistorico: boolean) => ['sgq', 'clientes', incluirHistorico] as const,
   loteDraft: (filial: string | null) => ['sgq', 'lote-draft', filial] as const,
+  formDraft: (filial: string | null) => ['sgq', 'form-draft', filial] as const,
+  escoposAnalise: (incluirInativos = false) => ['sgq', 'escopos-analise', incluirInativos] as const,
+  userDirectory: ['sgq', 'user-directory'] as const,
   all: ['sgq'] as const,
 };
 
@@ -46,12 +52,13 @@ export function useSgqPesquisaStats(filial: string | null, params: SgqPesquisaQu
   });
 }
 
-/** Sugestões de nomes de motoristas já usados na filial, para o autocomplete
- * do formulário (ver `motoristas` em `apps/sgq/views.py`). */
+/** Sugestões de nomes de motoristas já usados em qualquer filial, para o
+ * autocomplete do formulário (ver `motoristas` em `apps/sgq/views.py`). */
 export function useSgqMotoristas(filial: string | null) {
   return useQuery({
-    queryKey: SGQ_KEYS.motoristas(filial),
+    queryKey: SGQ_KEYS.motoristas,
     queryFn: () => apiService.getSgqMotoristas(),
+    enabled: Boolean(filial),
     staleTime: 60_000,
   });
 }
@@ -62,6 +69,14 @@ export function useSgqLancadores(filial: string | null) {
     queryKey: SGQ_KEYS.lancadores(filial),
     queryFn: () => apiService.getSgqLancadores(),
     staleTime: 60_000,
+  });
+}
+
+export function useSgqClientes(incluirHistorico = false) {
+  return useQuery({
+    queryKey: SGQ_KEYS.clientes(incluirHistorico),
+    queryFn: () => apiService.getSgqClientes({ incluirHistorico }),
+    staleTime: 30_000,
   });
 }
 
@@ -118,6 +133,59 @@ export function useDeleteSgqLoteDraft(filial: string | null) {
   });
 }
 
+const EMPTY_FORM_DRAFT: SgqLoteDraftRow = {
+  dataEntrega: '',
+  cliente: '',
+  motorista: '',
+  cte: '',
+  notaFiscal: '',
+  clienteRecusouAssinar: false,
+  prazoEntrega: '',
+  condicoesMercadoria: '',
+  condicoesVeiculo: '',
+  apresentacaoMotorista: '',
+  atendimentoDispensado: '',
+  analise: '',
+  escopoAnalise: {},
+};
+
+/** Rascunho server-side do formulário de lançamento — isolado por usuário + filial. */
+export function useSgqFormDraft(filial: string | null) {
+  return useQuery({
+    queryKey: SGQ_KEYS.formDraft(filial),
+    queryFn: () => apiService.getSgqFormDraft(),
+    enabled: Boolean(filial),
+    staleTime: 15_000,
+  });
+}
+
+export function useSaveSgqFormDraft(filial: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (form: SgqLoteDraftRow) => apiService.saveSgqFormDraft(form),
+    onSuccess: (data: SgqFormDraft) => {
+      queryClient.setQueryData(SGQ_KEYS.formDraft(filial), data);
+    },
+  });
+}
+
+export function useDeleteSgqFormDraft(filial: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiService.deleteSgqFormDraft(),
+    onSuccess: () => {
+      queryClient.setQueryData(SGQ_KEYS.formDraft(filial), {
+        version: 1,
+        updatedAt: null,
+        filial: filial ?? '',
+        hasDraft: false,
+        form: { ...EMPTY_FORM_DRAFT },
+      } satisfies SgqFormDraft);
+      queryClient.invalidateQueries({ queryKey: SGQ_KEYS.formDraft(filial) });
+    },
+  });
+}
+
 export function useUpdateSgqPesquisa() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -147,10 +215,20 @@ export function usePreviewSgqPesquisasSpreadsheet() {
   });
 }
 
+export function useSgqUserDirectory(enabled = true) {
+  return useQuery({
+    queryKey: SGQ_KEYS.userDirectory,
+    queryFn: () => apiService.getUserDirectory('SGQ'),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 export function useImportSgqPesquisasSpreadsheet() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (file: File) => apiService.importSgqPesquisasSpreadsheet(file),
+    mutationFn: ({ file, criadoPorUserId }: { file: File; criadoPorUserId?: string }) =>
+      apiService.importSgqPesquisasSpreadsheet(file, criadoPorUserId),
     onSuccess: (result) => {
       if (result.success) {
         invalidateSgqAndIndicador(queryClient);
@@ -162,6 +240,91 @@ export function useImportSgqPesquisasSpreadsheet() {
 export function useEnviarResumoSgqPesquisas() {
   return useMutation({
     mutationFn: (payload: SendSgqResumoEmailParams) => apiService.enviarResumoSgqPesquisas(payload),
+  });
+}
+
+export function useSgqEscoposAnaliseCatalog(enabled = true) {
+  return useQuery({
+    queryKey: SGQ_KEYS.escoposAnalise(false),
+    queryFn: () => apiService.getSgqEscoposAnalise(),
+    enabled,
+    staleTime: 30_000,
+    select: (items) => {
+      const catalog = catalogFromSgqEscopos(items);
+      return catalog.length > 0 ? catalog : SGQ_ESCOPO_ANALISE_CATALOG;
+    },
+  });
+}
+
+export function useSgqEscoposAnaliseCadastro(enabled = true) {
+  return useQuery({
+    queryKey: SGQ_KEYS.escoposAnalise(true),
+    queryFn: () => apiService.getSgqEscoposAnalise({ incluirInativos: true }),
+    enabled,
+  });
+}
+
+function invalidateEscoposAnalise(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ['sgq', 'escopos-analise'] });
+}
+
+export function useCreateSgqEscopoAnalise() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { label: string }) => apiService.createSgqEscopoAnalise(payload),
+    onSuccess: () => invalidateEscoposAnalise(queryClient),
+  });
+}
+
+export function useUpdateSgqEscopoAnalise() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: { label?: string; ordem?: number; ativo?: boolean };
+    }) => apiService.updateSgqEscopoAnalise(id, payload),
+    onSuccess: () => invalidateEscoposAnalise(queryClient),
+  });
+}
+
+export function useDeleteSgqEscopoAnalise() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.deleteSgqEscopoAnalise(id),
+    onSuccess: () => invalidateEscoposAnalise(queryClient),
+  });
+}
+
+export function useCreateSgqEscopoAnaliseOpcao() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { escopoId: string; label: string }) => apiService.createSgqEscopoAnaliseOpcao(payload),
+    onSuccess: () => invalidateEscoposAnalise(queryClient),
+  });
+}
+
+export function useUpdateSgqEscopoAnaliseOpcao() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: { label?: string; ordem?: number; ativo?: boolean };
+    }) => apiService.updateSgqEscopoAnaliseOpcao(id, payload),
+    onSuccess: () => invalidateEscoposAnalise(queryClient),
+  });
+}
+
+export function useDeleteSgqEscopoAnaliseOpcao() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.deleteSgqEscopoAnaliseOpcao(id),
+    onSuccess: () => invalidateEscoposAnalise(queryClient),
   });
 }
 

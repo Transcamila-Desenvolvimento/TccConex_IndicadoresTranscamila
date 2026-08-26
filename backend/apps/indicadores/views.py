@@ -3,6 +3,7 @@ from rest_framework import status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.financeiro.pagination import ReportPagination
 from apps.accounts.mixins import ModuleScopedViewMixin
 
 from .cashflow_service import build_cashflow_day_detail, build_cashflow_payload, get_financeiro_activity_version
@@ -15,7 +16,12 @@ from .rh_indicador_service import (
     parse_mes_ano_export_params,
 )
 from .serializers import IndicadorFilialSerializer, IndicadorKpiSerializer
-from .sgq_satisfacao_service import build_sgq_satisfacao_payload, get_sgq_activity_version
+from .sgq_satisfacao_service import (
+    build_sgq_satisfacao_payload,
+    build_sgq_satisfacao_detalhes_qs,
+    get_sgq_activity_version,
+    serialize_sgq_satisfacao_detalhe,
+)
 
 
 class SendGerencialEmailView(ModuleScopedViewMixin, APIView):
@@ -171,6 +177,25 @@ class SgqSatisfacaoIndicadorView(ModuleScopedViewMixin, APIView):
 
     def get(self, request):
         return Response(build_sgq_satisfacao_payload(request.query_params))
+
+
+class SgqSatisfacaoDetalhesPagination(ReportPagination):
+    page_size = 20
+
+
+class SgqSatisfacaoDetalhesView(ModuleScopedViewMixin, APIView):
+    """Lista cada pesquisa (e a análise) no mesmo recorte do indicador."""
+
+    permission_module = 'Indicadores'
+    permission_requires_filial = False
+
+    def get(self, request):
+        qs = build_sgq_satisfacao_detalhes_qs(request.query_params)
+        paginator = SgqSatisfacaoDetalhesPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        return paginator.get_paginated_response(
+            [serialize_sgq_satisfacao_detalhe(item) for item in page]
+        )
 
 
 class IndicadorKpiViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):

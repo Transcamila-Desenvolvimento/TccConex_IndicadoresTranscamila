@@ -93,7 +93,64 @@ class FaturamentoProtocoloTests(TestCase):
             **auth_headers(self.admin, 'Faturamento'),
         )
         self.assertEqual(response.status_code, 201)
-        self.assertTrue(ClienteProtocolo.objects.filter(nome='Cliente Admin').exists())
+        cliente = ClienteProtocolo.objects.get(nome='Cliente Admin')
+        self.assertTrue(cliente.codigo.startswith('CLI-'))
+        self.assertEqual(cliente.nome_interno, 'Cliente Admin')
+
+    def test_lista_clientes_protocolo_omite_flag_desligada(self):
+        self.other_cliente.emitir_protocolo_canhotos = False
+        self.other_cliente.save(update_fields=['emitir_protocolo_canhotos'])
+        response = self.api.get(
+            '/api/faturamento/protocolo-clientes/?uso=protocolo',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 200)
+        ids = {item['id'] for item in response.data}
+        self.assertIn(str(self.cliente.pk), ids)
+        self.assertNotIn(str(self.other_cliente.pk), ids)
+
+    def test_nao_cria_protocolo_quando_flag_canhotos_desligada(self):
+        self.other_cliente.emitir_protocolo_canhotos = False
+        self.other_cliente.save(update_fields=['emitir_protocolo_canhotos'])
+        response = self.api.post(
+            '/api/faturamento/protocolos/',
+            {
+                'data': '2026-07-10',
+                'clienteId': self.other_cliente.pk,
+                'notaFiscal': '9001',
+            },
+            format='json',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_desligar_flag_nao_apaga_protocolos(self):
+        ProtocoloEnvio.objects.create(
+            data='2026-07-10',
+            cliente=self.other_cliente,
+            nota_fiscal='8001',
+            usuario=self.user,
+            usuario_nome='Usuário Faturamento',
+        )
+        self.other_cliente.emitir_protocolo_canhotos = False
+        self.other_cliente.save(update_fields=['emitir_protocolo_canhotos'])
+        self.assertTrue(ProtocoloEnvio.objects.filter(cliente=self.other_cliente, nota_fiscal='8001').exists())
+
+    def test_consultar_cnpj_admin(self):
+        from unittest.mock import patch
+
+        with patch('apps.faturamento.views.consultar_cnpj') as mock_cnpj:
+            mock_cnpj.return_value = {
+                'cnpj': '00.000.000/0001-91',
+                'razaoSocial': 'EMPRESA TESTE LTDA',
+                'nomeFantasia': 'EMPRESA TESTE',
+            }
+            response = self.api.get(
+                '/api/faturamento/protocolo-clientes/consultar-cnpj/?cnpj=00000000000191',
+                **auth_headers(self.admin, 'Faturamento'),
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['razaoSocial'], 'EMPRESA TESTE LTDA')
 
     def test_operador_nao_pode_criar_filial_cliente(self):
         response = self.api.post(

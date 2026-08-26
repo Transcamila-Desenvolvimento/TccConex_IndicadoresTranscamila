@@ -18,7 +18,6 @@ import {
 } from '../../hooks/useFaturamentoProtocolos';
 import type { ProtocoloEnvio, ProtocoloOrdering, ProtocoloQueryParams } from '../../types/domain';
 import NovoProtocoloModal from './modals/NovoProtocoloModal';
-import GerenciarClientesProtocoloModal from './modals/GerenciarClientesProtocoloModal';
 import ImportarProtocolosModal from './modals/ImportarProtocolosModal';
 
 const formatDateBr = (value: string) => {
@@ -57,12 +56,10 @@ const FaturamentoProtocolos: React.FC = () => {
   const canCreateProtocolos = userHasFuncao(user, 'Faturamento', 'criar-protocolos');
   const canEditProtocolos = userHasFuncao(user, 'Faturamento', 'editar-protocolos');
   const canDeleteProtocolos = userHasFuncao(user, 'Faturamento', 'excluir-protocolos');
-  const canManageClientes = userHasFuncao(user, 'Faturamento', 'gerenciar-clientes');
   const [filters, setFilters] = useState<ProtocoloQueryParams>({ page: 1, pageSize: DEFAULT_PAGE_SIZE, ordering: 'data_desc' });
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showNovo, setShowNovo] = useState(false);
   const [editingProtocolo, setEditingProtocolo] = useState<ProtocoloEnvio | null>(null);
-  const [showClientes, setShowClientes] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
 
@@ -277,15 +274,7 @@ const FaturamentoProtocolos: React.FC = () => {
                   </span>
                 </span>
               )}
-              {selectedIds.length > 0 && (canManageClientes || isAdmin) && <div className="reports-dropdown-divider" />}
-              {canManageClientes && (
-                <span className="reports-dropdown-item" onClick={() => openAction(setShowClientes)}>
-                  <span className="reports-dropdown-item-left">
-                    <i className="bi bi-people" />
-                    Gerenciar clientes
-                  </span>
-                </span>
-              )}
+              {selectedIds.length > 0 && isAdmin && <div className="reports-dropdown-divider" />}
               {isAdmin && (
                 <span className="reports-dropdown-item" onClick={() => openAction(setShowImport)}>
                   <span className="reports-dropdown-item-left">
@@ -572,7 +561,6 @@ const FaturamentoProtocolos: React.FC = () => {
           onClose={() => setEditingProtocolo(null)}
         />
       )}
-      {showClientes && canManageClientes && <GerenciarClientesProtocoloModal onClose={() => setShowClientes(false)} />}
       {showImport && isAdmin && <ImportarProtocolosModal onClose={() => setShowImport(false)} />}
     </div>
   );

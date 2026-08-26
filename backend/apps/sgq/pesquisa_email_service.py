@@ -11,12 +11,9 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 from apps.accounts.constants import branches_for_module
-from apps.accounts.permissions import allowed_filiais_for_module
 
-from .models import CLIENTE_CHOICES, PesquisaSatisfacao
+from .models import PesquisaSatisfacao
 from .stats_service import build_pesquisa_stats, count_pesquisas_em_branco
-
-_CLIENTE_LABELS = dict(CLIENTE_CHOICES)
 
 
 def parse_emails(value) -> list[str]:
@@ -35,10 +32,13 @@ def _usuario_display(user) -> str:
     return user.name or user.get_full_name() or user.username
 
 
-def resolve_resumo_filiais(user) -> list[str]:
-    """Filiais SGQ incluídas no resumo — ordem canônica, respeitando permissão do usuário."""
-    allowed = set(allowed_filiais_for_module(user, 'SGQ'))
-    return [nome for nome in branches_for_module('SGQ') if nome in allowed]
+def resolve_resumo_filiais(_user=None) -> list[str]:
+    """Filiais do resumo: sempre as unidades do SGQ (Ibiporã e Rondonópolis).
+
+    Independente das filiais liberadas no cadastro do usuário e da sessão.
+    Quem consegue abrir o SGQ envia o consolidado operacional completo.
+    """
+    return list(branches_for_module('SGQ'))
 
 
 def _filial_curta(nome: str) -> str:
@@ -113,7 +113,7 @@ def send_pesquisa_resumo_email(
     por_cliente = [
         {
             'cliente': row['cliente'],
-            'label': _CLIENTE_LABELS.get(row['cliente'], row['cliente']),
+            'label': row['cliente'],
             'total': row['total'],
         }
         for row in qs.values('cliente').annotate(total=Count('id')).order_by('-total', 'cliente')

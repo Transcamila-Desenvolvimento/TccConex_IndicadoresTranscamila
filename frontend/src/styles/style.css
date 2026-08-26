@@ -3079,6 +3079,14 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   border-top: 4px solid #ffffff !important;
 }
 
+.sgq-pesquisas-table td.sgq-cell-ellipsis,
+.sgq-ind-detalhes-table td.sgq-cell-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 0;
+}
+
 .sgq-lancado-por-badge {
   display: inline-block;
   max-width: 100%;
@@ -3301,6 +3309,42 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   min-height: 0;
   overflow-y: auto;
   padding: 16px 22px;
+}
+
+.sgq-import-lancado-por {
+  margin: 0 0 16px;
+}
+
+.sgq-import-lancado-por label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.sgq-import-lancado-por select {
+  width: 100%;
+  height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: #0f172a;
+  background: #fff;
+}
+
+.sgq-import-lancado-por select:focus {
+  outline: none;
+  border-color: #118CC4;
+  box-shadow: 0 0 0 3px rgba(17, 140, 196, 0.15);
+}
+
+.sgq-import-lancado-por p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
 }
 
 .sgq-import-modal-footer {
@@ -9643,6 +9687,54 @@ button.mkt-drive-browser-row:hover {
   }
 }
 
+.sgq-ind-detalhes-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sgq-ind-detalhes-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.sgq-ind-detalhes-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.sgq-ind-detalhes-table td.sgq-ind-detalhes-analise {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 360px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.sgq-ind-detalhes-table td.sgq-ind-detalhes-analise[title] {
+  cursor: help;
+}
+
+.sgq-recorrencias-table td.sgq-recorrencias-escopo {
+  font-weight: 700;
+  color: #0f172a;
+  background: #eff6ff !important;
+  vertical-align: middle;
+  white-space: normal;
+  width: 22%;
+}
+
+.sgq-recorrencias-table td.sgq-recorrencias-count {
+  font-weight: 700;
+  width: 110px;
+}
+
+.sgq-recorrencias-table td:last-child {
+  white-space: normal;
+}
+
 /* Meta de Faturamento */
 .meta-fat-kpi-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -12106,7 +12198,8 @@ col.sgq-lote-col-motorista { width: 10%; }
 col.sgq-lote-col-doc { width: 8%; }
 col.sgq-lote-col-recusou { width: 3.5%; }
 col.sgq-lote-col-avaliacao { width: 6.5%; }
-col.sgq-lote-col-analise { width: 12%; }
+col.sgq-lote-col-escopo { width: 16%; }
+col.sgq-lote-col-analise { width: 8%; }
 col.sgq-lote-col-remove { width: 2%; }
 
 .sgq-lote-th-center { text-align: center; }
@@ -12591,6 +12684,124 @@ textarea.form-input {
   border-radius: 999px;
   padding: 2px 8px;
   font-size: 11px;
+}
+
+.compras-setores-list-btn.is-inactive {
+  opacity: 0.6;
+}
+
+.sgq-escopos-modal {
+  width: 820px;
+  max-width: 94vw;
+  height: min(680px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.sgq-escopos-modal .compras-setores-layout {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+}
+
+.sgq-escopos-modal .compras-colaboradores-panel,
+.sgq-escopos-modal .compras-setores-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sgq-escopos-query {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sgq-escopos-query > div:last-child {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sgq-escopos-opcoes {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sgq-escopos-opcoes .compras-setores-add-form {
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.sgq-escopos-opcoes .compras-setores-add-form input {
+  min-width: 0;
+}
+
+.sgq-escopos-opcoes .compras-setores-add-form .reports-action-btn.primary {
+  min-width: auto;
+  flex-shrink: 0;
+}
+
+.sgq-escopos-opcoes-list {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.sgq-escopos-opcoes-list .reports-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.sgq-escopos-opcoes-list .reports-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.sgq-escopos-opcoes-list .reports-table td:last-child,
+.sgq-escopos-opcoes-actions {
+  width: 120px;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.sgq-escopos-error {
+  flex-shrink: 0;
+  padding: 0 24px 12px;
+  font-size: 12.5px;
+  color: #b91c1c;
+}
+
+.sgq-escopos-inactive-tag {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 2px 7px;
+  vertical-align: middle;
+}
+
+.sgq-escopos-row-inactive td {
+  color: #94a3b8;
 }
 
 .compras-setores-list-actions {

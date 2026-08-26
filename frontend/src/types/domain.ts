@@ -1021,14 +1021,27 @@ export interface FilialClienteProtocolo {
 
 export interface ClienteProtocolo {
   id: string;
+  codigo: string;
   nome: string;
+  razaoSocial: string;
+  nomeFantasia: string;
+  nomeInterno: string;
   cnpj: string | null;
+  emitirProtocoloCanhotos: boolean;
+  considerarPesquisaSatisfacao: boolean;
   requerExpedicao: boolean;
   exigeFilial: boolean;
   filiais: FilialClienteProtocolo[];
   emailsEnvio: string | null;
   emailsCopia: string | null;
   dataCriacao?: string;
+  dataAtualizacao?: string;
+}
+
+export interface CnpjConsultaResult {
+  cnpj: string;
+  razaoSocial: string;
+  nomeFantasia: string;
 }
 
 export interface ProtocoloNotaDraft {
@@ -1098,8 +1111,13 @@ export interface UpdateProtocoloPayload {
 }
 
 export interface ClienteProtocoloPayload {
-  nome: string;
+  nome?: string;
+  razaoSocial?: string;
+  nomeFantasia?: string;
+  nomeInterno?: string;
   cnpj?: string | null;
+  emitirProtocoloCanhotos?: boolean;
+  considerarPesquisaSatisfacao?: boolean;
   requerExpedicao?: boolean;
   exigeFilial?: boolean;
   emailsEnvio?: string | null;
@@ -1145,21 +1163,154 @@ export const SGQ_AVALIACAO_OPTIONS = [
 
 export type SgqAvaliacao = (typeof SGQ_AVALIACAO_OPTIONS)[number]['value'];
 
-export const SGQ_CLIENTE_OPTIONS = ['CCAB', 'PRENTISS', 'ALBAUGH', 'OUTROS'] as const;
+export const SGQ_CLIENTE_FALLBACK = ['OUTROS'] as const;
 
-export type SgqCliente = (typeof SGQ_CLIENTE_OPTIONS)[number];
+export interface SgqClienteOption {
+  value: string;
+  label: string;
+}
 
 /** Critérios avaliados na pesquisa (chave camelCase da API → rótulo).
  * `shortLabel` é usado em colunas estreitas de tabela/grade (o rótulo completo fica no `title`). */
 export const SGQ_CRITERIOS = [
-  { key: 'prazoEntrega', label: 'Prazo de Entrega', shortLabel: 'Prazo' },
-  { key: 'condicoesMercadoria', label: 'Condições da Mercadoria', shortLabel: 'Mercadoria' },
-  { key: 'condicoesVeiculo', label: 'Condições do Veículo', shortLabel: 'Veículo' },
-  { key: 'apresentacaoMotorista', label: 'Apresentação do Motorista', shortLabel: 'Apresentação' },
-  { key: 'atendimentoDispensado', label: 'Atendimento Dispensado', shortLabel: 'Atendimento' },
+  { key: 'prazoEntrega', label: 'Prazo de Entrega', shortLabel: 'Prazo', escopo: 'prazo_entrega' },
+  { key: 'condicoesMercadoria', label: 'Condições da Mercadoria', shortLabel: 'Mercadoria', escopo: 'condicoes_mercadoria' },
+  { key: 'condicoesVeiculo', label: 'Condições do Veículo', shortLabel: 'Veículo', escopo: 'condicoes_veiculo' },
+  { key: 'apresentacaoMotorista', label: 'Apresentação do Motorista', shortLabel: 'Apresentação', escopo: 'apresentacao_motorista' },
+  { key: 'atendimentoDispensado', label: 'Atendimento Dispensado', shortLabel: 'Atendimento', escopo: 'atendimento_dispensado' },
 ] as const;
 
 export type SgqCriterioKey = (typeof SGQ_CRITERIOS)[number]['key'];
+export type SgqEscopoAnalise = string;
+
+export type SgqEscopoAnaliseGrupo = {
+  escopo: string;
+  label: string;
+  opcoes: { value: string; label: string }[];
+};
+
+export const SGQ_ESCOPO_ANALISE_CATALOG: SgqEscopoAnaliseGrupo[] = [
+  {
+    escopo: 'prazo_entrega',
+    label: 'Prazo de Entrega',
+    opcoes: [
+      { value: 'entregas_dentro_prazo_contratual', label: 'Entregas dentro do prazo contratual' },
+      { value: 'cliente_recusou_informar_motivos', label: 'Cliente se recusou a informar os motivos' },
+      { value: 'entregas_fora_prazo_contratual', label: 'Entregas fora do prazo contratual' },
+      { value: 'motorista_recusou_ajudar_descarga', label: 'Motorista se recusou a ajudar na descarga' },
+    ],
+  },
+  {
+    escopo: 'condicoes_mercadoria',
+    label: 'Condições da Mercadoria',
+    opcoes: [
+      { value: 'motorista_recusou_ajudar_descarga', label: 'Motorista se recusou a ajudar na descarga' },
+      { value: 'embalagens_sujas', label: 'Embalagens sujas' },
+      { value: 'embalagens_molhadas', label: 'Embalagens molhadas' },
+      { value: 'embalagens_amassadas_ou_rasgadas', label: 'Embalagens amassadas ou rasgadas' },
+      { value: 'produtos_tombaram_dos_pallets', label: 'Produtos tombaram dos pallets' },
+      { value: 'pallets_mal_estrechados', label: 'Pallets mal estrechados' },
+      { value: 'pallets_ma_qualidade_quebrados', label: 'Pallets de má qualidade — quebrados' },
+      { value: 'pallets_tombaram', label: 'Pallets tombaram' },
+      { value: 'produtos_com_vazamento', label: 'Produtos com vazamento' },
+      { value: 'produtos_faltando', label: 'Produtos faltando' },
+      { value: 'produtos_remontados_ou_empilhados', label: 'Produtos remontados ou empilhados' },
+      { value: 'produtos_divergencia_lotes', label: 'Produtos com divergência de lotes' },
+      { value: 'produtos_mal_acondicionados_veiculo', label: 'Produtos mal acondicionados no veículo' },
+      { value: 'cliente_marcou_tudo_ruim', label: 'Cliente marcou tudo ruim devido aos problemas' },
+    ],
+  },
+  {
+    escopo: 'condicoes_veiculo',
+    label: 'Condições do Veículo',
+    opcoes: [
+      { value: 'cliente_marcou_tudo_ruim', label: 'Cliente marcou tudo ruim devido aos problemas' },
+      { value: 'dificuldade_abrir_carroceria', label: 'Dificuldade para abrir a carroceria' },
+      { value: 'irritado_demora_abrir_bau', label: 'Estava irritado com a demora em abrir o baú' },
+      { value: 'motorista_recusou_ajudar_descarga', label: 'Motorista se recusou a ajudar na descarga' },
+      { value: 'problemas_carroceria', label: 'Problemas na carroceria' },
+      { value: 'problemas_assoalho', label: 'Problemas no assoalho' },
+      { value: 'problemas_fueiro_carreta', label: 'Problemas no fueiro da carreta' },
+      { value: 'reclamacao_sider', label: 'Reclamação por sider' },
+      { value: 'reclamacao_bau', label: 'Reclamação por baú' },
+      { value: 'reclamacao_veiculo_bitrem', label: 'Reclamação por enviar veículo bitrem' },
+      { value: 'reclamacao_veiculo_graneleiro', label: 'Reclamação por enviar veículo graneleiro' },
+      { value: 'rua_apertada_dificuldade_manobrar', label: 'Rua apertada e dificuldade em manobrar o veículo' },
+      { value: 'veiculo_sujo', label: 'Veículo sujo' },
+    ],
+  },
+  {
+    escopo: 'apresentacao_motorista',
+    label: 'Apresentação do Motorista',
+    opcoes: [
+      { value: 'cliente_marcou_tudo_ruim', label: 'Cliente marcou tudo ruim devido aos problemas' },
+      { value: 'motorista_chegou_horario_almoco', label: 'Motorista chegou perto do horário de almoço e não teve permissão para almoçar' },
+      { value: 'motorista_precisou_falar_supervisor', label: 'Motorista precisou falar com supervisor para liberar' },
+      { value: 'motorista_recusou_ajudar_descarga', label: 'Motorista se recusou a ajudar na descarga' },
+      { value: 'outros', label: 'Outros' },
+    ],
+  },
+  {
+    escopo: 'atendimento_dispensado',
+    label: 'Atendimento Dispensado',
+    opcoes: [
+      { value: 'cliente_marcou_tudo_ruim_pallets', label: 'Cliente marcou tudo ruim devido aos problemas nos pallets' },
+      { value: 'motorista_recusou_ajudar_descarga', label: 'Motorista se recusou a ajudar na descarga' },
+      { value: 'outros', label: 'Outros' },
+    ],
+  },
+];
+
+export type SgqEscopoAnaliseMap = Record<string, string[]>;
+
+export interface SgqEscopoAnaliseOpcaoCadastro {
+  id: string;
+  escopoId: string;
+  chave: string;
+  label: string;
+  ordem: number;
+  ativo: boolean;
+}
+
+export interface SgqEscopoAnaliseCadastro {
+  id: string;
+  chave: string;
+  label: string;
+  ordem: number;
+  ativo: boolean;
+  opcoes: SgqEscopoAnaliseOpcaoCadastro[];
+}
+
+export function catalogFromSgqEscopos(items: SgqEscopoAnaliseCadastro[]): SgqEscopoAnaliseGrupo[] {
+  return items
+    .filter((item) => item.ativo)
+    .map((item) => ({
+      escopo: item.chave,
+      label: item.label,
+      opcoes: item.opcoes
+        .filter((opcao) => opcao.ativo)
+        .map((opcao) => ({ value: opcao.chave, label: opcao.label })),
+    }))
+    .filter((grupo) => grupo.opcoes.length > 0);
+}
+
+export function hasSgqEscopoOpcoes(map: SgqEscopoAnaliseMap | undefined | null): boolean {
+  if (!map || typeof map !== 'object') return false;
+  return Object.values(map).some((opcoes) => Array.isArray(opcoes) && opcoes.length > 0);
+}
+
+export function toggleSgqEscopoOpcao(
+  map: SgqEscopoAnaliseMap,
+  escopo: SgqEscopoAnalise,
+  opcao: string,
+): SgqEscopoAnaliseMap {
+  const current = map[escopo] ?? [];
+  const next = current.includes(opcao) ? current.filter((item) => item !== opcao) : [...current, opcao];
+  const copy: SgqEscopoAnaliseMap = { ...map };
+  if (next.length === 0) delete copy[escopo];
+  else copy[escopo] = next;
+  return copy;
+}
 
 export interface SgqPesquisaImportIssue {
   row: number;
@@ -1182,6 +1333,8 @@ export interface SgqPesquisaImportPreviewRow {
   apresentacaoMotorista: string;
   atendimentoDispensado: string;
   analise: string;
+  escopoAnalise?: string | SgqEscopoAnaliseMap;
+  clienteRecusouAssinar?: boolean;
 }
 
 export interface SgqPesquisaImportPreviewStats {
@@ -1193,6 +1346,7 @@ export interface SgqPesquisaImportPreviewStats {
   readyToImport: boolean;
   uniqueMotoristas: number;
   rowsWithAnalise: number;
+  rowsClienteRecusou: number;
   duplicateRowCount: number;
   duplicateGroupCount: number;
   byCliente: { cliente: string; count: number }[];
@@ -1228,6 +1382,7 @@ export interface SgqPesquisaImportResult {
   skipped: number;
   errors: SgqPesquisaImportIssue[];
   detail?: string;
+  criadoPor?: string;
 }
 
 export interface SgqPesquisa {
@@ -1240,7 +1395,7 @@ export interface SgqPesquisa {
   dataInclusao: string | null;
   dataEntrega: string;
   notaFiscal: string;
-  cliente: SgqCliente;
+  cliente: string;
   /** Quando true, os critérios abaixo ficam vazios — o cliente se recusou a avaliar a pesquisa. */
   clienteRecusouAssinar: boolean;
   prazoEntrega: SgqAvaliacao | '';
@@ -1250,6 +1405,8 @@ export interface SgqPesquisa {
   atendimentoDispensado: SgqAvaliacao | '';
   /** Campo único de observação — "Análise, Tratativa e Justificativa". */
   analise: string;
+  /** Critério(s) e opções da análise — obrigatório quando `analise` tem texto. */
+  escopoAnalise: SgqEscopoAnaliseMap;
   criadoPor: string;
 }
 
@@ -1309,6 +1466,26 @@ export interface SgqSatisfacaoIndicadorQueryParams {
   dataFim?: string;
   cliente?: string;
   avaliacao?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface SgqSatisfacaoDetalhe {
+  id: string;
+  filial: string;
+  dataEntrega: string | null;
+  cliente: string;
+  motorista: string;
+  cte: string;
+  notaFiscal: string;
+  clienteRecusouAssinar: boolean;
+  prazoEntrega: SgqAvaliacao | '';
+  condicoesMercadoria: SgqAvaliacao | '';
+  condicoesVeiculo: SgqAvaliacao | '';
+  apresentacaoMotorista: SgqAvaliacao | '';
+  atendimentoDispensado: SgqAvaliacao | '';
+  analise: string;
+  escopoAnaliseTexto: string;
 }
 
 export interface SgqSatisfacaoPorFilial {
@@ -1330,6 +1507,19 @@ export interface SgqSatisfacaoSerieMensal {
   contagem: Record<SgqAvaliacao, number>;
 }
 
+export interface SgqSatisfacaoRecorrenciaItem {
+  chave: string;
+  label: string;
+  total: number;
+}
+
+export interface SgqSatisfacaoRecorrenciaEscopo {
+  escopo: string;
+  label: string;
+  total: number;
+  itens: SgqSatisfacaoRecorrenciaItem[];
+}
+
 /** Resposta do indicador de Satisfação dos Clientes (ambiente Indicadores). */
 export interface SgqSatisfacaoIndicadorResponse extends SgqPesquisaStats {
   meta: {
@@ -1342,6 +1532,7 @@ export interface SgqSatisfacaoIndicadorResponse extends SgqPesquisaStats {
   totalRecusas: number;
   porFilial: SgqSatisfacaoPorFilial[];
   serieMensal: SgqSatisfacaoSerieMensal[];
+  recorrenciasEscopo: SgqSatisfacaoRecorrenciaEscopo[];
 }
 
 /** Erros de validação por linha, retornados pelo endpoint de inclusão em lote. */
@@ -1351,7 +1542,7 @@ export type SgqPesquisaBulkErrors = Record<number, SgqPesquisaBulkFieldErrors>;
 /** Linha do rascunho de inclusão em tabela (pode estar incompleta). */
 export type SgqLoteDraftRow = {
   dataEntrega: string;
-  cliente: SgqCliente;
+  cliente: string;
   motorista: string;
   cte: string;
   notaFiscal: string;
@@ -1362,6 +1553,7 @@ export type SgqLoteDraftRow = {
   apresentacaoMotorista: SgqAvaliacao | '';
   atendimentoDispensado: SgqAvaliacao | '';
   analise: string;
+  escopoAnalise: SgqEscopoAnaliseMap;
 };
 
 /** Rascunho server-side — isolado por usuário autenticado + filial da sessão. */
@@ -1371,6 +1563,15 @@ export interface SgqLoteDraft {
   filial: string;
   hasDraft: boolean;
   rows: SgqLoteDraftRow[];
+}
+
+/** Rascunho do formulário de lançamento (uma pesquisa) — isolado do lote. */
+export interface SgqFormDraft {
+  version: number;
+  updatedAt: string | null;
+  filial: string;
+  hasDraft: boolean;
+  form: SgqLoteDraftRow;
 }
 
 // --- Marketing — Campanhas ---

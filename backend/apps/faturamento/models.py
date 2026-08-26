@@ -2,9 +2,26 @@ from django.conf import settings
 from django.db import models
 
 
+def format_nome_cadastro(value: str) -> str:
+    """Primeira letra de cada palavra maiúscula, demais minúsculas."""
+    return ' '.join(word[:1].upper() + word[1:].lower() for word in (value or '').split())
+
+
 class ClienteProtocolo(models.Model):
-    nome = models.CharField(max_length=200)
+    codigo = models.CharField(max_length=20, unique=True, blank=True, default='', verbose_name='Código do cliente')
+    nome = models.CharField(max_length=200, verbose_name='Nome interno')
+    razao_social = models.CharField(max_length=200, blank=True, default='', verbose_name='Razão social')
+    nome_fantasia = models.CharField(max_length=200, blank=True, default='', verbose_name='Nome fantasia')
+    nome_interno = models.CharField(max_length=200, blank=True, default='', verbose_name='Nome interno')
     cnpj = models.CharField(max_length=20, blank=True, null=True)
+    emitir_protocolo_canhotos = models.BooleanField(
+        default=True,
+        verbose_name='Emitir protocolo de canhotos?',
+    )
+    considerar_pesquisa_satisfacao = models.BooleanField(
+        default=False,
+        verbose_name='Considerar pesquisa de satisfação?',
+    )
     requer_expedicao = models.BooleanField(default=False, verbose_name='Requer expedição?')
     exige_filial = models.BooleanField(default=False, verbose_name='Exigir filial do cliente?')
     ultimo_numero_protocolo = models.PositiveIntegerField(
@@ -15,14 +32,27 @@ class ClienteProtocolo(models.Model):
     emails_envio = models.TextField(blank=True, null=True, verbose_name='E-mails para envio')
     emails_copia = models.TextField(blank=True, null=True, verbose_name='E-mails em cópia')
     data_criacao = models.DateTimeField(auto_now_add=True)
+    data_atualizacao = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['nome']
-        verbose_name = 'Cliente de protocolo'
-        verbose_name_plural = 'Clientes de protocolo'
+        verbose_name = 'Cliente'
+        verbose_name_plural = 'Clientes'
+
+    def save(self, *args, **kwargs):
+        razao = format_nome_cadastro(self.razao_social)
+        interno = format_nome_cadastro(self.nome_interno) or razao or format_nome_cadastro(self.nome)
+        self.razao_social = razao
+        self.nome_fantasia = format_nome_cadastro(self.nome_fantasia)
+        self.nome_interno = interno
+        self.nome = interno or self.nome
+        super().save(*args, **kwargs)
+        if not self.codigo:
+            self.codigo = f'CLI-{self.pk:04d}'
+            super().save(update_fields=['codigo'])
 
     def __str__(self):
-        return self.nome
+        return self.nome_interno or self.nome
 
 
 class FilialClienteProtocolo(models.Model):

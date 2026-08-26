@@ -1,5 +1,6 @@
 from collections import Counter
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.http import HttpResponse
 from rest_framework import status, viewsets
@@ -16,24 +17,55 @@ from apps.accounts.permissions import (
 from apps.audit.services import record_audit
 from apps.financeiro.pagination import ReportPagination
 
+from .form_draft import form_draft_payload, has_meaningful_form_draft, sanitize_form_draft
 from .lote_draft import draft_payload, has_meaningful_draft, sanitize_draft_rows
-from .models import PesquisaSatisfacao, PesquisaSatisfacaoLoteDraft
+from .models import EscopoAnalise, EscopoAnaliseOpcao, PesquisaSatisfacao, PesquisaSatisfacaoFormDraft, PesquisaSatisfacaoLoteDraft
 from .pesquisa_email_service import filiais_label, parse_emails, resolve_resumo_filiais, send_pesquisa_resumo_email
 from .pesquisa_import_service import (
+    CRIADO_POR_IMPORTACAO,
     PesquisaImportError,
     build_pesquisa_import_template,
     import_pesquisas_from_spreadsheet,
     preview_pesquisas_from_spreadsheet,
 )
 from .pesquisa_query import filter_pesquisas_queryset
-from .serializers import PesquisaSatisfacaoSerializer
-from .stats_service import build_pesquisa_stats
+from .serializers import EscopoAnaliseOpcaoSerializer, EscopoAnaliseSerializer, PesquisaSatisfacaoSerializer
+from .escopo_analise import escopo_usado_em_pesquisas, opcao_usada_em_pesquisas
 
 
 def _usuario_display(user) -> str:
     if not user or not user.is_authenticated:
         return ''
     return user.name or user.get_full_name() or user.username
+
+
+def _resolve_criado_por_importacao(request):
+    """Admin pode atribuir o 'Lançado por' a outro usuário do SGQ. Operador fica como Importação."""
+    if not request.user.is_admin:
+        return CRIADO_POR_IMPORTACAO, None
+
+    raw = request.data.get('criadoPorUserId') or request.data.get('lancadoPorUserId')
+    if raw in (None, ''):
+        return _usuario_display(request.user), None
+
+    UserModel = get_user_model()
+    try:
+        target = UserModel.objects.get(pk=int(raw), status='ativo')
+    except (UserModel.DoesNotExist, TypeError, ValueError):
+        return None, Response(
+            {'detail': 'Usuário inválido para "Lançado por".'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    from apps.accounts.constants import normalize_environment
+
+    envs = [normalize_environment(e) for e in (target.environments or [])]
+    if not target.is_admin and 'SGQ' not in envs:
+        return None, Response(
+            {'detail': 'Selecione um usuário com acesso ao SGQ.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return _usuario_display(target), None
 
 
 def _funcao_required_response(request, funcao: str, detail: str):
@@ -167,10 +199,10 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def motoristas(self, request):
-        """Nomes de motoristas já usados nesta filial — alimenta a sugestão
+        """Nomes de motoristas já usados em qualquer filial — alimenta a sugestão
         (autocomplete) do formulário para reduzir o mesmo motorista sendo
         digitado de formas diferentes, sem exigir um cadastro formal deles."""
-        qs = self.scope_queryset(PesquisaSatisfacao.objects.all(), filial_field='filial', admin_bypass=False)
+        qs = PesquisaSatisfacao.objects.all()
         nomes = qs.exclude(motorista='').values_list('motorista', flat=True)
 
         # Agrupa variações de escrita (case/espaços) e usa a grafia mais
@@ -188,6 +220,14 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             key=str.upper,
         )
         return Response(sugestoes)
+
+    @action(detail=False, methods=['get'])
+    def clientes(self, request):
+        """Opções de cliente para lançamento/filtro de pesquisas de satisfação."""
+        from .clientes_cadastro import opcoes_cliente_pesquisa
+
+        incluir_historico = str(request.query_params.get('incluirHistorico') or '').lower() in ('1', 'true', 'sim')
+        return Response(opcoes_cliente_pesquisa(incluir_historico=incluir_historico))
 
     @action(detail=False, methods=['get'])
     def lancadores(self, request):
@@ -210,7 +250,7 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='enviar-resumo')
     def enviar_resumo(self, request):
-        """Envia resumo consolidado das filiais SGQ do usuário (ignora filtros da tabela)."""
+        """Envia resumo consolidado de Ibiporã e Rondonópolis (ignora filtros e acesso por filial)."""
         to_emails = parse_emails(request.data.get('to') or request.data.get('email'))
         cc_emails = parse_emails(request.data.get('cc') or request.data.get('emailCopia'))
 
@@ -309,6 +349,63 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         )
         return Response(draft_payload(draft, filial))
 
+    @action(detail=False, methods=['get', 'put', 'delete'], url_path='form-draft')
+    def form_draft(self, request):
+        """Rascunho do formulário de lançamento — singleton por usuário + filial."""
+        filial = self._session_filial()
+        if not filial:
+            return Response(
+                {'detail': 'Filial da sessão é obrigatória para o rascunho.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        draft = PesquisaSatisfacaoFormDraft.objects.filter(
+            usuario=request.user,
+            filial=filial,
+        ).first()
+
+        if request.method == 'GET':
+            return Response(form_draft_payload(draft, filial))
+
+        if request.method == 'DELETE':
+            denied = _funcao_required_response(request, 'criar-pesquisas', _CRIAR_PESQUISAS_DETAIL)
+            if denied:
+                return denied
+            if draft:
+                draft.delete()
+                record_audit(
+                    request.user,
+                    'sgq.pesquisa.form_draft_descartado',
+                    f'Rascunho do lançamento de pesquisa descartado ({filial}).',
+                )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        denied = _funcao_required_response(request, 'criar-pesquisas', _CRIAR_PESQUISAS_DETAIL)
+        if denied:
+            return denied
+        form = sanitize_form_draft(request.data)
+        if not has_meaningful_form_draft(form):
+            if draft:
+                draft.delete()
+                record_audit(
+                    request.user,
+                    'sgq.pesquisa.form_draft_descartado',
+                    f'Rascunho do lançamento de pesquisa limpo ({filial}).',
+                )
+            return Response(form_draft_payload(None, filial))
+
+        draft, _created = PesquisaSatisfacaoFormDraft.objects.update_or_create(
+            usuario=request.user,
+            filial=filial,
+            defaults={'version': 1, 'payload': form},
+        )
+        record_audit(
+            request.user,
+            'sgq.pesquisa.form_draft_salvo',
+            f'Rascunho do lançamento de pesquisa salvo ({filial}).',
+        )
+        return Response(form_draft_payload(draft, filial))
+
     @action(detail=False, methods=['get'], url_path='exportar-modelo')
     def exportar_modelo(self, request):
         denied = _funcao_required_response(request, 'importar-pesquisas', _IMPORTAR_PESQUISAS_DETAIL)
@@ -382,12 +479,17 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        criado_por, denied_criado = _resolve_criado_por_importacao(request)
+        if denied_criado:
+            return denied_criado
+
         try:
             file_bytes = arquivo.read()
             result = import_pesquisas_from_spreadsheet(
                 file_bytes,
                 filial=filial,
                 dry_run=dry_run,
+                criado_por=criado_por,
             )
         except PesquisaImportError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -396,8 +498,170 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             record_audit(
                 request.user,
                 'sgq.pesquisa.importada',
-                f'{result["created"]} pesquisa(s) importadas ({filial}).',
+                f'{result["created"]} pesquisa(s) importadas ({filial}) — lançado por {criado_por}.',
             )
+            result['criadoPor'] = criado_por
 
         status_code = status.HTTP_200_OK if result.get('success') else status.HTTP_400_BAD_REQUEST
         return Response(result, status=status_code)
+
+
+_GERENCIAR_ESCOPOS_DETAIL = (
+    'Acesso negado. Solicite ao administrador a função "Gerenciar escopos" do SGQ.'
+)
+_OPCAO_EM_USO_DETAIL = (
+    'Esta opção já foi usada em pesquisas gravadas. Inative-a para não oferecer em novos lançamentos. '
+    'O histórico no indicador é mantido.'
+)
+_ESCOPO_EM_USO_DETAIL = (
+    'Este escopo já foi usado em pesquisas gravadas. Inative-o para não oferecer em novos lançamentos. '
+    'O histórico no indicador é mantido.'
+)
+
+
+def _escopos_mutation_denied(request):
+    return _funcao_required_response(request, 'gerenciar-escopos', _GERENCIAR_ESCOPOS_DETAIL)
+
+
+def _truthy_query(params, key: str) -> bool:
+    return str(params.get(key) or '').strip().lower() in ('1', 'true', 'yes', 'on', 'sim')
+
+
+class EscopoAnaliseViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+    """Catálogo global de escopos da análise — compartilhado entre as filiais do SGQ."""
+
+    permission_module = 'SGQ'
+    serializer_class = EscopoAnaliseSerializer
+    queryset = EscopoAnalise.objects.all()
+    pagination_class = None
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        qs = EscopoAnalise.objects.all().prefetch_related('opcoes').order_by('ordem', 'id')
+        if not _truthy_query(self.request.query_params, 'incluirInativos'):
+            qs = qs.filter(ativo=True)
+        return qs
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['incluir_inativos'] = _truthy_query(self.request.query_params, 'incluirInativos')
+        return context
+
+    def create(self, request, *args, **kwargs):
+        denied = _escopos_mutation_denied(request)
+        if denied:
+            return denied
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        denied = _escopos_mutation_denied(request)
+        if denied:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        denied = _escopos_mutation_denied(request)
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        denied = _escopos_mutation_denied(request)
+        if denied:
+            return denied
+        instance = self.get_object()
+        if escopo_usado_em_pesquisas(instance.chave):
+            return Response({'detail': _ESCOPO_EM_USO_DETAIL}, status=status.HTTP_400_BAD_REQUEST)
+        return super().destroy(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        escopo = serializer.save()
+        record_audit(
+            self.request.user,
+            'sgq.escopo_analise.criado',
+            f'Escopo da análise "{escopo.label}" cadastrado (compartilhado entre filiais).',
+        )
+
+    def perform_update(self, serializer):
+        escopo = serializer.save()
+        record_audit(
+            self.request.user,
+            'sgq.escopo_analise.atualizado',
+            f'Escopo da análise "{escopo.label}" atualizado.',
+        )
+
+    def perform_destroy(self, instance):
+        label = instance.label
+        super().perform_destroy(instance)
+        record_audit(
+            self.request.user,
+            'sgq.escopo_analise.excluido',
+            f'Escopo da análise "{label}" excluído.',
+        )
+
+
+class EscopoAnaliseOpcaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+    permission_module = 'SGQ'
+    serializer_class = EscopoAnaliseOpcaoSerializer
+    queryset = EscopoAnaliseOpcao.objects.select_related('escopo')
+    pagination_class = None
+    http_method_names = ['post', 'patch', 'delete', 'head', 'options']
+
+    def create(self, request, *args, **kwargs):
+        denied = _escopos_mutation_denied(request)
+        if denied:
+            return denied
+        escopo_id = request.data.get('escopoId') or request.data.get('escopo')
+        try:
+            escopo = EscopoAnalise.objects.get(pk=escopo_id)
+        except (EscopoAnalise.DoesNotExist, ValueError, TypeError):
+            return Response({'escopoId': ['Escopo inválido.']}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = self.get_serializer(data=request.data, context={**self.get_serializer_context(), 'escopo': escopo})
+        serializer.is_valid(raise_exception=True)
+        opcao = serializer.save()
+        record_audit(
+            request.user,
+            'sgq.escopo_analise.opcao_criada',
+            f'Opção "{opcao.label}" adicionada ao escopo "{escopo.label}".',
+        )
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        denied = _escopos_mutation_denied(request)
+        if denied:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        denied = _escopos_mutation_denied(request)
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        denied = _escopos_mutation_denied(request)
+        if denied:
+            return denied
+        instance = self.get_object()
+        if opcao_usada_em_pesquisas(instance.escopo.chave, instance.chave):
+            return Response({'detail': _OPCAO_EM_USO_DETAIL}, status=status.HTTP_400_BAD_REQUEST)
+        return super().destroy(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        opcao = serializer.save()
+        record_audit(
+            self.request.user,
+            'sgq.escopo_analise.opcao_atualizada',
+            f'Opção "{opcao.label}" do escopo "{opcao.escopo.label}" atualizada.',
+        )
+
+    def perform_destroy(self, instance):
+        label = instance.label
+        escopo_label = instance.escopo.label
+        super().perform_destroy(instance)
+        record_audit(
+            self.request.user,
+            'sgq.escopo_analise.opcao_excluida',
+            f'Opção "{label}" do escopo "{escopo_label}" excluída.',
+        )
+

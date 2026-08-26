@@ -8,7 +8,7 @@ import type {
   CashflowQueryParams, CashflowResponse, CashflowDayDetailParams, CashflowDayDetailResponse,
   RHIndicadorQueryParams, RHIndicadorResponse, RHIndicadorCategoriaBucket, RHIndicadorPorCategoria,
   MetaFaturamentoQueryParams, MetaFaturamentoResponse,
-  SgqSatisfacaoIndicadorQueryParams, SgqSatisfacaoIndicadorResponse,
+  SgqSatisfacaoIndicadorQueryParams, SgqSatisfacaoIndicadorResponse, SgqSatisfacaoDetalhe,
   SendGerencialEmailParams, SendGerencialEmailResponse,
   ReportImportResult, ReportImportType,
   PaginatedResponse, ReportQueryParams, ReportFacets,
@@ -26,13 +26,17 @@ import type {
   RegistrarCompraPayload, RegistrarSaidaPayload,
   ClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft,
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
+  CnpjConsultaResult,
   ProtocoloImportParams, ProtocoloImportResult,
   SgqPesquisa, SgqPesquisaImportPreview, SgqPesquisaImportResult, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
+  SgqClienteOption,
+  SgqEscopoAnaliseCadastro,
+  SgqEscopoAnaliseOpcaoCadastro,
   SendSgqResumoEmailParams, SendSgqResumoEmailResponse,
   CampanhaMarketing, CampanhaPayload, CampanhaQuadro, CampanhaComentario, CampanhaMembro, CampanhaMidia,
   GoogleDriveStatus, GoogleDriveBrowseResponse,
   UserDirectoryEntry,
-  SgqLoteDraft, SgqLoteDraftRow,
+  SgqLoteDraft, SgqLoteDraftRow, SgqFormDraft,
 } from '../types/domain';
 import { filterActiveEnvironments, ACTIVE_ENVIRONMENTS } from '../constants/environments';
 
@@ -170,16 +174,26 @@ function normalizeBillingRecord(raw: any): BillingRecord {
 }
 
 function normalizeClienteProtocolo(raw: any): ClienteProtocolo {
+  const nomeInterno = raw.nomeInterno ?? raw.nome_interno ?? raw.nome ?? '';
   return {
     id: String(raw.id),
-    nome: raw.nome,
+    codigo: raw.codigo ?? '',
+    nome: nomeInterno || raw.nome,
+    razaoSocial: raw.razaoSocial ?? raw.razao_social ?? '',
+    nomeFantasia: raw.nomeFantasia ?? raw.nome_fantasia ?? '',
+    nomeInterno,
     cnpj: raw.cnpj ?? null,
+    emitirProtocoloCanhotos: Boolean(raw.emitirProtocoloCanhotos ?? raw.emitir_protocolo_canhotos ?? true),
+    considerarPesquisaSatisfacao: Boolean(
+      raw.considerarPesquisaSatisfacao ?? raw.considerar_pesquisa_satisfacao,
+    ),
     requerExpedicao: Boolean(raw.requerExpedicao ?? raw.requer_expedicao),
     exigeFilial: Boolean(raw.exigeFilial ?? raw.exige_filial),
     filiais: Array.isArray(raw.filiais) ? raw.filiais.map((f: any) => ({ id: String(f.id), nome: f.nome })) : [],
     emailsEnvio: raw.emailsEnvio ?? raw.emails_envio ?? null,
     emailsCopia: raw.emailsCopia ?? raw.emails_copia ?? null,
     dataCriacao: raw.dataCriacao ?? raw.data_criacao,
+    dataAtualizacao: raw.dataAtualizacao ?? raw.data_atualizacao,
   };
 }
 
@@ -535,6 +549,8 @@ function buildSgqSatisfacaoIndicadorQueryParams(params: SgqSatisfacaoIndicadorQu
   if (params.dataFim) query.dataFim = params.dataFim;
   if (params.cliente) query.cliente = params.cliente;
   if (params.avaliacao) query.avaliacao = params.avaliacao;
+  if (params.page) query.page = String(params.page);
+  if (params.pageSize) query.page_size = String(params.pageSize);
   return query;
 }
 
@@ -1102,6 +1118,15 @@ export const apiService = {
     return data as SgqSatisfacaoIndicadorResponse;
   },
 
+  async getIndicadorSgqSatisfacaoDetalhes(
+    params: SgqSatisfacaoIndicadorQueryParams = {},
+  ): Promise<PaginatedResponse<SgqSatisfacaoDetalhe>> {
+    const { data } = await api.get('/api/indicadores/sgq/satisfacao/detalhes/', {
+      params: buildSgqSatisfacaoIndicadorQueryParams(params),
+    });
+    return paginatedFromResponse(data, (raw) => raw as SgqSatisfacaoDetalhe);
+  },
+
   async getIndicadorMetaFaturamento(
     params: MetaFaturamentoQueryParams = {},
   ): Promise<MetaFaturamentoResponse> {
@@ -1496,9 +1521,18 @@ export const apiService = {
 
   // ─── Faturamento — Protocolos de envio de NF ────────────────────────────────
 
-  async getProtocoloClientes(): Promise<ClienteProtocolo[]> {
-    const { data } = await api.get('/api/faturamento/protocolo-clientes/');
+  async getProtocoloClientes(uso?: 'protocolo' | 'sgq'): Promise<ClienteProtocolo[]> {
+    const { data } = await api.get('/api/faturamento/protocolo-clientes/', {
+      params: uso ? { uso } : undefined,
+    });
     return Array.isArray(data) ? data.map(normalizeClienteProtocolo) : data.results?.map(normalizeClienteProtocolo) ?? [];
+  },
+
+  async consultarCnpj(cnpj: string): Promise<CnpjConsultaResult> {
+    const { data } = await api.get('/api/faturamento/protocolo-clientes/consultar-cnpj/', {
+      params: { cnpj },
+    });
+    return data;
   },
 
   async createProtocoloCliente(payload: ClienteProtocoloPayload): Promise<ClienteProtocolo> {
@@ -1670,9 +1704,9 @@ export const apiService = {
     await api.delete(`/api/sgq/pesquisas-satisfacao/${id}/`);
   },
 
-  /** Nomes de motoristas já usados na filial — alimenta a sugestão do formulário
-   * (evita o mesmo motorista sendo digitado de formas diferentes) sem exigir
-   * um cadastro formal deles. */
+  /** Nomes de motoristas já usados em qualquer filial — alimenta a sugestão do
+   * formulário (evita o mesmo motorista sendo digitado de formas diferentes)
+   * sem exigir um cadastro formal deles. */
   async getSgqMotoristas(): Promise<string[]> {
     const { data } = await api.get('/api/sgq/pesquisas-satisfacao/motoristas/');
     return data as string[];
@@ -1680,7 +1714,14 @@ export const apiService = {
 
   async getSgqLancadores(): Promise<string[]> {
     const { data } = await api.get('/api/sgq/pesquisas-satisfacao/lancadores/');
-    return data as string[];
+    return Array.isArray(data) ? data : [];
+  },
+
+  async getSgqClientes(params?: { incluirHistorico?: boolean }): Promise<SgqClienteOption[]> {
+    const { data } = await api.get('/api/sgq/pesquisas-satisfacao/clientes/', {
+      params: params?.incluirHistorico ? { incluirHistorico: true } : undefined,
+    });
+    return Array.isArray(data) ? data : [];
   },
 
   async getSgqLoteDraft(): Promise<SgqLoteDraft> {
@@ -1695,6 +1736,20 @@ export const apiService = {
 
   async deleteSgqLoteDraft(): Promise<void> {
     await api.delete('/api/sgq/pesquisas-satisfacao/lote-draft/');
+  },
+
+  async getSgqFormDraft(): Promise<SgqFormDraft> {
+    const { data } = await api.get('/api/sgq/pesquisas-satisfacao/form-draft/');
+    return data as SgqFormDraft;
+  },
+
+  async saveSgqFormDraft(form: SgqLoteDraftRow): Promise<SgqFormDraft> {
+    const { data } = await api.put('/api/sgq/pesquisas-satisfacao/form-draft/', { form });
+    return data as SgqFormDraft;
+  },
+
+  async deleteSgqFormDraft(): Promise<void> {
+    await api.delete('/api/sgq/pesquisas-satisfacao/form-draft/');
   },
 
   async exportSgqPesquisaImportTemplate(): Promise<Blob> {
@@ -1716,9 +1771,10 @@ export const apiService = {
     return data as SgqPesquisaImportPreview;
   },
 
-  async importSgqPesquisasSpreadsheet(file: File): Promise<SgqPesquisaImportResult> {
+  async importSgqPesquisasSpreadsheet(file: File, criadoPorUserId?: string): Promise<SgqPesquisaImportResult> {
     const form = new FormData();
     form.append('file', file);
+    if (criadoPorUserId) form.append('criadoPorUserId', criadoPorUserId);
     const { data } = await api.post('/api/sgq/pesquisas-satisfacao/import-spreadsheet/', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
@@ -1728,6 +1784,47 @@ export const apiService = {
   async enviarResumoSgqPesquisas(payload: SendSgqResumoEmailParams): Promise<SendSgqResumoEmailResponse> {
     const { data } = await api.post('/api/sgq/pesquisas-satisfacao/enviar-resumo/', payload);
     return data as SendSgqResumoEmailResponse;
+  },
+
+  async getSgqEscoposAnalise(params?: { incluirInativos?: boolean }): Promise<SgqEscopoAnaliseCadastro[]> {
+    const { data } = await api.get('/api/sgq/escopos-analise/', {
+      params: params?.incluirInativos ? { incluirInativos: true } : undefined,
+    });
+    return Array.isArray(data) ? data : [];
+  },
+
+  async createSgqEscopoAnalise(payload: { label: string }): Promise<SgqEscopoAnaliseCadastro> {
+    const { data } = await api.post('/api/sgq/escopos-analise/', payload);
+    return data as SgqEscopoAnaliseCadastro;
+  },
+
+  async updateSgqEscopoAnalise(
+    id: string,
+    payload: Partial<Pick<SgqEscopoAnaliseCadastro, 'label' | 'ordem' | 'ativo'>>,
+  ): Promise<SgqEscopoAnaliseCadastro> {
+    const { data } = await api.patch(`/api/sgq/escopos-analise/${id}/`, payload);
+    return data as SgqEscopoAnaliseCadastro;
+  },
+
+  async deleteSgqEscopoAnalise(id: string): Promise<void> {
+    await api.delete(`/api/sgq/escopos-analise/${id}/`);
+  },
+
+  async createSgqEscopoAnaliseOpcao(payload: { escopoId: string; label: string }): Promise<SgqEscopoAnaliseOpcaoCadastro> {
+    const { data } = await api.post('/api/sgq/escopos-analise-opcoes/', payload);
+    return data as SgqEscopoAnaliseOpcaoCadastro;
+  },
+
+  async updateSgqEscopoAnaliseOpcao(
+    id: string,
+    payload: Partial<Pick<SgqEscopoAnaliseOpcaoCadastro, 'label' | 'ordem' | 'ativo'>>,
+  ): Promise<SgqEscopoAnaliseOpcaoCadastro> {
+    const { data } = await api.patch(`/api/sgq/escopos-analise-opcoes/${id}/`, payload);
+    return data as SgqEscopoAnaliseOpcaoCadastro;
+  },
+
+  async deleteSgqEscopoAnaliseOpcao(id: string): Promise<void> {
+    await api.delete(`/api/sgq/escopos-analise-opcoes/${id}/`);
   },
 
   async getUserDirectory(module = 'Marketing'): Promise<UserDirectoryEntry[]> {

@@ -1,13 +1,17 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import type { SgqAvaliacao, SgqPesquisa, SgqPesquisaPayload, SgqPesquisaQueryParams } from '../../types/domain';
-import { SGQ_AVALIACAO_OPTIONS, SGQ_CLIENTE_OPTIONS, SGQ_CRITERIOS } from '../../types/domain';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import type { SgqAvaliacao, SgqEscopoAnaliseMap, SgqLoteDraftRow, SgqPesquisa, SgqPesquisaPayload, SgqPesquisaQueryParams } from '../../types/domain';
+import { hasSgqEscopoOpcoes, SGQ_AVALIACAO_OPTIONS, SGQ_CRITERIOS } from '../../types/domain';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
 import {
   useSgqPesquisas,
   useSgqMotoristas,
   useSgqLancadores,
+  useSgqClientes,
   useSgqLoteDraft,
+  useSgqFormDraft,
+  useSaveSgqFormDraft,
+  useDeleteSgqFormDraft,
   useCreateSgqPesquisa,
   useUpdateSgqPesquisa,
   useDeleteSgqPesquisa,
@@ -17,7 +21,9 @@ import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import SGQPesquisaLoteModal from './SGQPesquisaLoteModal';
 import SGQPesquisaImportModal from './SGQPesquisaImportModal';
 import SGQResumoEmailModal from './SGQResumoEmailModal';
+import SGQEscoposAnaliseModal from './SGQEscoposAnaliseModal';
 import { clearLegacySgqLoteDrafts } from './sgqLoteDraft';
+import SGQEscopoAnalisePicker from './SGQEscopoAnalisePicker';
 
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
@@ -131,11 +137,12 @@ type FormState = {
   apresentacaoMotorista: SgqAvaliacao | '';
   atendimentoDispensado: SgqAvaliacao | '';
   analise: string;
+  escopoAnalise: SgqEscopoAnaliseMap;
 };
 
 const EMPTY_FORM: FormState = {
   dataEntrega: '',
-  cliente: 'OUTROS',
+  cliente: '',
   motorista: '',
   cte: '',
   notaFiscal: '',
@@ -146,7 +153,44 @@ const EMPTY_FORM: FormState = {
   apresentacaoMotorista: '',
   atendimentoDispensado: '',
   analise: '',
+  escopoAnalise: {},
 };
+
+function todayIso(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+function formFromDraft(row: SgqLoteDraftRow): FormState {
+  return {
+    dataEntrega: row.dataEntrega || todayIso(),
+    cliente: row.cliente,
+    motorista: row.motorista,
+    cte: row.cte,
+    notaFiscal: row.notaFiscal,
+    clienteRecusouAssinar: row.clienteRecusouAssinar,
+    prazoEntrega: row.prazoEntrega,
+    condicoesMercadoria: row.condicoesMercadoria,
+    condicoesVeiculo: row.condicoesVeiculo,
+    apresentacaoMotorista: row.apresentacaoMotorista,
+    atendimentoDispensado: row.atendimentoDispensado,
+    analise: row.analise,
+    escopoAnalise: row.escopoAnalise && typeof row.escopoAnalise === 'object' ? row.escopoAnalise : {},
+  };
+}
+
+function formatDraftTime(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
 
 const SGQPesquisaSatisfacao: React.FC = () => {
   const { user, selectedFilial } = useAuth();
@@ -155,6 +199,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   const canEditPesquisas = userHasFuncao(user, 'SGQ', 'editar-pesquisas');
   const canDeletePesquisas = userHasFuncao(user, 'SGQ', 'excluir-pesquisas');
   const canMutatePesquisas = canEditPesquisas || canDeletePesquisas;
+  const canCadastrarEscopos = userHasFuncao(user, 'SGQ', 'gerenciar-escopos');
 
   // Filtros e paginação (server-side)
   const [search, setSearch] = useState('');
@@ -188,8 +233,11 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   const listQuery = useSgqPesquisas(selectedFilial, listParams);
   const motoristasQuery = useSgqMotoristas(selectedFilial);
   const lancadoresQuery = useSgqLancadores(selectedFilial);
+  const clientesFiltroQuery = useSgqClientes(true);
+  const clientesLancamentoQuery = useSgqClientes(false);
   const motoristasSugeridos = motoristasQuery.data ?? [];
   const lancadoresSugeridos = lancadoresQuery.data ?? [];
+  const clientesFiltro = clientesFiltroQuery.data ?? [];
   const listState = useAsyncQueryState(listQuery);
   const rows = listQuery.data?.results ?? [];
   const totalItems = listQuery.data?.count ?? 0;
@@ -206,13 +254,31 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   const [editingPesquisa, setEditingPesquisa] = useState<SgqPesquisa | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formError, setFormError] = useState('');
+  const clientesLancamento = useMemo(() => {
+    const opts = clientesLancamentoQuery.data ?? [];
+    if (form.cliente && !opts.some((item) => item.value === form.cliente)) {
+      return [{ value: form.cliente, label: form.cliente }, ...opts];
+    }
+    return opts;
+  }, [clientesLancamentoQuery.data, form.cliente]);
 
   // Dropdown "Incluir" removido — formulário direto no botão; lote/importação em "Ações"
   const [isResumoEmailOpen, setIsResumoEmailOpen] = useState(false);
   const [isLoteModalOpen, setIsLoteModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isEscoposModalOpen, setIsEscoposModalOpen] = useState(false);
   const loteDraftQuery = useSgqLoteDraft(selectedFilial);
   const hasLoteDraft = Boolean(loteDraftQuery.data?.hasDraft);
+  const formDraftQuery = useSgqFormDraft(canCreatePesquisas ? selectedFilial : null);
+  const saveFormDraft = useSaveSgqFormDraft(selectedFilial);
+  const deleteFormDraft = useDeleteSgqFormDraft(selectedFilial);
+  const hasFormDraft = Boolean(formDraftQuery.data?.hasDraft);
+  const skipNextFormDraftSave = useRef(true);
+  const [hydratedFormDraft, setHydratedFormDraft] = useState(false);
+  const [restoredFormDraft, setRestoredFormDraft] = useState(false);
+  const [formDraftUpdatedAt, setFormDraftUpdatedAt] = useState<string | null>(null);
+  const [formDraftUnavailable, setFormDraftUnavailable] = useState(false);
+  const formBusy = isSaving || deleteFormDraft.isPending;
 
   useEffect(() => {
     clearLegacySgqLoteDrafts();
@@ -273,9 +339,11 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   const openCreateModal = () => {
     if (!canCreatePesquisas) return;
     setEditingPesquisa(null);
-    const hoje = new Date().toISOString().split('T')[0];
-    setForm({ ...EMPTY_FORM, dataEntrega: hoje });
     setFormError('');
+    setRestoredFormDraft(false);
+    setFormDraftUpdatedAt(null);
+    setFormDraftUnavailable(false);
+    setHydratedFormDraft(false);
     setIsModalOpen(true);
   };
 
@@ -295,14 +363,83 @@ const SGQPesquisaSatisfacao: React.FC = () => {
       apresentacaoMotorista: pesquisa.apresentacaoMotorista,
       atendimentoDispensado: pesquisa.atendimentoDispensado,
       analise: pesquisa.analise,
+      escopoAnalise: pesquisa.escopoAnalise && typeof pesquisa.escopoAnalise === 'object' ? pesquisa.escopoAnalise : {},
     });
     setFormError('');
     setIsModalOpen(true);
   };
 
+  useEffect(() => {
+    if (!isModalOpen || editingPesquisa) return;
+    if (hydratedFormDraft) return;
+    if (formDraftQuery.isLoading && !formDraftQuery.data) return;
+
+    if (formDraftQuery.isError) {
+      setForm({ ...EMPTY_FORM, dataEntrega: todayIso() });
+      setFormDraftUnavailable(true);
+      setHydratedFormDraft(true);
+      skipNextFormDraftSave.current = true;
+      return;
+    }
+
+    const draft = formDraftQuery.data;
+    if (draft?.hasDraft && draft.form) {
+      setForm(formFromDraft(draft.form));
+      setFormDraftUpdatedAt(draft.updatedAt);
+      setRestoredFormDraft(true);
+      setFormDraftUnavailable(false);
+    } else {
+      setForm({ ...EMPTY_FORM, dataEntrega: todayIso() });
+      setFormDraftUpdatedAt(null);
+      setRestoredFormDraft(false);
+    }
+    setHydratedFormDraft(true);
+    skipNextFormDraftSave.current = true;
+  }, [isModalOpen, editingPesquisa, hydratedFormDraft, formDraftQuery.data, formDraftQuery.isError, formDraftQuery.isLoading]);
+
+  useEffect(() => {
+    if (!isModalOpen || editingPesquisa || !hydratedFormDraft || formDraftUnavailable || !selectedFilial) return;
+    if (skipNextFormDraftSave.current) {
+      skipNextFormDraftSave.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      saveFormDraft.mutate(form, {
+        onSuccess: (result) => {
+          setFormDraftUpdatedAt(result.hasDraft ? result.updatedAt : null);
+          if (!result.hasDraft) setRestoredFormDraft(false);
+          setFormDraftUnavailable(false);
+        },
+        onError: () => setFormDraftUnavailable(true),
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [isModalOpen, editingPesquisa, hydratedFormDraft, formDraftUnavailable, selectedFilial, form]); // eslint-disable-line react-hooks/exhaustive-deps -- debounce saveFormDraft
+
+  const discardFormDraft = () => {
+    if (!window.confirm('Descartar o rascunho desta pesquisa? Os dados salvos na sua conta serão apagados.')) return;
+    skipNextFormDraftSave.current = true;
+    deleteFormDraft.mutate(undefined, {
+      onSuccess: () => {
+        setRestoredFormDraft(false);
+        setFormDraftUpdatedAt(null);
+        setIsModalOpen(false);
+      },
+      onError: () => setFormError('Não foi possível descartar o rascunho. Tente novamente.'),
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!form.cliente) {
+      setFormError('Selecione um cliente cadastrado.');
+      return;
+    }
+    if (form.analise.trim() && !hasSgqEscopoOpcoes(form.escopoAnalise)) {
+      setFormError('Selecione ao menos uma opção no escopo da análise.');
+      return;
+    }
     if (!form.clienteRecusouAssinar) {
       const faltantes = SGQ_CRITERIOS.filter((criterio) => !form[criterio.key]);
       if (faltantes.length > 0) {
@@ -314,7 +451,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
 
     const payload: SgqPesquisaPayload = {
       dataEntrega: form.dataEntrega,
-      cliente: form.cliente as SgqPesquisaPayload['cliente'],
+      cliente: form.cliente,
       motorista: form.motorista.trim(),
       cte: form.cte.trim(),
       notaFiscal: form.notaFiscal.trim(),
@@ -325,6 +462,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
       apresentacaoMotorista: form.clienteRecusouAssinar ? '' : (form.apresentacaoMotorista as SgqAvaliacao),
       atendimentoDispensado: form.clienteRecusouAssinar ? '' : (form.atendimentoDispensado as SgqAvaliacao),
       analise: form.analise.trim(),
+      escopoAnalise: form.analise.trim() ? form.escopoAnalise : {},
     };
 
     if (editingPesquisa) {
@@ -338,8 +476,12 @@ const SGQPesquisaSatisfacao: React.FC = () => {
     } else {
       createPesquisa.mutate(payload, {
         onSuccess: () => {
-          setIsModalOpen(false);
-          setCurrentPage(1);
+          deleteFormDraft.mutate(undefined, {
+            onSettled: () => {
+              setIsModalOpen(false);
+              setCurrentPage(1);
+            },
+          });
         },
         onError: () => setFormError('Erro ao registrar a pesquisa. Tente novamente.'),
       });
@@ -369,9 +511,9 @@ const SGQPesquisaSatisfacao: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '4px' }}>
-      {/* Sugestões de motorista (autocomplete nativo) — compartilhada pelo formulário
-          e pela inclusão em tabela, para reduzir o mesmo motorista sendo digitado
-          de formas diferentes, sem exigir um cadastro formal deles. */}
+      {/* Sugestões de motorista (autocomplete nativo) — compartilhada entre filiais,
+          pelo formulário e pela inclusão em tabela, para reduzir o mesmo motorista
+          sendo digitado de formas diferentes, sem exigir um cadastro formal deles. */}
       <datalist id="sgq-motoristas-sugestoes">
         {motoristasSugeridos.map((nome) => (
           <option key={nome} value={nome} />
@@ -442,6 +584,23 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                       </span>
                     </span>
                   )}
+                  {canCadastrarEscopos && (
+                    <>
+                      <div className="reports-dropdown-divider" />
+                      <span
+                        className="reports-dropdown-item"
+                        onClick={() => {
+                          setIsActionsOpen(false);
+                          setIsEscoposModalOpen(true);
+                        }}
+                      >
+                        <span className="reports-dropdown-item-left">
+                          <i className="bi bi-list-check" />
+                          Escopos de análise
+                        </span>
+                      </span>
+                    </>
+                  )}
                 </>
               ) : (
                 <>
@@ -466,21 +625,37 @@ const SGQPesquisaSatisfacao: React.FC = () => {
             </div>
           </div>
 
-          {canCreatePesquisas && !hasLoteDraft && (
-            <button
-              type="button"
-              className="reports-action-btn primary"
-              style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
-              onClick={() => {
-                setIsActionsOpen(false);
-                openCreateModal();
-              }}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              <span>Incluir</span>
-            </button>
+          {canCreatePesquisas && (
+            hasFormDraft ? (
+              <button
+                type="button"
+                className="reports-action-btn primary"
+                style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
+                onClick={() => {
+                  setIsActionsOpen(false);
+                  openCreateModal();
+                }}
+                title="Continuar rascunho do lançamento"
+              >
+                <i className="bi bi-journal-text" aria-hidden="true" />
+                <span>Rascunho</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="reports-action-btn primary"
+                style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
+                onClick={() => {
+                  setIsActionsOpen(false);
+                  openCreateModal();
+                }}
+              >
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <span>Incluir</span>
+              </button>
+            )
           )}
 
           {canCreatePesquisas && hasLoteDraft && (
@@ -494,8 +669,8 @@ const SGQPesquisaSatisfacao: React.FC = () => {
               }}
               title="Continuar rascunho da inclusão em tabela"
             >
-              <i className="bi bi-journal-text" aria-hidden="true" />
-              <span>Rascunho</span>
+              <i className="bi bi-table" aria-hidden="true" />
+              <span>Rascunho tabela</span>
             </button>
           )}
         </div>
@@ -535,8 +710,8 @@ const SGQPesquisaSatisfacao: React.FC = () => {
           <div className="reports-select-wrapper">
             <select value={filterCliente} onChange={(e) => { setFilterCliente(e.target.value); setCurrentPage(1); setSelectedIds([]); }}>
               <option value="">Cliente</option>
-              {SGQ_CLIENTE_OPTIONS.map((cliente) => (
-                <option key={cliente} value={cliente}>{cliente}</option>
+              {clientesFiltro.map((cliente) => (
+                <option key={cliente.value} value={cliente.value}>{cliente.label}</option>
               ))}
             </select>
           </div>
@@ -648,14 +823,14 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                         )}
                         <td style={{ fontWeight: 500 }}>{pesquisa.dataInclusao ? formatDateBr(pesquisa.dataInclusao) : '—'}</td>
                         <td style={{ fontWeight: 500 }}>{formatDateBr(pesquisa.dataEntrega)}</td>
-                        <td>{pesquisa.cliente}</td>
-                        <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pesquisa.motorista}>
+                        <td className="sgq-cell-ellipsis" title={pesquisa.cliente}>{pesquisa.cliente}</td>
+                        <td className="sgq-cell-ellipsis" title={pesquisa.motorista}>
                           {pesquisa.motorista}
                         </td>
-                        <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pesquisa.cte}>
+                        <td className="sgq-cell-ellipsis" title={pesquisa.cte}>
                           {pesquisa.cte}
                         </td>
-                        <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pesquisa.notaFiscal}>
+                        <td className="sgq-cell-ellipsis" title={pesquisa.notaFiscal}>
                           {pesquisa.notaFiscal}
                         </td>
                         {(pesquisa.clienteRecusouAssinar || SGQ_CRITERIOS.every((c) => !pesquisa[c.key])) ? (
@@ -762,7 +937,14 @@ const SGQPesquisaSatisfacao: React.FC = () => {
         </QueryDataPanel>
 
       {/* MODAL: NOVA/EDITAR PESQUISA */}
-      {isModalOpen && ((editingPesquisa && canEditPesquisas) || (!editingPesquisa && canCreatePesquisas)) && (
+      {isModalOpen && !editingPesquisa && canCreatePesquisas && !hydratedFormDraft && (
+        <div className="search-backdrop" style={{ display: 'flex', alignItems: 'center', padding: '24px 16px' }}>
+          <div className="modal-card" style={{ width: 'min(820px, 100%)', padding: '32px', textAlign: 'center' }}>
+            Carregando rascunho...
+          </div>
+        </div>
+      )}
+      {isModalOpen && ((editingPesquisa && canEditPesquisas) || (!editingPesquisa && canCreatePesquisas && hydratedFormDraft)) && (
         <div
           className="search-backdrop"
           style={{ display: 'flex', alignItems: 'center', padding: '24px 16px' }}
@@ -770,7 +952,21 @@ const SGQPesquisaSatisfacao: React.FC = () => {
         >
           <div className="modal-card" style={{ width: 'min(820px, 100%)' }}>
             <div className="modal-header">
-              <h3>{editingPesquisa ? 'Editar Pesquisa de Satisfação' : 'Nova Pesquisa de Satisfação'}</h3>
+              <div>
+                <h3>{editingPesquisa ? 'Editar Pesquisa de Satisfação' : 'Nova Pesquisa de Satisfação'}</h3>
+                {!editingPesquisa && formDraftUnavailable && (
+                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#b45309' }}>
+                    Rascunho indisponível no servidor — você pode preencher normalmente, mas nada será salvo automaticamente.
+                  </p>
+                )}
+                {!editingPesquisa && !formDraftUnavailable && (restoredFormDraft || formDraftUpdatedAt) && (
+                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
+                    Rascunho na sua conta
+                    {formDraftUpdatedAt ? ` · ${formatDraftTime(formDraftUpdatedAt)}` : ''}
+                    {saveFormDraft.isPending ? ' · salvando…' : ''}
+                  </p>
+                )}
+              </div>
               <button type="button" className="btn-icon" onClick={() => setIsModalOpen(false)} aria-label="Fechar">
                 <i className="bi bi-x-lg" />
               </button>
@@ -809,8 +1005,9 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                 <label>
                   Cliente
                   <select className="form-input" required value={form.cliente} onChange={(e) => setField('cliente', e.target.value)}>
-                    {SGQ_CLIENTE_OPTIONS.map((cliente) => (
-                      <option key={cliente} value={cliente}>{cliente}</option>
+                    <option value="">Selecione...</option>
+                    {clientesLancamento.map((cliente) => (
+                      <option key={cliente.value} value={cliente.value}>{cliente.label}</option>
                     ))}
                   </select>
                 </label>
@@ -880,8 +1077,33 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
                   Análise, Tratativa e Justificativa
                 </div>
-                <textarea className="form-input" rows={3} placeholder="Digite a análise, tratativa e justificativa..." value={form.analise} onChange={(e) => setField('analise', e.target.value)} />
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  placeholder="Digite a análise, tratativa e justificativa..."
+                  value={form.analise}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setForm((prev) => ({
+                      ...prev,
+                      analise: value,
+                      escopoAnalise: value.trim() ? prev.escopoAnalise : {},
+                    }));
+                  }}
+                />
               </label>
+
+              {form.analise.trim() ? (
+                <div style={{ marginTop: '14px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '8px' }}>
+                    Escopo da análise <span style={{ color: '#dc2626' }}>*</span>
+                  </div>
+                  <SGQEscopoAnalisePicker
+                    value={form.escopoAnalise}
+                    onChange={(next) => setField('escopoAnalise', next)}
+                  />
+                </div>
+              ) : null}
 
               {formError && (
                 <div style={{ marginTop: '14px', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', color: '#b91c1c', fontSize: '13px' }}>
@@ -889,11 +1111,26 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                 </div>
               )}
 
-              <div className="modal-footer" style={{ marginTop: '20px' }}>
-                <button type="button" className="reports-action-btn secondary" onClick={() => setIsModalOpen(false)}>Cancelar</button>
-                <button type="submit" className="reports-action-btn primary" disabled={isSaving}>
-                  {isSaving ? 'Salvando...' : (editingPesquisa ? 'Salvar Alterações' : 'Registrar Pesquisa')}
-                </button>
+              <div className="modal-footer" style={{ marginTop: '20px', justifyContent: 'space-between' }}>
+                <div>
+                  {!editingPesquisa && (restoredFormDraft || formDraftUpdatedAt) && (
+                    <button
+                      type="button"
+                      className="reports-action-btn secondary"
+                      onClick={discardFormDraft}
+                      disabled={formBusy}
+                      title="Apaga o rascunho da sua conta nesta filial"
+                    >
+                      {deleteFormDraft.isPending ? 'Descartando...' : 'Descartar rascunho'}
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="button" className="reports-action-btn secondary" onClick={() => setIsModalOpen(false)} disabled={formBusy}>Cancelar</button>
+                  <button type="submit" className="reports-action-btn primary" disabled={formBusy}>
+                    {isSaving ? 'Salvando...' : (editingPesquisa ? 'Salvar Alterações' : 'Registrar Pesquisa')}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -902,6 +1139,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
 
       {isLoteModalOpen && canCreatePesquisas && (
         <SGQPesquisaLoteModal
+          clienteOptions={clientesLancamentoQuery.data ?? []}
           onClose={() => {
             setIsLoteModalOpen(false);
             void loteDraftQuery.refetch();
@@ -917,6 +1155,10 @@ const SGQPesquisaSatisfacao: React.FC = () => {
         <SGQResumoEmailModal
           onClose={() => setIsResumoEmailOpen(false)}
         />
+      )}
+
+      {isEscoposModalOpen && canCadastrarEscopos && (
+        <SGQEscoposAnaliseModal onClose={() => setIsEscoposModalOpen(false)} />
       )}
     </div>
   );

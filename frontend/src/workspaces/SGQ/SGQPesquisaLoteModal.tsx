@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type {
   SgqAvaliacao,
-  SgqCliente,
+  SgqClienteOption,
+  SgqEscopoAnaliseMap,
   SgqLoteDraftRow,
   SgqPesquisaBulkErrors,
   SgqPesquisaPayload,
 } from '../../types/domain';
-import { SGQ_AVALIACAO_OPTIONS, SGQ_CLIENTE_OPTIONS, SGQ_CRITERIOS } from '../../types/domain';
+import { SGQ_AVALIACAO_OPTIONS, SGQ_CRITERIOS } from '../../types/domain';
 import {
   useBulkCreateSgqPesquisas,
   useDeleteSgqLoteDraft,
@@ -15,13 +16,14 @@ import {
   getSgqBulkErrors,
 } from '../../hooks/useSgqPesquisas';
 import { useAuth } from '../../contexts/AuthContext';
+import SGQEscopoAnalisePicker from './SGQEscopoAnalisePicker';
 
 type LoteRow = SgqLoteDraftRow;
 
 function emptyRow(overrides: Partial<LoteRow> = {}): LoteRow {
   return {
     dataEntrega: '',
-    cliente: 'OUTROS',
+    cliente: '',
     motorista: '',
     cte: '',
     notaFiscal: '',
@@ -32,6 +34,7 @@ function emptyRow(overrides: Partial<LoteRow> = {}): LoteRow {
     apresentacaoMotorista: '',
     atendimentoDispensado: '',
     analise: '',
+    escopoAnalise: {},
     ...overrides,
   };
 }
@@ -61,9 +64,10 @@ function formatDraftTime(iso: string): string {
 
 type SGQPesquisaLoteModalProps = {
   onClose: () => void;
+  clienteOptions: SgqClienteOption[];
 };
 
-const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) => {
+const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose, clienteOptions }) => {
   const { selectedFilial } = useAuth();
   const filial = selectedFilial ?? null;
   const draftQuery = useSgqLoteDraft(filial);
@@ -119,6 +123,9 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
       if (field === 'clienteRecusouAssinar' && value === true) {
         SGQ_CRITERIOS.forEach((c) => { next[c.key] = ''; });
       }
+      if (field === 'analise' && !String(value).trim()) {
+        next.escopoAnalise = {};
+      }
       return next;
     }));
     setRowErrors((prev) => {
@@ -135,7 +142,7 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
         ...prev,
         emptyRow({
           dataEntrega: last?.dataEntrega || '',
-          cliente: last?.cliente || 'OUTROS',
+          cliente: last?.cliente || '',
         }),
       ];
     });
@@ -185,6 +192,7 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
         apresentacaoMotorista: row.clienteRecusouAssinar ? '' : (row.apresentacaoMotorista as SgqAvaliacao),
         atendimentoDispensado: row.clienteRecusouAssinar ? '' : (row.atendimentoDispensado as SgqAvaliacao),
         analise: row.analise.trim(),
+        escopoAnalise: row.analise.trim() ? row.escopoAnalise : {},
       });
     });
 
@@ -275,6 +283,7 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
                 {SGQ_CRITERIOS.map((criterio) => (
                   <col key={criterio.key} className="sgq-lote-col-avaliacao" />
                 ))}
+                <col className="sgq-lote-col-escopo" />
                 <col className="sgq-lote-col-analise" />
                 <col className="sgq-lote-col-remove" />
               </colgroup>
@@ -292,6 +301,7 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
                       {criterio.shortLabel}
                     </th>
                   ))}
+                  <th title="Obrigatório quando houver análise">Escopo</th>
                   <th title="Análise, tratativa e justificativa">Análise</th>
                   <th aria-label="Remover" />
                 </tr>
@@ -314,10 +324,11 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
                         className={cellClass(idx, 'cliente')}
                         value={row.cliente}
                         title={fieldError(idx, 'cliente')}
-                        onChange={(e) => updateRow(idx, 'cliente', e.target.value as SgqCliente)}
+                        onChange={(e) => updateRow(idx, 'cliente', e.target.value)}
                       >
-                        {SGQ_CLIENTE_OPTIONS.map((clienteOpt) => (
-                          <option key={clienteOpt} value={clienteOpt}>{clienteOpt}</option>
+                        <option value="">Selecione...</option>
+                        {clienteOptions.map((clienteOpt) => (
+                          <option key={clienteOpt.value} value={clienteOpt.value}>{clienteOpt.label}</option>
                         ))}
                       </select>
                     </td>
@@ -380,6 +391,15 @@ const SGQPesquisaLoteModal: React.FC<SGQPesquisaLoteModalProps> = ({ onClose }) 
                         </select>
                       </td>
                     ))}
+                    <td>
+                      <SGQEscopoAnalisePicker
+                        compact
+                        disabled={!row.analise.trim()}
+                        invalid={Boolean(fieldError(idx, 'escopoAnalise'))}
+                        value={row.escopoAnalise}
+                        onChange={(next: SgqEscopoAnaliseMap) => updateRow(idx, 'escopoAnalise', next)}
+                      />
+                    </td>
                     <td>
                       <input
                         type="text"

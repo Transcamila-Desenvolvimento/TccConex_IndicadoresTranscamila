@@ -12,7 +12,7 @@ interface ImportarProtocolosModalProps {
 }
 
 const ImportarProtocolosModal: React.FC<ImportarProtocolosModalProps> = ({ onClose }) => {
-  const clientesQuery = useProtocoloClientes();
+  const clientesQuery = useProtocoloClientes('protocolo');
   const importMutation = useImportProtocolosSpreadsheet();
   const exportarModelo = useExportarModeloProtocolos();
 

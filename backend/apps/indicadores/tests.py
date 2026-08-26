@@ -1550,6 +1550,7 @@ class IndicadoresSgqSatisfacaoTests(TestCase):
         self.assertIn('Motorista Teste', response.data['meta']['motoristasDisponiveis'])
         self.assertIn('anosDisponiveis', response.data['meta'])
         self.assertIn(2026, response.data['meta']['anosDisponiveis'])
+        self.assertEqual(response.data['recorrenciasEscopo'], [])
 
     def test_filtro_por_periodo_data_entrega(self):
         _pesquisa('Ibiporã (Matriz)', cte='IBI-OLD', data_entrega=date(2025, 3, 10))
@@ -1642,6 +1643,103 @@ class IndicadoresSgqSatisfacaoTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['totalPesquisas'], 3)  # 2 do setUp + parcial
         self.assertEqual(response.data['totalRecusas'], 0)
+
+    def test_recorrencias_escopo_omite_zeros(self):
+        _pesquisa(
+            'Ibiporã (Matriz)',
+            cte='ESC-1',
+            analise='Pallets tombados.',
+            escopo_analise={'condicoes_mercadoria': ['pallets_tombaram', 'produtos_faltando']},
+        )
+        _pesquisa(
+            'Rondonópolis',
+            cte='ESC-2',
+            analise='Pallets tombados novamente.',
+            escopo_analise={'condicoes_mercadoria': ['pallets_tombaram']},
+        )
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        grupos = {item['escopo']: item for item in response.data['recorrenciasEscopo']}
+        self.assertIn('condicoes_mercadoria', grupos)
+        self.assertNotIn('prazo_entrega', grupos)
+        itens = {item['chave']: item['total'] for item in grupos['condicoes_mercadoria']['itens']}
+        self.assertEqual(itens['pallets_tombaram'], 2)
+        self.assertEqual(itens['produtos_faltando'], 1)
+        self.assertNotIn('embalagens_sujas', itens)
+
+    def test_recorrencias_mantem_opcao_excluida_do_catalogo(self):
+        from apps.sgq.models import EscopoAnaliseOpcao
+
+        _pesquisa(
+            'Ibiporã (Matriz)',
+            cte='ESC-DEL',
+            analise='Pallets tombados.',
+            escopo_analise={'condicoes_mercadoria': ['pallets_tombaram']},
+        )
+        EscopoAnaliseOpcao.objects.filter(escopo__chave='condicoes_mercadoria', chave='pallets_tombaram').delete()
+
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        grupos = {item['escopo']: item for item in response.data['recorrenciasEscopo']}
+        itens = {item['chave']: item for item in grupos['condicoes_mercadoria']['itens']}
+        self.assertEqual(itens['pallets_tombaram']['total'], 1)
+        self.assertIn('tombaram', itens['pallets_tombaram']['label'].lower())
+
+        detalhes = self.client.get(
+            '/api/indicadores/sgq/satisfacao/detalhes/',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        ibi = next(item for item in detalhes.data['results'] if item['cte'] == 'ESC-DEL')
+        self.assertIn('tombaram', ibi['escopoAnaliseTexto'].lower())
+
+
+class IndicadoresSgqSatisfacaoDetalhesTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='ind_sgq_det',
+            password='ind123',
+            role_id='2',
+            environments=['Indicadores'],
+            filiais={},
+        )
+        _pesquisa(
+            'Ibiporã (Matriz)',
+            cte='IBI-DET',
+            analise='Atraso na descarga.',
+            escopo_analise={'prazo_entrega': ['entregas_fora_prazo_contratual']},
+        )
+        _pesquisa('Rondonópolis', cte='RDN-DET')
+
+    def test_lista_pesquisas_com_analise(self):
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/detalhes/',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 2)
+        rows = response.data['results']
+        self.assertEqual(len(rows), 2)
+        ibi = next(item for item in rows if item['cte'] == 'IBI-DET')
+        self.assertEqual(ibi['analise'], 'Atraso na descarga.')
+        self.assertIn('fora do prazo', ibi['escopoAnaliseTexto'].lower())
+        self.assertEqual(ibi['filial'], 'Ibiporã (Matriz)')
+
+    def test_filtro_por_filial(self):
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/detalhes/',
+            {'filial': 'Rondonópolis'},
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['cte'], 'RDN-DET')
 
 
 class IndicadoresMetaFaturamentoTests(TestCase):

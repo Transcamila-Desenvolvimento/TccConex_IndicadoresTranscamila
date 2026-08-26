@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from apps.faturamento.models import ClienteProtocolo
+
 from .models import PesquisaSatisfacao
 
 User = get_user_model()
@@ -72,6 +74,13 @@ class PesquisaSatisfacaoTests(APITestCase):
             filiais={'SGQ': [IBIPORA, RONDONOPOLIS]},
             funcoes={},
         )
+        for nome in ('CCAB', 'PRENTISS', 'ALBAUGH', 'Braskem'):
+            ClienteProtocolo.objects.create(
+                nome=nome,
+                razao_social=nome,
+                nome_interno=nome,
+                considerar_pesquisa_satisfacao=True,
+            )
 
     def _create(self, filial=IBIPORA, **overrides):
         return self.client.post(
@@ -94,18 +103,48 @@ class PesquisaSatisfacaoTests(APITestCase):
 
         response = self.client.patch(
             f'/api/sgq/pesquisas-satisfacao/{pesquisa_id}/',
-            {'prazoEntrega': 'ruim', 'analise': 'Atraso na entrega.'},
+            {'prazoEntrega': 'ruim', 'analise': 'Atraso na entrega.', 'escopoAnalise': {
+                'prazo_entrega': ['entregas_fora_prazo_contratual'],
+            }},
             format='json',
             **ENV_HEADER,
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['prazoEntrega'], 'ruim')
+        self.assertEqual(response.data['escopoAnalise'], {
+            'prazo_entrega': ['entregas_fora_prazo_contratual'],
+        })
 
         response = self.client.delete(
             f'/api/sgq/pesquisas-satisfacao/{pesquisa_id}/', **ENV_HEADER
         )
         self.assertEqual(response.status_code, 204)
         self.assertEqual(PesquisaSatisfacao.objects.count(), 0)
+
+    def test_analise_exige_escopo(self):
+        response = self._create(analise='Atraso na descarga.', cte='ESCOPO-1')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('escopoAnalise', response.data)
+
+        response = self._create(
+            analise='Atraso na descarga.',
+            escopoAnalise={'prazo_entrega': ['entregas_fora_prazo_contratual', 'motorista_recusou_ajudar_descarga']},
+            cte='ESCOPO-2',
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.data['escopoAnalise'],
+            {'prazo_entrega': ['entregas_fora_prazo_contratual', 'motorista_recusou_ajudar_descarga']},
+        )
+
+        response = self._create(
+            analise='',
+            escopoAnalise={'prazo_entrega': ['entregas_fora_prazo_contratual']},
+            cte='ESCOPO-3',
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['analise'], '')
+        self.assertEqual(response.data['escopoAnalise'], {})
 
     def test_lista_paginada_com_filtros(self):
         self._create(cte='111', cliente='CCAB', dataEntrega='2026-07-01')
@@ -357,13 +396,19 @@ class PesquisaSatisfacaoTests(APITestCase):
         self.assertIn('João da Silva', response.data)
         self.assertIn('Maria Souza', response.data)
 
-    def test_sugestoes_motoristas_respeitam_filial_da_sessao(self):
+    def test_sugestoes_motoristas_compartilhadas_entre_filiais(self):
         self.client.force_authenticate(self.operador)
         self._create(filial=IBIPORA, motorista='Motorista Ibiporã')
         self._create(filial=RONDONOPOLIS, motorista='Motorista Rondonópolis')
 
         response = self.client.get('/api/sgq/pesquisas-satisfacao/motoristas/', **_headers(IBIPORA))
-        self.assertEqual(response.data, ['Motorista Ibiporã'])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, ['Motorista Ibiporã', 'Motorista Rondonópolis'])
+
+        response_rondonopolis = self.client.get(
+            '/api/sgq/pesquisas-satisfacao/motoristas/', **_headers(RONDONOPOLIS)
+        )
+        self.assertEqual(response_rondonopolis.data, ['Motorista Ibiporã', 'Motorista Rondonópolis'])
 
     def test_filial_gravada_pela_sessao_e_nao_pelo_payload(self):
         """O cliente não pode escolher a filial via payload — só a sessão define."""
@@ -472,6 +517,34 @@ class PesquisaSatisfacaoTests(APITestCase):
         self.assertEqual(message.to, ['destino@example.com'])
         self.assertEqual(len(message.attachments), 0)
 
+    def test_enviar_resumo_consolida_mesmo_sem_acesso_as_duas_filiais(self):
+        """Operador só com Ibiporã no SGQ ainda envia o consolidado das duas unidades."""
+        from django.core import mail
+
+        self._create(filial=IBIPORA, cte='111')
+        self._create(filial=RONDONOPOLIS, cte='222')
+
+        so_ibipora = User.objects.create_user(
+            username='sgq.resumo.ibipora',
+            password='x',
+            name='Operador Só Ibiporã',
+            role_id='2',
+            status='ativo',
+            environments=['SGQ'],
+            filiais={'SGQ': [IBIPORA]},
+        )
+        self.client.force_authenticate(so_ibipora)
+        response = self.client.post(
+            '/api/sgq/pesquisas-satisfacao/enviar-resumo/',
+            {'to': ['destino@example.com']},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        message = mail.outbox[0]
+        self.assertIn('Pesquisa de Satisfação — Ibiporã e Rondonópolis', message.subject)
+        self.assertIn('>2<', message.body)
+
     def test_enviar_resumo_ignora_filtros_da_tabela(self):
         from django.core import mail
 
@@ -497,6 +570,39 @@ class PesquisaSatisfacaoTests(APITestCase):
             **_headers(IBIPORA),
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_clientes_endpoint_lista_apenas_habilitados(self):
+        ClienteProtocolo.objects.filter(nome__iexact='CCAB').update(considerar_pesquisa_satisfacao=False)
+        response = self.client.get('/api/sgq/pesquisas-satisfacao/clientes/', **ENV_HEADER)
+        self.assertEqual(response.status_code, 200)
+        valores = {item['value'] for item in response.data}
+        self.assertNotIn('OUTROS', valores)
+        self.assertTrue(any(v.casefold() == 'prentiss' for v in valores))
+        self.assertFalse(any(v.casefold() == 'ccab' for v in valores))
+
+    def test_nao_cria_pesquisa_manual_com_outros(self):
+        response = self._create(cliente='OUTROS')
+        self.assertEqual(response.status_code, 400)
+
+    def test_nao_cria_pesquisa_para_cliente_desabilitado(self):
+        ClienteProtocolo.objects.filter(nome__iexact='CCAB').update(considerar_pesquisa_satisfacao=False)
+        response = self._create(cliente='CCAB')
+        self.assertEqual(response.status_code, 400)
+
+    def test_edicao_mantem_cliente_legado_desabilitado(self):
+        created = self._create(cte='legado-1', cliente='CCAB')
+        self.assertEqual(created.status_code, 201, created.data)
+        ClienteProtocolo.objects.filter(nome__iexact='CCAB').update(considerar_pesquisa_satisfacao=False)
+        pesquisa_id = created.data['id']
+        response = self.client.patch(
+            f'/api/sgq/pesquisas-satisfacao/{pesquisa_id}/',
+            {'motorista': 'João Atualizado'},
+            format='json',
+            **ENV_HEADER,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['cliente'], 'CCAB')
+        self.assertEqual(response.data['motorista'], 'João Atualizado')
 
 
 class PesquisaSatisfacaoLoteDraftTests(APITestCase):
@@ -597,6 +703,106 @@ class PesquisaSatisfacaoLoteDraftTests(APITestCase):
         self.assertEqual(response.status_code, 403)
 
 
+class PesquisaSatisfacaoFormDraftTests(APITestCase):
+    def setUp(self):
+        self.user_a = User.objects.create_user(
+            username='sgq.form.draft.a',
+            password='x',
+            name='Operador Form A',
+            role_id='2',
+            status='ativo',
+            environments=['SGQ'],
+            filiais={'SGQ': [IBIPORA, RONDONOPOLIS]},
+            funcoes={'SGQ': ['criar-pesquisas']},
+        )
+        self.user_b = User.objects.create_user(
+            username='sgq.form.draft.b',
+            password='x',
+            name='Operador Form B',
+            role_id='2',
+            status='ativo',
+            environments=['SGQ'],
+            filiais={'SGQ': [IBIPORA, RONDONOPOLIS]},
+            funcoes={'SGQ': ['criar-pesquisas']},
+        )
+        self.user_consulta = User.objects.create_user(
+            username='sgq.form.draft.consulta',
+            password='x',
+            name='Operador Consulta Form Draft',
+            role_id='2',
+            status='ativo',
+            environments=['SGQ'],
+            filiais={'SGQ': [IBIPORA, RONDONOPOLIS]},
+            funcoes={},
+        )
+
+    def test_put_get_isolado_por_usuario(self):
+        self.client.force_authenticate(self.user_a)
+        response = self.client.put(
+            '/api/sgq/pesquisas-satisfacao/form-draft/',
+            {'form': {'motorista': 'Motorista A', 'cliente': 'CCAB', 'cte': '1', 'notaFiscal': '',
+                      'dataEntrega': '2026-08-26', 'clienteRecusouAssinar': False, 'prazoEntrega': '',
+                      'condicoesMercadoria': '', 'condicoesVeiculo': '', 'apresentacaoMotorista': '',
+                      'atendimentoDispensado': '', 'analise': ''}},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['hasDraft'])
+        self.assertEqual(response.data['form']['motorista'], 'Motorista A')
+
+        self.client.force_authenticate(self.user_b)
+        response_b = self.client.get('/api/sgq/pesquisas-satisfacao/form-draft/', **_headers(IBIPORA))
+        self.assertEqual(response_b.status_code, 200)
+        self.assertFalse(response_b.data['hasDraft'])
+
+    def test_somente_data_entrega_nao_persiste(self):
+        self.client.force_authenticate(self.user_a)
+        response = self.client.put(
+            '/api/sgq/pesquisas-satisfacao/form-draft/',
+            {'form': {'dataEntrega': '2026-08-26'}},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['hasDraft'])
+
+    def test_draft_isolado_por_filial(self):
+        self.client.force_authenticate(self.user_a)
+        self.client.put(
+            '/api/sgq/pesquisas-satisfacao/form-draft/',
+            {'form': {'motorista': 'Só Ibiporã', 'cliente': '', 'cte': '', 'notaFiscal': '',
+                      'dataEntrega': '', 'clienteRecusouAssinar': False}},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        response = self.client.get('/api/sgq/pesquisas-satisfacao/form-draft/', **_headers(RONDONOPOLIS))
+        self.assertFalse(response.data['hasDraft'])
+
+    def test_delete_descarta_rascunho(self):
+        self.client.force_authenticate(self.user_a)
+        self.client.put(
+            '/api/sgq/pesquisas-satisfacao/form-draft/',
+            {'form': {'motorista': 'X'}},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        deleted = self.client.delete('/api/sgq/pesquisas-satisfacao/form-draft/', **_headers(IBIPORA))
+        self.assertEqual(deleted.status_code, 204)
+        response = self.client.get('/api/sgq/pesquisas-satisfacao/form-draft/', **_headers(IBIPORA))
+        self.assertFalse(response.data['hasDraft'])
+
+    def test_operador_sem_funcao_criar_nao_pode_salvar_rascunho(self):
+        self.client.force_authenticate(self.user_consulta)
+        response = self.client.put(
+            '/api/sgq/pesquisas-satisfacao/form-draft/',
+            {'form': {'motorista': 'Bloqueado'}},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 403)
+
+
 class PesquisaImportacaoTests(APITestCase):
     def setUp(self):
         from .pesquisa_import_service import build_pesquisa_import_template
@@ -623,7 +829,7 @@ class PesquisaImportacaoTests(APITestCase):
             funcoes={'SGQ': ['criar-pesquisas']},
         )
 
-    def _upload(self, user, data: bytes, dry_run=False):
+    def _upload(self, user, data: bytes, dry_run=False, extra=None):
         from django.core.files.uploadedfile import SimpleUploadedFile
 
         self.client.force_authenticate(user)
@@ -635,6 +841,8 @@ class PesquisaImportacaoTests(APITestCase):
         payload = {'file': file}
         if dry_run:
             payload['dryRun'] = 'true'
+        if extra:
+            payload.update(extra)
         return self.client.post(
             '/api/sgq/pesquisas-satisfacao/import-spreadsheet/',
             payload,
@@ -653,6 +861,54 @@ class PesquisaImportacaoTests(APITestCase):
         self.assertTrue(response.data['success'])
         self.assertEqual(response.data['created'], 1)
         self.assertEqual(PesquisaSatisfacao.objects.filter(filial=IBIPORA).count(), before + 1)
+        created = PesquisaSatisfacao.objects.order_by('-id').first()
+        self.assertEqual(created.criado_por, 'Importação')
+
+    def test_admin_importa_vinculando_lancado_por(self):
+        admin = User.objects.create_user(
+            username='sgq.import.admin',
+            password='x',
+            name='Admin Importador',
+            role_id='1',
+            status='ativo',
+            environments=['SGQ'],
+        )
+        alvo = User.objects.create_user(
+            username='miguel.ribeiro',
+            password='x',
+            name='Miguel Ribeiro',
+            role_id='2',
+            status='ativo',
+            environments=['SGQ'],
+            filiais={'SGQ': [IBIPORA]},
+        )
+        response = self._upload(admin, self.template_bytes, extra={'criadoPorUserId': str(alvo.pk)})
+        self.assertEqual(response.status_code, 200, response.data)
+        created = PesquisaSatisfacao.objects.order_by('-id').first()
+        self.assertEqual(created.criado_por, 'Miguel Ribeiro')
+        self.assertEqual(response.data['criadoPor'], 'Miguel Ribeiro')
+
+    def test_admin_sem_selecao_usa_proprio_nome(self):
+        admin = User.objects.create_user(
+            username='sgq.import.admin2',
+            password='x',
+            name='Admin Importador',
+            role_id='1',
+            status='ativo',
+            environments=['SGQ'],
+        )
+        response = self._upload(admin, self.template_bytes)
+        self.assertEqual(response.status_code, 200, response.data)
+        created = PesquisaSatisfacao.objects.order_by('-id').first()
+        self.assertEqual(created.criado_por, 'Admin Importador')
+
+    def test_operador_ignora_criado_por_user_id(self):
+        response = self._upload(
+            self.importador,
+            self.template_bytes,
+            extra={'criadoPorUserId': str(self.importador.pk)},
+        )
+        self.assertEqual(response.status_code, 200, response.data)
         created = PesquisaSatisfacao.objects.order_by('-id').first()
         self.assertEqual(created.criado_por, 'Importação')
 
@@ -716,3 +972,196 @@ class PesquisaImportacaoTests(APITestCase):
         self.assertTrue(stats['readyToImport'])
         self.assertEqual(stats['uniqueMotoristas'], 1)
         self.assertEqual(len(stats['byCliente']), 1)
+
+    def test_importa_pesquisa_em_branco_como_recusa_de_avaliacao(self):
+        import openpyxl
+        from io import BytesIO
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from .pesquisa_import_service import _TEMPLATE_HEADERS
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(_TEMPLATE_HEADERS)
+        ws.append([
+            '10/08/2026',
+            'JOAO SILVA',
+            '99001',
+            '03/08/2026',
+            '7777',
+            '',
+            '',
+            '',
+            '',
+            '',
+            'OUTROS',
+            'Cliente não assinou a pesquisa',
+            'Prazo de Entrega: Entregas fora do prazo contratual',
+        ])
+        buffer = BytesIO()
+        wb.save(buffer)
+        data = buffer.getvalue()
+
+        self.client.force_authenticate(self.importador)
+        preview_file = SimpleUploadedFile(
+            'pesquisas.xlsx',
+            data,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        preview = self.client.post(
+            '/api/sgq/pesquisas-satisfacao/import-preview/',
+            {'file': preview_file},
+            format='multipart',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(preview.status_code, 200, preview.data)
+        self.assertTrue(preview.data['success'])
+        self.assertTrue(preview.data['rows'][0]['clienteRecusouAssinar'])
+        self.assertEqual(preview.data['stats']['rowsClienteRecusou'], 1)
+
+        response = self._upload(self.importador, data)
+        self.assertEqual(response.status_code, 200, response.data)
+        created = PesquisaSatisfacao.objects.order_by('-id').first()
+        self.assertTrue(created.cliente_recusou_assinar)
+        self.assertEqual(created.prazo_entrega, '')
+        self.assertEqual(created.analise, 'Cliente não assinou a pesquisa')
+        self.assertEqual(created.escopo_analise, {'prazo_entrega': ['entregas_fora_prazo_contratual']})
+        self.assertEqual(created.motorista, 'JOAO SILVA')
+        self.assertEqual(created.cte, '99001')
+
+    def test_importa_analise_sem_escopo(self):
+        import openpyxl
+        from io import BytesIO
+
+        from .pesquisa_import_service import _TEMPLATE_HEADERS
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(_TEMPLATE_HEADERS)
+        ws.append([
+            '10/08/2026',
+            'MARIA SOUZA',
+            '99002',
+            '03/08/2026',
+            '8888',
+            'BOM',
+            'OTIMO',
+            'OTIMO',
+            'OTIMO',
+            'OTIMO',
+            'OUTROS',
+            'Atraso pontual no descarregamento.',
+            '',
+        ])
+        buffer = BytesIO()
+        wb.save(buffer)
+
+        response = self._upload(self.importador, buffer.getvalue())
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['success'])
+        created = PesquisaSatisfacao.objects.order_by('-id').first()
+        self.assertEqual(created.analise, 'Atraso pontual no descarregamento.')
+        self.assertEqual(created.escopo_analise, {})
+
+
+class EscopoAnaliseCadastroTests(APITestCase):
+    def setUp(self):
+        self.operador = User.objects.create_user(
+            username='sgq.escopo.op',
+            password='x',
+            name='Operador Escopo',
+            role_id='2',
+            status='ativo',
+            environments=['SGQ'],
+            filiais={'SGQ': [IBIPORA, RONDONOPOLIS]},
+            funcoes={'SGQ': ['gerenciar-escopos']},
+        )
+        self.consulta = User.objects.create_user(
+            username='sgq.escopo.consulta',
+            password='x',
+            name='Consulta Escopo',
+            role_id='2',
+            status='ativo',
+            environments=['SGQ'],
+            filiais={'SGQ': [IBIPORA, RONDONOPOLIS]},
+            funcoes={},
+        )
+
+    def test_catalogo_igual_nas_duas_filiais(self):
+        self.client.force_authenticate(self.operador)
+        ibi = self.client.get('/api/sgq/escopos-analise/', **_headers(IBIPORA))
+        ron = self.client.get('/api/sgq/escopos-analise/', **_headers(RONDONOPOLIS))
+        self.assertEqual(ibi.status_code, 200, ibi.data)
+        self.assertEqual(ron.status_code, 200, ron.data)
+        self.assertGreaterEqual(len(ibi.data), 5)
+        self.assertEqual(ibi.data, ron.data)
+
+    def test_opcao_criada_em_ibipora_aparece_em_rondonopolis(self):
+        self.client.force_authenticate(self.operador)
+        catalogo = self.client.get('/api/sgq/escopos-analise/', **_headers(IBIPORA))
+        escopo_id = catalogo.data[0]['id']
+        created = self.client.post(
+            '/api/sgq/escopos-analise-opcoes/',
+            {'escopoId': escopo_id, 'label': 'Atraso no pátio do cliente'},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(created.status_code, 201, created.data)
+
+        ron = self.client.get('/api/sgq/escopos-analise/', **_headers(RONDONOPOLIS))
+        labels = [opcao['label'] for grupo in ron.data for opcao in grupo['opcoes']]
+        self.assertIn('Atraso no pátio do cliente', labels)
+
+    def test_consulta_pode_ler_mas_nao_alterar(self):
+        self.client.force_authenticate(self.consulta)
+        listed = self.client.get('/api/sgq/escopos-analise/', **_headers(IBIPORA))
+        self.assertEqual(listed.status_code, 200)
+        denied = self.client.post(
+            '/api/sgq/escopos-analise/',
+            {'label': 'Novo grupo'},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(denied.status_code, 403)
+
+    def test_criar_pesquisas_nao_libera_cadastro_de_escopos(self):
+        so_criar = User.objects.create_user(
+            username='sgq.escopo.criar',
+            password='x',
+            name='Só criar pesquisas',
+            role_id='2',
+            status='ativo',
+            environments=['SGQ'],
+            filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['criar-pesquisas']},
+        )
+        self.client.force_authenticate(so_criar)
+        denied = self.client.post(
+            '/api/sgq/escopos-analise/',
+            {'label': 'Novo grupo'},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(denied.status_code, 403)
+
+    def test_nao_exclui_opcao_ja_usada_em_pesquisa(self):
+        from .models import EscopoAnaliseOpcao
+
+        opcao = EscopoAnaliseOpcao.objects.get(escopo__chave='condicoes_mercadoria', chave='pallets_tombaram')
+        PesquisaSatisfacao.objects.create(
+            filial=IBIPORA,
+            motorista='X',
+            cte='ESC-USO',
+            data_entrega=timezone.localdate(),
+            nota_fiscal='1',
+            cliente='OUTROS',
+            analise='Pallets tombados.',
+            escopo_analise={'condicoes_mercadoria': ['pallets_tombaram']},
+        )
+        self.client.force_authenticate(self.operador)
+        denied = self.client.delete(
+            f'/api/sgq/escopos-analise-opcoes/{opcao.pk}/',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(denied.status_code, 400, denied.data)
+        self.assertTrue(EscopoAnaliseOpcao.objects.filter(pk=opcao.pk).exists())
