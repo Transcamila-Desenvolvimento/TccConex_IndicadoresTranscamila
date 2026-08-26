@@ -7,7 +7,6 @@ import {
   useIndicadorSgqSatisfacaoDetalhes,
   useSgqSatisfacaoActivityVersion,
 } from '../../hooks/useIndicadores';
-import { useSgqClientes } from '../../hooks/useSgqPesquisas';
 import SgqDistribuicaoChart from './SgqDistribuicaoChart';
 import SgqCriteriosChart from './SgqCriteriosChart';
 import SgqEvolucaoChart from './SgqEvolucaoChart';
@@ -87,8 +86,6 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
     { ...queryParams, page, pageSize },
     activeTab === 'detalhes',
   );
-  const clientesQuery = useSgqClientes(true);
-  const clientesFiltro = clientesQuery.data ?? [];
 
   // Sistema multiusuário: se alguém lançar/alterar/excluir pesquisas no SGQ
   // enquanto esta tela estiver aberta, o indicador atualiza sozinho — mesmo
@@ -109,6 +106,7 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
   }, [activityVersion, queryClient]);
 
   const motoristasDisponiveis = data?.meta.motoristasDisponiveis ?? [];
+  const clientesDisponiveis = data?.meta.clientesDisponiveis ?? [];
   const anosDisponiveis = useMemo(() => {
     const yearNum = Number(currentYearStr());
     const anos = new Set(data?.meta.anosDisponiveis ?? []);
@@ -204,6 +202,7 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
             onChange={(e) => {
               setFilial(e.target.value);
               setMotorista('');
+              setCliente('');
             }}
           >
             <option value="">Filial: Todas</option>
@@ -221,8 +220,8 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
 
           <select className="rh-period-select" value={cliente} onChange={(e) => setCliente(e.target.value)}>
             <option value="">Cliente: Todos</option>
-            {clientesFiltro.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            {clientesDisponiveis.map((nome) => (
+              <option key={nome} value={nome}>{nome}</option>
             ))}
           </select>
 

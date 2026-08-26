@@ -1525,6 +1525,7 @@ export interface SgqSatisfacaoIndicadorResponse extends SgqPesquisaStats {
   meta: {
     filiaisDisponiveis: string[];
     motoristasDisponiveis: string[];
+    clientesDisponiveis: string[];
     anosDisponiveis: number[];
     filial: string | null;
   };

@@ -104,6 +104,21 @@ def _motoristas_disponiveis(qs) -> list[str]:
     )
 
 
+def _clientes_disponiveis(qs) -> list[str]:
+    """Clientes já lançados no recorte (sem filtrar pelo próprio cliente)."""
+    variacoes: dict[str, Counter] = {}
+    for nome in qs.exclude(cliente='').values_list('cliente', flat=True):
+        nome = (nome or '').strip()
+        if not nome:
+            continue
+        chave = nome.casefold()
+        variacoes.setdefault(chave, Counter())[nome] += 1
+    return sorted(
+        (contador.most_common(1)[0][0] for contador in variacoes.values()),
+        key=str.casefold,
+    )
+
+
 def _anos_disponiveis(qs) -> list[int]:
     """Anos com data de entrega no recorte (antes do filtro de período)."""
     anos = {
@@ -194,6 +209,7 @@ def build_sgq_satisfacao_payload(params) -> dict:
     # Listas de apoio respeitam a filial, mas não motorista/período — senão
     # os dropdowns colapsariam ao aplicar o próprio filtro.
     motoristas = _motoristas_disponiveis(qs)
+    clientes = _clientes_disponiveis(qs)
     anos = _anos_disponiveis(qs)
 
     qs = filter_pesquisas_queryset(qs, params)
@@ -229,6 +245,7 @@ def build_sgq_satisfacao_payload(params) -> dict:
         'meta': {
             'filiaisDisponiveis': sgq_filiais,
             'motoristasDisponiveis': motoristas,
+            'clientesDisponiveis': clientes,
             'anosDisponiveis': anos,
             'filial': filial or None,
         },

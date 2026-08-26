@@ -9702,6 +9702,7 @@ button.mkt-drive-browser-row:hover {
 .sgq-ind-detalhes-card {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -9715,27 +9716,62 @@ button.mkt-drive-browser-row:hover {
 .sgq-ind-detalhes-query .async-query-content-body--page {
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 
 .sgq-ind-detalhes-query .erp-pagination-bar {
   flex-shrink: 0;
 }
 
-.sgq-ind-detalhes-scroll {
+.cashflow-table-card.sgq-ind-detalhes-card .table-container.sgq-ind-detalhes-scroll {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .sgq-ind-detalhes-table {
   table-layout: fixed;
   width: 100%;
+  max-width: 100%;
+}
+
+.sgq-ind-detalhes-table.reports-table th,
+.sgq-ind-detalhes-table.reports-table td {
+  padding: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sgq-ind-detalhes-table .sgq-ind-col-data { width: 8%; }
+.sgq-ind-detalhes-table .sgq-ind-col-filial { width: 11%; }
+.sgq-ind-detalhes-table .sgq-ind-col-cliente { width: 17%; }
+.sgq-ind-detalhes-table .sgq-ind-col-motorista { width: 15%; }
+.sgq-ind-detalhes-table .sgq-ind-col-cte { width: 7%; }
+.sgq-ind-detalhes-table .sgq-col-avaliacao {
+  width: 5.5%;
+  text-align: center;
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+}
+.sgq-ind-detalhes-table .sgq-avaliacao-badge--icon {
+  justify-content: center;
+  gap: 0;
+  width: 18px;
+  max-width: 18px;
+}
+.sgq-ind-detalhes-table .sgq-ind-col-analise {
+  width: 14.5%;
 }
 
 .sgq-ind-detalhes-table td.sgq-ind-detalhes-analise {
-  white-space: normal;
-  overflow-wrap: anywhere;
-  max-width: 360px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 12.5px;
   line-height: 1.4;
 }

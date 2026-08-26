@@ -13,6 +13,14 @@ const AVALIACAO_META: Record<SgqAvaliacao, { label: string; badgeClass: string; 
   otimo: { label: 'Ótimo', badgeClass: 'is-otimo', icon: 'bi bi-check-lg' },
 };
 
+const CRITERIO_TH: Record<(typeof SGQ_CRITERIOS)[number]['key'], string> = {
+  prazoEntrega: 'Prazo',
+  condicoesMercadoria: 'Merc.',
+  condicoesVeiculo: 'Veíc.',
+  apresentacaoMotorista: 'Apr.',
+  atendimentoDispensado: 'Atend.',
+};
+
 function formatDateBr(isoDate: string | null): string {
   if (!isoDate) return '—';
   const [year, month, day] = isoDate.split('-');
@@ -25,9 +33,12 @@ function AvaliacaoBadge({ value }: { value: SgqAvaliacao | '' }) {
   const meta = AVALIACAO_META[value];
   if (!meta) return <span>—</span>;
   return (
-    <span className={`sgq-avaliacao-badge ${meta.badgeClass}`}>
+    <span
+      className={`sgq-avaliacao-badge sgq-avaliacao-badge--icon ${meta.badgeClass}`}
+      title={meta.label}
+      aria-label={meta.label}
+    >
       <i className={meta.icon} aria-hidden="true" />
-      {meta.label}
     </span>
   );
 }
@@ -76,23 +87,23 @@ const SgqSatisfacaoDetalhesTable: React.FC<Props> = ({
           <table className="erp-table reports-table sgq-ind-detalhes-table">
             <thead>
               <tr>
-                <th>Entrega</th>
-                <th>Filial</th>
-                <th>Cliente</th>
-                <th>Motorista</th>
-                <th>CT-e</th>
+                <th className="sgq-ind-col-data">Entrega</th>
+                <th className="sgq-ind-col-filial">Filial</th>
+                <th className="sgq-ind-col-cliente">Cliente</th>
+                <th className="sgq-ind-col-motorista">Motorista</th>
+                <th className="sgq-ind-col-cte">CT-e</th>
                 {SGQ_CRITERIOS.map((criterio) => (
                   <th key={criterio.key} title={criterio.label} className="sgq-col-avaliacao">
-                    {criterio.shortLabel}
+                    {CRITERIO_TH[criterio.key]}
                   </th>
                 ))}
-                <th>Análise, Tratativa e Justificativa</th>
+                <th className="sgq-ind-col-analise" title="Análise, Tratativa e Justificativa">Análise</th>
               </tr>
             </thead>
             <tbody>
               {listState.canShowEmpty && rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '20px' }}>
+                  <td colSpan={11} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '20px' }}>
                     Nenhuma pesquisa no período selecionado.
                   </td>
                 </tr>
@@ -102,11 +113,11 @@ const SgqSatisfacaoDetalhesTable: React.FC<Props> = ({
                     || SGQ_CRITERIOS.every((criterio) => !pesquisa[criterio.key]);
                   return (
                     <tr key={pesquisa.id}>
-                      <td>{formatDateBr(pesquisa.dataEntrega)}</td>
-                      <td>{pesquisa.filial.replace(' (Matriz)', '')}</td>
-                      <td className="sgq-cell-ellipsis" title={pesquisa.cliente}>{pesquisa.cliente}</td>
-                      <td className="sgq-cell-ellipsis" title={pesquisa.motorista}>{pesquisa.motorista}</td>
-                      <td className="sgq-cell-ellipsis" title={pesquisa.cte}>{pesquisa.cte}</td>
+                      <td className="sgq-ind-col-data">{formatDateBr(pesquisa.dataEntrega)}</td>
+                      <td className="sgq-ind-col-filial sgq-cell-ellipsis" title={pesquisa.filial}>{pesquisa.filial.replace(' (Matriz)', '')}</td>
+                      <td className="sgq-ind-col-cliente sgq-cell-ellipsis" title={pesquisa.cliente}>{pesquisa.cliente}</td>
+                      <td className="sgq-ind-col-motorista sgq-cell-ellipsis" title={pesquisa.motorista}>{pesquisa.motorista}</td>
+                      <td className="sgq-ind-col-cte sgq-cell-ellipsis" title={pesquisa.cte}>{pesquisa.cte}</td>
                       {semAvaliacao ? (
                         <td
                           colSpan={SGQ_CRITERIOS.length}
@@ -122,8 +133,8 @@ const SgqSatisfacaoDetalhesTable: React.FC<Props> = ({
                         ))
                       )}
                       <td
-                        className="sgq-ind-detalhes-analise"
-                        title={pesquisa.escopoAnaliseTexto || undefined}
+                        className="sgq-ind-col-analise sgq-ind-detalhes-analise"
+                        title={pesquisa.escopoAnaliseTexto || pesquisa.analise || undefined}
                       >
                         {pesquisa.analise || '—'}
                       </td>

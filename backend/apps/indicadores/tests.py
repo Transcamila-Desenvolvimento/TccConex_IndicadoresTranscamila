@@ -1548,6 +1548,8 @@ class IndicadoresSgqSatisfacaoTests(TestCase):
         self.assertIsNotNone(response.data['scoreMedio'])
         self.assertIn('motoristasDisponiveis', response.data['meta'])
         self.assertIn('Motorista Teste', response.data['meta']['motoristasDisponiveis'])
+        self.assertIn('clientesDisponiveis', response.data['meta'])
+        self.assertIn('CCAB', response.data['meta']['clientesDisponiveis'])
         self.assertIn('anosDisponiveis', response.data['meta'])
         self.assertIn(2026, response.data['meta']['anosDisponiveis'])
         self.assertEqual(response.data['recorrenciasEscopo'], [])
