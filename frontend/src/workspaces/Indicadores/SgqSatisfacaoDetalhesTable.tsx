@@ -13,14 +13,6 @@ const AVALIACAO_META: Record<SgqAvaliacao, { label: string; badgeClass: string; 
   otimo: { label: 'Ótimo', badgeClass: 'is-otimo', icon: 'bi bi-check-lg' },
 };
 
-const CRITERIO_TH: Record<(typeof SGQ_CRITERIOS)[number]['key'], string> = {
-  prazoEntrega: 'Prazo',
-  condicoesMercadoria: 'Merc.',
-  condicoesVeiculo: 'Veíc.',
-  apresentacaoMotorista: 'Apr.',
-  atendimentoDispensado: 'Atend.',
-};
-
 function formatDateBr(isoDate: string | null): string {
   if (!isoDate) return '—';
   const [year, month, day] = isoDate.split('-');
@@ -34,11 +26,11 @@ function AvaliacaoBadge({ value }: { value: SgqAvaliacao | '' }) {
   if (!meta) return <span>—</span>;
   return (
     <span
-      className={`sgq-avaliacao-badge sgq-avaliacao-badge--icon ${meta.badgeClass}`}
+      className={`sgq-avaliacao-badge ${meta.badgeClass}`}
       title={meta.label}
-      aria-label={meta.label}
     >
       <i className={meta.icon} aria-hidden="true" />
+      {meta.label}
     </span>
   );
 }
@@ -64,6 +56,8 @@ const SgqSatisfacaoDetalhesTable: React.FC<Props> = ({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const clampedPage = Math.min(Math.max(1, page), totalPages);
 
+  const isEmpty = listState.canShowEmpty && rows.length === 0;
+
   const navBtnStyle = (disabled: boolean): React.CSSProperties => ({
     height: '32px',
     padding: '0 12px',
@@ -83,6 +77,11 @@ const SgqSatisfacaoDetalhesTable: React.FC<Props> = ({
         loadingMessage="Carregando pesquisas..."
         errorMessage="Não foi possível carregar o detalhe das pesquisas."
       >
+        {isEmpty ? (
+          <div className="sgq-ind-detalhes-empty" role="status">
+            Nenhuma pesquisa no período selecionado.
+          </div>
+        ) : (
         <div className="table-container sgq-ind-detalhes-scroll">
           <table className="erp-table reports-table sgq-ind-detalhes-table">
             <thead>
@@ -94,21 +93,14 @@ const SgqSatisfacaoDetalhesTable: React.FC<Props> = ({
                 <th className="sgq-ind-col-cte">CT-e</th>
                 {SGQ_CRITERIOS.map((criterio) => (
                   <th key={criterio.key} title={criterio.label} className="sgq-col-avaliacao">
-                    {CRITERIO_TH[criterio.key]}
+                    {criterio.shortLabel}
                   </th>
                 ))}
                 <th className="sgq-ind-col-analise" title="Análise, Tratativa e Justificativa">Análise</th>
               </tr>
             </thead>
             <tbody>
-              {listState.canShowEmpty && rows.length === 0 ? (
-                <tr>
-                  <td colSpan={11} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '20px' }}>
-                    Nenhuma pesquisa no período selecionado.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((pesquisa: SgqSatisfacaoDetalhe) => {
+              {rows.map((pesquisa: SgqSatisfacaoDetalhe) => {
                   const semAvaliacao = pesquisa.clienteRecusouAssinar
                     || SGQ_CRITERIOS.every((criterio) => !pesquisa[criterio.key]);
                   return (
@@ -140,11 +132,11 @@ const SgqSatisfacaoDetalhesTable: React.FC<Props> = ({
                       </td>
                     </tr>
                   );
-                })
-              )}
+              })}
             </tbody>
           </table>
         </div>
+        )}
 
         <div className="erp-pagination-bar">
           <div className="erp-pagination-page-size">

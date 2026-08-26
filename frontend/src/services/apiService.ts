@@ -548,6 +548,7 @@ function buildSgqSatisfacaoIndicadorQueryParams(params: SgqSatisfacaoIndicadorQu
   if (params.dataInicio) query.dataInicio = params.dataInicio;
   if (params.dataFim) query.dataFim = params.dataFim;
   if (params.cliente) query.cliente = params.cliente;
+  if (params.cte) query.cte = params.cte;
   if (params.avaliacao) query.avaliacao = params.avaliacao;
   if (params.page) query.page = String(params.page);
   if (params.pageSize) query.page_size = String(params.pageSize);

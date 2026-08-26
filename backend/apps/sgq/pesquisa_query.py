@@ -19,6 +19,7 @@ _ORDERING_MAP = {
 def filter_pesquisas_queryset(qs, params):
     search = (params.get('search') or '').strip()
     cliente = (params.get('cliente') or '').strip()
+    cte = (params.get('cte') or '').strip()
     motorista = (params.get('motorista') or '').strip()
     criado_por = (params.get('criadoPor') or params.get('criado_por') or '').strip()
     avaliacao = (params.get('avaliacao') or '').strip().lower()
@@ -34,6 +35,8 @@ def filter_pesquisas_queryset(qs, params):
         )
     if cliente:
         qs = qs.filter(cliente=cliente)
+    if cte:
+        qs = qs.filter(cte__icontains=cte)
     if motorista:
         qs = qs.filter(motorista__iexact=motorista)
     if criado_por:

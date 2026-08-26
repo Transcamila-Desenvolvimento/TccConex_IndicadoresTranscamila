@@ -8835,6 +8835,11 @@ button.mkt-drive-browser-row:hover {
   box-shadow: none !important;
 }
 
+.sgq-ind-cte-search input {
+  width: 160px;
+  border-radius: 6px !important;
+}
+
 .reports-select-wrapper select {
   height: 36px;
   padding: 0 28px 0 12px;
@@ -9357,6 +9362,7 @@ button.mkt-drive-browser-row:hover {
   height: 34px !important;
   padding: 0 14px !important;
   font-size: 12px !important;
+  border-radius: 6px !important;
 }
 
 .cashflow-meta-position {
@@ -9733,6 +9739,18 @@ button.mkt-drive-browser-row:hover {
   overflow-y: auto;
 }
 
+.sgq-ind-detalhes-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 24px 16px;
+  color: #64748b;
+  font-size: 14px;
+  font-style: italic;
+}
+
 .sgq-ind-detalhes-table {
   table-layout: fixed;
   width: 100%;
@@ -9741,31 +9759,41 @@ button.mkt-drive-browser-row:hover {
 
 .sgq-ind-detalhes-table.reports-table th,
 .sgq-ind-detalhes-table.reports-table td {
-  padding: 6px;
+  padding: 8px 10px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.sgq-ind-detalhes-table.reports-table th {
   white-space: nowrap;
 }
 
-.sgq-ind-detalhes-table .sgq-ind-col-data { width: 8%; }
-.sgq-ind-detalhes-table .sgq-ind-col-filial { width: 11%; }
-.sgq-ind-detalhes-table .sgq-ind-col-cliente { width: 17%; }
-.sgq-ind-detalhes-table .sgq-ind-col-motorista { width: 15%; }
-.sgq-ind-detalhes-table .sgq-ind-col-cte { width: 7%; }
-.sgq-ind-detalhes-table .sgq-col-avaliacao {
-  width: 5.5%;
-  text-align: center;
-  padding-left: 2px !important;
-  padding-right: 2px !important;
+.sgq-ind-detalhes-table.reports-table td {
+  white-space: nowrap;
 }
-.sgq-ind-detalhes-table .sgq-avaliacao-badge--icon {
-  justify-content: center;
-  gap: 0;
-  width: 18px;
-  max-width: 18px;
+
+.sgq-ind-detalhes-table td.sgq-cell-ellipsis {
+  max-width: none;
+}
+
+.sgq-ind-detalhes-table .sgq-ind-col-data { width: 7.5%; }
+.sgq-ind-detalhes-table .sgq-ind-col-filial { width: 10%; }
+.sgq-ind-detalhes-table .sgq-ind-col-cliente { width: 14%; }
+.sgq-ind-detalhes-table .sgq-ind-col-motorista { width: 13%; }
+.sgq-ind-detalhes-table .sgq-ind-col-cte { width: 6.5%; }
+.sgq-ind-detalhes-table .sgq-col-avaliacao {
+  width: 8%;
+  text-align: left;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+}
+.sgq-ind-detalhes-table .sgq-avaliacao-badge {
+  gap: 4px;
+  font-size: 12px;
+  max-width: 100%;
 }
 .sgq-ind-detalhes-table .sgq-ind-col-analise {
-  width: 14.5%;
+  width: 9%;
 }
 
 .sgq-ind-detalhes-table td.sgq-ind-detalhes-analise {

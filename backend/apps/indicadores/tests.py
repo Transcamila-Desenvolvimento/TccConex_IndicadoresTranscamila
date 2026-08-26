@@ -1743,6 +1743,16 @@ class IndicadoresSgqSatisfacaoDetalhesTests(TestCase):
         self.assertEqual(response.data['count'], 1)
         self.assertEqual(response.data['results'][0]['cte'], 'RDN-DET')
 
+    def test_filtro_por_cte(self):
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/detalhes/',
+            {'cte': 'IBI'},
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['cte'], 'IBI-DET')
+
 
 class IndicadoresMetaFaturamentoTests(TestCase):
     def setUp(self):

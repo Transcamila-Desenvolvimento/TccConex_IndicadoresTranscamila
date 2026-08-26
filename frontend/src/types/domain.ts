@@ -1465,6 +1465,7 @@ export interface SgqSatisfacaoIndicadorQueryParams {
   dataInicio?: string;
   dataFim?: string;
   cliente?: string;
+  cte?: string;
   avaliacao?: string;
   page?: number;
   pageSize?: number;

@@ -66,6 +66,8 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
   const [dataInicio, setDataInicio] = useState(defaults.dataInicio);
   const [dataFim, setDataFim] = useState(defaults.dataFim);
   const [cliente, setCliente] = useState('');
+  const [cte, setCte] = useState('');
+  const [cteFiltro, setCteFiltro] = useState('');
   const [ano, setAno] = useState(defaults.year);
   const [periodo, setPeriodo] = useState<PeriodoKey>('ano');
   const [activeTab, setActiveTab] = useState<SatisfacaoTab>('visao-geral');
@@ -83,9 +85,19 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
   const query = useIndicadorSgqSatisfacao(queryParams);
   const data = query.data;
   const detalhesQuery = useIndicadorSgqSatisfacaoDetalhes(
-    { ...queryParams, page, pageSize },
+    {
+      ...queryParams,
+      page,
+      pageSize,
+      ...(cteFiltro ? { cte: cteFiltro } : {}),
+    },
     activeTab === 'detalhes',
   );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setCteFiltro(cte.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [cte]);
 
   // Sistema multiusuário: se alguém lançar/alterar/excluir pesquisas no SGQ
   // enquanto esta tela estiver aberta, o indicador atualiza sozinho — mesmo
@@ -152,6 +164,8 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
     setFilial('');
     setMotorista('');
     setCliente('');
+    setCte('');
+    setCteFiltro('');
     setAno(reset.year);
     setPeriodo('ano');
     setDataInicio(reset.dataInicio);
@@ -163,7 +177,7 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [filial, motorista, cliente, dataInicio, dataFim]);
+  }, [filial, motorista, cliente, cteFiltro, dataInicio, dataFim]);
 
   return (
     <div className={`cashflow-page${activeTab === 'detalhes' ? ' cashflow-page--sgq-detalhes' : ''}`}>
@@ -224,6 +238,21 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
               <option key={nome} value={nome}>{nome}</option>
             ))}
           </select>
+
+          {activeTab === 'detalhes' && (
+            <div className="reports-search-wrapper sgq-ind-cte-search">
+              <svg className="search-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.637 10.637z" />
+              </svg>
+              <input
+                type="search"
+                placeholder="Buscar CT-e"
+                value={cte}
+                onChange={(e) => setCte(e.target.value)}
+                aria-label="Buscar por CT-e"
+              />
+            </div>
+          )}
 
           <select className="rh-period-select" value={ano} onChange={(e) => handleAnoChange(e.target.value)}>
             {anosDisponiveis.map((y) => (
