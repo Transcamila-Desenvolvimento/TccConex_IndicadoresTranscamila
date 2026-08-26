@@ -67,7 +67,8 @@ const SgqSatisfacaoDetalhesTable: React.FC<Props> = ({
       <h2 className="cashflow-section-title cashflow-section-title--table">Pesquisas e análises</h2>
       <QueryDataPanel
         query={query}
-        variant="compact"
+        variant="page"
+        className="sgq-ind-detalhes-query"
         loadingMessage="Carregando pesquisas..."
         errorMessage="Não foi possível carregar o detalhe das pesquisas."
       >
