@@ -371,3 +371,30 @@ class UserManagementEnvironmentRulesTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['roleId'], '2')
+
+    def test_admin_can_restrict_abas_per_environment(self):
+        operator = User.objects.create_user(
+            username='op_abas',
+            password='oper123',
+            role_id='2',
+            environments=['SGQ', 'Financeiro'],
+            filiais={'SGQ': ['Ibiporã (Matriz)'], 'Financeiro': ['Ibiporã (Matriz)']},
+        )
+        response = self.client.patch(
+            f'/api/auth/users/{operator.id}/',
+            {
+                'environments': ['SGQ', 'Financeiro'],
+                'filiais': {'SGQ': ['Ibiporã (Matriz)'], 'Financeiro': ['Ibiporã (Matriz)']},
+                'abas': {
+                    'SGQ': ['pesquisa-satisfacao', 'aba-invalida'],
+                    'Indicadores': ['fluxo-caixa'],
+                    'Financeiro': ['calendario'],
+                },
+            },
+            format='json',
+            **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['abas']['SGQ'], ['home', 'pesquisa-satisfacao'])
+        self.assertEqual(response.data['abas']['Financeiro'], ['home', 'calendario'])
+        self.assertNotIn('Indicadores', response.data['abas'])

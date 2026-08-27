@@ -40,6 +40,11 @@ class CustomUser(AbstractUser):
     # Example: {"Faturamento": ["excluir-protocolos", "gerenciar-clientes"]}
     funcoes = models.JSONField(default=dict, blank=True)
 
+    # Abas de menu liberadas por ambiente (exceto Indicadores).
+    # Example: {"SGQ": ["home", "pesquisa-satisfacao"]}. Vazio no módulo = todas as abas.
+    # A aba home é sempre incluída quando há recorte.
+    abas = models.JSONField(default=dict, blank=True)
+
     google_email = models.EmailField(blank=True, null=True)
     google_sub = models.CharField(max_length=255, blank=True, null=True)
     google_linked_at = models.DateTimeField(blank=True, null=True)

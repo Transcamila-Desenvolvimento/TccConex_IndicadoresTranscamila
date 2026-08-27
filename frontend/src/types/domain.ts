@@ -13,6 +13,8 @@ export interface User {
   indicadores: string[];
   /** Funções extras liberadas por ambiente (ex.: {"Faturamento": ["excluir-protocolos"]}). */
   funcoes: Record<string, string[]>;
+  /** Abas de menu liberadas por ambiente (exceto Indicadores). Vazio no módulo = todas. */
+  abas: Record<string, string[]>;
   googleEmail: string | null;
   googleLinkedAt: string | null;
   googlePicture: string | null;

@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from .constants import (
     ADMIN_ENVIRONMENT,
+    sanitize_abas,
     sanitize_environments,
     sanitize_filiais,
     sanitize_funcoes,
@@ -33,6 +34,7 @@ def _apply_environment_rules(user):
     user.filiais = sanitize_filiais(user.filiais)
     user.indicadores = sanitize_indicadores(user.indicadores)
     user.funcoes = sanitize_funcoes(user.funcoes)
+    user.abas = sanitize_abas(user.abas)
     if user.role_id == '1' and ADMIN_ENVIRONMENT not in user.environments:
         user.environments = [*user.environments, ADMIN_ENVIRONMENT]
 
@@ -49,7 +51,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'name', 'roleId', 'status',
-            'environments', 'filiais', 'indicadores', 'funcoes', 'lastLogin',
+            'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'lastLogin',
             'googleEmail', 'googleLinkedAt', 'googlePicture', 'mustChangePassword',
         ]
         read_only_fields = [
@@ -62,6 +64,7 @@ class UserSerializer(serializers.ModelSerializer):
         data['filiais'] = sanitize_filiais(data.get('filiais'))
         data['indicadores'] = sanitize_indicadores(data.get('indicadores'))
         data['funcoes'] = sanitize_funcoes(data.get('funcoes'))
+        data['abas'] = sanitize_abas(data.get('abas'))
         return data
 
 
@@ -85,7 +88,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'password']
+        fields = ['id', 'username', 'name', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
         read_only_fields = ['id']
 
     def validate_username(self, value):
@@ -113,7 +116,7 @@ class UpdateUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'password']
+        fields = ['id', 'username', 'name', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
         read_only_fields = ['id', 'username']
 
     def update(self, instance, validated_data):

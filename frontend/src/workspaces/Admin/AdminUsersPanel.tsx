@@ -16,7 +16,8 @@ import {
   normalizeEnvironment,
 } from '../../constants/environments';
 import { INDICADOR_ITEMS, type IndicadorKey } from '../../constants/indicadores';
-import { funcoesDoModulo, type FuncaoKey } from '../../constants/funcoes';
+import { funcoesDaAba, funcoesDoModulo, type FuncaoKey } from '../../constants/funcoes';
+import { abasDoModulo, HOME_ABA_KEY, rotinasConfiguraveisDoModulo } from '../../constants/abas';
 import { branchesForModule } from '../../constants/filiais';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
@@ -38,12 +39,6 @@ const INDICADOR_GROUPS = INDICADOR_ITEMS.reduce<Record<string, typeof INDICADOR_
   (acc[item.group] ??= []).push(item);
   return acc;
 }, {});
-
-const ChipCheck: React.FC = () => (
-  <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24" aria-hidden="true">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-  </svg>
-);
 
 const AdminUsersPanel: React.FC = () => {
   const { user: currentUser } = useAuth();
@@ -101,10 +96,10 @@ const AdminUsersPanel: React.FC = () => {
   const [roleId, setRoleId] = useState('2');
   const [status, setStatus] = useState('ativo');
   const [moduleAccess, setModuleAccess] = useState<Record<string, string[]>>({});
-  const [indicadoresMode, setIndicadoresMode] = useState<'todos' | 'personalizado'>('todos');
   const [selectedIndicadores, setSelectedIndicadores] = useState<IndicadorKey[]>([]);
   const [funcoes, setFuncoes] = useState<Record<string, string[]>>({});
-  const [expandedModule, setExpandedModule] = useState<string | null>(null);
+  const [selectedAbas, setSelectedAbas] = useState<Record<string, string[]>>({});
+  const [selectedModule, setSelectedModule] = useState<string>(MODULE_ACCESS_GROUPS[0].module);
 
   const isSelectedAdmin = roleId === '1';
   const isEditingSelf = !!editingUserId && editingUserId === currentUser?.id;
@@ -159,10 +154,10 @@ const AdminUsersPanel: React.FC = () => {
     setRoleId(defaultRoleId);
     setStatus('ativo');
     setModuleAccess({});
-    setIndicadoresMode('todos');
     setSelectedIndicadores([]);
     setFuncoes({});
-    setExpandedModule(null);
+    setSelectedAbas({});
+    setSelectedModule(MODULE_ACCESS_GROUPS[0].module);
     setIsModalOpen(true);
   };
 
@@ -187,10 +182,17 @@ const AdminUsersPanel: React.FC = () => {
     const userIndicadores = (user.indicadores ?? []).filter(
       (key): key is IndicadorKey => INDICADOR_ITEMS.some((item) => item.key === key),
     );
-    setIndicadoresMode(userIndicadores.length > 0 ? 'personalizado' : 'todos');
     setSelectedIndicadores(userIndicadores);
     setFuncoes(user.funcoes ?? {});
-    setExpandedModule(null);
+    const nextAbas: Record<string, string[]> = {};
+    MODULE_ACCESS_GROUPS.forEach((group) => {
+      if (group.module === 'Indicadores') return;
+      const catalog = abasDoModulo(group.module).map((item) => item.key);
+      nextAbas[group.module] = (user.abas?.[group.module] ?? []).filter((key) => catalog.includes(key));
+    });
+    setSelectedAbas(nextAbas);
+    const firstOpen = MODULE_ACCESS_GROUPS.find((group) => (nextAccess[group.module]?.length ?? 0) > 0);
+    setSelectedModule(firstOpen?.module ?? MODULE_ACCESS_GROUPS[0].module);
 
     setIsModalOpen(true);
   };
@@ -222,19 +224,31 @@ const AdminUsersPanel: React.FC = () => {
     }
 
     const hasIndicadoresModule = environments.includes('Indicadores');
-    if (hasIndicadoresModule && indicadoresMode === 'personalizado' && selectedIndicadores.length === 0) {
-      alert('Selecione ao menos um indicador ou escolha "Liberar todos".');
-      return;
+    const indicadorCatalog = INDICADOR_ITEMS.map((item) => item.key);
+    const indicadores = hasIndicadoresModule
+      && selectedIndicadores.length > 0
+      && selectedIndicadores.length < indicadorCatalog.length
+      ? selectedIndicadores
+      : [];
+
+    const abas: Record<string, string[]> = {};
+    for (const group of MODULE_ACCESS_GROUPS) {
+      if (group.module === 'Indicadores' || !environments.includes(group.module)) continue;
+      const catalog = abasDoModulo(group.module).map((item) => item.key);
+      const keys = (selectedAbas[group.module] ?? []).filter((key) => catalog.includes(key));
+      if (keys.length > 0 && keys.length < catalog.length) {
+        abas[group.module] = catalog.includes(HOME_ABA_KEY) && !keys.includes(HOME_ABA_KEY)
+          ? [HOME_ABA_KEY, ...keys]
+          : keys;
+      }
     }
-    // Lista vazia = acesso a todos os indicadores (padrão).
-    const indicadores = hasIndicadoresModule && indicadoresMode === 'personalizado' ? selectedIndicadores : [];
 
     // Só envia funções de módulos que o usuário realmente tem acesso.
     const funcoesFiltradas = Object.fromEntries(
       Object.entries(funcoes).filter(([module, keys]) => environments.includes(module) && keys.length > 0),
     );
 
-    const userData: any = { username, name, roleId, status, environments, filiais, indicadores, funcoes: funcoesFiltradas };
+    const userData: any = { username, name, roleId, status, environments, filiais, indicadores, funcoes: funcoesFiltradas, abas };
     if (password) userData.password = password;
 
     try {
@@ -327,7 +341,9 @@ const AdminUsersPanel: React.FC = () => {
   const handleToggleModule = (module: string, forceOn = false) => {
     setModuleAccess((prev) => {
       const hasAccess = (prev[module]?.length ?? 0) > 0;
-      return { ...prev, [module]: hasAccess && !forceOn ? [] : [...branchesForModule(module)] };
+      const nextOn = forceOn || !hasAccess;
+      if (nextOn) setSelectedModule(module);
+      return { ...prev, [module]: nextOn ? [...branchesForModule(module)] : [] };
     });
   };
 
@@ -340,9 +356,34 @@ const AdminUsersPanel: React.FC = () => {
   const handleClearAllModules = () => setModuleAccess({});
 
   const handleToggleIndicador = (key: IndicadorKey) => {
-    setSelectedIndicadores((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
-    );
+    const catalog = INDICADOR_ITEMS.map((item) => item.key);
+    setSelectedIndicadores((prev) => {
+      const current = prev.length > 0 ? prev : catalog;
+      const turningOff = current.includes(key);
+      if (turningOff && current.length <= 1) return prev;
+      const next = turningOff ? current.filter((k) => k !== key) : [...current, key];
+      return next.length === catalog.length ? [] : next;
+    });
+  };
+
+  const handleToggleAba = (module: string, key: string) => {
+    if (key === HOME_ABA_KEY) return;
+    const catalog = abasDoModulo(module).map((item) => item.key);
+    const current = (selectedAbas[module]?.length ?? 0) > 0 ? selectedAbas[module] : catalog;
+    const turningOff = current.includes(key);
+    if (turningOff && current.length <= 1) return;
+    const next = turningOff ? current.filter((k) => k !== key) : [...current, key];
+    if (!next.includes(HOME_ABA_KEY) && catalog.includes(HOME_ABA_KEY)) {
+      next.unshift(HOME_ABA_KEY);
+    }
+    setSelectedAbas((prev) => ({ ...prev, [module]: next.length === catalog.length ? [] : next }));
+    if (turningOff) {
+      const keysDaAba = funcoesDaAba(module, key).map((item) => item.key);
+      setFuncoes((prev) => ({
+        ...prev,
+        [module]: (prev[module] ?? []).filter((fn) => !keysDaAba.includes(fn as FuncaoKey)),
+      }));
+    }
   };
 
   const handleToggleFuncao = (module: string, key: FuncaoKey) => {
@@ -351,6 +392,25 @@ const AdminUsersPanel: React.FC = () => {
       const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
       return { ...prev, [module]: next };
     });
+  };
+
+  const handleApplyModulePreset = (module: string, preset: 'todas-rotinas' | 'so-consulta' | 'todas-acoes') => {
+    if (module === 'Indicadores') {
+      if (preset === 'todas-rotinas') setSelectedIndicadores([]);
+      return;
+    }
+    if (preset === 'todas-rotinas') {
+      setSelectedAbas((prev) => ({ ...prev, [module]: [] }));
+      return;
+    }
+    if (preset === 'so-consulta') {
+      setFuncoes((prev) => ({ ...prev, [module]: [] }));
+      return;
+    }
+    setFuncoes((prev) => ({
+      ...prev,
+      [module]: funcoesDoModulo(module).map((item) => item.key),
+    }));
   };
 
   return (
@@ -594,7 +654,7 @@ const AdminUsersPanel: React.FC = () => {
         }}>
           <div className="search-modal-card admin-user-modal-card admin-user-modal-card--wide">
             <div className="search-input-wrapper" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 id="admin-modal-title" style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>
+              <h3 id="admin-modal-title" style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
                 {editingUserId ? 'Editar Usuário' : 'Criar Novo Usuário'}
               </h3>
               <span className="search-close-key" style={{ cursor: 'pointer' }} onClick={() => setIsModalOpen(false)}>Fechar (X)</span>
@@ -702,206 +762,243 @@ const AdminUsersPanel: React.FC = () => {
 
               {/* Coluna direita: permissões */}
               <div className="admin-form-col">
-              {/* Seção 3: Permissões por módulo (acordeão) */}
               <div className="admin-form-section">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <h4 className="admin-form-section-title">Permissões por Módulo</h4>
+                  <h4 className="admin-form-section-title">Permissões</h4>
                   <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-                    <span className="module-access-quick-action" onClick={handleSelectAllModules}>Selecionar tudo</span>
-                    <span className="module-access-quick-action" onClick={handleClearAllModules}>Limpar</span>
+                    <span className="module-access-quick-action" onClick={handleSelectAllModules}>Liberar ambientes</span>
+                    <span className="module-access-quick-action" onClick={handleClearAllModules}>Bloquear todos</span>
                   </div>
                 </div>
                 <p className="admin-form-hint" style={{ margin: '0 0 8px 0' }}>
-                  Use o interruptor para liberar ou bloquear o módulo. Ambientes com sessão por filial (ex.: SGQ) pedem as unidades; nos globais basta liberar o acesso.
+                  Escolha o ambiente à esquerda. À direita, cada rotina tem o menu e as ações próprias.
                 </p>
 
                 {isSelectedAdmin && (
                   <div style={{ fontSize: '11px', color: '#0076ce', background: '#eff6ff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #bfdbfe', marginBottom: '8px' }}>
-                    Administradores têm acesso automático à Administração/Manutenção e a todas as funções dos módulos.
+                    Administradores entram automaticamente em Administração/Manutenção e têm todas as ações.
                   </div>
                 )}
 
-                <div className="module-config-list">
-                  {MODULE_ACCESS_GROUPS.map((group) => {
-                    const branches = moduleAccess[group.module] ?? [];
-                    const moduleBranches = branchesForModule(group.module);
-                    const hasAccess = branches.length > 0;
-                    const isExpanded = expandedModule === group.module;
-                    const funcaoItems = funcoesDoModulo(group.module);
-                    const selectedFuncoes = funcoes[group.module] ?? [];
-                    const showFuncoes = funcaoItems.length > 0 && !isSelectedAdmin;
-                    const requiresFilial = environmentRequiresFilial(group.module);
-                    const canExpand = requiresFilial || showFuncoes || group.module === 'Indicadores';
+                {(() => {
+                  const group = MODULE_ACCESS_GROUPS.find((item) => item.module === selectedModule) ?? MODULE_ACCESS_GROUPS[0];
+                  const branches = moduleAccess[group.module] ?? [];
+                  const moduleBranches = branchesForModule(group.module);
+                  const hasAccess = branches.length > 0;
+                  const funcaoItems = funcoesDoModulo(group.module);
+                  const selectedFuncoes = funcoes[group.module] ?? [];
+                  const requiresFilial = environmentRequiresFilial(group.module);
+                  const abaItems = group.module === 'Indicadores' ? [] : rotinasConfiguraveisDoModulo(group.module);
+                  const hasAcoes = funcaoItems.length > 0 && !isSelectedAdmin;
 
-                    const summaryParts: string[] = [];
-                    if (!hasAccess) {
-                      summaryParts.push('Sem acesso');
-                    } else if (requiresFilial) {
-                      summaryParts.push(
-                        branches.length === moduleBranches.length ? 'Todas as filiais' : `${branches.length} de ${moduleBranches.length} filiais`,
-                      );
-                    } else {
-                      summaryParts.push('Acesso liberado');
-                    }
-                    if (hasAccess && group.module === 'Indicadores') {
-                      summaryParts.push(
-                        indicadoresMode === 'todos' ? 'todos os indicadores' : `${selectedIndicadores.length} indicador(es)`,
-                      );
-                    }
-                    if (hasAccess && showFuncoes) {
-                      summaryParts.push(
-                        selectedFuncoes.length === 0 ? 'somente consulta' : `${selectedFuncoes.length} de ${funcaoItems.length} funções`,
-                      );
-                    }
-
-                    return (
-                      <div className={`module-config ${hasAccess ? 'is-active' : ''}`} key={group.module}>
-                        <div
-                          className="module-config-header"
-                          onClick={() => {
-                            if (!canExpand) return;
-                            setExpandedModule(isExpanded ? null : group.module);
-                          }}
-                          style={{ cursor: canExpand ? 'pointer' : 'default' }}
-                        >
-                          <label
-                            className="perm-switch"
-                            onClick={(e) => e.stopPropagation()}
-                            title={hasAccess ? 'Remover acesso ao módulo' : requiresFilial ? 'Liberar módulo (todas as filiais)' : 'Liberar módulo'}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={hasAccess}
-                              onChange={() => handleToggleModule(group.module)}
-                            />
-                            <span className="perm-switch-slider" />
-                          </label>
-                          <span className="module-config-name">{group.label}</span>
-                          <span className="module-config-summary">{summaryParts.join(' · ')}</span>
-                          {canExpand && (
-                            <svg
-                              className={`module-config-chevron ${isExpanded ? 'is-open' : ''}`}
-                              width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+                  return (
+                    <div className="perm-split">
+                      <div className="perm-env-list" role="list">
+                        {MODULE_ACCESS_GROUPS.map((item) => {
+                          const itemBranches = moduleAccess[item.module] ?? [];
+                          const itemOn = itemBranches.length > 0;
+                          const itemFuncoes = funcoes[item.module] ?? [];
+                          const itemAbas = item.module === 'Indicadores'
+                            ? (selectedIndicadores.length === 0 ? INDICADOR_ITEMS.length : selectedIndicadores.length)
+                            : (() => {
+                              const configuraveis = rotinasConfiguraveisDoModulo(item.module);
+                              const saved = selectedAbas[item.module] ?? [];
+                              if (saved.length === 0) return configuraveis.length;
+                              return configuraveis.filter((aba) => saved.includes(aba.key)).length;
+                            })();
+                          const itemAbaTotal = item.module === 'Indicadores'
+                            ? INDICADOR_ITEMS.length
+                            : rotinasConfiguraveisDoModulo(item.module).length;
+                          const itemHasAcoes = funcoesDoModulo(item.module).length > 0 && !isSelectedAdmin;
+                          let line = 'Bloqueado';
+                          if (itemOn) {
+                            const parts = [
+                              itemAbaTotal > 0 ? `${itemAbas}/${itemAbaTotal} rotinas` : 'Liberado',
+                            ];
+                            if (environmentRequiresFilial(item.module)) {
+                              parts.push(`${itemBranches.length} filial`);
+                            }
+                            if (itemHasAcoes) {
+                              parts.push(itemFuncoes.length === 0 ? 'consulta' : `${itemFuncoes.length} ação(ões)`);
+                            }
+                            line = parts.join(' · ');
+                          }
+                          return (
+                            <div
+                              role="listitem"
+                              key={item.module}
+                              className={`perm-env-item ${itemOn ? 'is-on' : ''} ${selectedModule === item.module ? 'is-selected' : ''}`}
+                              onClick={() => setSelectedModule(item.module)}
                             >
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                            </svg>
-                          )}
-                        </div>
+                              <label
+                                className="perm-switch"
+                                onClick={(e) => e.stopPropagation()}
+                                title={itemOn ? 'Bloquear ambiente' : 'Liberar ambiente'}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={itemOn}
+                                  onChange={() => handleToggleModule(item.module)}
+                                />
+                                <span className="perm-switch-slider" />
+                              </label>
+                              <span className="perm-env-item-text">
+                                <span className="perm-env-item-name">{item.label}</span>
+                                <span className="perm-env-item-meta">{line}</span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
 
-                        {isExpanded && canExpand && (
-                          <div className="module-config-body">
+                      <div className="perm-detail">
+                        {!hasAccess ? (
+                          <div className="perm-detail-empty">
+                            <p><strong>{group.label}</strong> está bloqueado para este usuário.</p>
+                            <button type="button" className="perm-detail-unlock" onClick={() => handleToggleModule(group.module)}>
+                              Liberar {group.label}
+                            </button>
+                          </div>
+                        ) : (
+                          <>
                             {requiresFilial && (
-                            <div className="module-config-group">
-                              <div className="module-config-group-head">
-                                <span className="module-config-group-label">Em quais filiais?</span>
-                                <span
-                                  className="module-access-quick-action"
-                                  onClick={() =>
-                                    branches.length === moduleBranches.length
-                                      ? handleToggleModule(group.module)
-                                      : handleToggleModule(group.module, true)
-                                  }
-                                >
-                                  {branches.length === moduleBranches.length ? 'Desmarcar todas' : 'Marcar todas'}
-                                </span>
-                              </div>
-                              <div className="perm-chip-list">
-                                {moduleBranches.map((branch) => {
-                                  const selected = isBranchSelected(group.module, branch);
-                                  return (
-                                    <button
-                                      type="button"
-                                      key={branch}
-                                      className={`perm-chip ${selected ? 'is-selected' : ''}`}
-                                      onClick={() => handleToggleBranch(group.module, branch)}
+                              <div className="perm-filial-bar">
+                                <div className="perm-filial-bar-head">
+                                  <span>Filiais da sessão</span>
+                                  {branches.length < moduleBranches.length && (
+                                    <span
+                                      className="module-access-quick-action"
+                                      onClick={() => handleToggleModule(group.module, true)}
                                     >
-                                      {selected && <ChipCheck />}
+                                      Todas
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="perm-check-row">
+                                  {moduleBranches.map((branch) => (
+                                    <label key={branch} className="perm-check">
+                                      <input
+                                        type="checkbox"
+                                        checked={isBranchSelected(group.module, branch)}
+                                        onChange={() => handleToggleBranch(group.module, branch)}
+                                      />
                                       {branch}
-                                    </button>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="perm-matrix-toolbar">
+                              <span>Neste ambiente</span>
+                              <span className="module-access-quick-action" onClick={() => handleApplyModulePreset(group.module, 'todas-rotinas')}>
+                                Todas as rotinas
+                              </span>
+                              {hasAcoes && (
+                                <>
+                                  <span className="module-access-quick-action" onClick={() => handleApplyModulePreset(group.module, 'so-consulta')}>
+                                    Só consulta
+                                  </span>
+                                  <span className="module-access-quick-action" onClick={() => handleApplyModulePreset(group.module, 'todas-acoes')}>
+                                    Todas as ações
+                                  </span>
+                                </>
+                              )}
+                            </div>
+
+                            <table className="perm-matrix">
+                              <thead>
+                                <tr>
+                                  <th>Rotina</th>
+                                  <th className="perm-matrix-col-menu">Menu</th>
+                                  <th>Ações desta rotina</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {group.module === 'Indicadores' && Object.entries(INDICADOR_GROUPS).map(([groupName, items]) => (
+                                  <React.Fragment key={groupName}>
+                                    <tr className="perm-matrix-group">
+                                      <td colSpan={3}>{groupName}</td>
+                                    </tr>
+                                    {items.map((item) => {
+                                      const visible = selectedIndicadores.length === 0 || selectedIndicadores.includes(item.key);
+                                      return (
+                                        <tr key={item.key} className={visible ? '' : 'is-off'}>
+                                          <td>
+                                            <span className="perm-matrix-name">{item.label}</span>
+                                          </td>
+                                          <td className="perm-matrix-col-menu">
+                                            <label className="perm-switch" title={visible ? 'Ocultar no menu' : 'Mostrar no menu'}>
+                                              <input
+                                                type="checkbox"
+                                                checked={visible}
+                                                onChange={() => handleToggleIndicador(item.key)}
+                                              />
+                                              <span className="perm-switch-slider" />
+                                            </label>
+                                          </td>
+                                          <td className="perm-matrix-muted">Consulta do indicador</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </React.Fragment>
+                                ))}
+
+                                {group.module !== 'Indicadores' && abaItems.map((item) => {
+                                  const saved = selectedAbas[group.module] ?? [];
+                                  const visible = saved.length === 0 || saved.includes(item.key);
+                                  const rotinaFuncoes = funcoesDaAba(group.module, item.key);
+                                  return (
+                                    <tr key={item.key} className={visible ? '' : 'is-off'}>
+                                      <td>
+                                        <span className="perm-matrix-name">{item.label}</span>
+                                      </td>
+                                      <td className="perm-matrix-col-menu">
+                                        <label className="perm-switch" title={visible ? 'Ocultar no menu' : 'Mostrar no menu'}>
+                                          <input
+                                            type="checkbox"
+                                            checked={visible}
+                                            onChange={() => handleToggleAba(group.module, item.key)}
+                                          />
+                                          <span className="perm-switch-slider" />
+                                        </label>
+                                      </td>
+                                      <td>
+                                        {!visible ? (
+                                          <span className="perm-matrix-muted">Oculta no menu</span>
+                                        ) : rotinaFuncoes.length === 0 || isSelectedAdmin ? (
+                                          <span className="perm-matrix-muted">Só consulta</span>
+                                        ) : (
+                                          <div className="perm-check-row">
+                                            {rotinaFuncoes.map((fn) => (
+                                              <label key={fn.key} className="perm-check" title={fn.description}>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={selectedFuncoes.includes(fn.key)}
+                                                  onChange={() => handleToggleFuncao(group.module, fn.key)}
+                                                />
+                                                {fn.label}
+                                              </label>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </td>
+                                    </tr>
                                   );
                                 })}
-                              </div>
-                            </div>
+                              </tbody>
+                            </table>
+                            {hasAcoes && (
+                              <p className="admin-form-hint" style={{ margin: '8px 0 0' }}>
+                                Sem ação marcada na rotina, a pessoa só consulta. Consulta não precisa de caixa.
+                              </p>
                             )}
-
-                            {group.module === 'Indicadores' && (
-                              <div className="module-config-group">
-                                <span className="module-config-group-label">Quais indicadores pode ver?</span>
-                                <div className="perm-segment">
-                                  <button
-                                    type="button"
-                                    className={indicadoresMode === 'todos' ? 'is-selected' : ''}
-                                    onClick={() => setIndicadoresMode('todos')}
-                                  >
-                                    Todos
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={indicadoresMode === 'personalizado' ? 'is-selected' : ''}
-                                    onClick={() => setIndicadoresMode('personalizado')}
-                                  >
-                                    Escolher quais
-                                  </button>
-                                </div>
-                                {indicadoresMode === 'personalizado' && (
-                                  <div className="indicadores-access-groups">
-                                    {Object.entries(INDICADOR_GROUPS).map(([groupName, items]) => (
-                                      <div key={groupName} className="indicadores-access-group">
-                                        <span className="indicadores-access-group-name">{groupName}</span>
-                                        <div className="perm-chip-list">
-                                          {items.map((item) => {
-                                            const selected = selectedIndicadores.includes(item.key);
-                                            return (
-                                              <button
-                                                type="button"
-                                                key={item.key}
-                                                className={`perm-chip ${selected ? 'is-selected' : ''}`}
-                                                onClick={() => handleToggleIndicador(item.key)}
-                                              >
-                                                {selected && <ChipCheck />}
-                                                {item.label}
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {showFuncoes && (
-                              <div className="module-config-group">
-                                <span className="module-config-group-label">O que pode fazer?</span>
-                                <div className="perm-chip-list">
-                                  {funcaoItems.map((item) => {
-                                    const selected = selectedFuncoes.includes(item.key);
-                                    return (
-                                      <button
-                                        type="button"
-                                        key={item.key}
-                                        className={`perm-chip ${selected ? 'is-selected' : ''}`}
-                                        title={item.description}
-                                        onClick={() => handleToggleFuncao(group.module, item.key)}
-                                      >
-                                        {selected && <ChipCheck />}
-                                        {item.label}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                                <small className="admin-form-hint" style={{ marginTop: '4px' }}>
-                                  Sem nenhuma função marcada, o operador apenas consulta.
-                                </small>
-                              </div>
-                            )}
-                          </div>
+                          </>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })()}
               </div>
               </div>
               </div>

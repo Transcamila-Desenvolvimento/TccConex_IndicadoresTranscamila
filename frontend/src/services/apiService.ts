@@ -81,6 +81,7 @@ function normalizeUser(raw: any): User {
     ) as Record<string, string[]>,
     indicadores: Array.isArray(raw.indicadores) ? raw.indicadores : [],
     funcoes: raw.funcoes && typeof raw.funcoes === 'object' ? raw.funcoes : {},
+    abas: raw.abas && typeof raw.abas === 'object' ? raw.abas : {},
     googleEmail: raw.googleEmail ?? null,
     googleLinkedAt: raw.googleLinkedAt ?? null,
     googlePicture: raw.googlePicture ?? null,

@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from '../components/UserAvatar';
 import { environmentRequiresFilial, isAdminEnvironment } from '../constants/environments';
 import { getAllowedIndicadores } from '../constants/indicadores';
+import { userCanSeeAba } from '../constants/abas';
 import logoExpanded from '../assets/Logo_TccConex.png';
 import logoCollapsed from '../assets/Logo_TccConex_Fechado.png';
 
@@ -34,6 +35,7 @@ const DashboardLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const allowedIndicadores = getAllowedIndicadores(user);
+  const canAba = (module: string, aba: string) => userCanSeeAba(user, module, aba);
   const showSessionFilial = environmentRequiresFilial(selectedEnvironment) && !!selectedFilial;
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
@@ -152,7 +154,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/financeiro/home'),
-        show: selectedEnvironment === 'Financeiro'
+        show: selectedEnvironment === 'Financeiro' && canAba('Financeiro', 'home')
       },
       {
         title: "Inclusão de Relatórios",
@@ -163,7 +165,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/financeiro/reports'),
-        show: selectedEnvironment === 'Financeiro'
+        show: selectedEnvironment === 'Financeiro' && canAba('Financeiro', 'inclusao-relatorios')
       },
       {
         title: "Saldos Bancários",
@@ -174,7 +176,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/financeiro/balances'),
-        show: selectedEnvironment === 'Financeiro'
+        show: selectedEnvironment === 'Financeiro' && canAba('Financeiro', 'saldos-bancarios')
       },
       {
         title: "Ajustes de Caixa",
@@ -185,7 +187,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/financeiro/adjustments'),
-        show: selectedEnvironment === 'Financeiro'
+        show: selectedEnvironment === 'Financeiro' && canAba('Financeiro', 'ajustes-caixa')
       },
       {
         title: "Faturamento",
@@ -196,7 +198,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/financeiro/billing'),
-        show: selectedEnvironment === 'Financeiro'
+        show: selectedEnvironment === 'Financeiro' && canAba('Financeiro', 'faturamento')
       },
       {
         title: "Configurações gerais",
@@ -208,7 +210,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/logistica/configuracoes'),
-        show: selectedEnvironment === 'Logística'
+        show: selectedEnvironment === 'Logística' && canAba('Logística', 'configuracoes')
       },
       {
         title: "Home Faturamento",
@@ -219,7 +221,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/faturamento'),
-        show: selectedEnvironment === 'Faturamento'
+        show: selectedEnvironment === 'Faturamento' && canAba('Faturamento', 'home')
       },
       {
         title: "Envio NF Cliente",
@@ -230,7 +232,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/faturamento/protocolos'),
-        show: selectedEnvironment === 'Faturamento'
+        show: selectedEnvironment === 'Faturamento' && canAba('Faturamento', 'envio-nf-cliente')
       },
       {
         title: "Cadastro cliente",
@@ -241,7 +243,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/faturamento/cadastros/clientes'),
-        show: selectedEnvironment === 'Faturamento'
+        show: selectedEnvironment === 'Faturamento' && canAba('Faturamento', 'cadastro-clientes')
       },
       {
         title: "Home Indicadores",
@@ -263,7 +265,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/indicadores/fluxo-de-caixa'),
-        show: selectedEnvironment === 'Indicadores'
+        show: selectedEnvironment === 'Indicadores' && allowedIndicadores.has('fluxo-caixa')
       },
       {
         title: "Meta de faturamento",
@@ -274,7 +276,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/indicadores/logistica/meta-faturamento'),
-        show: selectedEnvironment === 'Indicadores'
+        show: selectedEnvironment === 'Indicadores' && allowedIndicadores.has('meta-faturamento')
       },
       {
         title: "Movimentação de RH",
@@ -285,7 +287,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/indicadores/rh/movimentacao'),
-        show: selectedEnvironment === 'Indicadores'
+        show: selectedEnvironment === 'Indicadores' && allowedIndicadores.has('movimentacao-rh')
       },
       {
         title: "Satisfação dos Clientes",
@@ -296,7 +298,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/indicadores/gestao-qualidade/satisfacao-clientes'),
-        show: selectedEnvironment === 'Indicadores'
+        show: selectedEnvironment === 'Indicadores' && allowedIndicadores.has('satisfacao-clientes')
       },
       {
         title: "Home Compras",
@@ -307,7 +309,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/compras'),
-        show: selectedEnvironment === 'Compras'
+        show: selectedEnvironment === 'Compras' && canAba('Compras', 'home')
       },
       {
         title: "Controle de estoque",
@@ -318,7 +320,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/compras/controle-estoque'),
-        show: selectedEnvironment === 'Compras'
+        show: selectedEnvironment === 'Compras' && canAba('Compras', 'controle-estoque')
       },
       {
         title: "Home RH",
@@ -329,7 +331,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/rh'),
-        show: selectedEnvironment === 'RH'
+        show: selectedEnvironment === 'RH' && canAba('RH', 'home')
       },
       {
         title: "Movimentações",
@@ -340,7 +342,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/rh/movimentacoes'),
-        show: selectedEnvironment === 'RH'
+        show: selectedEnvironment === 'RH' && canAba('RH', 'movimentacoes')
       },
       {
         title: "Home SGQ",
@@ -351,7 +353,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/sgq'),
-        show: selectedEnvironment === 'SGQ'
+        show: selectedEnvironment === 'SGQ' && canAba('SGQ', 'home')
       },
       {
         title: "Pesquisa de Satisfação",
@@ -362,7 +364,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/sgq/pesquisa-satisfacao'),
-        show: selectedEnvironment === 'SGQ'
+        show: selectedEnvironment === 'SGQ' && canAba('SGQ', 'pesquisa-satisfacao')
       },
       {
         title: "Home Marketing",
@@ -373,7 +375,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/marketing'),
-        show: selectedEnvironment === 'Marketing'
+        show: selectedEnvironment === 'Marketing' && canAba('Marketing', 'home')
       },
       {
         title: "Calendario Transcamila",
@@ -385,7 +387,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/marketing/campanhas'),
-        show: selectedEnvironment === 'Marketing'
+        show: selectedEnvironment === 'Marketing' && canAba('Marketing', 'campanhas')
       },
       {
         title: "Home Logística",
@@ -396,7 +398,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/logistica'),
-        show: selectedEnvironment === 'Logística'
+        show: selectedEnvironment === 'Logística' && canAba('Logística', 'home')
       },
     ];
 
@@ -695,7 +697,7 @@ const DashboardLayout: React.FC = () => {
           {/* Financeiro Workspace Group */}
           {selectedEnvironment === 'Financeiro' && (
             <div id="sidebar-financeiro-group" style={{ width: '100%' }}>
-              {/* Home Financeiro */}
+              {canAba('Financeiro', 'home') && (
               <Link 
                 to="/financeiro/home" 
                 className={`nav-btn ${isRouteActive('/financeiro/home') ? 'active' : ''}`} 
@@ -706,8 +708,9 @@ const DashboardLayout: React.FC = () => {
                   <span className="nav-text">Home Financeiro</span>
                 </div>
               </Link>
+              )}
 
-              {/* Calendário Financeiro */}
+              {canAba('Financeiro', 'calendario') && (
               <Link
                 to="/financeiro/calendar"
                 className={`nav-btn ${isRouteActive('/financeiro/calendar') ? 'active' : ''}`}
@@ -718,8 +721,9 @@ const DashboardLayout: React.FC = () => {
                   <span className="nav-text">Calendário</span>
                 </div>
               </Link>
+              )}
 
-              {/* Fluxo de Caixa Collapsible Submenu */}
+              {(canAba('Financeiro', 'inclusao-relatorios') || canAba('Financeiro', 'saldos-bancarios') || canAba('Financeiro', 'ajustes-caixa') || canAba('Financeiro', 'faturamento')) && (
               <div className="nav-group-wrapper" id="btn-menu-financeiro-cashflow">
                 <button 
                   type="button" 
@@ -742,7 +746,7 @@ const DashboardLayout: React.FC = () => {
                     transition: 'max-height 0.25s ease' 
                   }}
                 >
-                  {/* Relatórios */}
+                  {canAba('Financeiro', 'inclusao-relatorios') && (
                   <Link 
                     to="/financeiro/reports" 
                     className={`nav-btn sub-nav-btn ${isRouteActive('/financeiro/reports') ? 'active' : ''}`}
@@ -752,7 +756,8 @@ const DashboardLayout: React.FC = () => {
                       <span className="nav-text">Inclusão de Relatórios</span>
                     </div>
                   </Link>
-                  {/* Saldos Bancários */}
+                  )}
+                  {canAba('Financeiro', 'saldos-bancarios') && (
                   <Link 
                     to="/financeiro/balances" 
                     className={`nav-btn sub-nav-btn ${isRouteActive('/financeiro/balances') ? 'active' : ''}`}
@@ -762,7 +767,8 @@ const DashboardLayout: React.FC = () => {
                       <span className="nav-text">Saldos Bancários</span>
                     </div>
                   </Link>
-                  {/* Ajustes de caixa */}
+                  )}
+                  {canAba('Financeiro', 'ajustes-caixa') && (
                   <Link 
                     to="/financeiro/adjustments" 
                     className={`nav-btn sub-nav-btn ${isRouteActive('/financeiro/adjustments') ? 'active' : ''}`}
@@ -772,7 +778,8 @@ const DashboardLayout: React.FC = () => {
                       <span className="nav-text">Ajustes de caixa</span>
                     </div>
                   </Link>
-                  {/* Faturamento */}
+                  )}
+                  {canAba('Financeiro', 'faturamento') && (
                   <Link 
                     to="/financeiro/billing" 
                     className={`nav-btn sub-nav-btn ${isRouteActive('/financeiro/billing') ? 'active' : ''}`}
@@ -782,14 +789,17 @@ const DashboardLayout: React.FC = () => {
                       <span className="nav-text">Faturamento</span>
                     </div>
                   </Link>
+                  )}
                 </div>
               </div>
+              )}
 
               </div>
             )}
 
             {selectedEnvironment === 'Faturamento' && (
               <div id="sidebar-faturamento-group" style={{ width: '100%' }}>
+                {canAba('Faturamento', 'home') && (
                 <Link
                   to="/faturamento"
                   className={`nav-btn ${location.pathname === '/faturamento' || location.pathname === '/faturamento/' ? 'active' : ''}`}
@@ -800,7 +810,9 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Home Faturamento</span>
                   </div>
                 </Link>
+                )}
 
+                {canAba('Faturamento', 'envio-nf-cliente') && (
                 <div className="nav-group-wrapper" id="btn-menu-faturamento-envio-documentos">
                   <button
                     type="button"
@@ -836,7 +848,9 @@ const DashboardLayout: React.FC = () => {
                     </Link>
                   </div>
                 </div>
+                )}
 
+                {canAba('Faturamento', 'cadastro-clientes') && (
                 <div className="nav-group-wrapper" id="btn-menu-faturamento-cadastros">
                   <button
                     type="button"
@@ -872,13 +886,14 @@ const DashboardLayout: React.FC = () => {
                     </Link>
                   </div>
                 </div>
+                )}
               </div>
             )}
 
             {/* Compras Workspace Group */}
             {selectedEnvironment === 'Compras' && (
               <div id="sidebar-compras-group" style={{ width: '100%' }}>
-                {/* Home Compras */}
+                {canAba('Compras', 'home') && (
                 <Link 
                   to="/compras" 
                   className={`nav-btn ${location.pathname === '/compras' ? 'active' : ''}`} 
@@ -889,8 +904,8 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Home Compras</span>
                   </div>
                 </Link>
-
-                {/* Controle de estoque */}
+                )}
+                {canAba('Compras', 'controle-estoque') && (
                 <Link 
                   to="/compras/controle-estoque" 
                   className={`nav-btn ${isRouteActive('/compras/controle-estoque') ? 'active' : ''}`} 
@@ -901,12 +916,13 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Controle de estoque</span>
                   </div>
                 </Link>
+                )}
               </div>
             )}
 
             {selectedEnvironment === 'RH' && (
               <div id="sidebar-rh-group" style={{ width: '100%' }}>
-                {/* Home RH */}
+                {canAba('RH', 'home') && (
                 <Link 
                   to="/rh" 
                   className={`nav-btn ${location.pathname === '/rh' || location.pathname === '/rh/' ? 'active' : ''}`} 
@@ -917,8 +933,8 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Home RH</span>
                   </div>
                 </Link>
-
-                {/* Movimentações RH */}
+                )}
+                {canAba('RH', 'movimentacoes') && (
                 <Link
                   to="/rh/movimentacoes"
                   className={`nav-btn ${isRouteActive('/rh/movimentacoes') ? 'active' : ''}`}
@@ -929,12 +945,13 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Movimentações</span>
                   </div>
                 </Link>
+                )}
               </div>
             )}
 
             {selectedEnvironment === 'SGQ' && (
               <div id="sidebar-sgq-group" style={{ width: '100%' }}>
-                {/* Home SGQ */}
+                {canAba('SGQ', 'home') && (
                 <Link
                   to="/sgq"
                   className={`nav-btn ${location.pathname === '/sgq' || location.pathname === '/sgq/' ? 'active' : ''}`}
@@ -945,8 +962,8 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Home SGQ</span>
                   </div>
                 </Link>
-
-                {/* Pesquisa de Satisfação */}
+                )}
+                {canAba('SGQ', 'pesquisa-satisfacao') && (
                 <Link
                   to="/sgq/pesquisa-satisfacao"
                   className={`nav-btn ${isRouteActive('/sgq/pesquisa-satisfacao') ? 'active' : ''}`}
@@ -957,12 +974,13 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Pesquisa de satisfação</span>
                   </div>
                 </Link>
-
+                )}
               </div>
             )}
 
             {selectedEnvironment === 'Marketing' && (
               <div id="sidebar-marketing-group" style={{ width: '100%' }}>
+                {canAba('Marketing', 'home') && (
                 <Link
                   to="/marketing"
                   className={`nav-btn ${location.pathname === '/marketing' || location.pathname === '/marketing/' ? 'active' : ''}`}
@@ -973,7 +991,8 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Home Marketing</span>
                   </div>
                 </Link>
-
+                )}
+                {canAba('Marketing', 'campanhas') && (
                 <Link
                   to="/marketing/campanhas"
                   className={`nav-btn ${isRouteActive('/marketing/campanhas') ? 'active' : ''}`}
@@ -984,11 +1003,13 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Calendario Transcamila</span>
                   </div>
                 </Link>
+                )}
               </div>
             )}
 
             {selectedEnvironment === 'Logística' && (
               <div id="sidebar-logistica-group" style={{ width: '100%' }}>
+                {canAba('Logística', 'home') && (
                 <Link
                   to="/logistica"
                   className={`nav-btn ${location.pathname === '/logistica' || location.pathname === '/logistica/' ? 'active' : ''}`}
@@ -999,7 +1020,8 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Home Logística</span>
                   </div>
                 </Link>
-
+                )}
+                {canAba('Logística', 'configuracoes') && (
                 <Link
                   to="/logistica/configuracoes"
                   className={`nav-btn ${isRouteActive('/logistica/configuracoes') ? 'active' : ''}`}
@@ -1010,6 +1032,7 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Configurações gerais</span>
                   </div>
                 </Link>
+                )}
               </div>
             )}
           </nav>

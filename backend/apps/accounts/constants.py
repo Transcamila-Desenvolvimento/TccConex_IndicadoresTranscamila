@@ -33,6 +33,33 @@ INDICADORES_KEYS = frozenset({
     'satisfacao-clientes',
 })
 
+# Abas de menu liberáveis por ambiente (Indicadores continua em INDICADORES_KEYS).
+# Lista vazia em CustomUser.abas[modulo] = todas as abas daquele ambiente.
+# A aba "home" é obrigatória: quem tem o ambiente sempre acessa a home.
+# Mantém paridade com frontend/src/constants/abas.ts.
+HOME_ABA_KEY = 'home'
+
+ABAS_POR_AMBIENTE = {
+    'Financeiro': frozenset({
+        'home',
+        'calendario',
+        'inclusao-relatorios',
+        'saldos-bancarios',
+        'ajustes-caixa',
+        'faturamento',
+    }),
+    'Faturamento': frozenset({
+        'home',
+        'envio-nf-cliente',
+        'cadastro-clientes',
+    }),
+    'Compras': frozenset({'home', 'controle-estoque'}),
+    'RH': frozenset({'home', 'movimentacoes'}),
+    'SGQ': frozenset({'home', 'pesquisa-satisfacao'}),
+    'Marketing': frozenset({'home', 'campanhas'}),
+    'Logística': frozenset({'home', 'configuracoes'}),
+}
+
 # Funções liberáveis por ambiente para operadores (admin sempre tem todas).
 # Mantém paridade com frontend/src/constants/funcoes.ts.
 FUNCOES_POR_AMBIENTE = {
@@ -95,6 +122,26 @@ def sanitize_funcoes(funcoes: dict | None) -> dict[str, list]:
         if not allowed:
             continue
         valid = [key for key in (keys or []) if key in allowed]
+        if valid:
+            result[module] = valid
+    return result
+
+
+def sanitize_abas(abas: dict | None) -> dict[str, list]:
+    result: dict[str, list] = {}
+    for module, keys in (abas or {}).items():
+        module = normalize_environment(module)
+        allowed = ABAS_POR_AMBIENTE.get(module)
+        if not allowed:
+            continue
+        seen: set[str] = set()
+        valid: list[str] = []
+        for key in (keys or []):
+            if key in allowed and key not in seen:
+                seen.add(key)
+                valid.append(key)
+        if HOME_ABA_KEY in allowed and valid:
+            valid = [HOME_ABA_KEY, *[key for key in valid if key != HOME_ABA_KEY]]
         if valid:
             result[module] = valid
     return result
