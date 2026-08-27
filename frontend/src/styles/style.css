@@ -12947,6 +12947,34 @@ textarea.form-input {
   color: #64748b;
 }
 
+.fat-list-compact .view-page-title {
+  margin-bottom: 0;
+}
+
+.content:has(.fat-list-compact) {
+  padding-top: 8px;
+  padding-bottom: 16px;
+}
+
+.fat-list-compact > .view-header {
+  margin-bottom: 6px !important;
+}
+
+.fat-list-compact > .reports-filters-bar {
+  margin-bottom: 16px !important;
+  gap: 8px !important;
+}
+
+.fat-list-compact .reports-filter-left {
+  gap: 8px !important;
+}
+
+.fat-list-compact .data-table th,
+.fat-list-compact .data-table td {
+  padding: 5px 12px;
+  font-size: 13px;
+}
+
 .compras-setores-layout {
   display: grid;
   grid-template-columns: minmax(220px, 280px) 1fr;
