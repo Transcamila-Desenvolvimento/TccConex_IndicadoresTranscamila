@@ -1407,6 +1407,7 @@ export interface SgqPesquisa {
   dataEntrega: string;
   notaFiscal: string;
   cliente: string;
+  clienteLabel?: string;
   /** Quando true, os critérios abaixo ficam vazios — o cliente se recusou a avaliar a pesquisa. */
   clienteRecusouAssinar: boolean;
   prazoEntrega: SgqAvaliacao | '';

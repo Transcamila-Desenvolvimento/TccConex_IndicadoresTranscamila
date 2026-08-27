@@ -86,7 +86,7 @@ const FaturamentoProtocolos: React.FC = () => {
 
   const protocolosQuery = useProtocolosEnvio(filters);
   const { canShowEmpty } = useAsyncQueryState(protocolosQuery);
-  const clientesQuery = useProtocoloClientes();
+  const clientesQuery = useProtocoloClientes('protocolo');
   const clientesFiltro = useMemo(
     () => clientesUnicosParaFiltro(clientesQuery.data ?? []),
     [clientesQuery.data],

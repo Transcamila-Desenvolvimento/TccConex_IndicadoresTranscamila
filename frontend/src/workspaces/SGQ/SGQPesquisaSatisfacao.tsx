@@ -823,7 +823,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                         )}
                         <td style={{ fontWeight: 500 }}>{pesquisa.dataInclusao ? formatDateBr(pesquisa.dataInclusao) : '—'}</td>
                         <td style={{ fontWeight: 500 }}>{formatDateBr(pesquisa.dataEntrega)}</td>
-                        <td className="sgq-cell-ellipsis" title={pesquisa.cliente}>{pesquisa.cliente}</td>
+                        <td className="sgq-cell-ellipsis" title={pesquisa.clienteLabel || pesquisa.cliente}>{pesquisa.clienteLabel || pesquisa.cliente}</td>
                         <td className="sgq-cell-ellipsis" title={pesquisa.motorista}>
                           {pesquisa.motorista}
                         </td>

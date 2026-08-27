@@ -9,6 +9,7 @@ from django.db.models.functions import TruncMonth
 
 from apps.accounts.constants import branches_for_module
 from apps.audit.models import AuditLog
+from apps.sgq.clientes_cadastro import nome_exibicao_pesquisa
 from apps.sgq.escopo_analise import format_escopo_analise_display, rotulos_escopo
 from apps.sgq.models import CRITERIOS_AVALIACAO, PesquisaSatisfacao
 from apps.sgq.pesquisa_query import filter_pesquisas_queryset
@@ -272,7 +273,7 @@ def serialize_sgq_satisfacao_detalhe(pesquisa: PesquisaSatisfacao) -> dict:
         'id': str(pesquisa.pk),
         'filial': pesquisa.filial,
         'dataEntrega': pesquisa.data_entrega.isoformat() if pesquisa.data_entrega else None,
-        'cliente': pesquisa.cliente,
+        'cliente': nome_exibicao_pesquisa(pesquisa.cliente),
         'motorista': pesquisa.motorista,
         'cte': pesquisa.cte,
         'notaFiscal': pesquisa.nota_fiscal,

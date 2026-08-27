@@ -2,7 +2,14 @@ from rest_framework import serializers
 
 from .cnpj_service import format_documento, only_digits
 from .constants import EXPEDICAO_CHOICES
-from .models import ClienteProtocolo, FilialClienteProtocolo, ProtocoloEnvio, TIPO_PESSOA_FISICA, TIPO_PESSOA_JURIDICA
+from .models import (
+    ClienteProtocolo,
+    FilialClienteProtocolo,
+    ProtocoloEnvio,
+    TIPO_PESSOA_FISICA,
+    TIPO_PESSOA_JURIDICA,
+    chave_texto_sem_acento,
+)
 from .services import gerar_numero_sequencial, separar_expedicoes, validate_protocolo_payload
 
 
@@ -265,7 +272,10 @@ class ProtocoloEnvioSerializer(serializers.ModelSerializer):
 
             if cliente.exige_filial:
                 nfs = [nf.strip() for nf in attrs['nota_fiscal'].split(',') if nf.strip()]
-                permitidas = {nome.casefold(): nome for nome in cliente.municipios_do_grupo()}
+                permitidas = {}
+                for nome in cliente.municipios_do_grupo():
+                    permitidas[nome.casefold()] = nome
+                    permitidas[chave_texto_sem_acento(nome)] = nome
                 if not permitidas:
                     raise serializers.ValidationError(
                         'Cadastre o município nas lojas deste código para exigir filial no protocolo.'
@@ -277,7 +287,7 @@ class ProtocoloEnvioSerializer(serializers.ModelSerializer):
                     if not raw:
                         sem_filial.append(nf)
                         continue
-                    oficial = permitidas.get(raw.casefold())
+                    oficial = permitidas.get(raw.casefold()) or permitidas.get(chave_texto_sem_acento(raw))
                     if not oficial:
                         raise serializers.ValidationError(
                             f'O município "{raw}" não pertence aos cadastros do cliente {cliente.codigo}.'

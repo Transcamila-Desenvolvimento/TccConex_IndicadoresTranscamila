@@ -1,5 +1,7 @@
 from django.db.models import Q
+from django.db.models.functions import Lower
 
+from .clientes_cadastro import valores_filtro_cliente
 from .models import AVALIACAO_CHOICES, CRITERIOS_AVALIACAO
 
 _AVALIACAO_KEYS = [key for key, _ in AVALIACAO_CHOICES]
@@ -34,7 +36,8 @@ def filter_pesquisas_queryset(qs, params):
             | Q(nota_fiscal__icontains=search)
         )
     if cliente:
-        qs = qs.filter(cliente=cliente)
+        aliases = [alias.casefold() for alias in valores_filtro_cliente(cliente)]
+        qs = qs.annotate(_cliente_norm=Lower('cliente')).filter(_cliente_norm__in=aliases)
     if cte:
         qs = qs.filter(cte__icontains=cte)
     if motorista:

@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+import unicodedata
 
 
 TIPO_PESSOA_FISICA = 'F'
@@ -18,6 +19,11 @@ def format_nome_cadastro(value: str) -> str:
 def format_municipio_cadastro(value: str) -> str:
     """Município com a primeira letra de cada palavra maiúscula."""
     return ' '.join(word[:1].upper() + word[1:].lower() for word in (value or '').split())
+
+
+def chave_texto_sem_acento(value: str) -> str:
+    nfd = unicodedata.normalize('NFD', (value or '').strip().casefold())
+    return ''.join(ch for ch in nfd if unicodedata.category(ch) != 'Mn')
 
 
 def chave_cadastro_cliente(codigo: str, loja: str) -> str:
@@ -94,20 +100,29 @@ class ClienteProtocolo(models.Model):
         }
 
     def municipios_do_grupo(self) -> list[str]:
-        seen: set[str] = set()
+        seen: dict[str, int] = {}
         ordered: list[str] = []
-        cadastros = self.cadastros_do_grupo().prefetch_related('filiais').order_by('loja', 'pk')
+        cadastros = self.cadastros_do_grupo().order_by('loja', 'pk')
         for cadastro in cadastros:
             aliases = cadastro._rotulos_do_cadastro()
-            nomes = [cadastro.municipio, *[filial.nome for filial in cadastro.filiais.all()]]
-            for nome in nomes:
-                nome = (nome or '').strip()
-                key = nome.casefold()
-                # Município/filial igual ao nome do cliente não é unidade (ex.: cadastro "Teste").
-                if not nome or key in aliases or key in seen:
-                    continue
-                seen.add(key)
-                ordered.append(nome)
+            nome = format_municipio_cadastro((cadastro.municipio or '').strip())
+            if not nome:
+                continue
+            key = chave_texto_sem_acento(nome)
+            if not key or key in aliases or nome.casefold() in aliases:
+                continue
+            if key in seen:
+                idx = seen[key]
+                atual = ordered[idx]
+                atual_nfd = unicodedata.normalize('NFD', atual)
+                novo_nfd = unicodedata.normalize('NFD', nome)
+                atual_tem_acento = any(unicodedata.category(ch) == 'Mn' for ch in atual_nfd)
+                novo_tem_acento = any(unicodedata.category(ch) == 'Mn' for ch in novo_nfd)
+                if novo_tem_acento and not atual_tem_acento:
+                    ordered[idx] = nome
+                continue
+            seen[key] = len(ordered)
+            ordered.append(nome)
         return ordered
 
     def chave_cadastro(self) -> str:

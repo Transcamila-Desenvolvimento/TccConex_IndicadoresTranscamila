@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .clientes_cadastro import cliente_pesquisa_permitido
+from .clientes_cadastro import cliente_pesquisa_permitido, nome_exibicao_pesquisa
 from .escopo_analise import has_escopo_opcoes, normalize_escopo_analise, slugify_chave
 from .models import EscopoAnalise, EscopoAnaliseOpcao, PesquisaSatisfacao
 
@@ -44,6 +44,7 @@ class PesquisaSatisfacaoSerializer(serializers.ModelSerializer):
     analise = serializers.CharField(required=False, allow_blank=True)
     escopoAnalise = serializers.JSONField(source='escopo_analise', required=False)
     cliente = serializers.CharField(max_length=200)
+    clienteLabel = serializers.SerializerMethodField()
     criadoPor = serializers.CharField(source='criado_por', read_only=True)
     dataInclusao = serializers.DateField(source='data_inclusao', format='%Y-%m-%d', read_only=True)
     dataEntrega = serializers.DateField(source='data_entrega', format='%Y-%m-%d')
@@ -53,11 +54,14 @@ class PesquisaSatisfacaoSerializer(serializers.ModelSerializer):
         model = PesquisaSatisfacao
         fields = [
             'id', 'filial', 'motorista', 'cte', 'dataInclusao', 'dataEntrega', 'notaFiscal', 'cliente',
-            'clienteRecusouAssinar',
+            'clienteLabel', 'clienteRecusouAssinar',
             'prazoEntrega', 'condicoesMercadoria', 'condicoesVeiculo',
             'apresentacaoMotorista', 'atendimentoDispensado',
             'analise', 'escopoAnalise', 'criadoPor',
         ]
+
+    def get_clienteLabel(self, obj):
+        return nome_exibicao_pesquisa(obj.cliente)
 
     def create(self, validated_data):
         validated_data.setdefault('data_inclusao', timezone.localdate())

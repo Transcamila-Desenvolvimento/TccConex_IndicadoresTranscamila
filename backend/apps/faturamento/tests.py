@@ -215,6 +215,25 @@ class FaturamentoProtocoloTests(TestCase):
         FilialClienteProtocolo.objects.create(cliente=teste, nome='Teste')
         self.assertEqual(teste.municipios_do_grupo(), ['Ibiporã', 'Rondonópolis'])
 
+    def test_municipios_do_grupo_ignora_filial_legada_e_acento(self):
+        matriz = ClienteProtocolo.objects.create(
+            codigo='ACC1',
+            loja='01',
+            nome='Albaugh',
+            nome_interno='Albaugh',
+            municipio='Ibipora',
+            exige_filial=True,
+        )
+        ClienteProtocolo.objects.create(
+            codigo='ACC1',
+            loja='02',
+            nome='Albaugh',
+            nome_interno='Albaugh',
+            municipio='Ibiporã',
+        )
+        FilialClienteProtocolo.objects.create(cliente=matriz, nome='Paulinia')
+        self.assertEqual(matriz.municipios_do_grupo(), ['Ibiporã'])
+
     def test_pesquisa_satisfacao_exclusiva_por_codigo(self):
         primeira = self.api.post(
             '/api/faturamento/protocolo-clientes/',
