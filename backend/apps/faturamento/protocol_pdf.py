@@ -14,9 +14,16 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from .models import ProtocoloEnvio
+from .models import ClienteProtocolo, ProtocoloEnvio
 
 logger = logging.getLogger(__name__)
+
+def _cadastro_pdf(protocolo: ProtocoloEnvio) -> ClienteProtocolo | None:
+    cliente = protocolo.cliente
+    if not cliente:
+        return None
+    padrao = cliente.cadastros_do_grupo().filter(padrao_protocolo=True).first()
+    return padrao or cliente
 
 # Altura reservada para assinatura + rodapé no bottomMargin
 _SIGNATURE_AREA_HEIGHT = 5.5 * cm
@@ -34,8 +41,9 @@ def _make_page_callback(protocolo_by_page: list[ProtocoloEnvio]):
             return
         protocolo = protocolo_by_page[min(page_idx, len(protocolo_by_page) - 1)]
 
-        cliente_nome = protocolo.cliente.nome
-        cliente_cnpj = _format_cnpj(protocolo.cliente.cnpj)
+        cadastro = _cadastro_pdf(protocolo)
+        cliente_nome = cadastro.nome if cadastro else ''
+        cliente_cnpj = _format_cnpj(cadastro.cnpj if cadastro else None)
 
         # ── Linha separadora da área de assinatura ──────────────────────────
         sep_y = _SIGNATURE_AREA_HEIGHT + _FOOTER_HEIGHT
@@ -100,6 +108,8 @@ def _format_cnpj(cnpj: str | None) -> str:
     digits = ''.join(c for c in cnpj if c.isdigit())
     if len(digits) == 14:
         return f'{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}'
+    if len(digits) == 11:
+        return f'{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}'
     return cnpj
 
 
@@ -223,9 +233,10 @@ def generate_pdf_protocol(buffer, protocolos: list[ProtocoloEnvio]) -> None:
             protocolo.usuario.get_full_name() if protocolo.usuario else ''
         ) or (protocolo.usuario.username if protocolo.usuario else '—')
 
+        cadastro_pdf = _cadastro_pdf(protocolo)
         protocol_data = {
             'protocolo_numero': _protocolo_numero(protocolo),
-            'protocolo_cliente': protocolo.cliente.nome if protocolo.cliente_id else '—',
+            'protocolo_cliente': cadastro_pdf.nome if cadastro_pdf else '—',
             'data_envio': protocolo.data.strftime('%d/%m/%Y') if protocolo.data else '—',
             'indexador': indexador,
             'expedicao': protocolo.expedicao or 'Não informado',

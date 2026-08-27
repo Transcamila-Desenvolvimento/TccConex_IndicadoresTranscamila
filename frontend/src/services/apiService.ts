@@ -179,11 +179,15 @@ function normalizeClienteProtocolo(raw: any): ClienteProtocolo {
   return {
     id: String(raw.id),
     codigo: raw.codigo ?? '',
+    loja: raw.loja ?? '01',
+    tipoPessoa: raw.tipoPessoa === 'F' || raw.tipo_pessoa === 'F' ? 'F' : 'J',
     nome: nomeInterno || raw.nome,
     razaoSocial: raw.razaoSocial ?? raw.razao_social ?? '',
     nomeFantasia: raw.nomeFantasia ?? raw.nome_fantasia ?? '',
     nomeInterno,
+    municipio: raw.municipio ?? '',
     cnpj: raw.cnpj ?? null,
+    padraoProtocolo: Boolean(raw.padraoProtocolo ?? raw.padrao_protocolo),
     emitirProtocoloCanhotos: Boolean(raw.emitirProtocoloCanhotos ?? raw.emitir_protocolo_canhotos ?? true),
     considerarPesquisaSatisfacao: Boolean(
       raw.considerarPesquisaSatisfacao ?? raw.considerar_pesquisa_satisfacao,
@@ -725,6 +729,9 @@ export const apiService = {
     } catch (err) {
       if (axios.isAxiosError(err) && !err.response) {
         throw new Error('SERVER_OFFLINE');
+      }
+      if (axios.isAxiosError(err) && (err.response?.status ?? 0) >= 500) {
+        throw new Error('LOGIN_SERVER_ERROR');
       }
       return null;
     }

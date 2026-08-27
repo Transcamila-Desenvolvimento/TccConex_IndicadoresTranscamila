@@ -11,18 +11,31 @@ import urllib.request
 _DIGITOS = re.compile(r'\D+')
 
 
-def only_digits(cnpj: str) -> str:
-    return _DIGITOS.sub('', cnpj or '')[:14]
+def only_digits(cnpj: str, max_len: int = 14) -> str:
+    return _DIGITOS.sub('', cnpj or '')[:max_len]
 
 
 def format_cnpj(cnpj: str) -> str:
-    digits = only_digits(cnpj)
+    digits = only_digits(cnpj, 14)
     if len(digits) != 14:
         return cnpj or ''
     return f'{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}'
 
 
-from .models import format_nome_cadastro
+def format_cpf(cpf: str) -> str:
+    digits = only_digits(cpf, 11)
+    if len(digits) != 11:
+        return cpf or ''
+    return f'{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}'
+
+
+def format_documento(value: str, tipo_pessoa: str = 'J') -> str:
+    if (tipo_pessoa or 'J').upper() == 'F':
+        return format_cpf(value)
+    return format_cnpj(value)
+
+
+from .models import format_municipio_cadastro, format_nome_cadastro
 
 
 class CnpjLookupError(Exception):
@@ -52,6 +65,7 @@ def consultar_cnpj(cnpj: str) -> dict:
                 'cnpj': format_cnpj(digits),
                 'razaoSocial': format_nome_cadastro(razao),
                 'nomeFantasia': format_nome_cadastro(fantasia),
+                'municipio': format_municipio_cadastro(data.get('municipio') or ''),
             }
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
         pass
@@ -68,6 +82,7 @@ def consultar_cnpj(cnpj: str) -> dict:
             'cnpj': format_cnpj(digits),
             'razaoSocial': format_nome_cadastro(razao),
             'nomeFantasia': format_nome_cadastro(fantasia),
+            'municipio': format_municipio_cadastro(data.get('municipio') or ''),
         }
     except CnpjLookupError:
         raise

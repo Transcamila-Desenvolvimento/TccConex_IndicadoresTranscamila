@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.http import HttpResponse
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
@@ -73,7 +74,7 @@ def filter_protocolos_queryset(qs, params):
     ordering = (params.get('ordering') or 'data_desc').strip()
 
     if cliente:
-        qs = qs.filter(cliente__nome__icontains=cliente)
+        qs = qs.filter(Q(cliente__codigo__iexact=cliente) | Q(cliente__nome__icontains=cliente))
     if data:
         qs = qs.filter(data=data)
     if protocolo_id:

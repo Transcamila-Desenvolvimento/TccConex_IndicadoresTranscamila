@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -49,6 +50,17 @@ class AuthAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('token', response.data)
         self.assertIn('user', response.data)
+
+    def test_login_succeeds_with_blank_google_fields(self):
+        self.admin.google_email = ''
+        self.admin.google_picture_url = ''
+        self.admin.save(update_fields=['google_email', 'google_picture_url'])
+        response = self.client.post('/api/auth/login/', {
+            'username': 'admin_test',
+            'password': 'admin123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('token', response.data)
 
     def test_login_invalid_credentials(self):
         response = self.client.post('/api/auth/login/', {
@@ -398,3 +410,20 @@ class UserManagementEnvironmentRulesTests(TestCase):
         self.assertEqual(response.data['abas']['SGQ'], ['home', 'pesquisa-satisfacao'])
         self.assertEqual(response.data['abas']['Financeiro'], ['home', 'calendario'])
         self.assertNotIn('Indicadores', response.data['abas'])
+
+
+class ResetUserPasswordCommandTests(TestCase):
+    def test_reset_password_and_activate(self):
+        user = User.objects.create_user(
+            username='miguel.ribeiro',
+            password='antiga',
+            status='inativo',
+        )
+        user.is_active = False
+        user.save(update_fields=['is_active'])
+
+        call_command('reset_user_password', 'miguel.ribeiro', password='miguel@tcc08')
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('miguel@tcc08'))
+        self.assertEqual(user.status, 'ativo')
+        self.assertTrue(user.is_active)

@@ -1,7 +1,8 @@
 from rest_framework import serializers
 
+from .cnpj_service import format_documento, only_digits
 from .constants import EXPEDICAO_CHOICES
-from .models import ClienteProtocolo, FilialClienteProtocolo, ProtocoloEnvio
+from .models import ClienteProtocolo, FilialClienteProtocolo, ProtocoloEnvio, TIPO_PESSOA_FISICA, TIPO_PESSOA_JURIDICA
 from .services import gerar_numero_sequencial, separar_expedicoes, validate_protocolo_payload
 
 
@@ -15,7 +16,16 @@ class FilialClienteProtocoloSerializer(serializers.ModelSerializer):
 
 class ClienteProtocoloSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='pk', read_only=True)
-    codigo = serializers.CharField(read_only=True)
+    codigo = serializers.CharField(required=True, allow_blank=False, max_length=20)
+    loja = serializers.CharField(required=True, allow_blank=False, max_length=10)
+    tipoPessoa = serializers.ChoiceField(
+        source='tipo_pessoa',
+        choices=[TIPO_PESSOA_JURIDICA, TIPO_PESSOA_FISICA],
+        required=False,
+        default=TIPO_PESSOA_JURIDICA,
+    )
+    municipio = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    padraoProtocolo = serializers.BooleanField(source='padrao_protocolo', read_only=True)
     razaoSocial = serializers.CharField(source='razao_social', required=False, allow_blank=True)
     nomeFantasia = serializers.CharField(source='nome_fantasia', required=False, allow_blank=True)
     nomeInterno = serializers.CharField(source='nome_interno', required=False, allow_blank=True)
@@ -23,9 +33,7 @@ class ClienteProtocoloSerializer(serializers.ModelSerializer):
     considerarPesquisaSatisfacao = serializers.BooleanField(source='considerar_pesquisa_satisfacao', required=False)
     requerExpedicao = serializers.BooleanField(source='requer_expedicao', required=False)
     exigeFilial = serializers.BooleanField(source='exige_filial', required=False)
-    filiais = FilialClienteProtocoloSerializer(many=True, read_only=True)
-    # Usado apenas na criação: permite cadastrar as filiais junto com o cliente,
-    # já que FilialClienteProtocolo exige um cliente_id que só existe após o save.
+    filiais = serializers.SerializerMethodField()
     filiaisIniciais = serializers.ListField(
         child=serializers.CharField(max_length=150, allow_blank=False),
         write_only=True,
@@ -42,11 +50,15 @@ class ClienteProtocoloSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'codigo',
+            'loja',
+            'tipoPessoa',
             'nome',
             'razaoSocial',
             'nomeFantasia',
             'nomeInterno',
+            'municipio',
             'cnpj',
+            'padraoProtocolo',
             'emitirProtocoloCanhotos',
             'considerarPesquisaSatisfacao',
             'requerExpedicao',
@@ -60,6 +72,16 @@ class ClienteProtocoloSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {'nome': {'required': False, 'allow_blank': True}}
 
+    def get_filiais(self, obj: ClienteProtocolo):
+        cache = self.context.setdefault('_filiais_grupo', {})
+        codigo = obj.codigo or ''
+        if codigo not in cache:
+            cache[codigo] = [
+                {'id': f'mun-{idx}', 'nome': nome}
+                for idx, nome in enumerate(obj.municipios_do_grupo(), start=1)
+            ]
+        return cache[codigo]
+
     def validate(self, attrs):
         razao = (attrs.get('razao_social') or getattr(self.instance, 'razao_social', '') or '').strip()
         interno = (attrs.get('nome_interno') or getattr(self.instance, 'nome_interno', '') or '').strip()
@@ -71,10 +93,85 @@ class ClienteProtocoloSerializer(serializers.ModelSerializer):
         attrs['razao_social'] = razao or interno or nome
         attrs['nome_interno'] = interno or razao or nome
         attrs['nome'] = attrs['nome_interno']
+
+        codigo = (attrs.get('codigo') if 'codigo' in attrs else getattr(self.instance, 'codigo', '') or '').strip()
+        loja = (attrs.get('loja') if 'loja' in attrs else getattr(self.instance, 'loja', '01') or '01').strip()
+        attrs['codigo'] = codigo
+        attrs['loja'] = loja or '01'
+        if not attrs['codigo']:
+            raise serializers.ValidationError({'codigo': ['Informe o código do cliente.']})
+        if not attrs['loja']:
+            raise serializers.ValidationError({'loja': ['Informe a loja.']})
+
+        qs = ClienteProtocolo.objects.filter(codigo=attrs['codigo'], loja=attrs['loja'])
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError({
+                'loja': ['Já existe um cadastro com este código e loja.'],
+            })
+
+        tipo = attrs.get('tipo_pessoa') or getattr(self.instance, 'tipo_pessoa', TIPO_PESSOA_JURIDICA)
+        attrs['tipo_pessoa'] = tipo
+        if not self.instance:
+            attrs.setdefault('emitir_protocolo_canhotos', False)
+            attrs.setdefault('considerar_pesquisa_satisfacao', False)
+        cnpj = attrs.get('cnpj', getattr(self.instance, 'cnpj', None) if self.instance and 'cnpj' not in attrs else attrs.get('cnpj'))
+        if 'cnpj' in attrs:
+            raw = attrs.get('cnpj') or ''
+            digits = only_digits(raw, 14)
+            if digits:
+                expected = 11 if tipo == TIPO_PESSOA_FISICA else 14
+                if len(digits) != expected:
+                    campo = 'CPF' if tipo == TIPO_PESSOA_FISICA else 'CNPJ'
+                    raise serializers.ValidationError({
+                        'cnpj': [f'Informe um {campo} com {expected} dígitos.'],
+                    })
+                attrs['cnpj'] = format_documento(digits, tipo)
+            else:
+                attrs['cnpj'] = None
+
+        self._validar_flag_exclusiva_no_grupo(
+            attrs,
+            campo='emitir_protocolo_canhotos',
+            erro_key='emitirProtocoloCanhotos',
+            rotulo='Emitir protocolo de canhotos',
+        )
+        self._validar_flag_exclusiva_no_grupo(
+            attrs,
+            campo='considerar_pesquisa_satisfacao',
+            erro_key='considerarPesquisaSatisfacao',
+            rotulo='Considerar pesquisa de satisfação',
+        )
         return attrs
+
+    def _validar_flag_exclusiva_no_grupo(self, attrs, *, campo: str, erro_key: str, rotulo: str):
+        codigo = attrs.get('codigo') or ''
+        if not codigo:
+            return
+        ativo = attrs.get(campo, getattr(self.instance, campo, False) if self.instance else False)
+        if not ativo:
+            return
+        qs = ClienteProtocolo.objects.filter(codigo=codigo, **{campo: True})
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        outra = qs.order_by('loja', 'pk').first()
+        if outra:
+            raise serializers.ValidationError({
+                erro_key: [
+                    f'{rotulo} já está ativo na loja {outra.loja}. '
+                    f'Desative nessa loja para ativar nesta.'
+                ],
+            })
 
     def create(self, validated_data):
         nomes = validated_data.pop('filiaisIniciais', [])
+        codigo = validated_data.get('codigo')
+        if codigo:
+            irmao = ClienteProtocolo.objects.filter(codigo=codigo).order_by('pk').first()
+            if irmao:
+                validated_data['requer_expedicao'] = irmao.requer_expedicao
+                validated_data['exige_filial'] = irmao.exige_filial
         cliente = super().create(validated_data)
         vistos = set()
         for nome in nomes:
@@ -85,10 +182,15 @@ class ClienteProtocoloSerializer(serializers.ModelSerializer):
         return cliente
 
     def update(self, instance, validated_data):
-        # filiaisIniciais é usado apenas na criação; edições de filiais passam
-        # pelo endpoint dedicado (FilialClienteProtocoloViewSet).
         validated_data.pop('filiaisIniciais', None)
-        return super().update(instance, validated_data)
+        cliente = super().update(instance, validated_data)
+        grupo_flags = {}
+        for campo in ('requer_expedicao', 'exige_filial'):
+            if campo in validated_data:
+                grupo_flags[campo] = getattr(cliente, campo)
+        if grupo_flags and cliente.codigo:
+            ClienteProtocolo.objects.filter(codigo=cliente.codigo).exclude(pk=cliente.pk).update(**grupo_flags)
+        return cliente
 
 
 class ProtocoloEnvioSerializer(serializers.ModelSerializer):
@@ -163,11 +265,29 @@ class ProtocoloEnvioSerializer(serializers.ModelSerializer):
 
             if cliente.exige_filial:
                 nfs = [nf.strip() for nf in attrs['nota_fiscal'].split(',') if nf.strip()]
-                sem_filial = [nf for nf in nfs if not notas_filiais.get(nf)]
+                permitidas = {nome.casefold(): nome for nome in cliente.municipios_do_grupo()}
+                if not permitidas:
+                    raise serializers.ValidationError(
+                        'Cadastre o município nas lojas deste código para exigir filial no protocolo.'
+                    )
+                sem_filial = []
+                normalizadas = {}
+                for nf in nfs:
+                    raw = (notas_filiais.get(nf) or '').strip()
+                    if not raw:
+                        sem_filial.append(nf)
+                        continue
+                    oficial = permitidas.get(raw.casefold())
+                    if not oficial:
+                        raise serializers.ValidationError(
+                            f'O município "{raw}" não pertence aos cadastros do cliente {cliente.codigo}.'
+                        )
+                    normalizadas[nf] = oficial
                 if sem_filial:
                     raise serializers.ValidationError(
-                        f'As seguintes NFs não têm filial associada: {", ".join(sem_filial)}'
+                        f'As seguintes NFs não têm município associado: {", ".join(sem_filial)}'
                     )
+                attrs['notas_filiais'] = normalizadas
 
         return attrs
 

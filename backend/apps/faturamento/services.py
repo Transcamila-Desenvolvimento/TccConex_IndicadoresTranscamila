@@ -49,52 +49,51 @@ def normalize_notas_fiscais(raw: str) -> str:
 def gerar_numero_sequencial(cliente: ClienteProtocolo) -> int:
     """Gera o próximo número de protocolo para o cliente, de forma atômica.
 
-    O próximo número é sempre o maior número existente no banco + 1 — a
-    sequência continua do último protocolo real, mesmo que o contador do
-    cliente tenha divergido por exclusões antigas. Cada cliente possui sua
-    própria sequência numérica, independente dos demais.
+    A sequência é compartilhada por todas as lojas do mesmo código.
     """
     with transaction.atomic():
-        cliente_bloqueado = ClienteProtocolo.objects.select_for_update().get(pk=cliente.pk)
+        grupo = list(
+            ClienteProtocolo.objects.select_for_update().filter(codigo=cliente.codigo).order_by('pk')
+        )
+        if not grupo:
+            grupo = [ClienteProtocolo.objects.select_for_update().get(pk=cliente.pk)]
+        ids = [item.pk for item in grupo]
         maior_existente = (
-            ProtocoloEnvio.objects.filter(cliente=cliente_bloqueado)
+            ProtocoloEnvio.objects.filter(cliente_id__in=ids)
             .aggregate(maior=Max('numero_sequencial'))['maior']
             or 0
         )
         proximo = maior_existente + 1
-        cliente_bloqueado.ultimo_numero_protocolo = proximo
-        cliente_bloqueado.save(update_fields=['ultimo_numero_protocolo'])
+        ClienteProtocolo.objects.filter(pk__in=ids).update(ultimo_numero_protocolo=proximo)
         return proximo
 
 
 def liberar_numeros_sequenciais(cliente: ClienteProtocolo, numeros_excluidos: list[int]) -> None:
     """Devolve à sequência do cliente apenas os números excluídos que estavam
     no topo do contador (o último criado, ou os últimos, se contíguos).
-
-    Ex.: contador em 22 e exclusão do 22 → contador volta a 21 e o próximo
-    protocolo criado reutiliza o 22. Números excluídos no meio da sequência
-    (ex.: 20 com o contador em 22) ficam queimados de forma permanente, para
-    que um número nunca identifique dois protocolos diferentes.
     """
     excluidos = set(numeros_excluidos)
     if not excluidos:
         return
     with transaction.atomic():
-        cliente_bloqueado = ClienteProtocolo.objects.select_for_update().get(pk=cliente.pk)
-        contador = cliente_bloqueado.ultimo_numero_protocolo
+        grupo = list(
+            ClienteProtocolo.objects.select_for_update().filter(codigo=cliente.codigo).order_by('pk')
+        )
+        if not grupo:
+            grupo = [ClienteProtocolo.objects.select_for_update().get(pk=cliente.pk)]
+        contador = max((item.ultimo_numero_protocolo for item in grupo), default=0)
         while contador > 0 and contador in excluidos:
             contador -= 1
-        if contador != cliente_bloqueado.ultimo_numero_protocolo:
-            cliente_bloqueado.ultimo_numero_protocolo = contador
-            cliente_bloqueado.save(update_fields=['ultimo_numero_protocolo'])
+        ids = [item.pk for item in grupo]
+        ClienteProtocolo.objects.filter(pk__in=ids).update(ultimo_numero_protocolo=contador)
 
 
 def notas_fiscais_duplicadas(
     *, cliente: ClienteProtocolo, notas: list[str], protocolo_atual_id: int | None = None,
 ) -> list[str]:
     """Retorna as NFs da lista que já estão registradas em outro protocolo do mesmo
-    cliente. NFs repetidas em protocolos de clientes diferentes são permitidas."""
-    qs = ProtocoloEnvio.objects.filter(cliente=cliente)
+    código de cliente (todas as lojas). NFs repetidas em clientes diferentes são permitidas."""
+    qs = ProtocoloEnvio.objects.filter(cliente__codigo=cliente.codigo)
     if protocolo_atual_id:
         qs = qs.exclude(pk=protocolo_atual_id)
     usadas: set[str] = set()

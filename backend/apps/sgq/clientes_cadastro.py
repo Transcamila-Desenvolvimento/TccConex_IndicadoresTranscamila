@@ -2,24 +2,32 @@
 
 from __future__ import annotations
 
+from apps.faturamento.models import ClienteProtocolo
+
 from .models import PesquisaSatisfacao
 
 
-def clientes_pesquisa_ativos() -> list[str]:
-    from apps.faturamento.models import ClienteProtocolo
+def _label_cadastro(cliente: ClienteProtocolo) -> str:
+    return (cliente.nome_interno or cliente.nome or '').strip()
 
-    nomes = [
-        (cliente.nome_interno or cliente.nome or '').strip()
-        for cliente in ClienteProtocolo.objects.filter(considerar_pesquisa_satisfacao=True)
-    ]
-    ordered: list[str] = []
+
+def _cadastros_pesquisa_ativos():
+    return list(
+        ClienteProtocolo.objects.filter(considerar_pesquisa_satisfacao=True).order_by('codigo', 'loja', 'pk')
+    )
+
+
+def clientes_pesquisa_ativos() -> list[str]:
+    """Valores aceitos no lançamento: chave código|loja e nome interno (legado)."""
+    valores: list[str] = []
     seen: set[str] = set()
-    for nome in nomes:
-        if not nome or nome.casefold() in seen:
-            continue
-        seen.add(nome.casefold())
-        ordered.append(nome)
-    return ordered
+    for cliente in _cadastros_pesquisa_ativos():
+        for valor in (cliente.chave_cadastro(), (cliente.nome_interno or cliente.nome or '').strip()):
+            if not valor or valor.casefold() in seen:
+                continue
+            seen.add(valor.casefold())
+            valores.append(valor)
+    return valores
 
 
 def cliente_pesquisa_permitido(valor: str, *, valor_atual: str = '', permitir_outros: bool = False) -> bool:
@@ -31,12 +39,28 @@ def cliente_pesquisa_permitido(valor: str, *, valor_atual: str = '', permitir_ou
     if texto.casefold() == 'outros':
         return permitir_outros
     permitidos = {item.casefold() for item in clientes_pesquisa_ativos()}
-    return texto.casefold() in permitidos
+    if texto.casefold() in permitidos:
+        return True
+    for cliente in _cadastros_pesquisa_ativos():
+        if _label_cadastro(cliente).casefold() == texto.casefold():
+            return True
+    return False
 
 
 def opcoes_cliente_pesquisa(*, incluir_historico: bool = False, valor_atual: str = '') -> list[dict]:
-    opcoes = clientes_pesquisa_ativos()
-    seen = {item.casefold() for item in opcoes}
+    opcoes: list[dict] = []
+    seen: set[str] = set()
+    for cliente in _cadastros_pesquisa_ativos():
+        label = _label_cadastro(cliente)
+        if not label:
+            continue
+        value = cliente.chave_cadastro()
+        if value.casefold() in seen or label.casefold() in seen:
+            continue
+        seen.add(value.casefold())
+        seen.add(label.casefold())
+        opcoes.append({'value': value, 'label': label})
+
     extra: list[str] = []
     atual = (valor_atual or '').strip()
     if atual and atual.casefold() not in seen:
@@ -48,4 +72,6 @@ def opcoes_cliente_pesquisa(*, incluir_historico: bool = False, valor_atual: str
             if nome and nome.casefold() not in seen:
                 extra.append(nome)
                 seen.add(nome.casefold())
-    return [{'value': nome, 'label': nome} for nome in [*opcoes, *extra]]
+    for nome in extra:
+        opcoes.append({'value': nome, 'label': nome})
+    return opcoes

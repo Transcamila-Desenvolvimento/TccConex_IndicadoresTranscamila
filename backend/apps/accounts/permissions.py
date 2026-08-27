@@ -11,7 +11,7 @@ from .constants import ADMIN_ENVIRONMENT, branches_for_module, normalize_environ
 
 # Ambientes sem filial obrigatória na sessão (visão consolidada).
 # SGQ exige filial na sessão (como Indicadores) — pesquisas diferem por unidade.
-GLOBAL_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'RH', 'Compras', 'Faturamento', 'Marketing', 'Logística'})
+GLOBAL_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'RH', 'Compras', 'Faturamento', 'Marketing', 'Logística', 'Frota'})
 
 # Nomes de filial no banco podem ser abreviados (ex.: faturamento usa "Ibiporã").
 # Relatórios financeiros armazenam códigos ERP (01, 03, 05…) e Aging usa origem (1, 5, 9…).

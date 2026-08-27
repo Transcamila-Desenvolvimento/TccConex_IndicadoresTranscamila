@@ -138,15 +138,19 @@ class LoginAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Update last login time
-        user.last_login = datetime.datetime.now()
-        user.save()
+        try:
+            user.last_login = timezone.now()
+            user.save(update_fields=['last_login'])
+        except Exception:
+            # Não bloqueia o login se o banco recusar last_login (ex.: datetime naive).
+            pass
 
-        record_audit(user, 'login', 'Login realizado com sucesso.')
+        try:
+            record_audit(user, 'login', 'Login realizado com sucesso.')
+        except Exception:
+            pass
 
-        # Generate JWT Access token
         token = generate_jwt_token(user)
-
         user_data = UserSerializer(user).data
 
         return Response({

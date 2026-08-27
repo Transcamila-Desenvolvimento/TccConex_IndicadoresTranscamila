@@ -38,7 +38,7 @@ function formatDraftTime(iso: string | null): string {
 
 const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protocolo }) => {
   const isEditing = !!protocolo;
-  const clientesQuery = useProtocoloClientes();
+  const clientesQuery = useProtocoloClientes(isEditing ? undefined : 'protocolo');
   const createProtocolo = useCreateProtocoloEnvio();
   const updateProtocolo = useUpdateProtocoloEnvio();
   const draftQuery = useProtocoloEnvioDraft(!isEditing);
@@ -365,7 +365,9 @@ const NovoProtocoloModal: React.FC<NovoProtocoloModalProps> = ({ onClose, protoc
               >
                 <option value="">Selecione...</option>
                 {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nome}</option>
+                  <option key={c.id} value={c.id}>
+                    {c.nomeInterno || c.nome}{c.codigo ? ` (${c.codigo})` : ''}
+                  </option>
                 ))}
               </select>
             </label>

@@ -576,9 +576,10 @@ class PesquisaSatisfacaoTests(APITestCase):
         response = self.client.get('/api/sgq/pesquisas-satisfacao/clientes/', **ENV_HEADER)
         self.assertEqual(response.status_code, 200)
         valores = {item['value'] for item in response.data}
+        rotulos = {item['label'] for item in response.data}
         self.assertNotIn('OUTROS', valores)
-        self.assertTrue(any(v.casefold() == 'prentiss' for v in valores))
-        self.assertFalse(any(v.casefold() == 'ccab' for v in valores))
+        self.assertTrue(any('prentiss' in texto.casefold() for texto in valores | rotulos))
+        self.assertFalse(any('ccab' in texto.casefold() for texto in valores | rotulos))
 
     def test_nao_cria_pesquisa_manual_com_outros(self):
         response = self._create(cliente='OUTROS')

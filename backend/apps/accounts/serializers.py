@@ -41,10 +41,10 @@ def _apply_environment_rules(user):
 
 class UserSerializer(serializers.ModelSerializer):
     roleId = serializers.CharField(source='role_id')
-    lastLogin = serializers.DateTimeField(source='last_login', read_only=True)
-    googleEmail = serializers.EmailField(source='google_email', read_only=True)
-    googleLinkedAt = serializers.DateTimeField(source='google_linked_at', read_only=True)
-    googlePicture = serializers.URLField(source='google_picture_url', read_only=True)
+    lastLogin = serializers.DateTimeField(source='last_login', read_only=True, allow_null=True)
+    googleEmail = serializers.EmailField(source='google_email', read_only=True, allow_blank=True, allow_null=True)
+    googleLinkedAt = serializers.DateTimeField(source='google_linked_at', read_only=True, allow_null=True)
+    googlePicture = serializers.URLField(source='google_picture_url', read_only=True, allow_blank=True, allow_null=True)
     mustChangePassword = serializers.BooleanField(source='must_change_password', read_only=True)
 
     class Meta:
@@ -74,8 +74,8 @@ class LoginSerializer(serializers.Serializer):
 
 
 class UserDirectorySerializer(serializers.ModelSerializer):
-    googlePicture = serializers.URLField(source='google_picture_url', read_only=True)
-    googleEmail = serializers.EmailField(source='google_email', read_only=True)
+    googlePicture = serializers.URLField(source='google_picture_url', read_only=True, allow_blank=True, allow_null=True)
+    googleEmail = serializers.EmailField(source='google_email', read_only=True, allow_blank=True, allow_null=True)
 
     class Meta:
         model = User

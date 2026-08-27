@@ -26,6 +26,7 @@ const RHWorkspace = lazyWithMinDuration(() => import('../workspaces/RH/RHWorkspa
 const FaturamentoWorkspace = lazyWithMinDuration(() => import('../workspaces/Faturamento/FaturamentoWorkspace'));
 const MarketingWorkspace = lazyWithMinDuration(() => import('../workspaces/Marketing/MarketingWorkspace'));
 const LogisticaWorkspace = lazyWithMinDuration(() => import('../workspaces/Logistica/LogisticaWorkspace'));
+const FrotaWorkspace = lazyWithMinDuration(() => import('../workspaces/Frota/FrotaWorkspace'));
 const SGQWorkspace = lazyWithMinDuration(() => import('../workspaces/SGQ/SGQWorkspace'));
 // Autenticado, sem bloquear quem precisa trocar a senha (usado em /change-password).
 const ProtectedRouteAllowPasswordChange: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -100,6 +101,9 @@ const DashboardIndexRedirect: React.FC = () => {
   }
   if (selectedEnvironment === 'Logística') {
     return <Navigate to="/logistica" replace />;
+  }
+  if (selectedEnvironment === 'Frota') {
+    return <Navigate to="/frota" replace />;
   }
   
   return (
@@ -210,6 +214,12 @@ const AppRoutes: React.FC = () => {
           <Route path="logistica/*" element={
             <Suspense fallback={<PageLoader />}>
               <LogisticaWorkspace />
+            </Suspense>
+          } />
+
+          <Route path="frota/*" element={
+            <Suspense fallback={<PageLoader />}>
+              <FrotaWorkspace />
             </Suspense>
           } />
 

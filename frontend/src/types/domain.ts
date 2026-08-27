@@ -1024,11 +1024,15 @@ export interface FilialClienteProtocolo {
 export interface ClienteProtocolo {
   id: string;
   codigo: string;
+  loja: string;
+  tipoPessoa: 'F' | 'J';
   nome: string;
   razaoSocial: string;
   nomeFantasia: string;
   nomeInterno: string;
+  municipio: string;
   cnpj: string | null;
+  padraoProtocolo: boolean;
   emitirProtocoloCanhotos: boolean;
   considerarPesquisaSatisfacao: boolean;
   requerExpedicao: boolean;
@@ -1044,6 +1048,7 @@ export interface CnpjConsultaResult {
   cnpj: string;
   razaoSocial: string;
   nomeFantasia: string;
+  municipio?: string;
 }
 
 export interface ProtocoloNotaDraft {
@@ -1114,17 +1119,21 @@ export interface UpdateProtocoloPayload {
 
 export interface ClienteProtocoloPayload {
   nome?: string;
+  codigo?: string;
+  loja?: string;
+  tipoPessoa?: 'F' | 'J';
   razaoSocial?: string;
   nomeFantasia?: string;
   nomeInterno?: string;
+  municipio?: string;
   cnpj?: string | null;
+  padraoProtocolo?: boolean;
   emitirProtocoloCanhotos?: boolean;
   considerarPesquisaSatisfacao?: boolean;
   requerExpedicao?: boolean;
   exigeFilial?: boolean;
   emailsEnvio?: string | null;
   emailsCopia?: string | null;
-  /** Usado apenas na criação: nomes de filiais a cadastrar junto com o cliente. */
   filiaisIniciais?: string[];
 }
 

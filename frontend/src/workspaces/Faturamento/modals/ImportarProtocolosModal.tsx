@@ -187,7 +187,7 @@ const ImportarProtocolosModal: React.FC<ImportarProtocolosModalProps> = ({ onClo
                 <option value="">Selecione o cliente...</option>
                 {(clientesQuery.data ?? []).map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.nome}
+                    {c.nomeInterno || c.nome}{c.codigo ? ` (${c.codigo})` : ''}
                   </option>
                 ))}
               </select>

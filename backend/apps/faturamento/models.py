@@ -2,18 +2,48 @@ from django.conf import settings
 from django.db import models
 
 
+TIPO_PESSOA_FISICA = 'F'
+TIPO_PESSOA_JURIDICA = 'J'
+TIPO_PESSOA_CHOICES = [
+    (TIPO_PESSOA_JURIDICA, 'Pessoa jurídica'),
+    (TIPO_PESSOA_FISICA, 'Pessoa física'),
+]
+
+
 def format_nome_cadastro(value: str) -> str:
-    """Primeira letra de cada palavra maiúscula, demais minúsculas."""
+    """Razão social, fantasia e nome interno em maiúsculas."""
+    return ' '.join((value or '').split()).upper()
+
+
+def format_municipio_cadastro(value: str) -> str:
+    """Município com a primeira letra de cada palavra maiúscula."""
     return ' '.join(word[:1].upper() + word[1:].lower() for word in (value or '').split())
 
 
+def chave_cadastro_cliente(codigo: str, loja: str) -> str:
+    return f'{(codigo or "").strip()}|{(loja or "").strip()}'
+
+
 class ClienteProtocolo(models.Model):
-    codigo = models.CharField(max_length=20, unique=True, blank=True, default='', verbose_name='Código do cliente')
+    codigo = models.CharField(max_length=20, blank=True, default='', verbose_name='Código do cliente')
+    loja = models.CharField(max_length=10, blank=True, default='01', verbose_name='Loja')
+    tipo_pessoa = models.CharField(
+        max_length=1,
+        choices=TIPO_PESSOA_CHOICES,
+        default=TIPO_PESSOA_JURIDICA,
+        verbose_name='Tipo de pessoa',
+    )
     nome = models.CharField(max_length=200, verbose_name='Nome interno')
     razao_social = models.CharField(max_length=200, blank=True, default='', verbose_name='Razão social')
     nome_fantasia = models.CharField(max_length=200, blank=True, default='', verbose_name='Nome fantasia')
     nome_interno = models.CharField(max_length=200, blank=True, default='', verbose_name='Nome interno')
-    cnpj = models.CharField(max_length=20, blank=True, null=True)
+    municipio = models.CharField(max_length=150, blank=True, default='', verbose_name='Município')
+    cnpj = models.CharField(max_length=20, blank=True, null=True, verbose_name='CNPJ/CPF')
+    padrao_protocolo = models.BooleanField(
+        default=False,
+        verbose_name='Filial padrão para protocolos',
+        help_text='CNPJ/CPF deste cadastro aparece no PDF do protocolo.',
+    )
     emitir_protocolo_canhotos = models.BooleanField(
         default=True,
         verbose_name='Emitir protocolo de canhotos?',
@@ -35,9 +65,53 @@ class ClienteProtocolo(models.Model):
     data_atualizacao = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['nome']
+        ordering = ['codigo', 'loja', 'nome']
         verbose_name = 'Cliente'
         verbose_name_plural = 'Clientes'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['codigo', 'loja'],
+                name='faturamento_cliente_codigo_loja_uniq',
+                condition=~models.Q(codigo=''),
+            ),
+        ]
+
+    def cadastros_do_grupo(self):
+        if not self.codigo:
+            return ClienteProtocolo.objects.filter(pk=self.pk)
+        return ClienteProtocolo.objects.filter(codigo=self.codigo)
+
+    def _rotulos_do_cadastro(self) -> set[str]:
+        return {
+            valor.strip().casefold()
+            for valor in (
+                self.nome_interno,
+                self.nome,
+                self.razao_social,
+                self.nome_fantasia,
+            )
+            if (valor or '').strip()
+        }
+
+    def municipios_do_grupo(self) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        cadastros = self.cadastros_do_grupo().prefetch_related('filiais').order_by('loja', 'pk')
+        for cadastro in cadastros:
+            aliases = cadastro._rotulos_do_cadastro()
+            nomes = [cadastro.municipio, *[filial.nome for filial in cadastro.filiais.all()]]
+            for nome in nomes:
+                nome = (nome or '').strip()
+                key = nome.casefold()
+                # Município/filial igual ao nome do cliente não é unidade (ex.: cadastro "Teste").
+                if not nome or key in aliases or key in seen:
+                    continue
+                seen.add(key)
+                ordered.append(nome)
+        return ordered
+
+    def chave_cadastro(self) -> str:
+        return chave_cadastro_cliente(self.codigo, self.loja)
 
     def save(self, *args, **kwargs):
         razao = format_nome_cadastro(self.razao_social)
@@ -46,13 +120,22 @@ class ClienteProtocolo(models.Model):
         self.nome_fantasia = format_nome_cadastro(self.nome_fantasia)
         self.nome_interno = interno
         self.nome = interno or self.nome
+        self.municipio = format_municipio_cadastro(self.municipio)
+        self.codigo = (self.codigo or '').strip()
+        self.loja = (self.loja or '01').strip() or '01'
+        if self.tipo_pessoa not in {TIPO_PESSOA_FISICA, TIPO_PESSOA_JURIDICA}:
+            self.tipo_pessoa = TIPO_PESSOA_JURIDICA
+        self.padrao_protocolo = bool(self.emitir_protocolo_canhotos)
         super().save(*args, **kwargs)
         if not self.codigo:
             self.codigo = f'CLI-{self.pk:04d}'
             super().save(update_fields=['codigo'])
 
     def __str__(self):
-        return self.nome_interno or self.nome
+        base = self.nome_interno or self.nome
+        if self.codigo and self.loja:
+            return f'{base} ({self.codigo}-{self.loja})'
+        return base
 
 
 class FilialClienteProtocolo(models.Model):

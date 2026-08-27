@@ -3,9 +3,9 @@
 ADMIN_ENVIRONMENT = 'Administração/Manutenção'
 LEGACY_ADMIN_ENVIRONMENT = 'Administração'
 
-ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística'})
+ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota'})
 
-DEPRECATED_ENVIRONMENTS = frozenset({'Comercial', 'Frota'})
+DEPRECATED_ENVIRONMENTS = frozenset({'Comercial'})
 
 # Filiais operacionais às quais um usuário pode ser vinculado por ambiente
 # (permissões/escopo de dados). Não confundir com listas de domínio específicas,
@@ -58,6 +58,7 @@ ABAS_POR_AMBIENTE = {
     'SGQ': frozenset({'home', 'pesquisa-satisfacao'}),
     'Marketing': frozenset({'home', 'campanhas'}),
     'Logística': frozenset({'home', 'configuracoes'}),
+    'Frota': frozenset({'home'}),
 }
 
 # Funções liberáveis por ambiente para operadores (admin sempre tem todas).

@@ -6,9 +6,7 @@ import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
   getFaturamentoErrorMessage,
   useConsultarCnpj,
-  useCreateFilial,
   useCreateProtocoloCliente,
-  useDeleteFilial,
   useDeleteProtocoloCliente,
   useProtocoloClientes,
   useUpdateProtocoloCliente,
@@ -29,6 +27,14 @@ const formatNomeCadastro = (value: string) =>
     .trim()
     .split(/\s+/)
     .filter(Boolean)
+    .join(' ')
+    .toLocaleUpperCase('pt-BR');
+
+const formatMunicipioCadastro = (value: string) =>
+  value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
     .map((word) => word.charAt(0).toLocaleUpperCase('pt-BR') + word.slice(1).toLocaleLowerCase('pt-BR'))
     .join(' ');
 
@@ -39,11 +45,26 @@ const formatDateTime = (value?: string) => {
   return date.toLocaleString('pt-BR');
 };
 
+const formatCPF = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  return digits
+    .replace(/^(\d{3})(\d)/, '$1.$2')
+    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1-$2');
+};
+
+const formatDocumento = (value: string, tipo: 'F' | 'J') =>
+  tipo === 'F' ? formatCPF(value) : formatCNPJ(value);
+
 type ClienteForm = {
+  codigo: string;
+  loja: string;
+  tipoPessoa: 'F' | 'J';
   razaoSocial: string;
   nomeFantasia: string;
   nomeInterno: string;
   nomeInternoTouched: boolean;
+  municipio: string;
   cnpj: string;
   emitirProtocoloCanhotos: boolean;
   considerarPesquisaSatisfacao: boolean;
@@ -55,10 +76,14 @@ const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 const emptyForm: ClienteForm = {
+  codigo: '',
+  loja: '01',
+  tipoPessoa: 'J',
   razaoSocial: '',
   nomeFantasia: '',
   nomeInterno: '',
   nomeInternoTouched: false,
+  municipio: '',
   cnpj: '',
   emitirProtocoloCanhotos: false,
   considerarPesquisaSatisfacao: false,
@@ -74,35 +99,54 @@ const FaturamentoCadastroClientes: React.FC = () => {
   const createCliente = useCreateProtocoloCliente();
   const updateCliente = useUpdateProtocoloCliente();
   const deleteCliente = useDeleteProtocoloCliente();
-  const createFilial = useCreateFilial();
-  const deleteFilial = useDeleteFilial();
   const consultarCnpj = useConsultarCnpj();
 
   const [search, setSearch] = useState('');
+  const [filterCodigo, setFilterCodigo] = useState('');
+  const [filterLoja, setFilterLoja] = useState('');
+  const [filterMunicipio, setFilterMunicipio] = useState('');
+  const [filterPadrao, setFilterPadrao] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ClienteForm>(emptyForm);
-  const [novaFilial, setNovaFilial] = useState('');
-  const [novasFiliais, setNovasFiliais] = useState<string[]>([]);
 
   const clientes = clientesQuery.data ?? [];
+  const opcoesCodigo = useMemo(
+    () => [...new Set(clientes.map((c) => c.codigo).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })),
+    [clientes],
+  );
+  const opcoesLoja = useMemo(
+    () => [...new Set(clientes.map((c) => c.loja).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })),
+    [clientes],
+  );
+  const opcoesMunicipio = useMemo(
+    () => [...new Set(clientes.map((c) => c.municipio).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    [clientes],
+  );
   const filteredClientes = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return clientes;
     return clientes.filter((cliente) => {
+      if (filterCodigo && cliente.codigo !== filterCodigo) return false;
+      if (filterLoja && cliente.loja !== filterLoja) return false;
+      if (filterMunicipio && cliente.municipio !== filterMunicipio) return false;
+      if (filterPadrao === 'sim' && !cliente.padraoProtocolo) return false;
+      if (filterPadrao === 'nao' && cliente.padraoProtocolo) return false;
+      if (!term) return true;
       const haystack = [
         cliente.codigo,
+        cliente.loja,
         cliente.nomeInterno,
         cliente.nome,
         cliente.razaoSocial,
         cliente.nomeFantasia,
+        cliente.municipio,
         cliente.cnpj ?? '',
       ].join(' ').toLowerCase();
       return haystack.includes(term);
     });
-  }, [clientes, search]);
+  }, [clientes, search, filterCodigo, filterLoja, filterMunicipio, filterPadrao]);
 
   const totalPages = Math.max(1, Math.ceil(filteredClientes.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
@@ -116,29 +160,38 @@ const FaturamentoCadastroClientes: React.FC = () => {
     [clientes, editingId],
   );
 
+  const irmaosDoCodigo = useMemo(
+    () => clientes.filter((c) => c.codigo === form.codigo.trim() && c.id !== editingId),
+    [clientes, form.codigo, editingId],
+  );
+  const lojaComEmitir = irmaosDoCodigo.find((c) => c.emitirProtocoloCanhotos);
+  const lojaComPesquisa = irmaosDoCodigo.find((c) => c.considerarPesquisaSatisfacao);
+  const podeMostrarEmitir = form.emitirProtocoloCanhotos || !lojaComEmitir;
+  const podeMostrarPesquisa = form.considerarPesquisaSatisfacao || !lojaComPesquisa;
+
   const openNew = () => {
     setEditingId(null);
     setForm(emptyForm);
-    setNovasFiliais([]);
-    setNovaFilial('');
     setIsModalOpen(true);
   };
 
   const startEdit = (cliente: ClienteProtocolo) => {
     setEditingId(cliente.id);
     setForm({
+      codigo: cliente.codigo || '',
+      loja: cliente.loja || '01',
+      tipoPessoa: cliente.tipoPessoa === 'F' ? 'F' : 'J',
       razaoSocial: formatNomeCadastro(cliente.razaoSocial || cliente.nome),
       nomeFantasia: formatNomeCadastro(cliente.nomeFantasia || ''),
       nomeInterno: formatNomeCadastro(cliente.nomeInterno || cliente.nome),
       nomeInternoTouched: Boolean(cliente.nomeInterno && cliente.nomeInterno !== cliente.razaoSocial),
+      municipio: formatMunicipioCadastro(cliente.municipio || ''),
       cnpj: cliente.cnpj ?? '',
       emitirProtocoloCanhotos: cliente.emitirProtocoloCanhotos,
       considerarPesquisaSatisfacao: cliente.considerarPesquisaSatisfacao,
       requerExpedicao: cliente.requerExpedicao,
       exigeFilial: cliente.exigeFilial,
     });
-    setNovasFiliais([]);
-    setNovaFilial('');
     setIsModalOpen(true);
   };
 
@@ -146,13 +199,11 @@ const FaturamentoCadastroClientes: React.FC = () => {
     setIsModalOpen(false);
     setEditingId(null);
     setForm(emptyForm);
-    setNovaFilial('');
-    setNovasFiliais([]);
   };
 
   const handleConsultarCnpj = () => {
     const digits = form.cnpj.replace(/\D/g, '');
-    if (digits.length !== 14) {
+    if (form.tipoPessoa !== 'J' || digits.length !== 14) {
       alert('Informe um CNPJ com 14 dígitos para consultar.');
       return;
     }
@@ -166,6 +217,7 @@ const FaturamentoCadastroClientes: React.FC = () => {
             cnpj: data.cnpj || prev.cnpj,
             razaoSocial,
             nomeFantasia,
+            municipio: data.municipio ? formatMunicipioCadastro(data.municipio) : prev.municipio,
             nomeInterno: prev.nomeInternoTouched ? prev.nomeInterno : razaoSocial,
           };
         });
@@ -176,22 +228,31 @@ const FaturamentoCadastroClientes: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.codigo.trim()) {
+      alert('Informe o código do cliente.');
+      return;
+    }
+    if (!form.loja.trim()) {
+      alert('Informe a loja.');
+      return;
+    }
     if (!form.razaoSocial.trim() && !form.nomeInterno.trim()) {
       alert('Informe a razão social ou o nome interno.');
       return;
     }
     const payload = {
+      codigo: form.codigo.trim(),
+      loja: form.loja.trim(),
+      tipoPessoa: form.tipoPessoa,
       razaoSocial: formatNomeCadastro(form.razaoSocial),
       nomeFantasia: formatNomeCadastro(form.nomeFantasia),
       nomeInterno: formatNomeCadastro(form.nomeInterno.trim() || form.razaoSocial),
+      municipio: formatMunicipioCadastro(form.municipio),
       cnpj: form.cnpj.trim() || null,
-      emitirProtocoloCanhotos: form.emitirProtocoloCanhotos,
-      considerarPesquisaSatisfacao: form.considerarPesquisaSatisfacao,
-      requerExpedicao: form.emitirProtocoloCanhotos ? form.requerExpedicao : false,
-      exigeFilial: form.emitirProtocoloCanhotos ? form.exigeFilial : false,
-      ...(!editingId && form.emitirProtocoloCanhotos && form.exigeFilial && novasFiliais.length > 0
-        ? { filiaisIniciais: novasFiliais }
-        : {}),
+      emitirProtocoloCanhotos: Boolean(podeMostrarEmitir && form.emitirProtocoloCanhotos),
+      considerarPesquisaSatisfacao: Boolean(podeMostrarPesquisa && form.considerarPesquisaSatisfacao),
+      requerExpedicao: podeMostrarEmitir && form.emitirProtocoloCanhotos ? form.requerExpedicao : false,
+      exigeFilial: podeMostrarEmitir && form.emitirProtocoloCanhotos ? form.exigeFilial : false,
     };
     const callbacks = {
       onSuccess: () => closeModal(),
@@ -212,37 +273,8 @@ const FaturamentoCadastroClientes: React.FC = () => {
     });
   };
 
-  const handleAddFilial = () => {
-    const nome = novaFilial.trim();
-    if (!nome) return;
-    if (!editingId) {
-      if (novasFiliais.some((f) => f.toLowerCase() === nome.toLowerCase())) {
-        alert('Esta filial já foi adicionada.');
-        return;
-      }
-      setNovasFiliais((prev) => [...prev, nome]);
-      setNovaFilial('');
-      return;
-    }
-    createFilial.mutate({ clienteId: editingId, nome }, {
-      onSuccess: () => setNovaFilial(''),
-      onError: (err) => alert(getFaturamentoErrorMessage(err)),
-    });
-  };
-
-  const handleDeleteFilial = (filialId: string, filialNome: string) => {
-    if (!editingId || !window.confirm(`Excluir a filial "${filialNome}"?`)) return;
-    deleteFilial.mutate({ clienteId: editingId, filialId }, {
-      onError: (err) => alert(getFaturamentoErrorMessage(err)),
-    });
-  };
-
   const isPending = createCliente.isPending || updateCliente.isPending;
-  const filiaisExibidas = editingId
-    ? (editingCliente?.filiais ?? []).map((f) => ({ id: f.id, nome: f.nome, pendente: false }))
-    : novasFiliais.map((nome) => ({ id: nome, nome, pendente: true }));
   const mostrarConfigProtocolo = form.emitirProtocoloCanhotos;
-  const mostrarSecaoFiliais = mostrarConfigProtocolo && (form.exigeFilial || filiaisExibidas.length > 0);
 
   return (
     <div className="fat-list-compact" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '0 4px 4px' }}>
@@ -274,10 +306,41 @@ const FaturamentoCadastroClientes: React.FC = () => {
             </svg>
             <input
               type="text"
-              placeholder="Código, nome ou CNPJ..."
+              placeholder="Nome ou CNPJ/CPF..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             />
+          </div>
+          <div className="reports-select-wrapper" style={{ minWidth: '140px' }}>
+            <select value={filterCodigo} onChange={(e) => { setFilterCodigo(e.target.value); setPage(1); }}>
+              <option value="">Código: Todos</option>
+              {opcoesCodigo.map((codigo) => (
+                <option key={codigo} value={codigo}>{codigo}</option>
+              ))}
+            </select>
+          </div>
+          <div className="reports-select-wrapper" style={{ minWidth: '120px' }}>
+            <select value={filterLoja} onChange={(e) => { setFilterLoja(e.target.value); setPage(1); }}>
+              <option value="">Loja: Todas</option>
+              {opcoesLoja.map((loja) => (
+                <option key={loja} value={loja}>{loja}</option>
+              ))}
+            </select>
+          </div>
+          <div className="reports-select-wrapper" style={{ minWidth: '160px' }}>
+            <select value={filterMunicipio} onChange={(e) => { setFilterMunicipio(e.target.value); setPage(1); }}>
+              <option value="">Município: Todos</option>
+              {opcoesMunicipio.map((municipio) => (
+                <option key={municipio} value={municipio}>{municipio}</option>
+              ))}
+            </select>
+          </div>
+          <div className="reports-select-wrapper" style={{ minWidth: '140px' }}>
+            <select value={filterPadrao} onChange={(e) => { setFilterPadrao(e.target.value); setPage(1); }}>
+              <option value="">Padrão: Todos</option>
+              <option value="sim">Padrão: Sim</option>
+              <option value="nao">Padrão: Não</option>
+            </select>
           </div>
         </div>
         <div className="reports-filter-right">
@@ -297,17 +360,18 @@ const FaturamentoCadastroClientes: React.FC = () => {
               <thead>
                 <tr>
                   <th>Código</th>
+                  <th>Loja</th>
                   <th>Nome interno</th>
-                  <th>Nome fantasia</th>
-                  <th>Razão social</th>
-                  <th>CNPJ</th>
+                  <th>Município</th>
+                  <th>CNPJ/CPF</th>
+                  <th>Padrão</th>
                   <th style={{ width: 80 }} />
                 </tr>
               </thead>
               <tbody>
                 {canShowEmpty && filteredClientes.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
                       Nenhum cliente cadastrado.
                     </td>
                   </tr>
@@ -315,10 +379,11 @@ const FaturamentoCadastroClientes: React.FC = () => {
                   pagedClientes.map((cliente) => (
                     <tr key={cliente.id}>
                       <td><strong>{cliente.codigo || '—'}</strong></td>
+                      <td>{cliente.loja || '—'}</td>
                       <td>{cliente.nomeInterno || cliente.nome || '—'}</td>
-                      <td>{cliente.nomeFantasia || '—'}</td>
-                      <td>{cliente.razaoSocial || '—'}</td>
+                      <td>{cliente.municipio || '—'}</td>
                       <td>{cliente.cnpj || '—'}</td>
+                      <td>{cliente.padraoProtocolo ? 'Sim' : '—'}</td>
                       <td>
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button type="button" className="btn-icon" title="Editar cliente" onClick={() => startEdit(cliente)}>
@@ -429,22 +494,65 @@ const FaturamentoCadastroClientes: React.FC = () => {
             <form className="modal-body" onSubmit={handleSubmit}>
               <div className="form-grid two-cols">
                 <label>
-                  Código
-                  <input type="text" className="form-input" value={editingCliente?.codigo || 'Automático'} disabled />
+                  Código do cliente
+                  <input
+                    type="text"
+                    className="form-input"
+                    required
+                    value={form.codigo}
+                    onChange={(e) => setForm({ ...form, codigo: e.target.value })}
+                    disabled={!canManage}
+                    placeholder="Informe o código"
+                  />
                 </label>
                 <label>
-                  CNPJ
+                  Loja
+                  <input
+                    type="text"
+                    className="form-input"
+                    required
+                    value={form.loja}
+                    onChange={(e) => setForm({ ...form, loja: e.target.value })}
+                    disabled={!canManage}
+                    placeholder="01"
+                  />
+                </label>
+              </div>
+
+              <div className="form-grid two-cols" style={{ marginTop: '14px' }}>
+                <label>
+                  Pessoa
+                  <select
+                    className="form-input"
+                    value={form.tipoPessoa}
+                    disabled={!canManage}
+                    onChange={(e) => {
+                      const tipoPessoa = e.target.value === 'F' ? 'F' : 'J';
+                      setForm((prev) => ({
+                        ...prev,
+                        tipoPessoa,
+                        cnpj: formatDocumento(prev.cnpj, tipoPessoa),
+                      }));
+                    }}
+                  >
+                    <option value="J">Pessoa jurídica</option>
+                    <option value="F">Pessoa física</option>
+                  </select>
+                </label>
+                <label>
+                  {form.tipoPessoa === 'F' ? 'CPF' : 'CNPJ'}
                   <div style={{ position: 'relative' }}>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="00.000.000/0000-00"
+                      placeholder={form.tipoPessoa === 'F' ? '000.000.000-00' : '00.000.000/0000-00'}
                       value={form.cnpj}
-                      onChange={(e) => setForm({ ...form, cnpj: formatCNPJ(e.target.value) })}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleConsultarCnpj(); } }}
+                      onChange={(e) => setForm({ ...form, cnpj: formatDocumento(e.target.value, form.tipoPessoa) })}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && form.tipoPessoa === 'J') { e.preventDefault(); handleConsultarCnpj(); } }}
                       disabled={!canManage}
-                      style={{ paddingRight: '38px' }}
+                      style={{ paddingRight: form.tipoPessoa === 'J' ? '38px' : undefined }}
                     />
+                    {form.tipoPessoa === 'J' && (
                     <button
                       type="button"
                       className="btn-icon"
@@ -467,6 +575,7 @@ const FaturamentoCadastroClientes: React.FC = () => {
                         <i className="bi bi-search" />
                       )}
                     </button>
+                    )}
                   </div>
                 </label>
               </div>
@@ -526,6 +635,21 @@ const FaturamentoCadastroClientes: React.FC = () => {
                 </label>
               </div>
 
+              <div className="form-grid two-cols" style={{ marginTop: '14px' }}>
+                <label>
+                  Município
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form.municipio}
+                    onChange={(e) => setForm({ ...form, municipio: e.target.value })}
+                    onBlur={() => setForm((prev) => ({ ...prev, municipio: formatMunicipioCadastro(prev.municipio) }))}
+                    disabled={!canManage}
+                    placeholder="Município deste cadastro"
+                  />
+                </label>
+              </div>
+
               {editingId && (
                 <div className="form-grid two-cols" style={{ marginTop: '14px' }}>
                   <label>
@@ -539,11 +663,8 @@ const FaturamentoCadastroClientes: React.FC = () => {
                 </div>
               )}
 
-              <label
+              <div
                 style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '8px',
                   marginTop: '16px',
                   padding: '10px 14px',
                   background: '#f8fafc',
@@ -552,141 +673,111 @@ const FaturamentoCadastroClientes: React.FC = () => {
                   fontSize: '13px',
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={form.emitirProtocoloCanhotos}
-                  disabled={!canManage}
-                  onChange={(e) => setForm({ ...form, emitirProtocoloCanhotos: e.target.checked })}
-                  style={{ marginTop: '2px' }}
-                />
-                <span>
-                  <strong>Emitir protocolo de canhotos?</strong>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                    Se desligada, o cliente some da emissão sem apagar protocolos já feitos.
-                  </div>
-                </span>
-              </label>
-
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '8px',
-                  marginTop: '10px',
-                  padding: '10px 14px',
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={form.considerarPesquisaSatisfacao}
-                  disabled={!canManage}
-                  onChange={(e) => setForm({ ...form, considerarPesquisaSatisfacao: e.target.checked })}
-                  style={{ marginTop: '2px' }}
-                />
-                <span>
-                  <strong>Considerar pesquisa de satisfação?</strong>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                    Se desligada, o cliente some do lançamento no SGQ sem apagar pesquisas já feitas.
-                  </div>
-                </span>
-              </label>
-
-              {mostrarConfigProtocolo && (
-                <div className="form-grid two-cols" style={{ marginTop: '14px' }}>
-                  <label
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '10px 14px',
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                    }}
-                  >
+                {podeMostrarEmitir ? (
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                     <input
                       type="checkbox"
-                      checked={form.requerExpedicao}
+                      checked={form.emitirProtocoloCanhotos}
                       disabled={!canManage}
-                      onChange={(e) => setForm({ ...form, requerExpedicao: e.target.checked })}
+                      onChange={(e) => setForm({ ...form, emitirProtocoloCanhotos: e.target.checked })}
+                      style={{ marginTop: '2px' }}
                     />
-                    Requer expedição
+                    <span>
+                      <strong>Emitir protocolo de canhotos?</strong>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                        Se desligada, esta loja some da emissão sem apagar protocolos já feitos.
+                        Ligada, o CNPJ/CPF deste cadastro é o que aparece no PDF (fica a filial padrão do código).
+                      </div>
+                    </span>
                   </label>
-                  <label
+                ) : (
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+                    Emitir protocolo já está ativo na loja {lojaComEmitir?.loja}. Desative nessa loja para ligar nesta.
+                  </p>
+                )}
+
+                {mostrarConfigProtocolo && (
+                  <div
                     style={{
                       display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '10px 14px',
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      fontSize: '13px',
+                      flexWrap: 'wrap',
+                      gap: '16px 24px',
+                      marginTop: '10px',
+                      marginLeft: '24px',
+                      paddingTop: '10px',
+                      borderTop: '1px solid #e2e8f0',
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={form.exigeFilial}
-                      disabled={!canManage}
-                      onChange={(e) => setForm({ ...form, exigeFilial: e.target.checked })}
-                    />
-                    Exigir filial do cliente
-                  </label>
-                </div>
-              )}
-
-              {mostrarSecaoFiliais && (
-                <div style={{ marginTop: '16px' }}>
-                  <label>Filiais cadastradas</label>
-                  {filiaisExibidas.length === 0 ? (
-                    <p className="text-muted" style={{ fontStyle: 'italic', margin: '8px 0 10px' }}>Nenhuma filial cadastrada ainda.</p>
-                  ) : (
-                    <div className="tag-list" style={{ marginTop: '8px', marginBottom: '10px' }}>
-                      {filiaisExibidas.map((filial) => (
-                        <span key={filial.id} className="tag-chip">
-                          <span>{filial.nome}</span>
-                          {canManage && (
-                            <button
-                              type="button"
-                              onClick={() => (filial.pendente
-                                ? setNovasFiliais((prev) => prev.filter((f) => f !== filial.nome))
-                                : handleDeleteFilial(filial.id, filial.nome))}
-                              aria-label={`Remover ${filial.nome}`}
-                            >
-                              ×
-                            </button>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {canManage && (
-                    <div className="protocolo-nf-row">
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <input
-                        type="text"
-                        className="form-input"
-                        placeholder="Nome da nova filial..."
-                        value={novaFilial}
-                        onChange={(e) => setNovaFilial(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFilial(); } }}
+                        type="checkbox"
+                        checked={form.requerExpedicao}
+                        disabled={!canManage}
+                        onChange={(e) => setForm({ ...form, requerExpedicao: e.target.checked })}
                       />
-                      <button
-                        type="button"
-                        className="reports-action-btn secondary"
-                        style={{ height: '38px', flexShrink: 0 }}
-                        onClick={handleAddFilial}
-                        disabled={createFilial.isPending || !novaFilial.trim()}
-                      >
-                        Adicionar
-                      </button>
+                      Requer expedição
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={form.exigeFilial}
+                        disabled={!canManage}
+                        onChange={(e) => setForm({ ...form, exigeFilial: e.target.checked })}
+                      />
+                      Exigir filial do cliente no protocolo
+                    </label>
+                    {form.exigeFilial && (
+                      <p style={{ flexBasis: '100%', fontSize: '12px', color: '#64748b', margin: 0 }}>
+                        No protocolo, as filiais vêm dos municípios cadastrados nas lojas deste código.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {podeMostrarPesquisa ? (
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px',
+                    marginTop: '10px',
+                    padding: '10px 14px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={form.considerarPesquisaSatisfacao}
+                    disabled={!canManage}
+                    onChange={(e) => setForm({ ...form, considerarPesquisaSatisfacao: e.target.checked })}
+                    style={{ marginTop: '2px' }}
+                  />
+                  <span>
+                    <strong>Considerar pesquisa de satisfação?</strong>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                      Se desligada, o cliente some do lançamento no SGQ sem apagar pesquisas já feitas.
                     </div>
-                  )}
-                </div>
+                  </span>
+                </label>
+              ) : (
+                <p
+                  style={{
+                    marginTop: '10px',
+                    marginBottom: 0,
+                    padding: '10px 14px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    color: '#64748b',
+                  }}
+                >
+                  Pesquisa de satisfação já está ativa na loja {lojaComPesquisa?.loja}. Desative nessa loja para ligar nesta.
+                </p>
               )}
 
               <div className="modal-footer" style={{ marginTop: '20px' }}>

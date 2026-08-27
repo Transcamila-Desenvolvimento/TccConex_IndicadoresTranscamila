@@ -35,6 +35,8 @@ export const ABA_ITEMS = [
 
   { module: 'Logística', key: 'home', label: 'Home Logística', path: '/logistica' },
   { module: 'Logística', key: 'configuracoes', label: 'Configurações gerais', path: '/logistica/configuracoes' },
+
+  { module: 'Frota', key: 'home', label: 'Home Frota', path: '/frota' },
 ] as const;
 
 export type AbaKey = (typeof ABA_ITEMS)[number]['key'];

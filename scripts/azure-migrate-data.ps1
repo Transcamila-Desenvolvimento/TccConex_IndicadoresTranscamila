@@ -83,7 +83,7 @@ function Show-SshInstructions {
     Write-Host '   Cole estes comandos:' -ForegroundColor Yellow
     Write-Host ''
     Write-Host '   cd /home/site/wwwroot'
-    Write-Host '   export PYTHONPATH=/home/site/wwwroot/.python_packages/lib/site-packages'
+    Write-Host '   export PYTHONPATH=/home/site/python_packages/lib/site-packages'
     Write-Host '   python manage.py loaddata dump.json'
     Write-Host '   rm dump.json'
     Write-Host ''

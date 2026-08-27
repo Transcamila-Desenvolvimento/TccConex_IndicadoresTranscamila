@@ -114,8 +114,8 @@ def _match_expedicao(value: str) -> list[str]:
 
 
 def _filiais_index(cliente: ClienteProtocolo) -> dict[str, str]:
-    """Mapa nome-normalizado → nome oficial cadastrado no cliente."""
-    return {_norm(f.nome): f.nome for f in cliente.filiais.all()}
+    """Mapa nome-normalizado → município/filial do grupo (código do cliente)."""
+    return {_norm(nome): nome for nome in cliente.municipios_do_grupo()}
 
 
 def _resolver_filial(
@@ -784,8 +784,7 @@ def import_protocolos_from_workbook(
             criados += 1
 
         if not dry_run and criados and max_numero > cliente.ultimo_numero_protocolo:
-            cliente.ultimo_numero_protocolo = max_numero
-            cliente.save(update_fields=['ultimo_numero_protocolo'])
+            ClienteProtocolo.objects.filter(codigo=cliente.codigo).update(ultimo_numero_protocolo=max_numero)
 
         # Só erros estruturais (data/NF inválida) fazem rollback do lote.
         rolled_back = bool(erros and not dry_run)

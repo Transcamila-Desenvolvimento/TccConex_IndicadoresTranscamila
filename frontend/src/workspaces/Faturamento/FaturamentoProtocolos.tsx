@@ -16,7 +16,7 @@ import {
   useProtocoloEnvioDraft,
   useProtocolosEnvio,
 } from '../../hooks/useFaturamentoProtocolos';
-import type { ProtocoloEnvio, ProtocoloOrdering, ProtocoloQueryParams } from '../../types/domain';
+import type { ClienteProtocolo, ProtocoloEnvio, ProtocoloOrdering, ProtocoloQueryParams } from '../../types/domain';
 import NovoProtocoloModal from './modals/NovoProtocoloModal';
 import ImportarProtocolosModal from './modals/ImportarProtocolosModal';
 
@@ -31,6 +31,27 @@ const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 type SortField = 'protocolo' | 'data';
+
+/** Uma opção por código de cliente (várias lojas não repetem o nome no filtro). */
+function clientesUnicosParaFiltro(clientes: ClienteProtocolo[]): ClienteProtocolo[] {
+  const ordenados = [...clientes].sort((a, b) => {
+    if (a.emitirProtocoloCanhotos !== b.emitirProtocoloCanhotos) {
+      return a.emitirProtocoloCanhotos ? -1 : 1;
+    }
+    return (a.loja || '').localeCompare(b.loja || '', 'pt-BR', { numeric: true });
+  });
+  const visto = new Set<string>();
+  const unicos: ClienteProtocolo[] = [];
+  for (const cliente of ordenados) {
+    const chave = (cliente.codigo || '').trim() || `id:${cliente.id}`;
+    if (visto.has(chave)) continue;
+    visto.add(chave);
+    unicos.push(cliente);
+  }
+  return unicos.sort((a, b) =>
+    (a.nomeInterno || a.nome).localeCompare(b.nomeInterno || b.nome, 'pt-BR'),
+  );
+}
 
 function nextOrdering(field: SortField, current: ProtocoloOrdering | undefined): ProtocoloOrdering {
   if (field === 'protocolo') {
@@ -66,6 +87,10 @@ const FaturamentoProtocolos: React.FC = () => {
   const protocolosQuery = useProtocolosEnvio(filters);
   const { canShowEmpty } = useAsyncQueryState(protocolosQuery);
   const clientesQuery = useProtocoloClientes();
+  const clientesFiltro = useMemo(
+    () => clientesUnicosParaFiltro(clientesQuery.data ?? []),
+    [clientesQuery.data],
+  );
   const draftQuery = useProtocoloEnvioDraft(canCreateProtocolos);
   const hasProtocoloDraft = Boolean(draftQuery.data?.hasDraft);
   const bulkDelete = useBulkDeleteProtocolos();
@@ -324,8 +349,10 @@ const FaturamentoProtocolos: React.FC = () => {
               onChange={(e) => setFilters((prev) => ({ ...prev, cliente: e.target.value || undefined, page: 1 }))}
             >
               <option value="">Cliente: Todos</option>
-              {(clientesQuery.data ?? []).map((c) => (
-                <option key={c.id} value={c.nome}>{c.nome}</option>
+              {clientesFiltro.map((c) => (
+                <option key={c.codigo || c.id} value={c.codigo || c.nome}>
+                  {c.nomeInterno || c.nome}
+                </option>
               ))}
             </select>
           </div>

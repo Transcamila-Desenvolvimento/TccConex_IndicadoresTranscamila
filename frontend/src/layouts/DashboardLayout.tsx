@@ -400,6 +400,17 @@ const DashboardLayout: React.FC = () => {
         action: () => navigate('/logistica'),
         show: selectedEnvironment === 'Logística' && canAba('Logística', 'home')
       },
+      {
+        title: "Home Frota",
+        path: "Frota / Home",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+          </svg>
+        ),
+        action: () => navigate('/frota'),
+        show: selectedEnvironment === 'Frota' && canAba('Frota', 'home')
+      },
     ];
 
     return list.filter(f => f.show);
@@ -458,6 +469,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/sgq')) return env;
     if (path.startsWith('/logistica/configuracoes')) return `${env} / Configurações gerais`;
     if (path.startsWith('/logistica')) return env;
+    if (path.startsWith('/frota')) return env;
     if (path.startsWith('/marketing/campanhas')) return `${env} / Calendario Transcamila`;
     if (path.startsWith('/marketing')) return env;
     if (path.startsWith('/admin/usuarios')) return `Administração / Controle Geral`;
@@ -492,7 +504,7 @@ const DashboardLayout: React.FC = () => {
         
         <nav className="sidebar-nav">
           {/* General Home/Dashboard — oculto nos ambientes com home própria */}
-          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && selectedEnvironment !== 'Faturamento' && selectedEnvironment !== 'SGQ' && selectedEnvironment !== 'Marketing' && selectedEnvironment !== 'Logística' && !isAdminEnvironment(selectedEnvironment) && (
+          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && selectedEnvironment !== 'Faturamento' && selectedEnvironment !== 'SGQ' && selectedEnvironment !== 'Marketing' && selectedEnvironment !== 'Logística' && selectedEnvironment !== 'Frota' && !isAdminEnvironment(selectedEnvironment) && (
             <Link 
               to="/" 
               className={`nav-btn ${isRouteActive('/') ? 'active' : ''}`} 
@@ -1030,6 +1042,23 @@ const DashboardLayout: React.FC = () => {
                   <div className="nav-btn-left">
                     <NavIcon name="gear" />
                     <span className="nav-text">Configurações gerais</span>
+                  </div>
+                </Link>
+                )}
+              </div>
+            )}
+
+            {selectedEnvironment === 'Frota' && (
+              <div id="sidebar-frota-group" style={{ width: '100%' }}>
+                {canAba('Frota', 'home') && (
+                <Link
+                  to="/frota"
+                  className={`nav-btn ${location.pathname === '/frota' || location.pathname === '/frota/' ? 'active' : ''}`}
+                  data-tooltip="Home Frota"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="house" />
+                    <span className="nav-text">Home Frota</span>
                   </div>
                 </Link>
                 )}

@@ -75,7 +75,7 @@ class FaturamentoProtocoloTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
         self.cliente.refresh_from_db()
-        self.assertEqual(self.cliente.nome, 'Cliente Teste')
+        self.assertEqual(self.cliente.nome, 'CLIENTE TESTE')
 
     def test_operador_nao_pode_excluir_cliente(self):
         response = self.api.delete(
@@ -88,14 +88,174 @@ class FaturamentoProtocoloTests(TestCase):
     def test_admin_pode_criar_cliente(self):
         response = self.api.post(
             '/api/faturamento/protocolo-clientes/',
-            {'nome': 'Cliente Admin', 'requerExpedicao': False},
+            {'nome': 'Cliente Admin', 'codigo': 'C001', 'loja': '01', 'requerExpedicao': False, 'emitirProtocoloCanhotos': True},
             format='json',
             **auth_headers(self.admin, 'Faturamento'),
         )
         self.assertEqual(response.status_code, 201)
-        cliente = ClienteProtocolo.objects.get(nome='Cliente Admin')
-        self.assertTrue(cliente.codigo.startswith('CLI-'))
-        self.assertEqual(cliente.nome_interno, 'Cliente Admin')
+        cliente = ClienteProtocolo.objects.get(nome='CLIENTE ADMIN')
+        self.assertEqual(cliente.codigo, 'C001')
+        self.assertEqual(cliente.loja, '01')
+        self.assertEqual(cliente.nome_interno, 'CLIENTE ADMIN')
+        self.assertTrue(cliente.padrao_protocolo)
+
+    def test_codigo_agrupa_lojas_e_define_padrao_unico(self):
+        matriz = self.api.post(
+            '/api/faturamento/protocolo-clientes/',
+            {
+                'codigo': 'G10',
+                'loja': '01',
+                'nomeInterno': 'Grupo Matriz',
+                'municipio': 'Curitiba',
+                'cnpj': '00.000.000/0001-91',
+                'tipoPessoa': 'J',
+                'emitirProtocoloCanhotos': True,
+                'exigeFilial': True,
+            },
+            format='json',
+            **auth_headers(self.admin, 'Faturamento'),
+        )
+        filial = self.api.post(
+            '/api/faturamento/protocolo-clientes/',
+            {
+                'codigo': 'G10',
+                'loja': '02',
+                'nomeInterno': 'Grupo Filial',
+                'municipio': 'Londrina',
+                'cnpj': '00.000.000/0002-72',
+                'tipoPessoa': 'J',
+                'emitirProtocoloCanhotos': False,
+            },
+            format='json',
+            **auth_headers(self.admin, 'Faturamento'),
+        )
+        self.assertEqual(matriz.status_code, 201, matriz.data)
+        self.assertEqual(filial.status_code, 201, filial.data)
+        matriz_obj = ClienteProtocolo.objects.get(pk=matriz.data['id'])
+        filial_obj = ClienteProtocolo.objects.get(pk=filial.data['id'])
+        matriz_obj.refresh_from_db()
+        filial_obj.refresh_from_db()
+        self.assertTrue(matriz_obj.padrao_protocolo)
+        self.assertTrue(matriz_obj.emitir_protocolo_canhotos)
+        self.assertFalse(filial_obj.padrao_protocolo)
+        self.assertFalse(filial_obj.emitir_protocolo_canhotos)
+        self.assertEqual(set(filial_obj.municipios_do_grupo()), {'Curitiba', 'Londrina'})
+
+        recusa = self.api.patch(
+            f'/api/faturamento/protocolo-clientes/{filial_obj.pk}/',
+            {'emitirProtocoloCanhotos': True},
+            format='json',
+            **auth_headers(self.admin, 'Faturamento'),
+        )
+        self.assertEqual(recusa.status_code, 400, recusa.data)
+
+        self.api.patch(
+            f'/api/faturamento/protocolo-clientes/{matriz_obj.pk}/',
+            {'emitirProtocoloCanhotos': False},
+            format='json',
+            **auth_headers(self.admin, 'Faturamento'),
+        )
+        libera = self.api.patch(
+            f'/api/faturamento/protocolo-clientes/{filial_obj.pk}/',
+            {'emitirProtocoloCanhotos': True},
+            format='json',
+            **auth_headers(self.admin, 'Faturamento'),
+        )
+        self.assertEqual(libera.status_code, 200, libera.data)
+        matriz_obj.refresh_from_db()
+        filial_obj.refresh_from_db()
+        self.assertFalse(matriz_obj.emitir_protocolo_canhotos)
+        self.assertTrue(filial_obj.emitir_protocolo_canhotos)
+
+        lista = self.api.get(
+            '/api/faturamento/protocolo-clientes/?uso=protocolo',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        ids = {item['id'] for item in lista.data}
+        self.assertIn(str(filial_obj.pk), ids)
+        self.assertNotIn(str(matriz_obj.pk), ids)
+
+        protocolo = self.api.post(
+            '/api/faturamento/protocolos/',
+            {
+                'data': '2026-07-10',
+                'clienteId': filial_obj.pk,
+                'notaFiscal': '5511',
+                'notasFiliais': {'5511': 'Londrina'},
+            },
+            format='json',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(protocolo.status_code, 201, protocolo.data)
+        self.assertEqual(protocolo.data['notasFiliais']['5511'], 'Londrina')
+
+    def test_filiais_do_protocolo_ignoram_nome_do_cliente(self):
+        teste = ClienteProtocolo.objects.create(
+            codigo='6991',
+            loja='01',
+            nome='Teste',
+            nome_interno='Teste',
+            municipio='Teste',
+            exige_filial=True,
+        )
+        ClienteProtocolo.objects.create(
+            codigo='6991',
+            loja='02',
+            nome='Teste Ibipora',
+            nome_interno='Teste Ibipora',
+            municipio='Ibiporã',
+        )
+        ClienteProtocolo.objects.create(
+            codigo='6991',
+            loja='03',
+            nome='Teste Rondonopolis',
+            nome_interno='Teste Rondonopolis',
+            municipio='Rondonópolis',
+        )
+        FilialClienteProtocolo.objects.create(cliente=teste, nome='Teste')
+        self.assertEqual(teste.municipios_do_grupo(), ['Ibiporã', 'Rondonópolis'])
+
+    def test_pesquisa_satisfacao_exclusiva_por_codigo(self):
+        primeira = self.api.post(
+            '/api/faturamento/protocolo-clientes/',
+            {
+                'codigo': 'PESQ1',
+                'loja': '01',
+                'nomeInterno': 'Pesquisa Um',
+                'considerarPesquisaSatisfacao': True,
+            },
+            format='json',
+            **auth_headers(self.admin, 'Faturamento'),
+        )
+        segunda = self.api.post(
+            '/api/faturamento/protocolo-clientes/',
+            {
+                'codigo': 'PESQ1',
+                'loja': '02',
+                'nomeInterno': 'Pesquisa Dois',
+                'considerarPesquisaSatisfacao': True,
+            },
+            format='json',
+            **auth_headers(self.admin, 'Faturamento'),
+        )
+        self.assertEqual(primeira.status_code, 201, primeira.data)
+        self.assertEqual(segunda.status_code, 400, segunda.data)
+
+    def test_recusa_codigo_loja_duplicados(self):
+        self.api.post(
+            '/api/faturamento/protocolo-clientes/',
+            {'codigo': 'DUP1', 'loja': '01', 'nome': 'Primeiro'},
+            format='json',
+            **auth_headers(self.admin, 'Faturamento'),
+        )
+        response = self.api.post(
+            '/api/faturamento/protocolo-clientes/',
+            {'codigo': 'DUP1', 'loja': '01', 'nome': 'Segundo'},
+            format='json',
+            **auth_headers(self.admin, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 400)
+
 
     def test_lista_clientes_protocolo_omite_flag_desligada(self):
         self.other_cliente.emitir_protocolo_canhotos = False
@@ -244,6 +404,47 @@ class FaturamentoProtocoloTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['count'], 1)
+
+    def test_listar_protocolos_filtra_por_codigo_do_grupo(self):
+        loja1 = ClienteProtocolo.objects.create(
+            codigo='006991',
+            loja='01',
+            nome='Teste',
+            nome_interno='Teste',
+        )
+        loja2 = ClienteProtocolo.objects.create(
+            codigo='006991',
+            loja='02',
+            nome='Teste',
+            nome_interno='Teste',
+        )
+        ProtocoloEnvio.objects.create(
+            data='2026-07-10',
+            cliente=loja1,
+            nota_fiscal='1',
+            usuario=self.user,
+            usuario_nome=self.user.name,
+        )
+        ProtocoloEnvio.objects.create(
+            data='2026-07-10',
+            cliente=loja2,
+            nota_fiscal='2',
+            usuario=self.user,
+            usuario_nome=self.user.name,
+        )
+        ProtocoloEnvio.objects.create(
+            data='2026-07-10',
+            cliente=self.other_cliente,
+            nota_fiscal='3',
+            usuario=self.user,
+            usuario_nome=self.user.name,
+        )
+        response = self.api.get(
+            '/api/faturamento/protocolos/?cliente=006991',
+            **auth_headers(self.user, 'Faturamento'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 2)
 
     def test_excluir_cliente_com_protocolo_retorna_400(self):
         ProtocoloEnvio.objects.create(
@@ -408,12 +609,14 @@ class FaturamentoProtocoloTests(TestCase):
         )
         response = self.api.post(
             '/api/faturamento/protocolo-clientes/',
-            {'nome': 'Cliente do Operador', 'requerExpedicao': False},
+            {'nome': 'Cliente do Operador', 'codigo': 'OP01', 'loja': '01', 'requerExpedicao': False},
             format='json',
             **auth_headers(operador, 'Faturamento'),
         )
-        self.assertEqual(response.status_code, 201)
-        self.assertTrue(ClienteProtocolo.objects.filter(nome='Cliente do Operador').exists())
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertTrue(
+            ClienteProtocolo.objects.filter(codigo='OP01', loja='01').exists()
+        )
 
     def test_excluir_ultimo_protocolo_devolve_numero_para_sequencia(self):
         self._criar_protocolo('4001')

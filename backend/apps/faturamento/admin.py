@@ -2,7 +2,14 @@ from django.contrib import admin
 
 from .models import ClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft
 
-admin.site.register(ClienteProtocolo)
+
+@admin.register(ClienteProtocolo)
+class ClienteProtocoloAdmin(admin.ModelAdmin):
+    list_display = ('codigo', 'loja', 'nome_interno', 'municipio', 'cnpj', 'padrao_protocolo')
+    search_fields = ('codigo', 'loja', 'nome_interno', 'cnpj', 'municipio')
+    list_filter = ('tipo_pessoa', 'padrao_protocolo', 'emitir_protocolo_canhotos')
+
+
 admin.site.register(ProtocoloEnvio)
 
 

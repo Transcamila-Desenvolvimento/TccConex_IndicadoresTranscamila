@@ -34,7 +34,9 @@ const LoginPage: React.FC = () => {
       }
     } catch (err) {
       if (err instanceof Error && err.message === 'SERVER_OFFLINE') {
-        setError('Servidor indisponível. Inicie o backend com start.ps1 ou runserver 8001.');
+        setError('Servidor indisponível. Confira a URL do App Service ou inicie o backend local.');
+      } else if (err instanceof Error && err.message === 'LOGIN_SERVER_ERROR') {
+        setError('O servidor recusou o login após autenticar. Tente novamente.');
       } else {
         setError('Erro ao efetuar login. Tente novamente.');
       }

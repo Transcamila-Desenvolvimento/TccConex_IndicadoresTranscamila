@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'apps.sgq',
     'apps.marketing',
     'apps.logistica',
+    'apps.frota',
 ]
 
 MIDDLEWARE = [
@@ -176,6 +177,27 @@ else:
 # Necessário para o Django aceitar POSTs (ex.: /admin/) atrás de um domínio HTTPS do App Service.
 _csrf_trusted_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted_env.split(',') if o.strip()]
+
+def _https_origin(host: str) -> str:
+    host = (host or '').split(':')[0].strip().lower()
+    return f'https://{host}' if host else ''
+
+# App Service tem hostname canônico e hostname regional (*.brazilsouth-01.azurewebsites.net).
+_azure_origins: list[str] = []
+if _website_hostname:
+    origin = _https_origin(_website_hostname)
+    if origin:
+        _azure_origins.append(origin)
+_site_name = os.environ.get('WEBSITE_SITE_NAME', '').strip()
+if _site_name:
+    origin = _https_origin(f'{_site_name}.azurewebsites.net')
+    if origin and origin not in _azure_origins:
+        _azure_origins.append(origin)
+for origin in _azure_origins:
+    if origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(origin)
+    if _cors_origins_env and origin not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(origin)
 
 # Internationalization
 LANGUAGE_CODE = 'pt-br'
