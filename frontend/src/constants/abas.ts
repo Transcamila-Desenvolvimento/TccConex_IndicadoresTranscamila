@@ -52,7 +52,7 @@ export function getAllowedAbas(user: User | null, module: string): Set<string> {
   if (module === 'Indicadores') {
     return getAllowedIndicadores(user) as Set<string>;
   }
-  const catalog = abasDoModulo(module).map((item) => item.key);
+  const catalog = abasDoModulo(module).map((item) => item.key as string);
   if (user?.roleId === '1' || catalog.length === 0) return new Set(catalog);
   const selected = (user?.abas?.[module] ?? []).filter((key) => catalog.includes(key));
   if (selected.length === 0) return new Set(catalog);

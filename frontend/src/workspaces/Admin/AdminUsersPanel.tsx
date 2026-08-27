@@ -187,7 +187,7 @@ const AdminUsersPanel: React.FC = () => {
     const nextAbas: Record<string, string[]> = {};
     MODULE_ACCESS_GROUPS.forEach((group) => {
       if (group.module === 'Indicadores') return;
-      const catalog = abasDoModulo(group.module).map((item) => item.key);
+      const catalog = abasDoModulo(group.module).map((item) => item.key as string);
       nextAbas[group.module] = (user.abas?.[group.module] ?? []).filter((key) => catalog.includes(key));
     });
     setSelectedAbas(nextAbas);
@@ -234,7 +234,7 @@ const AdminUsersPanel: React.FC = () => {
     const abas: Record<string, string[]> = {};
     for (const group of MODULE_ACCESS_GROUPS) {
       if (group.module === 'Indicadores' || !environments.includes(group.module)) continue;
-      const catalog = abasDoModulo(group.module).map((item) => item.key);
+      const catalog = abasDoModulo(group.module).map((item) => item.key as string);
       const keys = (selectedAbas[group.module] ?? []).filter((key) => catalog.includes(key));
       if (keys.length > 0 && keys.length < catalog.length) {
         abas[group.module] = catalog.includes(HOME_ABA_KEY) && !keys.includes(HOME_ABA_KEY)
@@ -368,7 +368,7 @@ const AdminUsersPanel: React.FC = () => {
 
   const handleToggleAba = (module: string, key: string) => {
     if (key === HOME_ABA_KEY) return;
-    const catalog = abasDoModulo(module).map((item) => item.key);
+    const catalog = abasDoModulo(module).map((item) => item.key as string);
     const current = (selectedAbas[module]?.length ?? 0) > 0 ? selectedAbas[module] : catalog;
     const turningOff = current.includes(key);
     if (turningOff && current.length <= 1) return;
