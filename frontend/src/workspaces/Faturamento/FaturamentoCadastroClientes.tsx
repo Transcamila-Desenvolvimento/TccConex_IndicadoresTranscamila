@@ -56,6 +56,12 @@ const formatCPF = (value: string) => {
 const formatDocumento = (value: string, tipo: 'F' | 'J') =>
   tipo === 'F' ? formatCPF(value) : formatCNPJ(value);
 
+const lojaControlaFlags = (loja: string) => {
+  const texto = loja.trim();
+  if (/^\d+$/.test(texto)) return Number(texto) === 1;
+  return texto === '01';
+};
+
 type ClienteForm = {
   codigo: string;
   loja: string;
@@ -159,15 +165,7 @@ const FaturamentoCadastroClientes: React.FC = () => {
     () => clientes.find((c) => c.id === editingId) ?? null,
     [clientes, editingId],
   );
-
-  const irmaosDoCodigo = useMemo(
-    () => clientes.filter((c) => c.codigo === form.codigo.trim() && c.id !== editingId),
-    [clientes, form.codigo, editingId],
-  );
-  const lojaComEmitir = irmaosDoCodigo.find((c) => c.emitirProtocoloCanhotos);
-  const lojaComPesquisa = irmaosDoCodigo.find((c) => c.considerarPesquisaSatisfacao);
-  const podeMostrarEmitir = form.emitirProtocoloCanhotos || !lojaComEmitir;
-  const podeMostrarPesquisa = form.considerarPesquisaSatisfacao || !lojaComPesquisa;
+  const podeEditarFlags = lojaControlaFlags(form.loja);
 
   const openNew = () => {
     setEditingId(null);
@@ -249,10 +247,10 @@ const FaturamentoCadastroClientes: React.FC = () => {
       nomeInterno: formatNomeCadastro(form.nomeInterno.trim() || form.razaoSocial),
       municipio: formatMunicipioCadastro(form.municipio),
       cnpj: form.cnpj.trim() || null,
-      emitirProtocoloCanhotos: Boolean(podeMostrarEmitir && form.emitirProtocoloCanhotos),
-      considerarPesquisaSatisfacao: Boolean(podeMostrarPesquisa && form.considerarPesquisaSatisfacao),
-      requerExpedicao: podeMostrarEmitir && form.emitirProtocoloCanhotos ? form.requerExpedicao : false,
-      exigeFilial: podeMostrarEmitir && form.emitirProtocoloCanhotos ? form.exigeFilial : false,
+      emitirProtocoloCanhotos: Boolean(podeEditarFlags && form.emitirProtocoloCanhotos),
+      considerarPesquisaSatisfacao: Boolean(podeEditarFlags && form.considerarPesquisaSatisfacao),
+      requerExpedicao: podeEditarFlags && form.emitirProtocoloCanhotos ? form.requerExpedicao : false,
+      exigeFilial: podeEditarFlags && form.emitirProtocoloCanhotos ? form.exigeFilial : false,
     };
     const callbacks = {
       onSuccess: () => closeModal(),
@@ -512,7 +510,21 @@ const FaturamentoCadastroClientes: React.FC = () => {
                     className="form-input"
                     required
                     value={form.loja}
-                    onChange={(e) => setForm({ ...form, loja: e.target.value })}
+                    onChange={(e) => {
+                      const loja = e.target.value;
+                      setForm((prev) => ({
+                        ...prev,
+                        loja,
+                        ...(lojaControlaFlags(loja)
+                          ? {}
+                          : {
+                              emitirProtocoloCanhotos: false,
+                              considerarPesquisaSatisfacao: false,
+                              requerExpedicao: false,
+                              exigeFilial: false,
+                            }),
+                      }));
+                    }}
                     disabled={!canManage}
                     placeholder="01"
                   />
@@ -673,7 +685,7 @@ const FaturamentoCadastroClientes: React.FC = () => {
                   fontSize: '13px',
                 }}
               >
-                {podeMostrarEmitir ? (
+                {podeEditarFlags ? (
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                     <input
                       type="checkbox"
@@ -685,14 +697,14 @@ const FaturamentoCadastroClientes: React.FC = () => {
                     <span>
                       <strong>Emitir protocolo de canhotos?</strong>
                       <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                        Se desligada, esta loja some da emissão sem apagar protocolos já feitos.
-                        Ligada, o CNPJ/CPF deste cadastro é o que aparece no PDF (fica a filial padrão do código).
+                        Só a loja 01 libera a emissão para este código. Se desligada, o cliente some da emissão sem apagar protocolos já feitos.
+                        Ligada, o CNPJ/CPF desta loja 01 é o que aparece no PDF.
                       </div>
                     </span>
                   </label>
                 ) : (
                   <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
-                    Emitir protocolo já está ativo na loja {lojaComEmitir?.loja}. Desative nessa loja para ligar nesta.
+                    Protocolo e pesquisa de satisfação só podem ser ligados na loja 01 deste código.
                   </p>
                 )}
 
@@ -735,7 +747,7 @@ const FaturamentoCadastroClientes: React.FC = () => {
                 )}
               </div>
 
-              {podeMostrarPesquisa ? (
+              {podeEditarFlags ? (
                 <label
                   style={{
                     display: 'flex',
@@ -759,26 +771,11 @@ const FaturamentoCadastroClientes: React.FC = () => {
                   <span>
                     <strong>Considerar pesquisa de satisfação?</strong>
                     <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                      Se desligada, o cliente some do lançamento no SGQ sem apagar pesquisas já feitas.
+                      Só a loja 01 libera o cliente no lançamento do SGQ. Se desligada, ele some sem apagar pesquisas já feitas.
                     </div>
                   </span>
                 </label>
-              ) : (
-                <p
-                  style={{
-                    marginTop: '10px',
-                    marginBottom: 0,
-                    padding: '10px 14px',
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    color: '#64748b',
-                  }}
-                >
-                  Pesquisa de satisfação já está ativa na loja {lojaComPesquisa?.loja}. Desative nessa loja para ligar nesta.
-                </p>
-              )}
+              ) : null}
 
               <div className="modal-footer" style={{ marginTop: '20px' }}>
                 <button type="button" className="reports-action-btn secondary" onClick={closeModal}>Cancelar</button>

@@ -149,37 +149,19 @@ class FaturamentoProtocoloTests(TestCase):
         )
         self.assertEqual(recusa.status_code, 400, recusa.data)
 
-        self.api.patch(
-            f'/api/faturamento/protocolo-clientes/{matriz_obj.pk}/',
-            {'emitirProtocoloCanhotos': False},
-            format='json',
-            **auth_headers(self.admin, 'Faturamento'),
-        )
-        libera = self.api.patch(
-            f'/api/faturamento/protocolo-clientes/{filial_obj.pk}/',
-            {'emitirProtocoloCanhotos': True},
-            format='json',
-            **auth_headers(self.admin, 'Faturamento'),
-        )
-        self.assertEqual(libera.status_code, 200, libera.data)
-        matriz_obj.refresh_from_db()
-        filial_obj.refresh_from_db()
-        self.assertFalse(matriz_obj.emitir_protocolo_canhotos)
-        self.assertTrue(filial_obj.emitir_protocolo_canhotos)
-
         lista = self.api.get(
             '/api/faturamento/protocolo-clientes/?uso=protocolo',
             **auth_headers(self.user, 'Faturamento'),
         )
         ids = {item['id'] for item in lista.data}
-        self.assertIn(str(filial_obj.pk), ids)
-        self.assertNotIn(str(matriz_obj.pk), ids)
+        self.assertIn(str(matriz_obj.pk), ids)
+        self.assertNotIn(str(filial_obj.pk), ids)
 
         protocolo = self.api.post(
             '/api/faturamento/protocolos/',
             {
                 'data': '2026-07-10',
-                'clienteId': filial_obj.pk,
+                'clienteId': matriz_obj.pk,
                 'notaFiscal': '5511',
                 'notasFiliais': {'5511': 'Londrina'},
             },
@@ -259,6 +241,7 @@ class FaturamentoProtocoloTests(TestCase):
         )
         self.assertEqual(primeira.status_code, 201, primeira.data)
         self.assertEqual(segunda.status_code, 400, segunda.data)
+        self.assertIn('loja 01', str(segunda.data).casefold())
 
     def test_recusa_codigo_loja_duplicados(self):
         self.api.post(

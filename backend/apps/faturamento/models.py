@@ -37,6 +37,14 @@ def chave_cadastro_cliente(codigo: str, loja: str) -> str:
     return f'{(codigo or "").strip()}|{(loja or "").strip()}'
 
 
+def loja_controla_flags(loja: str) -> bool:
+    """Protocolo e pesquisa de satisfação só podem ser ligados na loja 01."""
+    texto = (loja or '').strip()
+    if texto.isdigit():
+        return int(texto) == 1
+    return texto.casefold() in {'01', '1'}
+
+
 class ClienteProtocolo(models.Model):
     codigo = models.CharField(max_length=20, blank=True, default='', verbose_name='Código do cliente')
     loja = models.CharField(max_length=10, blank=True, default='01', verbose_name='Loja')
@@ -147,6 +155,9 @@ class ClienteProtocolo(models.Model):
         self.loja = (self.loja or '01').strip() or '01'
         if self.tipo_pessoa not in {TIPO_PESSOA_FISICA, TIPO_PESSOA_JURIDICA}:
             self.tipo_pessoa = TIPO_PESSOA_JURIDICA
+        if not loja_controla_flags(self.loja):
+            self.emitir_protocolo_canhotos = False
+            self.considerar_pesquisa_satisfacao = False
         self.padrao_protocolo = bool(self.emitir_protocolo_canhotos)
         super().save(*args, **kwargs)
         if not self.codigo:

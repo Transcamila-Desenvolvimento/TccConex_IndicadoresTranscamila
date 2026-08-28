@@ -9,6 +9,7 @@ from .models import (
     TIPO_PESSOA_FISICA,
     TIPO_PESSOA_JURIDICA,
     chave_texto_sem_acento,
+    loja_controla_flags,
 )
 from .services import gerar_numero_sequencial, separar_expedicoes, validate_protocolo_payload
 
@@ -138,38 +139,20 @@ class ClienteProtocoloSerializer(serializers.ModelSerializer):
             else:
                 attrs['cnpj'] = None
 
-        self._validar_flag_exclusiva_no_grupo(
-            attrs,
-            campo='emitir_protocolo_canhotos',
-            erro_key='emitirProtocoloCanhotos',
-            rotulo='Emitir protocolo de canhotos',
-        )
-        self._validar_flag_exclusiva_no_grupo(
-            attrs,
-            campo='considerar_pesquisa_satisfacao',
-            erro_key='considerarPesquisaSatisfacao',
-            rotulo='Considerar pesquisa de satisfação',
-        )
+        self._validar_flags_somente_loja_01(attrs)
         return attrs
 
-    def _validar_flag_exclusiva_no_grupo(self, attrs, *, campo: str, erro_key: str, rotulo: str):
-        codigo = attrs.get('codigo') or ''
-        if not codigo:
+    def _validar_flags_somente_loja_01(self, attrs):
+        loja = attrs.get('loja') or getattr(self.instance, 'loja', '01')
+        if loja_controla_flags(loja):
             return
-        ativo = attrs.get(campo, getattr(self.instance, campo, False) if self.instance else False)
-        if not ativo:
-            return
-        qs = ClienteProtocolo.objects.filter(codigo=codigo, **{campo: True})
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-        outra = qs.order_by('loja', 'pk').first()
-        if outra:
-            raise serializers.ValidationError({
-                erro_key: [
-                    f'{rotulo} já está ativo na loja {outra.loja}. '
-                    f'Desative nessa loja para ativar nesta.'
-                ],
-            })
+        mensagem = 'Só a loja 01 pode liberar protocolo e pesquisa de satisfação.'
+        if attrs.get('emitir_protocolo_canhotos') is True:
+            raise serializers.ValidationError({'emitirProtocoloCanhotos': [mensagem]})
+        if attrs.get('considerar_pesquisa_satisfacao') is True:
+            raise serializers.ValidationError({'considerarPesquisaSatisfacao': [mensagem]})
+        attrs['emitir_protocolo_canhotos'] = False
+        attrs['considerar_pesquisa_satisfacao'] = False
 
     def create(self, validated_data):
         nomes = validated_data.pop('filiaisIniciais', [])
@@ -193,6 +176,9 @@ class ClienteProtocoloSerializer(serializers.ModelSerializer):
 
         aliases_anteriores = _nomes_cadastro(instance)
         validated_data.pop('filiaisIniciais', None)
+        if not loja_controla_flags(validated_data.get('loja', instance.loja)):
+            validated_data.pop('requer_expedicao', None)
+            validated_data.pop('exige_filial', None)
         cliente = super().update(instance, validated_data)
         sincronizar_cliente_pesquisas(cliente, aliases_anteriores)
         grupo_flags = {}
