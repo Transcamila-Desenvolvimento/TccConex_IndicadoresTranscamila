@@ -111,7 +111,6 @@ const FaturamentoCadastroClientes: React.FC = () => {
   const [filterCodigo, setFilterCodigo] = useState('');
   const [filterLoja, setFilterLoja] = useState('');
   const [filterMunicipio, setFilterMunicipio] = useState('');
-  const [filterPadrao, setFilterPadrao] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -137,8 +136,6 @@ const FaturamentoCadastroClientes: React.FC = () => {
       if (filterCodigo && cliente.codigo !== filterCodigo) return false;
       if (filterLoja && cliente.loja !== filterLoja) return false;
       if (filterMunicipio && cliente.municipio !== filterMunicipio) return false;
-      if (filterPadrao === 'sim' && !cliente.padraoProtocolo) return false;
-      if (filterPadrao === 'nao' && cliente.padraoProtocolo) return false;
       if (!term) return true;
       const haystack = [
         cliente.codigo,
@@ -152,7 +149,7 @@ const FaturamentoCadastroClientes: React.FC = () => {
       ].join(' ').toLowerCase();
       return haystack.includes(term);
     });
-  }, [clientes, search, filterCodigo, filterLoja, filterMunicipio, filterPadrao]);
+  }, [clientes, search, filterCodigo, filterLoja, filterMunicipio]);
 
   const totalPages = Math.max(1, Math.ceil(filteredClientes.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
@@ -333,13 +330,6 @@ const FaturamentoCadastroClientes: React.FC = () => {
               ))}
             </select>
           </div>
-          <div className="reports-select-wrapper" style={{ minWidth: '140px' }}>
-            <select value={filterPadrao} onChange={(e) => { setFilterPadrao(e.target.value); setPage(1); }}>
-              <option value="">Padrão: Todos</option>
-              <option value="sim">Padrão: Sim</option>
-              <option value="nao">Padrão: Não</option>
-            </select>
-          </div>
         </div>
         <div className="reports-filter-right">
           <span className="reports-records-count"><strong>{filteredClientes.length}</strong> Clientes</span>
@@ -362,14 +352,13 @@ const FaturamentoCadastroClientes: React.FC = () => {
                   <th>Nome interno</th>
                   <th>Município</th>
                   <th>CNPJ/CPF</th>
-                  <th>Padrão</th>
                   <th style={{ width: 80 }} />
                 </tr>
               </thead>
               <tbody>
                 {canShowEmpty && filteredClientes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
                       Nenhum cliente cadastrado.
                     </td>
                   </tr>
@@ -381,7 +370,6 @@ const FaturamentoCadastroClientes: React.FC = () => {
                       <td>{cliente.nomeInterno || cliente.nome || '—'}</td>
                       <td>{cliente.municipio || '—'}</td>
                       <td>{cliente.cnpj || '—'}</td>
-                      <td>{cliente.padraoProtocolo ? 'Sim' : '—'}</td>
                       <td>
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button type="button" className="btn-icon" title="Editar cliente" onClick={() => startEdit(cliente)}>

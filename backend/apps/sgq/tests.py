@@ -605,6 +605,44 @@ class PesquisaSatisfacaoTests(APITestCase):
         self.assertEqual(response.data['cliente'], 'CCAB')
         self.assertEqual(response.data['motorista'], 'João Atualizado')
 
+    def test_filtro_com_historico_inclui_cadastro_mesmo_desligado(self):
+        ClienteProtocolo.objects.filter(nome__iexact='CCAB').update(
+            codigo='002431',
+            loja='01',
+            nome_interno='CCAB AGRO S.A.',
+            razao_social='CCAB AGRO S.A.',
+            nome='CCAB AGRO S.A.',
+            considerar_pesquisa_satisfacao=False,
+        )
+        PesquisaSatisfacao.objects.create(
+            filial=IBIPORA,
+            motorista='João da Silva',
+            cte='hist-ccab',
+            data_inclusao=timezone.localdate(),
+            data_entrega='2026-07-01',
+            nota_fiscal='1',
+            cliente='Ccab Agro S.a.',
+            prazo_entrega='otimo',
+            condicoes_mercadoria='otimo',
+            condicoes_veiculo='bom',
+            apresentacao_motorista='otimo',
+            atendimento_dispensado='bom',
+            criado_por='Admin SGQ',
+        )
+
+        lancamento = self.client.get('/api/sgq/pesquisas-satisfacao/clientes/', **ENV_HEADER)
+        self.assertEqual(lancamento.status_code, 200)
+        self.assertFalse(any('ccab' in item['label'].casefold() for item in lancamento.data))
+
+        filtro = self.client.get(
+            '/api/sgq/pesquisas-satisfacao/clientes/?incluirHistorico=true',
+            **ENV_HEADER,
+        )
+        self.assertEqual(filtro.status_code, 200)
+        rotulos = [item['label'] for item in filtro.data]
+        self.assertIn('CCAB AGRO S.A.', rotulos)
+        self.assertNotIn('Ccab Agro S.a.', rotulos)
+
     def test_lista_e_filtro_usam_nome_atual_do_cadastro(self):
         ClienteProtocolo.objects.filter(nome__iexact='PRENTISS').update(
             codigo='002450',

@@ -22,6 +22,7 @@ from apps.financeiro.models import (
 from apps.indicadores.models import GerencialSnapshot, MetaFaturamentoMensal
 from apps.indicadores.meta_faturamento_service import networkdays
 from apps.rh.models import Colaborador, LoteMovimentacaoRH, MovimentacaoColaborador
+from apps.faturamento.models import ClienteProtocolo
 from apps.sgq.models import PesquisaSatisfacao
 
 User = get_user_model()
@@ -1553,6 +1554,24 @@ class IndicadoresSgqSatisfacaoTests(TestCase):
         self.assertIn('anosDisponiveis', response.data['meta'])
         self.assertIn(2026, response.data['meta']['anosDisponiveis'])
         self.assertEqual(response.data['recorrenciasEscopo'], [])
+
+    def test_filtro_cliente_usa_nome_atual_do_cadastro(self):
+        ClienteProtocolo.objects.create(
+            codigo='002431',
+            loja='01',
+            nome='CCAB AGRO S.A.',
+            nome_interno='CCAB AGRO S.A.',
+            razao_social='CCAB AGRO S.A.',
+            considerar_pesquisa_satisfacao=True,
+        )
+        _pesquisa('Ibiporã (Matriz)', cte='IBI-CCAB', cliente='Ccab Agro S.a.')
+        response = self.client.get(
+            '/api/indicadores/sgq/satisfacao/',
+            **auth_headers(self.user, 'Indicadores'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('CCAB AGRO S.A.', response.data['meta']['clientesDisponiveis'])
+        self.assertNotIn('Ccab Agro S.a.', response.data['meta']['clientesDisponiveis'])
 
     def test_filtro_por_periodo_data_entrega(self):
         _pesquisa('Ibiporã (Matriz)', cte='IBI-OLD', data_entrega=date(2025, 3, 10))

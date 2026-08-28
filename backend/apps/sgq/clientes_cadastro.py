@@ -73,12 +73,14 @@ def valores_filtro_cliente(valor: str) -> list[str]:
         return []
     textos = {texto}
     cadastro = encontrar_cadastro_pesquisa(texto)
+    alvos = {chave_nome_cliente(texto)}
     if cadastro:
         textos.update(_nomes_cadastro(cadastro))
-    alvo = chave_nome_cliente(texto)
+        alvos.update(chave_nome_cliente(item) for item in _nomes_cadastro(cadastro))
+    alvos.discard('')
     for nome in PesquisaSatisfacao.objects.exclude(cliente='').values_list('cliente', flat=True).distinct():
         nome = (nome or '').strip()
-        if nome and chave_nome_cliente(nome) == alvo:
+        if nome and chave_nome_cliente(nome) in alvos:
             textos.add(nome)
     return list(textos)
 
@@ -113,21 +115,25 @@ def cliente_pesquisa_permitido(valor: str, *, valor_atual: str = '', permitir_ou
     return False
 
 
+def _append_opcao_cadastro(cadastro: ClienteProtocolo, opcoes: list[dict], seen: set[str]) -> None:
+    label = _label_cadastro(cadastro)
+    if not label:
+        return
+    value = cadastro.chave_cadastro() if (cadastro.codigo or '').strip() else label
+    chave = chave_nome_cliente(label)
+    if value.casefold() in seen or label.casefold() in seen or chave in seen:
+        return
+    seen.add(value.casefold())
+    seen.add(label.casefold())
+    seen.add(chave)
+    opcoes.append({'value': value, 'label': label})
+
+
 def opcoes_cliente_pesquisa(*, incluir_historico: bool = False, valor_atual: str = '') -> list[dict]:
     opcoes: list[dict] = []
     seen: set[str] = set()
     for cliente in _cadastros_pesquisa_ativos():
-        label = _label_cadastro(cliente)
-        if not label:
-            continue
-        value = cliente.chave_cadastro()
-        chave = chave_nome_cliente(label)
-        if value.casefold() in seen or label.casefold() in seen or chave in seen:
-            continue
-        seen.add(value.casefold())
-        seen.add(label.casefold())
-        seen.add(chave)
-        opcoes.append({'value': value, 'label': label})
+        _append_opcao_cadastro(cliente, opcoes, seen)
 
     extra: list[str] = []
     atual = (valor_atual or '').strip()
@@ -145,7 +151,9 @@ def opcoes_cliente_pesquisa(*, incluir_historico: bool = False, valor_atual: str
                     seen.add('outros')
                     extra.append('OUTROS')
                 continue
-            if encontrar_cadastro_pesquisa(nome):
+            cadastro = encontrar_cadastro_pesquisa(nome)
+            if cadastro:
+                _append_opcao_cadastro(cadastro, opcoes, seen)
                 continue
             chave = chave_nome_cliente(nome)
             if nome.casefold() in seen or chave in seen:

@@ -711,7 +711,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
             <select value={filterCliente} onChange={(e) => { setFilterCliente(e.target.value); setCurrentPage(1); setSelectedIds([]); }}>
               <option value="">Cliente</option>
               {clientesFiltro.map((cliente) => (
-                <option key={cliente.value} value={cliente.value}>{cliente.label}</option>
+                <option key={`${cliente.value}:${cliente.label}`} value={cliente.value}>{cliente.label}</option>
               ))}
             </select>
           </div>

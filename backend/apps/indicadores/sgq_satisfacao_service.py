@@ -9,6 +9,7 @@ from django.db.models.functions import TruncMonth
 
 from apps.accounts.constants import branches_for_module
 from apps.audit.models import AuditLog
+from apps.faturamento.models import chave_nome_cliente
 from apps.sgq.clientes_cadastro import nome_exibicao_pesquisa
 from apps.sgq.escopo_analise import format_escopo_analise_display, rotulos_escopo
 from apps.sgq.models import CRITERIOS_AVALIACAO, PesquisaSatisfacao
@@ -106,18 +107,16 @@ def _motoristas_disponiveis(qs) -> list[str]:
 
 
 def _clientes_disponiveis(qs) -> list[str]:
-    """Clientes já lançados no recorte (sem filtrar pelo próprio cliente)."""
-    variacoes: dict[str, Counter] = {}
+    """Clientes do recorte com o nome atual do cadastro, sem duplicar grafia antiga."""
+    rotulos: dict[str, str] = {}
     for nome in qs.exclude(cliente='').values_list('cliente', flat=True):
         nome = (nome or '').strip()
         if not nome:
             continue
-        chave = nome.casefold()
-        variacoes.setdefault(chave, Counter())[nome] += 1
-    return sorted(
-        (contador.most_common(1)[0][0] for contador in variacoes.values()),
-        key=str.casefold,
-    )
+        rotulo = nome_exibicao_pesquisa(nome) or nome
+        chave = chave_nome_cliente(rotulo) or chave_nome_cliente(nome) or rotulo.casefold()
+        rotulos[chave] = rotulo
+    return sorted(rotulos.values(), key=str.casefold)
 
 
 def _anos_disponiveis(qs) -> list[int]:
