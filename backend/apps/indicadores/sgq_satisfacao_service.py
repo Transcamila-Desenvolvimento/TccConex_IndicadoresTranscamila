@@ -5,7 +5,6 @@ sessão operacional do módulo SGQ."""
 from collections import Counter, defaultdict
 
 from django.db.models import Q
-from django.db.models.functions import TruncMonth
 
 from apps.accounts.constants import branches_for_module
 from apps.audit.models import AuditLog
@@ -14,7 +13,7 @@ from apps.sgq.clientes_cadastro import indice_cadastros_pesquisa, nome_exibicao_
 from apps.sgq.escopo_analise import format_escopo_analise_display, rotulos_escopo
 from apps.sgq.models import CRITERIOS_AVALIACAO, PesquisaSatisfacao
 from apps.sgq.pesquisa_query import filter_pesquisas_queryset
-from apps.sgq.stats_service import build_pesquisa_stats
+from apps.sgq.stats_service import build_pesquisa_stats_from_rows
 
 _SGQ_ACTIVITY_PREFIX = 'sgq.pesquisa.'
 _SGQ_DRAFT_ACTIVITY_PREFIX = 'sgq.pesquisa.lote_draft'
@@ -51,16 +50,15 @@ def _score_medio_criterios(criterios: list[dict]) -> float | None:
     return round(sum(c['score'] for c in com_dados) / len(com_dados), 2)
 
 
-def _build_serie_mensal(qs) -> list[dict]:
+def _build_serie_mensal(rows: list[dict]) -> list[dict]:
     """Evolução mensal de pesquisas e % ótimo (por data de entrega)."""
-    rows = list(
-        qs.annotate(mes=TruncMonth('data_entrega'))
-        .exclude(mes__isnull=True)
-        .values('mes', *_CRITERIO_FIELDS)
-    )
     por_mes: dict = defaultdict(list)
     for row in rows:
-        por_mes[row['mes']].append(row)
+        data = row.get('data_entrega')
+        if not data:
+            continue
+        mes = data.replace(day=1)
+        por_mes[mes].append(row)
 
     serie = []
     for mes in sorted(por_mes.keys()):
@@ -68,7 +66,7 @@ def _build_serie_mensal(qs) -> list[dict]:
         totais = {'otimo': 0, 'bom': 0, 'regular': 0, 'ruim': 0}
         for row in grupo:
             for field in _CRITERIO_FIELDS:
-                valor = row[field]
+                valor = row.get(field)
                 if valor in totais:
                     totais[valor] += 1
         total_aval = sum(totais.values())
@@ -94,7 +92,7 @@ def _build_serie_mensal(qs) -> list[dict]:
 def _motoristas_disponiveis(qs) -> list[str]:
     """Grafias canônicas dos motoristas do recorte (sem filtrar pelo próprio motorista)."""
     variacoes: dict[str, Counter] = {}
-    for nome in qs.exclude(motorista='').values_list('motorista', flat=True):
+    for nome in qs.exclude(motorista='').values_list('motorista', flat=True).distinct():
         nome = (nome or '').strip()
         if not nome:
             continue
@@ -110,7 +108,7 @@ def _clientes_disponiveis(qs) -> list[str]:
     """Clientes do recorte com o nome atual do cadastro, sem duplicar grafia antiga."""
     indice = indice_cadastros_pesquisa()
     rotulos: dict[str, str] = {}
-    for nome in qs.exclude(cliente='').values_list('cliente', flat=True):
+    for nome in qs.exclude(cliente='').values_list('cliente', flat=True).distinct():
         nome = (nome or '').strip()
         if not nome:
             continue
@@ -122,12 +120,7 @@ def _clientes_disponiveis(qs) -> list[str]:
 
 def _anos_disponiveis(qs) -> list[int]:
     """Anos com data de entrega no recorte (antes do filtro de período)."""
-    anos = {
-        d.year
-        for d in qs.exclude(data_entrega__isnull=True).values_list('data_entrega', flat=True)
-        if d
-    }
-    return sorted(anos, reverse=True)
+    return sorted((d.year for d in qs.dates('data_entrega', 'year')), reverse=True)
 
 
 def _q_sem_avaliacao() -> Q:
@@ -214,9 +207,9 @@ def build_sgq_satisfacao_payload(params) -> dict:
     anos = _anos_disponiveis(qs)
 
     qs = filter_pesquisas_queryset(qs, params)
-    # Em branco/recusa contam só em totalRecusas — não entram em total, %, score nem gráficos.
     qs_avaliadas = _qs_com_avaliacao(qs)
-    stats = build_pesquisa_stats(qs_avaliadas)
+    rows = list(qs_avaliadas.values('filial', 'data_entrega', *_CRITERIO_FIELDS))
+    stats = build_pesquisa_stats_from_rows(rows)
 
     total_recusas = _qs_sem_avaliacao(qs).count()
     score_medio = _score_medio_criterios(stats['criterios'])
@@ -225,13 +218,7 @@ def build_sgq_satisfacao_payload(params) -> dict:
     for nome in sgq_filiais:
         if filial and nome != filial:
             continue
-        f_qs = _qs_com_avaliacao(
-            filter_pesquisas_queryset(
-                PesquisaSatisfacao.objects.filter(filial=nome),
-                params,
-            )
-        )
-        f_stats = build_pesquisa_stats(f_qs)
+        f_stats = build_pesquisa_stats_from_rows([row for row in rows if row['filial'] == nome])
         por_filial.append({
             'filial': nome,
             'totalPesquisas': f_stats['totalPesquisas'],
@@ -254,7 +241,7 @@ def build_sgq_satisfacao_payload(params) -> dict:
         'scoreMedio': score_medio,
         'totalRecusas': total_recusas,
         'porFilial': por_filial,
-        'serieMensal': _build_serie_mensal(qs_avaliadas),
+        'serieMensal': _build_serie_mensal(rows),
         'recorrenciasEscopo': _build_recorrencias_escopo(qs),
     }
 

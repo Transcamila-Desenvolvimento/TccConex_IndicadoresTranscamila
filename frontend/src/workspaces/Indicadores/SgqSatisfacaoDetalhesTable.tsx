@@ -69,7 +69,6 @@ const SgqSatisfacaoDetalhesTable: React.FC<Props> = ({
 
   return (
     <div className="erp-card reports-table-card cashflow-table-card sgq-ind-detalhes-card">
-      <h2 className="cashflow-section-title cashflow-section-title--table">Pesquisas e análises</h2>
       <QueryDataPanel
         query={query}
         variant="page"

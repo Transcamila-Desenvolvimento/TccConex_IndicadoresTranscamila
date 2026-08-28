@@ -183,7 +183,7 @@ const IndicadoresSatisfacaoClientes: React.FC = () => {
     <div className={`cashflow-page${activeTab === 'detalhes' ? ' cashflow-page--sgq-detalhes' : ''}`}>
       <header className="view-header cashflow-header">
         <div>
-          <h1>Satisfação dos Clientes</h1>
+          <h1>Satisfação do Cliente Final</h1>
           <p>Pesquisas de satisfação · {metaHint}</p>
         </div>
       </header>

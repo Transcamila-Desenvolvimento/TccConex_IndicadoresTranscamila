@@ -22,10 +22,8 @@ def count_pesquisas_em_branco(qs) -> int:
     return qs.filter(_q_sem_avaliacao()).count()
 
 
-def build_pesquisa_stats(qs) -> dict:
-    """Calcula totais, percentuais e score por critério a partir de um queryset
-    já filtrado de PesquisaSatisfacao."""
-    pesquisas = list(qs.values(*_CRITERIO_FIELDS))
+def build_pesquisa_stats_from_rows(pesquisas: list[dict]) -> dict:
+    """Mesmos KPIs de `build_pesquisa_stats`, a partir de linhas já materializadas."""
     total_pesquisas = len(pesquisas)
 
     totais = {key: 0 for key in _AVALIACAO_KEYS}
@@ -33,7 +31,7 @@ def build_pesquisa_stats(qs) -> dict:
     for field, label in CRITERIOS_AVALIACAO:
         contagem = {key: 0 for key in _AVALIACAO_KEYS}
         for row in pesquisas:
-            valor = row[field]
+            valor = row.get(field)
             if valor in contagem:
                 contagem[valor] += 1
                 totais[valor] += 1
@@ -76,3 +74,9 @@ def build_pesquisa_stats(qs) -> dict:
         'metaOtimo': 80,
         'criterios': criterios,
     }
+
+
+def build_pesquisa_stats(qs) -> dict:
+    """Calcula totais, percentuais e score por critério a partir de um queryset
+    já filtrado de PesquisaSatisfacao."""
+    return build_pesquisa_stats_from_rows(list(qs.values(*_CRITERIO_FIELDS)))
