@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .clientes_cadastro import cliente_pesquisa_permitido, nome_exibicao_pesquisa
+from .clientes_cadastro import cliente_pesquisa_permitido, indice_cadastros_pesquisa, nome_exibicao_pesquisa
 from .escopo_analise import has_escopo_opcoes, normalize_escopo_analise, slugify_chave
 from .models import EscopoAnalise, EscopoAnaliseOpcao, PesquisaSatisfacao
 
@@ -61,7 +61,8 @@ class PesquisaSatisfacaoSerializer(serializers.ModelSerializer):
         ]
 
     def get_clienteLabel(self, obj):
-        return nome_exibicao_pesquisa(obj.cliente)
+        indice = self.context.setdefault('_indice_clientes_pesquisa', indice_cadastros_pesquisa())
+        return nome_exibicao_pesquisa(obj.cliente, indice)
 
     def create(self, validated_data):
         validated_data.setdefault('data_inclusao', timezone.localdate())

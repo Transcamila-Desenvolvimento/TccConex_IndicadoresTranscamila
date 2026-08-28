@@ -10,7 +10,7 @@ from django.db.models.functions import TruncMonth
 from apps.accounts.constants import branches_for_module
 from apps.audit.models import AuditLog
 from apps.faturamento.models import chave_nome_cliente
-from apps.sgq.clientes_cadastro import nome_exibicao_pesquisa
+from apps.sgq.clientes_cadastro import indice_cadastros_pesquisa, nome_exibicao_pesquisa
 from apps.sgq.escopo_analise import format_escopo_analise_display, rotulos_escopo
 from apps.sgq.models import CRITERIOS_AVALIACAO, PesquisaSatisfacao
 from apps.sgq.pesquisa_query import filter_pesquisas_queryset
@@ -108,12 +108,13 @@ def _motoristas_disponiveis(qs) -> list[str]:
 
 def _clientes_disponiveis(qs) -> list[str]:
     """Clientes do recorte com o nome atual do cadastro, sem duplicar grafia antiga."""
+    indice = indice_cadastros_pesquisa()
     rotulos: dict[str, str] = {}
     for nome in qs.exclude(cliente='').values_list('cliente', flat=True):
         nome = (nome or '').strip()
         if not nome:
             continue
-        rotulo = nome_exibicao_pesquisa(nome) or nome
+        rotulo = nome_exibicao_pesquisa(nome, indice) or nome
         chave = chave_nome_cliente(rotulo) or chave_nome_cliente(nome) or rotulo.casefold()
         rotulos[chave] = rotulo
     return sorted(rotulos.values(), key=str.casefold)
@@ -267,12 +268,12 @@ def _filtered_pesquisas_qs(params):
     return filter_pesquisas_queryset(qs, params)
 
 
-def serialize_sgq_satisfacao_detalhe(pesquisa: PesquisaSatisfacao) -> dict:
+def serialize_sgq_satisfacao_detalhe(pesquisa: PesquisaSatisfacao, indice=None) -> dict:
     return {
         'id': str(pesquisa.pk),
         'filial': pesquisa.filial,
         'dataEntrega': pesquisa.data_entrega.isoformat() if pesquisa.data_entrega else None,
-        'cliente': nome_exibicao_pesquisa(pesquisa.cliente),
+        'cliente': nome_exibicao_pesquisa(pesquisa.cliente, indice),
         'motorista': pesquisa.motorista,
         'cte': pesquisa.cte,
         'notaFiscal': pesquisa.nota_fiscal,

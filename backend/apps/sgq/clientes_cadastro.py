@@ -11,6 +11,45 @@ def _label_cadastro(cliente: ClienteProtocolo) -> str:
     return (cliente.nome_interno or cliente.nome or '').strip()
 
 
+class IndiceCadastrosPesquisa:
+    """Resolve nomes de pesquisa contra o cadastro sem consultar o banco por item."""
+
+    def __init__(self, cadastros=None):
+        self.cadastros = list(
+            cadastros
+            if cadastros is not None
+            else ClienteProtocolo.objects.all().order_by(
+                '-considerar_pesquisa_satisfacao', 'codigo', 'loja', 'pk'
+            )
+        )
+        self.por_chave: dict[str, ClienteProtocolo] = {}
+        self.por_codigo_loja: dict[tuple[str, str], ClienteProtocolo] = {}
+        for cadastro in self.cadastros:
+            self.por_codigo_loja[(cadastro.codigo or '').strip(), (cadastro.loja or '01').strip() or '01'] = cadastro
+            for nome in _nomes_cadastro(cadastro):
+                chave = chave_nome_cliente(nome)
+                if chave and chave not in self.por_chave:
+                    self.por_chave[chave] = cadastro
+
+    def encontrar(self, valor: str):
+        texto = (valor or '').strip()
+        if not texto:
+            return None
+        if '|' in texto:
+            codigo, _, loja = texto.partition('|')
+            encontrado = self.por_codigo_loja.get((codigo.strip(), (loja.strip() or '01')))
+            if encontrado:
+                return encontrado
+        alvo = chave_nome_cliente(texto)
+        if not alvo:
+            return None
+        return self.por_chave.get(alvo)
+
+
+def indice_cadastros_pesquisa() -> IndiceCadastrosPesquisa:
+    return IndiceCadastrosPesquisa()
+
+
 def _cadastros_pesquisa_ativos():
     return list(
         ClienteProtocolo.objects.filter(considerar_pesquisa_satisfacao=True).order_by('codigo', 'loja', 'pk')
@@ -33,35 +72,17 @@ def _nomes_cadastro(cadastro: ClienteProtocolo) -> tuple[str, ...]:
     )
 
 
-def encontrar_cadastro_pesquisa(valor: str):
-    texto = (valor or '').strip()
-    if not texto:
-        return None
-    if '|' in texto:
-        codigo, _, loja = texto.partition('|')
-        encontrado = ClienteProtocolo.objects.filter(
-            codigo=codigo.strip(),
-            loja=(loja.strip() or '01'),
-        ).first()
-        if encontrado:
-            return encontrado
-    alvo = chave_nome_cliente(texto)
-    if not alvo:
-        return None
-    qs = ClienteProtocolo.objects.all().order_by('-considerar_pesquisa_satisfacao', 'codigo', 'loja', 'pk')
-    for cadastro in qs:
-        if any(chave_nome_cliente(item) == alvo for item in _nomes_cadastro(cadastro)):
-            return cadastro
-    return None
+def encontrar_cadastro_pesquisa(valor: str, indice: IndiceCadastrosPesquisa | None = None):
+    return (indice or indice_cadastros_pesquisa()).encontrar(valor)
 
 
-def nome_exibicao_pesquisa(valor: str) -> str:
+def nome_exibicao_pesquisa(valor: str, indice: IndiceCadastrosPesquisa | None = None) -> str:
     texto = (valor or '').strip()
     if not texto:
         return ''
     if texto.casefold() == 'outros':
         return 'OUTROS'
-    cadastro = encontrar_cadastro_pesquisa(texto)
+    cadastro = encontrar_cadastro_pesquisa(texto, indice)
     if cadastro:
         return _label_cadastro(cadastro) or texto
     return texto
@@ -71,8 +92,9 @@ def valores_filtro_cliente(valor: str) -> list[str]:
     texto = (valor or '').strip()
     if not texto:
         return []
+    indice = indice_cadastros_pesquisa()
     textos = {texto}
-    cadastro = encontrar_cadastro_pesquisa(texto)
+    cadastro = encontrar_cadastro_pesquisa(texto, indice)
     alvos = {chave_nome_cliente(texto)}
     if cadastro:
         textos.update(_nomes_cadastro(cadastro))
@@ -132,6 +154,7 @@ def _append_opcao_cadastro(cadastro: ClienteProtocolo, opcoes: list[dict], seen:
 def opcoes_cliente_pesquisa(*, incluir_historico: bool = False, valor_atual: str = '') -> list[dict]:
     opcoes: list[dict] = []
     seen: set[str] = set()
+    indice = indice_cadastros_pesquisa()
     for cliente in _cadastros_pesquisa_ativos():
         _append_opcao_cadastro(cliente, opcoes, seen)
 
@@ -151,7 +174,7 @@ def opcoes_cliente_pesquisa(*, incluir_historico: bool = False, valor_atual: str
                     seen.add('outros')
                     extra.append('OUTROS')
                 continue
-            cadastro = encontrar_cadastro_pesquisa(nome)
+            cadastro = indice.encontrar(nome)
             if cadastro:
                 _append_opcao_cadastro(cadastro, opcoes, seen)
                 continue
@@ -162,7 +185,7 @@ def opcoes_cliente_pesquisa(*, incluir_historico: bool = False, valor_atual: str
             seen.add(nome.casefold())
             seen.add(chave)
     for nome in extra:
-        opcoes.append({'value': nome, 'label': nome_exibicao_pesquisa(nome)})
+        opcoes.append({'value': nome, 'label': nome_exibicao_pesquisa(nome, indice)})
     return opcoes
 
 

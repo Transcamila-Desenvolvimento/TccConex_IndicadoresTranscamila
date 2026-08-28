@@ -22,6 +22,7 @@ from .sgq_satisfacao_service import (
     get_sgq_activity_version,
     serialize_sgq_satisfacao_detalhe,
 )
+from apps.sgq.clientes_cadastro import indice_cadastros_pesquisa
 
 
 class SendGerencialEmailView(ModuleScopedViewMixin, APIView):
@@ -193,8 +194,9 @@ class SgqSatisfacaoDetalhesView(ModuleScopedViewMixin, APIView):
         qs = build_sgq_satisfacao_detalhes_qs(request.query_params)
         paginator = SgqSatisfacaoDetalhesPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
+        indice = indice_cadastros_pesquisa()
         return paginator.get_paginated_response(
-            [serialize_sgq_satisfacao_detalhe(item) for item in page]
+            [serialize_sgq_satisfacao_detalhe(item, indice) for item in page]
         )
 
 

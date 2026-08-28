@@ -76,7 +76,7 @@ export function useSgqClientes(incluirHistorico = false) {
   return useQuery({
     queryKey: SGQ_KEYS.clientes(incluirHistorico),
     queryFn: () => apiService.getSgqClientes({ incluirHistorico }),
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
   });
 }
 

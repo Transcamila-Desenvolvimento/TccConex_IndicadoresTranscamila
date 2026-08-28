@@ -237,7 +237,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   const clientesLancamentoQuery = useSgqClientes(false);
   const motoristasSugeridos = motoristasQuery.data ?? [];
   const lancadoresSugeridos = lancadoresQuery.data ?? [];
-  const clientesFiltro = clientesFiltroQuery.data ?? [];
+  const clientesFiltro = clientesFiltroQuery.data ?? clientesLancamentoQuery.data ?? [];
   const listState = useAsyncQueryState(listQuery);
   const rows = listQuery.data?.results ?? [];
   const totalItems = listQuery.data?.count ?? 0;
