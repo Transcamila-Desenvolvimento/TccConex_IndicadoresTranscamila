@@ -605,6 +605,36 @@ class PesquisaSatisfacaoTests(APITestCase):
         self.assertEqual(response.data['cliente'], 'CCAB')
         self.assertEqual(response.data['motorista'], 'João Atualizado')
 
+    def test_lista_e_filtro_usam_nome_atual_do_cadastro(self):
+        ClienteProtocolo.objects.filter(nome__iexact='PRENTISS').update(
+            codigo='002450',
+            loja='01',
+            nome_interno='PRENTISS QUIMICA LTDA',
+            razao_social='PRENTISS QUIMICA LTDA',
+            nome='PRENTISS QUIMICA LTDA',
+        )
+        created = self._create(cte='nf-legado', cliente='Prentiss Química Ltda.')
+        self.assertEqual(created.status_code, 201, created.data)
+        self.assertEqual(created.data['clienteLabel'], 'PRENTISS QUIMICA LTDA')
+
+        listagem = self.client.get(
+            '/api/sgq/pesquisas-satisfacao/?search=nf-legado',
+            **ENV_HEADER,
+        )
+        self.assertEqual(listagem.status_code, 200)
+        item = next(row for row in listagem.data['results'] if row['cte'] == 'nf-legado')
+        self.assertEqual(item['clienteLabel'], 'PRENTISS QUIMICA LTDA')
+
+        filtro = self.client.get(
+            '/api/sgq/pesquisas-satisfacao/clientes/?incluirHistorico=true',
+            **ENV_HEADER,
+        )
+        self.assertEqual(filtro.status_code, 200)
+        rotulos = [item['label'] for item in filtro.data]
+        self.assertEqual(sum(1 for rotulo in rotulos if 'prentiss' in rotulo.casefold()), 1)
+        self.assertIn('PRENTISS QUIMICA LTDA', rotulos)
+        self.assertNotIn('Prentiss Química Ltda.', rotulos)
+
 
 class PesquisaSatisfacaoLoteDraftTests(APITestCase):
     def setUp(self):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.faturamento.models import ClienteProtocolo, chave_texto_sem_acento
+from apps.faturamento.models import ClienteProtocolo, chave_nome_cliente
 
 from .models import PesquisaSatisfacao
 
@@ -14,6 +14,22 @@ def _label_cadastro(cliente: ClienteProtocolo) -> str:
 def _cadastros_pesquisa_ativos():
     return list(
         ClienteProtocolo.objects.filter(considerar_pesquisa_satisfacao=True).order_by('codigo', 'loja', 'pk')
+    )
+
+
+def _nomes_cadastro(cadastro: ClienteProtocolo) -> tuple[str, ...]:
+    return tuple(
+        filter(
+            None,
+            (
+                cadastro.chave_cadastro(),
+                _label_cadastro(cadastro),
+                cadastro.nome,
+                cadastro.nome_interno,
+                cadastro.razao_social,
+                cadastro.nome_fantasia,
+            ),
+        )
     )
 
 
@@ -29,18 +45,12 @@ def encontrar_cadastro_pesquisa(valor: str):
         ).first()
         if encontrado:
             return encontrado
-    alvo = chave_texto_sem_acento(texto)
+    alvo = chave_nome_cliente(texto)
     if not alvo:
         return None
-    for cadastro in ClienteProtocolo.objects.all().order_by('codigo', 'loja', 'pk'):
-        candidatos = (
-            _label_cadastro(cadastro),
-            cadastro.nome,
-            cadastro.nome_interno,
-            cadastro.razao_social,
-            cadastro.chave_cadastro(),
-        )
-        if any(chave_texto_sem_acento(item) == alvo for item in candidatos if item):
+    qs = ClienteProtocolo.objects.all().order_by('-considerar_pesquisa_satisfacao', 'codigo', 'loja', 'pk')
+    for cadastro in qs:
+        if any(chave_nome_cliente(item) == alvo for item in _nomes_cadastro(cadastro)):
             return cadastro
     return None
 
@@ -64,22 +74,11 @@ def valores_filtro_cliente(valor: str) -> list[str]:
     textos = {texto}
     cadastro = encontrar_cadastro_pesquisa(texto)
     if cadastro:
-        textos.update(
-            filter(
-                None,
-                {
-                    cadastro.chave_cadastro(),
-                    _label_cadastro(cadastro),
-                    cadastro.nome,
-                    cadastro.nome_interno,
-                    cadastro.razao_social,
-                },
-            )
-        )
-    alvo = chave_texto_sem_acento(texto)
+        textos.update(_nomes_cadastro(cadastro))
+    alvo = chave_nome_cliente(texto)
     for nome in PesquisaSatisfacao.objects.exclude(cliente='').values_list('cliente', flat=True).distinct():
         nome = (nome or '').strip()
-        if nome and chave_texto_sem_acento(nome) == alvo:
+        if nome and chave_nome_cliente(nome) == alvo:
             textos.add(nome)
     return list(textos)
 
@@ -109,7 +108,7 @@ def cliente_pesquisa_permitido(valor: str, *, valor_atual: str = '', permitir_ou
     if texto.casefold() in permitidos:
         return True
     for cliente in _cadastros_pesquisa_ativos():
-        if chave_texto_sem_acento(_label_cadastro(cliente)) == chave_texto_sem_acento(texto):
+        if chave_nome_cliente(_label_cadastro(cliente)) == chave_nome_cliente(texto):
             return True
     return False
 
@@ -122,7 +121,7 @@ def opcoes_cliente_pesquisa(*, incluir_historico: bool = False, valor_atual: str
         if not label:
             continue
         value = cliente.chave_cadastro()
-        chave = chave_texto_sem_acento(label)
+        chave = chave_nome_cliente(label)
         if value.casefold() in seen or label.casefold() in seen or chave in seen:
             continue
         seen.add(value.casefold())
@@ -132,10 +131,10 @@ def opcoes_cliente_pesquisa(*, incluir_historico: bool = False, valor_atual: str
 
     extra: list[str] = []
     atual = (valor_atual or '').strip()
-    if atual and atual.casefold() not in seen and chave_texto_sem_acento(atual) not in seen:
+    if atual and atual.casefold() not in seen and chave_nome_cliente(atual) not in seen:
         extra.append(atual)
         seen.add(atual.casefold())
-        seen.add(chave_texto_sem_acento(atual))
+        seen.add(chave_nome_cliente(atual))
     if incluir_historico:
         for nome in PesquisaSatisfacao.objects.exclude(cliente='').values_list('cliente', flat=True).distinct():
             nome = (nome or '').strip()
@@ -148,7 +147,7 @@ def opcoes_cliente_pesquisa(*, incluir_historico: bool = False, valor_atual: str
                 continue
             if encontrar_cadastro_pesquisa(nome):
                 continue
-            chave = chave_texto_sem_acento(nome)
+            chave = chave_nome_cliente(nome)
             if nome.casefold() in seen or chave in seen:
                 continue
             extra.append(nome)
@@ -157,3 +156,33 @@ def opcoes_cliente_pesquisa(*, incluir_historico: bool = False, valor_atual: str
     for nome in extra:
         opcoes.append({'value': nome, 'label': nome_exibicao_pesquisa(nome)})
     return opcoes
+
+
+def valor_persistido_pesquisa(cadastro: ClienteProtocolo) -> str:
+    if (cadastro.codigo or '').strip():
+        return cadastro.chave_cadastro()
+    return _label_cadastro(cadastro)
+
+
+def sincronizar_cliente_pesquisas(cadastro: ClienteProtocolo, aliases_anteriores=()) -> int:
+    """Atualiza lançamentos antigos para a chave atual do cadastro."""
+    chaves = {
+        chave_nome_cliente(item)
+        for item in (*aliases_anteriores, *_nomes_cadastro(cadastro))
+        if item
+    }
+    chaves.discard('')
+    novo = valor_persistido_pesquisa(cadastro)
+    if not novo:
+        return 0
+    ids = []
+    for pk, nome in PesquisaSatisfacao.objects.exclude(cliente='').values_list('pk', 'cliente'):
+        texto = (nome or '').strip()
+        if not texto or texto == novo:
+            continue
+        if chave_nome_cliente(texto) in chaves:
+            ids.append(pk)
+    if not ids:
+        return 0
+    PesquisaSatisfacao.objects.filter(pk__in=ids).update(cliente=novo)
+    return len(ids)

@@ -1,6 +1,8 @@
+import re
+import unicodedata
+
 from django.conf import settings
 from django.db import models
-import unicodedata
 
 
 TIPO_PESSOA_FISICA = 'F'
@@ -24,6 +26,11 @@ def format_municipio_cadastro(value: str) -> str:
 def chave_texto_sem_acento(value: str) -> str:
     nfd = unicodedata.normalize('NFD', (value or '').strip().casefold())
     return ''.join(ch for ch in nfd if unicodedata.category(ch) != 'Mn')
+
+
+def chave_nome_cliente(value: str) -> str:
+    """Compara nomes de cliente ignorando caixa, acento e pontuação (Ltda. vs LTDA)."""
+    return re.sub(r'[^a-z0-9]+', '', chave_texto_sem_acento(value))
 
 
 def chave_cadastro_cliente(codigo: str, loja: str) -> str:

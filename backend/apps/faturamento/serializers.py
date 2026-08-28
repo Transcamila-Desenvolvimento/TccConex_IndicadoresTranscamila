@@ -189,8 +189,12 @@ class ClienteProtocoloSerializer(serializers.ModelSerializer):
         return cliente
 
     def update(self, instance, validated_data):
+        from apps.sgq.clientes_cadastro import _nomes_cadastro, sincronizar_cliente_pesquisas
+
+        aliases_anteriores = _nomes_cadastro(instance)
         validated_data.pop('filiaisIniciais', None)
         cliente = super().update(instance, validated_data)
+        sincronizar_cliente_pesquisas(cliente, aliases_anteriores)
         grupo_flags = {}
         for campo in ('requer_expedicao', 'exige_filial'):
             if campo in validated_data:
