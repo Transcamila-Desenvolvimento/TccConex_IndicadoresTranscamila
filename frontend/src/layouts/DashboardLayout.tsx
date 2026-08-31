@@ -45,8 +45,10 @@ const DashboardLayout: React.FC = () => {
   const [isIndLogisticaSubmenuOpen, setIsIndLogisticaSubmenuOpen] = useState(false);
   const [isIndRHSubmenuOpen, setIsIndRHSubmenuOpen] = useState(false);
   const [isIndSgqSubmenuOpen, setIsIndSgqSubmenuOpen] = useState(false);
+  const [isIndFrotaSubmenuOpen, setIsIndFrotaSubmenuOpen] = useState(false);
   const [isEnvioDocumentosSubmenuOpen, setIsEnvioDocumentosSubmenuOpen] = useState(false);
   const [isCadastrosFaturamentoSubmenuOpen, setIsCadastrosFaturamentoSubmenuOpen] = useState(false);
+  const [isCadastrosFrotaSubmenuOpen, setIsCadastrosFrotaSubmenuOpen] = useState(false);
   const [, setIsAdminSubmenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
@@ -81,11 +83,17 @@ const DashboardLayout: React.FC = () => {
     if (location.pathname.startsWith('/indicadores/gestao-qualidade')) {
       setIsIndSgqSubmenuOpen(true);
     }
+    if (location.pathname.startsWith('/indicadores/frota')) {
+      setIsIndFrotaSubmenuOpen(true);
+    }
     if (location.pathname.startsWith('/faturamento/protocolos')) {
       setIsEnvioDocumentosSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/faturamento/cadastros')) {
       setIsCadastrosFaturamentoSubmenuOpen(true);
+    }
+    if (location.pathname.startsWith('/frota/cadastros')) {
+      setIsCadastrosFrotaSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/admin')) {
       setIsAdminSubmenuOpen(true);
@@ -301,6 +309,18 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Indicadores' && allowedIndicadores.has('satisfacao-clientes')
       },
       {
+        title: "Custos de frota",
+        path: "Indicadores / Frota / Custos de frota",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 8.75A2.5 2.5 0 0012 7.5c-1.66 0-2.75.9-2.75 2.1 0 2.9 5.5.7 5.5 3.4 0 1.25-1.15 2.15-2.75 2.15a2.6 2.6 0 01-2.4-1.4M12 6.5v11" />
+          </svg>
+        ),
+        action: () => navigate('/indicadores/frota/custos'),
+        show: selectedEnvironment === 'Indicadores' && allowedIndicadores.has('custos-frota')
+      },
+      {
         title: "Home Compras",
         path: "Compras / Home",
         icon: (
@@ -411,6 +431,27 @@ const DashboardLayout: React.FC = () => {
         action: () => navigate('/frota'),
         show: selectedEnvironment === 'Frota' && canAba('Frota', 'home')
       },
+      {
+        title: "Custos de frota",
+        path: "Frota / Custos de frota",
+        icon: <i className="bi bi-truck search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/frota/custos'),
+        show: selectedEnvironment === 'Frota' && canAba('Frota', 'custos-frota')
+      },
+      {
+        title: "Condutores",
+        path: "Frota / Cadastros / Condutores",
+        icon: <i className="bi bi-person-badge search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/frota/cadastros/condutores'),
+        show: selectedEnvironment === 'Frota' && canAba('Frota', 'cadastro-condutores')
+      },
+      {
+        title: "Veículos frota",
+        path: "Frota / Cadastros / Veículos frota",
+        icon: <i className="bi bi-truck search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/frota/cadastros/veiculos'),
+        show: selectedEnvironment === 'Frota' && canAba('Frota', 'cadastro-veiculos')
+      },
     ];
 
     return list.filter(f => f.show);
@@ -446,8 +487,10 @@ const DashboardLayout: React.FC = () => {
   const IND_LOGISTICA_PATHS = ['/indicadores/logistica/meta-faturamento'];
   const IND_RH_PATHS = ['/indicadores/rh/movimentacao'];
   const IND_SGQ_PATHS = ['/indicadores/gestao-qualidade/satisfacao-clientes'];
+  const IND_FROTA_PATHS = ['/indicadores/frota/custos'];
   const FATURAMENTO_ENVIO_PATHS = ['/faturamento/protocolos'];
   const FATURAMENTO_CADASTROS_PATHS = ['/faturamento/cadastros/clientes'];
+  const FROTA_CADASTROS_PATHS = ['/frota/cadastros/condutores', '/frota/cadastros/veiculos'];
 
   // Get Breadcrumb text based on active route and environment
   const getBreadcrumbText = () => {
@@ -469,6 +512,9 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/sgq')) return env;
     if (path.startsWith('/logistica/configuracoes')) return `${env} / Configurações gerais`;
     if (path.startsWith('/logistica')) return env;
+    if (path.startsWith('/frota/cadastros/condutores')) return `${env} / Cadastros / Condutores`;
+    if (path.startsWith('/frota/cadastros/veiculos')) return `${env} / Cadastros / Veículos frota`;
+    if (path.startsWith('/frota/custos')) return `${env} / Custos de frota`;
     if (path.startsWith('/frota')) return env;
     if (path.startsWith('/marketing/campanhas')) return `${env} / Calendario Transcamila`;
     if (path.startsWith('/marketing')) return env;
@@ -487,6 +533,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/indicadores/logistica/meta-faturamento')) return `${env} / Logística / Meta de faturamento`;
     if (path.startsWith('/indicadores/rh/movimentacao')) return `${env} / Recursos Humanos / Movimentação de RH`;
     if (path.startsWith('/indicadores/gestao-qualidade/satisfacao-clientes')) return `${env} / Gestão da qualidade / Satisfação dos Clientes`;
+    if (path.startsWith('/indicadores/frota/custos')) return `${env} / Frota / Custos de frota`;
     if (path.startsWith('/indicadores/fluxo-de-caixa')) return `${env} / Financeiro / Fluxo de Caixa`;
     if (path.startsWith('/indicadores')) return `${env} / Home Indicadores`;
     
@@ -698,6 +745,42 @@ const DashboardLayout: React.FC = () => {
                     <div className="nav-btn-left">
                       <NavIcon name="star" sub />
                       <span className="nav-text">Satisfação dos Clientes</span>
+                    </div>
+                  </Link>
+                </div>
+              </div>
+              )}
+
+              {allowedIndicadores.has('custos-frota') && (
+              <div className="nav-group-wrapper" id="btn-menu-indicadores-frota">
+                <button
+                  type="button"
+                  className={`nav-btn ${isParentNavActive(IND_FROTA_PATHS) ? 'active-parent' : ''}`}
+                  onClick={() => setIsIndFrotaSubmenuOpen(!isIndFrotaSubmenuOpen)}
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="truck" />
+                    <span className="nav-text">Frota</span>
+                  </div>
+                  <ChevronSubmenu open={isIndFrotaSubmenuOpen} />
+                </button>
+
+                <div
+                  className="submenu-container"
+                  style={{
+                    display: isSidebarCollapsed ? undefined : 'block',
+                    maxHeight: isSidebarCollapsed ? undefined : (isIndFrotaSubmenuOpen ? '80px' : '0px'),
+                    overflow: 'hidden',
+                    transition: 'max-height 0.25s ease',
+                  }}
+                >
+                  <Link
+                    to="/indicadores/frota/custos"
+                    className={`nav-btn sub-nav-btn ${isRouteActive('/indicadores/frota/custos') ? 'active' : ''}`}
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="coin" sub />
+                      <span className="nav-text">Custos de frota</span>
                     </div>
                   </Link>
                 </div>
@@ -1061,6 +1144,69 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Home Frota</span>
                   </div>
                 </Link>
+                )}
+                {canAba('Frota', 'custos-frota') && (
+                <Link
+                  to="/frota/custos"
+                  className={`nav-btn ${isRouteActive('/frota/custos') ? 'active' : ''}`}
+                  data-tooltip="Custos de frota"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="truck" />
+                    <span className="nav-text">Custos de frota</span>
+                  </div>
+                </Link>
+                )}
+                {(canAba('Frota', 'cadastro-condutores') || canAba('Frota', 'cadastro-veiculos')) && (
+                <div className="nav-group-wrapper" id="btn-menu-frota-cadastros">
+                  <button
+                    type="button"
+                    className={`nav-btn ${isParentNavActive(FROTA_CADASTROS_PATHS) ? 'active-parent' : ''}`}
+                    onClick={() => setIsCadastrosFrotaSubmenuOpen(!isCadastrosFrotaSubmenuOpen)}
+                    data-tooltip="Cadastros"
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="journal-text" />
+                      <span className="nav-text">Cadastros</span>
+                    </div>
+                    <ChevronSubmenu open={isCadastrosFrotaSubmenuOpen} />
+                  </button>
+
+                  <div
+                    className="submenu-container"
+                    style={{
+                      display: isSidebarCollapsed ? undefined : 'block',
+                      maxHeight: isSidebarCollapsed ? undefined : (isCadastrosFrotaSubmenuOpen ? '160px' : '0px'),
+                      overflow: 'hidden',
+                      transition: 'max-height 0.25s ease',
+                    }}
+                  >
+                    {canAba('Frota', 'cadastro-condutores') && (
+                    <Link
+                      to="/frota/cadastros/condutores"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/frota/cadastros/condutores') ? 'active' : ''}`}
+                      data-tooltip="Condutores"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="person-badge" sub />
+                        <span className="nav-text">Condutores</span>
+                      </div>
+                    </Link>
+                    )}
+                    {canAba('Frota', 'cadastro-veiculos') && (
+                    <Link
+                      to="/frota/cadastros/veiculos"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/frota/cadastros/veiculos') ? 'active' : ''}`}
+                      data-tooltip="Veículos frota"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="truck" sub />
+                        <span className="nav-text">Veículos frota</span>
+                      </div>
+                    </Link>
+                    )}
+                  </div>
+                </div>
                 )}
               </div>
             )}

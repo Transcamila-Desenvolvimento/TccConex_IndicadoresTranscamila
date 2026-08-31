@@ -31,6 +31,7 @@ INDICADORES_KEYS = frozenset({
     'meta-faturamento',
     'movimentacao-rh',
     'satisfacao-clientes',
+    'custos-frota',
 })
 
 # Abas de menu liberáveis por ambiente (Indicadores continua em INDICADORES_KEYS).
@@ -58,7 +59,7 @@ ABAS_POR_AMBIENTE = {
     'SGQ': frozenset({'home', 'pesquisa-satisfacao'}),
     'Marketing': frozenset({'home', 'campanhas'}),
     'Logística': frozenset({'home', 'configuracoes'}),
-    'Frota': frozenset({'home'}),
+    'Frota': frozenset({'home', 'cadastro-veiculos', 'cadastro-condutores', 'custos-frota'}),
 }
 
 # Funções liberáveis por ambiente para operadores (admin sempre tem todas).
@@ -81,6 +82,11 @@ FUNCOES_POR_AMBIENTE = {
         'criar-campanhas',
         'editar-campanhas',
         'excluir-campanhas',
+    }),
+    'Frota': frozenset({
+        'gerenciar-veiculos',
+        'gerenciar-condutores',
+        'gerenciar-custos-frota',
     }),
 }
 

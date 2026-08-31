@@ -48,6 +48,18 @@ const QUICK_LINKS = [
       </svg>
     ),
   },
+  {
+    title: 'Custos de frota',
+    description: 'Custo total de operação, manutenções, abastecimento, média km/L, R$/km e km rodado por veículo.',
+    path: '/indicadores/frota/custos',
+    badge: 'Frota',
+    icon: (
+      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 8.75A2.5 2.5 0 0012 7.5c-1.66 0-2.75.9-2.75 2.1 0 2.9 5.5.7 5.5 3.4 0 1.25-1.15 2.15-2.75 2.15a2.6 2.6 0 01-2.4-1.4M12 6.5v11" />
+      </svg>
+    ),
+  },
 ] as const;
 
 const IndicadoresHome: React.FC = () => {
@@ -60,6 +72,7 @@ const IndicadoresHome: React.FC = () => {
     if (link.path === '/indicadores/fluxo-de-caixa') return allowed.has('fluxo-caixa');
     if (link.path === '/indicadores/rh/movimentacao') return allowed.has('movimentacao-rh');
     if (link.path === '/indicadores/gestao-qualidade/satisfacao-clientes') return allowed.has('satisfacao-clientes');
+    if (link.path === '/indicadores/frota/custos') return allowed.has('custos-frota');
     return allowed.has('meta-faturamento');
   });
 

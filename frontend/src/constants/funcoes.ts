@@ -89,6 +89,27 @@ export const FUNCAO_ITEMS = [
     label: 'Excluir',
     description: 'Permite excluir campanhas do calendário.',
   },
+  {
+    module: 'Frota',
+    aba: 'cadastro-veiculos',
+    key: 'gerenciar-veiculos',
+    label: 'Cadastrar e editar',
+    description: 'Permite cadastrar, editar e excluir veículos da frota.',
+  },
+  {
+    module: 'Frota',
+    aba: 'cadastro-condutores',
+    key: 'gerenciar-condutores',
+    label: 'Cadastrar e editar',
+    description: 'Permite cadastrar, editar e excluir condutores da frota.',
+  },
+  {
+    module: 'Frota',
+    aba: 'custos-frota',
+    key: 'gerenciar-custos-frota',
+    label: 'Importar relatórios',
+    description: 'Permite importar planilhas de manutenção e abastecimento para o indicador de custos da frota.',
+  },
 ] as const;
 
 export type FuncaoKey = (typeof FUNCAO_ITEMS)[number]['key'];

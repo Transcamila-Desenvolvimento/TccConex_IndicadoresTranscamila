@@ -8,6 +8,7 @@ import type {
   CashflowQueryParams, CashflowResponse, CashflowDayDetailParams, CashflowDayDetailResponse,
   RHIndicadorQueryParams, RHIndicadorResponse, RHIndicadorCategoriaBucket, RHIndicadorPorCategoria,
   MetaFaturamentoQueryParams, MetaFaturamentoResponse,
+  FrotaCustosIndicadorQueryParams, FrotaCustosIndicadorResponse,
   SgqSatisfacaoIndicadorQueryParams, SgqSatisfacaoIndicadorResponse, SgqSatisfacaoDetalhe,
   SendGerencialEmailParams, SendGerencialEmailResponse,
   ReportImportResult, ReportImportType,
@@ -37,6 +38,10 @@ import type {
   GoogleDriveStatus, GoogleDriveBrowseResponse,
   UserDirectoryEntry,
   SgqLoteDraft, SgqLoteDraftRow, SgqFormDraft,
+  VeiculoFrota, VeiculoFrotaPayload,
+  CondutorFrota, CondutorFrotaPayload,
+  CustoFrotaLote, CustoFrotaLotesResponse, CustoFrotaImportResult, CustoFrotaReportType,
+  CustoManutencaoRow, CustoAbastecimentoRow,
 } from '../types/domain';
 import { filterActiveEnvironments, ACTIVE_ENVIRONMENTS } from '../constants/environments';
 
@@ -86,6 +91,42 @@ function normalizeUser(raw: any): User {
     googleLinkedAt: raw.googleLinkedAt ?? null,
     googlePicture: raw.googlePicture ?? null,
     mustChangePassword: Boolean(raw.mustChangePassword),
+  };
+}
+
+function normalizeCustoFrotaLote(raw: any): CustoFrotaLote {
+  return {
+    id: String(raw.id),
+    label: raw.label,
+    date: raw.date,
+    periodoInicio: raw.periodoInicio ?? '',
+    periodoFim: raw.periodoFim ?? '',
+    updatedBy: raw.updatedBy,
+    importedReports: {
+      manutencao: Boolean(raw.importedReports?.manutencao),
+      abastecimento: Boolean(raw.importedReports?.abastecimento),
+    },
+    isActive: Boolean(raw.isActive ?? raw.is_active),
+  };
+}
+
+function normalizeCustoFrotaImportResult(raw: any, type: CustoFrotaReportType, fileName = ''): CustoFrotaImportResult {
+  const issues = Array.isArray(raw?.issues) ? raw.issues : [];
+  if (issues.length === 0 && raw?.detail) {
+    issues.push({ severity: 'error', message: String(raw.detail) });
+  }
+  return {
+    type,
+    fileName: raw?.fileName ?? fileName,
+    success: raw?.success === true,
+    rowCount: Number(raw?.rowCount ?? 0),
+    skippedRows: Number(raw?.skippedRows ?? 0),
+    issues,
+    loteId: raw?.loteId != null ? String(raw.loteId) : null,
+    loteLabel: raw?.loteLabel ?? null,
+    reusedLote: Boolean(raw?.reusedLote),
+    periodoInicio: raw?.periodoInicio ?? null,
+    periodoFim: raw?.periodoFim ?? null,
   };
 }
 
@@ -1146,6 +1187,16 @@ export const apiService = {
     return data as MetaFaturamentoResponse;
   },
 
+  async getIndicadorFrotaCustos(
+    params: FrotaCustosIndicadorQueryParams = {},
+  ): Promise<FrotaCustosIndicadorResponse> {
+    const query: Record<string, string | number> = {};
+    if (params.loteId != null) query.loteId = params.loteId;
+    if (params.filial) query.filial = params.filial;
+    const { data } = await api.get('/api/indicadores/frota/custos/', { params: query });
+    return data as FrotaCustosIndicadorResponse;
+  },
+
   async sendGerencialEmail(payload: SendGerencialEmailParams): Promise<SendGerencialEmailResponse> {
     const { data } = await api.post('/api/indicadores/fluxo-caixa/enviar-gerencial/', payload);
     return data;
@@ -1952,6 +2003,115 @@ export const apiService = {
 
   async removeCampanhaMidia(campanhaId: string, driveFileId: string): Promise<void> {
     await api.post(`/api/marketing/campanhas/${campanhaId}/midias/remover/`, { driveFileId });
+  },
+
+  // ─── Frota ──────────────────────────────────────────────────────────────────
+
+  async getVeiculosFrota(): Promise<VeiculoFrota[]> {
+    const { data } = await api.get('/api/frota/veiculos/');
+    return Array.isArray(data) ? data : data.results ?? [];
+  },
+
+  async createVeiculoFrota(payload: VeiculoFrotaPayload): Promise<VeiculoFrota> {
+    const { data } = await api.post('/api/frota/veiculos/', payload);
+    return data;
+  },
+
+  async updateVeiculoFrota(id: string, payload: Partial<VeiculoFrotaPayload>): Promise<VeiculoFrota> {
+    const { data } = await api.patch(`/api/frota/veiculos/${id}/`, payload);
+    return data;
+  },
+
+  async deleteVeiculoFrota(id: string): Promise<void> {
+    await api.delete(`/api/frota/veiculos/${id}/`);
+  },
+
+  async getCondutoresFrota(): Promise<CondutorFrota[]> {
+    const { data } = await api.get('/api/frota/condutores/');
+    return Array.isArray(data) ? data : data.results ?? [];
+  },
+
+  async createCondutorFrota(payload: CondutorFrotaPayload): Promise<CondutorFrota> {
+    const { data } = await api.post('/api/frota/condutores/', payload);
+    return data;
+  },
+
+  async updateCondutorFrota(id: string, payload: Partial<CondutorFrotaPayload>): Promise<CondutorFrota> {
+    const { data } = await api.patch(`/api/frota/condutores/${id}/`, payload);
+    return data;
+  },
+
+  async deleteCondutorFrota(id: string): Promise<void> {
+    await api.delete(`/api/frota/condutores/${id}/`);
+  },
+
+  async getCustoFrotaLotes(): Promise<CustoFrotaLotesResponse> {
+    const { data } = await api.get('/api/frota/custos-lotes/');
+    const list = Array.isArray(data) ? data : (data.results ?? []);
+    return {
+      maxBatches: Number((data as { maxBatches?: number }).maxBatches ?? list.length),
+      results: list.map(normalizeCustoFrotaLote),
+    };
+  },
+
+  async importCustoFrota(type: CustoFrotaReportType, file: File): Promise<CustoFrotaImportResult> {
+    const form = new FormData();
+    form.append('type', type);
+    form.append('file', file);
+    try {
+      const response = await api.post('/api/frota/custos-lotes/importar/', form, {
+        timeout: 120000,
+        validateStatus: (s) => s === 200 || s === 400 || s === 403 || s === 500,
+      });
+      return normalizeCustoFrotaImportResult(response.data, type, file.name);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: unknown } };
+      if (axiosErr.response?.data) {
+        return normalizeCustoFrotaImportResult(axiosErr.response.data, type, file.name);
+      }
+      throw err;
+    }
+  },
+
+  async finalizeCustoFrotaLote(batchId: string): Promise<CustoFrotaLote> {
+    const { data } = await api.post(`/api/frota/custos-lotes/${batchId}/finalize/`);
+    return normalizeCustoFrotaLote(data);
+  },
+
+  async getCustoFrotaRelatorio(
+    reportType: CustoFrotaReportType,
+    params: ReportQueryParams = {},
+  ): Promise<PaginatedResponse<CustoManutencaoRow | CustoAbastecimentoRow>> {
+    const { data } = await api.get(`/api/frota/custos/relatorios/${reportType}/`, {
+      params: buildReportQueryParams(params),
+    });
+    const normalize = reportType === 'manutencao'
+      ? (raw: any): CustoManutencaoRow => ({
+          id: String(raw.id),
+          placa: raw.placa,
+          grupo: raw.grupo ?? '',
+          item: raw.item,
+          valorMaterial: parseReportAmount(raw.valorMaterial) ?? 0,
+          valorServicos: parseReportAmount(raw.valorServicos) ?? 0,
+          valorTotal: parseReportAmount(raw.valorTotal) ?? 0,
+        })
+      : (raw: any): CustoAbastecimentoRow => ({
+          id: String(raw.id),
+          placa: raw.placa,
+          transacao: raw.transacao ?? '',
+          data: raw.data ?? '',
+          hora: raw.hora ?? '',
+          estabelecimento: raw.estabelecimento ?? '',
+          cidade: raw.cidade ?? '',
+          motorista: raw.motorista ?? '',
+          hodometro: raw.hodometro != null ? Number(raw.hodometro) : null,
+          kmTrecho: raw.kmTrecho != null ? Number(raw.kmTrecho) : null,
+          litragem: parseReportAmount(raw.litragem) ?? null,
+          combustivel: raw.combustivel ?? '',
+          valorTotal: parseReportAmount(raw.valorTotal) ?? 0,
+          numeroNfe: raw.numeroNfe ?? '',
+        });
+    return paginatedFromResponse(data, normalize);
   },
 
 };

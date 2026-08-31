@@ -7,6 +7,7 @@ from apps.financeiro.pagination import ReportPagination
 from apps.accounts.mixins import ModuleScopedViewMixin
 
 from .cashflow_service import build_cashflow_day_detail, build_cashflow_payload, get_financeiro_activity_version
+from .frota_custos_service import build_frota_custos_payload
 from .gerencial_email_service import _parse_emails, _parse_reference, send_gerencial_email
 from .meta_faturamento_service import build_meta_faturamento_payload
 from .models import IndicadorFilial, IndicadorKpi
@@ -143,6 +144,20 @@ class RHMovimentacaoExportView(ModuleScopedViewMixin, APIView):
         )
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
+
+
+class FrotaCustosIndicadorView(ModuleScopedViewMixin, APIView):
+    """Custos de frota — manutenção + abastecimento por veículo e totais da operação."""
+
+    permission_module = 'Indicadores'
+    permission_requires_filial = False
+
+    def get(self, request):
+        try:
+            payload = build_frota_custos_payload(request.query_params)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
 
 
 class MetaFaturamentoIndicadorView(ModuleScopedViewMixin, APIView):

@@ -542,6 +542,68 @@ export interface MetaFaturamentoQueryParams {
   mes?: number;
 }
 
+export interface FrotaCustosIndicadorQueryParams {
+  loteId?: number | null;
+  filial?: string;
+}
+
+export interface FrotaCustosIndicadorLoteOption {
+  id: number;
+  label: string;
+  periodoInicio: string | null;
+  periodoFim: string | null;
+  isActive: boolean;
+}
+
+export interface FrotaCustosIndicadorVeiculo {
+  veiculoId: number;
+  placa: string;
+  placaExibicao: string;
+  marca: string;
+  modelo: string;
+  filial: string;
+  custoManutencao: number;
+  custoAbastecimento: number;
+  custoTotal: number;
+  litragem: number;
+  km: number | null;
+  kmPorLitro: number | null;
+  custoPorKm: number | null;
+  percentualTotal: number;
+}
+
+export interface FrotaCustosManutencaoTipo {
+  item: string;
+  label: string;
+  valor: number;
+  quantidade: number;
+  percentual: number;
+}
+
+export interface FrotaCustosIndicadorResponse {
+  meta: {
+    loteId: number | null;
+    loteLabel: string;
+    periodoInicio: string | null;
+    periodoFim: string | null;
+    filial: string | null;
+    lotes: FrotaCustosIndicadorLoteOption[];
+    filiaisDisponiveis: string[];
+  };
+  summary: {
+    custoTotal: number;
+    custoManutencao: number;
+    custoAbastecimento: number;
+    veiculosCount: number;
+    mediaKmPorLitro: number | null;
+    kmTotal: number | null;
+    custoPorKm: number | null;
+    litragemTotal: number;
+  };
+  veiculos: FrotaCustosIndicadorVeiculo[];
+  manutencaoPorTipo: FrotaCustosManutencaoTipo[];
+}
+
 export interface MetaFaturamentoFilialBucket {
   filial: string;
   valor: number;
@@ -1753,4 +1815,193 @@ export const CAMPANHA_COR_OPTIONS: { key: string; label: string; hex: string }[]
 
 export const campanhaCorHex = (key: string) =>
   CAMPANHA_COR_OPTIONS.find((c) => c.key === key)?.hex ?? '#118CC4';
+
+export type VeiculoCategoria =
+  | 'tanque'
+  | 'teste'
+  | 'toco'
+  | 'trafic'
+  | 'truck'
+  | 'van'
+  | 'van-01-eixos'
+  | 'vuc';
+
+export type VeiculoCombustivel =
+  | 'arla-32'
+  | 'diesel-bs-500'
+  | 'diesel-bs-500-itapevi'
+  | 'diesel-s10'
+  | 'eletrica'
+  | 'etanol'
+  | 'flex'
+  | 'gasolina';
+
+export type VeiculoCarroceria =
+  | 'bau'
+  | 'bitrem'
+  | 'carreta'
+  | 'carroceria-fechada'
+  | 'cavalo-mecanico'
+  | 'dolly'
+  | 'empilhadeira-eletrica'
+  | 'empilhadeira-glp';
+
+export type VeiculoStatus = 'ativo' | 'inativo';
+
+export interface VeiculoFrota {
+  id: string;
+  placa: string;
+  renavam: string;
+  chassi: string;
+  marca: string;
+  modelo: string;
+  anoFabricacao: number | null;
+  anoModelo: number | null;
+  cor: string;
+  combustivel: VeiculoCombustivel;
+  categoria: VeiculoCategoria;
+  tipoCarroceria: VeiculoCarroceria;
+  hodometro: number;
+  status: VeiculoStatus;
+  filial: string;
+  observacoes: string;
+  dataCriacao?: string;
+  dataAtualizacao?: string;
+}
+
+export interface VeiculoFrotaPayload {
+  placa: string;
+  renavam?: string;
+  chassi?: string;
+  marca: string;
+  modelo: string;
+  anoFabricacao?: number | null;
+  anoModelo?: number | null;
+  cor?: string;
+  combustivel: VeiculoCombustivel;
+  categoria: VeiculoCategoria;
+  tipoCarroceria: VeiculoCarroceria;
+  hodometro?: number;
+  status: VeiculoStatus;
+  filial: string;
+  observacoes?: string;
+}
+
+export const VEICULO_CATEGORIA_LABEL: Record<VeiculoCategoria, string> = {
+  tanque: 'Tanque',
+  teste: 'Teste',
+  toco: 'Toco',
+  trafic: 'Trafic',
+  truck: 'Truck',
+  van: 'Van',
+  'van-01-eixos': 'Van 01 eixos',
+  vuc: 'VUC',
+};
+
+export const VEICULO_COMBUSTIVEL_LABEL: Record<VeiculoCombustivel, string> = {
+  'arla-32': 'Arla 32',
+  'diesel-bs-500': 'Diesel BS 500',
+  'diesel-bs-500-itapevi': 'Diesel BS 500 Itapevi',
+  'diesel-s10': 'Diesel S-10',
+  eletrica: 'Elétrica',
+  etanol: 'Etanol',
+  flex: 'Flex',
+  gasolina: 'Gasolina',
+};
+
+export const VEICULO_CARROCERIA_LABEL: Record<VeiculoCarroceria, string> = {
+  bau: 'Baú',
+  bitrem: 'Bitrem',
+  carreta: 'Carreta',
+  'carroceria-fechada': 'Carroceria fechada',
+  'cavalo-mecanico': 'Cavalo mecânico',
+  dolly: 'Dolly',
+  'empilhadeira-eletrica': 'Empilhadeira elétrica',
+  'empilhadeira-glp': 'Empilhadeira GLP',
+};
+
+export const VEICULO_STATUS_LABEL: Record<VeiculoStatus, string> = {
+  ativo: 'Ativo',
+  inativo: 'Inativo',
+};
+
+export const VEICULO_CATEGORIA_OPTIONS = Object.entries(VEICULO_CATEGORIA_LABEL) as [VeiculoCategoria, string][];
+export const VEICULO_COMBUSTIVEL_OPTIONS = Object.entries(VEICULO_COMBUSTIVEL_LABEL) as [VeiculoCombustivel, string][];
+export const VEICULO_CARROCERIA_OPTIONS = Object.entries(VEICULO_CARROCERIA_LABEL) as [VeiculoCarroceria, string][];
+export const VEICULO_STATUS_OPTIONS = Object.entries(VEICULO_STATUS_LABEL) as [VeiculoStatus, string][];
+
+export interface CondutorFrota {
+  id: string;
+  nome: string;
+  cpf: string;
+  filial: string;
+  status: 'ativo' | 'inativo';
+  dataCriacao?: string;
+}
+
+export interface CondutorFrotaPayload {
+  nome: string;
+  cpf?: string;
+  filial: string;
+  status?: 'ativo' | 'inativo';
+}
+
+export type CustoFrotaReportType = 'manutencao' | 'abastecimento';
+
+export interface CustoFrotaLote {
+  id: string;
+  label: string;
+  date: string;
+  periodoInicio: string;
+  periodoFim: string;
+  updatedBy: string;
+  importedReports: { manutencao: boolean; abastecimento: boolean };
+  isActive: boolean;
+}
+
+export interface CustoFrotaLotesResponse {
+  results: CustoFrotaLote[];
+  maxBatches: number;
+}
+
+export interface CustoFrotaImportResult {
+  type: CustoFrotaReportType;
+  fileName: string;
+  success: boolean;
+  rowCount: number;
+  skippedRows: number;
+  issues: ImportIssue[];
+  loteId?: string | null;
+  loteLabel?: string | null;
+  reusedLote?: boolean;
+  periodoInicio?: string | null;
+  periodoFim?: string | null;
+}
+
+export interface CustoManutencaoRow {
+  id: string;
+  placa: string;
+  grupo: string;
+  item: string;
+  valorMaterial: number;
+  valorServicos: number;
+  valorTotal: number;
+}
+
+export interface CustoAbastecimentoRow {
+  id: string;
+  placa: string;
+  transacao: string;
+  data: string;
+  hora: string;
+  estabelecimento: string;
+  cidade: string;
+  motorista: string;
+  hodometro: number | null;
+  kmTrecho: number | null;
+  litragem: number | null;
+  combustivel: string;
+  valorTotal: number;
+  numeroNfe: string;
+}
 

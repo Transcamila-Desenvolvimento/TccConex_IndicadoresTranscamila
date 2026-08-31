@@ -10,6 +10,7 @@ export const INDICADOR_ITEMS = [
   { key: 'meta-faturamento', label: 'Meta de Faturamento', group: 'Logística' },
   { key: 'movimentacao-rh', label: 'Movimentação de RH', group: 'Recursos Humanos' },
   { key: 'satisfacao-clientes', label: 'Satisfação dos Clientes', group: 'Gestão da qualidade' },
+  { key: 'custos-frota', label: 'Custos de frota', group: 'Frota' },
 ] as const;
 
 export type IndicadorKey = (typeof INDICADOR_ITEMS)[number]['key'];

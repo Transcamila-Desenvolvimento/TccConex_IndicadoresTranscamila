@@ -9963,6 +9963,46 @@ button.mkt-drive-browser-row:hover {
   min-width: 0;
 }
 
+.frota-custos-chart-card {
+  min-height: 420px;
+  flex: 0 0 auto;
+}
+
+.frota-custos-chart-wrap {
+  min-height: 340px;
+}
+
+.frota-tipo-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+}
+
+.frota-tipo-bar-track {
+  flex: 1;
+  height: 10px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.frota-tipo-bar-fill {
+  height: 100%;
+  background: #118cc4;
+  border-radius: 999px;
+}
+
+.frota-tipo-bar-pct {
+  width: 52px;
+  flex-shrink: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 12px;
+  color: #334155;
+}
+
 @media (max-width: 1200px) {
   .sgq-ind-kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -13229,4 +13269,193 @@ textarea.form-input {
     border-bottom: 1px solid #e2e8f0;
     padding-bottom: 16px;
   }
+}
+
+/* Consulta estilo Protheus (zoom de cadastro) */
+.erp-lookup-modal {
+  width: min(880px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: calc(100vh / var(--app-zoom) - 48px);
+}
+
+.erp-lookup-modal .modal-body {
+  padding: 12px 20px 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.erp-lookup-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.erp-lookup-search {
+  position: relative;
+  width: 280px;
+}
+
+.erp-lookup-search input {
+  width: 100%;
+  height: 34px;
+  padding: 0 34px 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #334155;
+  background: #fff;
+}
+
+.erp-lookup-search input:focus {
+  outline: none;
+  border-color: #118CC4;
+  box-shadow: 0 0 0 2px rgba(17, 140, 196, 0.15);
+}
+
+.erp-lookup-search .search-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.erp-lookup-gear-row {
+  display: flex;
+  justify-content: flex-end;
+  position: relative;
+  margin: 6px 0 8px;
+}
+
+.erp-lookup-gear-btn {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.erp-lookup-gear-btn:hover {
+  color: #0f172a;
+}
+
+.erp-lookup-gear-menu {
+  position: absolute;
+  top: 24px;
+  right: 0;
+  z-index: 4;
+  min-width: 160px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  font-size: 13px;
+}
+
+.erp-lookup-gear-menu label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.erp-lookup-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: auto;
+  max-height: 460px;
+  background: #fff;
+}
+
+.erp-lookup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.erp-lookup-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.erp-lookup-table thead th.is-sortable {
+  cursor: pointer;
+}
+
+.erp-lookup-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #0f172a;
+}
+
+.erp-lookup-table tbody tr {
+  cursor: pointer;
+}
+
+.erp-lookup-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.erp-lookup-table tbody tr.is-selected {
+  background: #dbeafe;
+}
+
+.erp-lookup-table tbody tr.is-selected:hover {
+  background: #dbeafe;
+}
+
+.erp-lookup-radio {
+  width: 40px;
+  text-align: center;
+}
+
+.erp-lookup-sort {
+  display: inline-flex;
+  flex-direction: column;
+  margin-left: 6px;
+  font-size: 8px;
+  line-height: 0.85;
+  color: #cbd5e1;
+  vertical-align: middle;
+}
+
+.erp-lookup-sort .is-active {
+  color: #0f172a;
+}
+
+.erp-lookup-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.erp-lookup-footer .reports-action-btn.secondary {
+  border-color: #118CC4;
+  color: #118CC4;
+}
+
+.erp-lookup-footer .reports-action-btn.secondary:hover {
+  background: #f0f9ff;
+  border-color: #0F7EB0;
+  color: #0F7EB0;
 }

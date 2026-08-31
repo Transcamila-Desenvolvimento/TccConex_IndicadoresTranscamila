@@ -7,6 +7,7 @@ import IndicadoresFluxoCaixa from './IndicadoresFluxoCaixa';
 import IndicadoresMetaFaturamento from './IndicadoresMetaFaturamento';
 import IndicadoresRHMovimentacao from './IndicadoresRHMovimentacao';
 import IndicadoresSatisfacaoClientes from './IndicadoresSatisfacaoClientes';
+import IndicadoresFrotaCustos from './IndicadoresFrotaCustos';
 
 const IndicadoresWorkspace: React.FC = () => {
   const { user } = useAuth();
@@ -30,6 +31,10 @@ const IndicadoresWorkspace: React.FC = () => {
       <Route
         path="gestao-qualidade/satisfacao-clientes"
         element={allowed.has('satisfacao-clientes') ? <IndicadoresSatisfacaoClientes /> : <Navigate to="" replace />}
+      />
+      <Route
+        path="frota/custos"
+        element={allowed.has('custos-frota') ? <IndicadoresFrotaCustos /> : <Navigate to="" replace />}
       />
       <Route path="*" element={<Navigate to="" replace />} />
     </Routes>
