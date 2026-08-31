@@ -2085,33 +2085,33 @@ export const apiService = {
     const { data } = await api.get(`/api/frota/custos/relatorios/${reportType}/`, {
       params: buildReportQueryParams(params),
     });
-    const normalize = reportType === 'manutencao'
-      ? (raw: any): CustoManutencaoRow => ({
-          id: String(raw.id),
-          placa: raw.placa,
-          grupo: raw.grupo ?? '',
-          item: raw.item,
-          valorMaterial: parseReportAmount(raw.valorMaterial) ?? 0,
-          valorServicos: parseReportAmount(raw.valorServicos) ?? 0,
-          valorTotal: parseReportAmount(raw.valorTotal) ?? 0,
-        })
-      : (raw: any): CustoAbastecimentoRow => ({
-          id: String(raw.id),
-          placa: raw.placa,
-          transacao: raw.transacao ?? '',
-          data: raw.data ?? '',
-          hora: raw.hora ?? '',
-          estabelecimento: raw.estabelecimento ?? '',
-          cidade: raw.cidade ?? '',
-          motorista: raw.motorista ?? '',
-          hodometro: raw.hodometro != null ? Number(raw.hodometro) : null,
-          kmTrecho: raw.kmTrecho != null ? Number(raw.kmTrecho) : null,
-          litragem: parseReportAmount(raw.litragem) ?? null,
-          combustivel: raw.combustivel ?? '',
-          valorTotal: parseReportAmount(raw.valorTotal) ?? 0,
-          numeroNfe: raw.numeroNfe ?? '',
-        });
-    return paginatedFromResponse(data, normalize);
+    if (reportType === 'manutencao') {
+      return paginatedFromResponse(data, (raw: any): CustoManutencaoRow => ({
+        id: String(raw.id),
+        placa: raw.placa,
+        grupo: raw.grupo ?? '',
+        item: raw.item,
+        valorMaterial: parseReportAmount(raw.valorMaterial) ?? 0,
+        valorServicos: parseReportAmount(raw.valorServicos) ?? 0,
+        valorTotal: parseReportAmount(raw.valorTotal) ?? 0,
+      }));
+    }
+    return paginatedFromResponse(data, (raw: any): CustoAbastecimentoRow => ({
+      id: String(raw.id),
+      placa: raw.placa,
+      transacao: raw.transacao ?? '',
+      data: raw.data ?? '',
+      hora: raw.hora ?? '',
+      estabelecimento: raw.estabelecimento ?? '',
+      cidade: raw.cidade ?? '',
+      motorista: raw.motorista ?? '',
+      hodometro: raw.hodometro != null ? Number(raw.hodometro) : null,
+      kmTrecho: raw.kmTrecho != null ? Number(raw.kmTrecho) : null,
+      litragem: parseReportAmount(raw.litragem) ?? null,
+      combustivel: raw.combustivel ?? '',
+      valorTotal: parseReportAmount(raw.valorTotal) ?? 0,
+      numeroNfe: raw.numeroNfe ?? '',
+    }));
   },
 
 };
