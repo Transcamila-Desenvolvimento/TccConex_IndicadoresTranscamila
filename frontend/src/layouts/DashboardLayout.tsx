@@ -7,6 +7,8 @@ import { getAllowedIndicadores } from '../constants/indicadores';
 import { userCanSeeAba } from '../constants/abas';
 import logoExpanded from '../assets/Logo_TccConex.png';
 import logoCollapsed from '../assets/Logo_TccConex_Fechado.png';
+import logoIndicadoresExpanded from '../assets/Logo_Indicadores.png';
+import logoIndicadoresCollapsed from '../assets/Logo_Indicadores_Fechado.png';
 
 function NavIcon({ name, sub = false }: { name: string; sub?: boolean }) {
   return (
@@ -16,6 +18,8 @@ function NavIcon({ name, sub = false }: { name: string; sub?: boolean }) {
     />
   );
 }
+
+type IndNavGroup = 'financeiro' | 'logistica' | 'rh' | 'sgq' | 'frota';
 
 function ChevronSubmenu({ open }: { open: boolean }) {
   return (
@@ -41,11 +45,7 @@ const DashboardLayout: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isCashflowSubmenuOpen, setIsCashflowSubmenuOpen] = useState(false);
-  const [isIndFinanceiroSubmenuOpen, setIsIndFinanceiroSubmenuOpen] = useState(false);
-  const [isIndLogisticaSubmenuOpen, setIsIndLogisticaSubmenuOpen] = useState(false);
-  const [isIndRHSubmenuOpen, setIsIndRHSubmenuOpen] = useState(false);
-  const [isIndSgqSubmenuOpen, setIsIndSgqSubmenuOpen] = useState(false);
-  const [isIndFrotaSubmenuOpen, setIsIndFrotaSubmenuOpen] = useState(false);
+  const [indOpenGroup, setIndOpenGroup] = useState<IndNavGroup | null>(null);
   const [isEnvioDocumentosSubmenuOpen, setIsEnvioDocumentosSubmenuOpen] = useState(false);
   const [isCadastrosFaturamentoSubmenuOpen, setIsCadastrosFaturamentoSubmenuOpen] = useState(false);
   const [isCadastrosFrotaSubmenuOpen, setIsCadastrosFrotaSubmenuOpen] = useState(false);
@@ -72,19 +72,20 @@ const DashboardLayout: React.FC = () => {
       setIsCashflowSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/indicadores/fluxo-de-caixa')) {
-      setIsIndFinanceiroSubmenuOpen(true);
-    }
-    if (location.pathname.startsWith('/indicadores/logistica')) {
-      setIsIndLogisticaSubmenuOpen(true);
-    }
-    if (location.pathname.startsWith('/indicadores/rh')) {
-      setIsIndRHSubmenuOpen(true);
-    }
-    if (location.pathname.startsWith('/indicadores/gestao-qualidade')) {
-      setIsIndSgqSubmenuOpen(true);
-    }
-    if (location.pathname.startsWith('/indicadores/frota')) {
-      setIsIndFrotaSubmenuOpen(true);
+      setIndOpenGroup('financeiro');
+    } else if (location.pathname.startsWith('/indicadores/logistica')) {
+      setIndOpenGroup('logistica');
+    } else if (location.pathname.startsWith('/indicadores/rh')) {
+      setIndOpenGroup('rh');
+    } else if (location.pathname.startsWith('/indicadores/gestao-qualidade')) {
+      setIndOpenGroup('sgq');
+    } else if (location.pathname.startsWith('/indicadores/frota')) {
+      setIndOpenGroup('frota');
+    } else if (
+      location.pathname === '/indicadores'
+      || location.pathname === '/indicadores/'
+    ) {
+      setIndOpenGroup(null);
     }
     if (location.pathname.startsWith('/faturamento/protocolos')) {
       setIsEnvioDocumentosSubmenuOpen(true);
@@ -471,9 +472,12 @@ const DashboardLayout: React.FC = () => {
 
   const isChildRouteActive = (paths: string[]) => paths.some((path) => isRouteActive(path));
 
-  /** Pai ativo só com sidebar recolhida; expandida destaca apenas o submenu. */
-  const isParentNavActive = (childPaths: string[]) =>
-    isSidebarCollapsed && isChildRouteActive(childPaths);
+  const isParentNavActive = (childPaths: string[], submenuOpen = false) =>
+    isChildRouteActive(childPaths) && (isSidebarCollapsed || !submenuOpen);
+
+  const toggleIndGroup = (group: IndNavGroup) => {
+    setIndOpenGroup((current) => (current === group ? null : group));
+  };
 
   const FINANCEIRO_CASHFLOW_PATHS = [
     '/financeiro/reports',
@@ -545,8 +549,17 @@ const DashboardLayout: React.FC = () => {
       {/* Sidebar */}
       <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`} id="sidebar">
         <div className="sidebar-brand" onClick={handleChangeEnv} title="Alterar ERP / Sair">
-          <img src={logoExpanded} alt="TccConex Logo" className="brand-logo logo-expanded" />
-          <img src={logoCollapsed} alt="TccConex Logo Fechado" className="brand-logo logo-collapsed" />
+          {selectedEnvironment === 'Indicadores' ? (
+            <>
+              <img src={logoIndicadoresExpanded} alt="Transcamila Luft Logistics" className="brand-logo logo-expanded logo-indicadores" />
+              <img src={logoIndicadoresCollapsed} alt="Transcamila" className="brand-logo logo-collapsed logo-indicadores" />
+            </>
+          ) : (
+            <>
+              <img src={logoExpanded} alt="TccConex Logo" className="brand-logo logo-expanded" />
+              <img src={logoCollapsed} alt="TccConex Logo Fechado" className="brand-logo logo-collapsed" />
+            </>
+          )}
         </div>
         
         <nav className="sidebar-nav">
@@ -608,24 +621,24 @@ const DashboardLayout: React.FC = () => {
               </Link>
 
               {allowedIndicadores.has('fluxo-caixa') && (
-              <div className="nav-group-wrapper" id="btn-menu-indicadores-financeiro">
+              <div className={`nav-group-wrapper${indOpenGroup === 'financeiro' ? ' submenu-open' : ''}`} id="btn-menu-indicadores-financeiro">
                 <button
                   type="button"
-                  className={`nav-btn ${isParentNavActive(IND_FINANCEIRO_PATHS) ? 'active-parent' : ''}`}
-                  onClick={() => setIsIndFinanceiroSubmenuOpen(!isIndFinanceiroSubmenuOpen)}
+                  className={`nav-btn ${isParentNavActive(IND_FINANCEIRO_PATHS, indOpenGroup === 'financeiro') ? 'active-parent' : ''}`}
+                  onClick={() => toggleIndGroup('financeiro')}
                 >
                   <div className="nav-btn-left">
                     <NavIcon name="coin" />
                     <span className="nav-text">Financeiro</span>
                   </div>
-                  <ChevronSubmenu open={isIndFinanceiroSubmenuOpen} />
+                  <ChevronSubmenu open={indOpenGroup === 'financeiro'} />
                 </button>
 
                 <div
                   className="submenu-container"
                   style={{
                     display: isSidebarCollapsed ? undefined : 'block',
-                    maxHeight: isSidebarCollapsed ? undefined : (isIndFinanceiroSubmenuOpen ? '80px' : '0px'),
+                    maxHeight: isSidebarCollapsed ? undefined : (indOpenGroup === 'financeiro' ? '80px' : '0px'),
                     overflow: 'hidden',
                     transition: 'max-height 0.25s ease',
                   }}
@@ -644,24 +657,24 @@ const DashboardLayout: React.FC = () => {
               )}
 
               {allowedIndicadores.has('meta-faturamento') && (
-              <div className="nav-group-wrapper" id="btn-menu-indicadores-logistica">
+              <div className={`nav-group-wrapper${indOpenGroup === 'logistica' ? ' submenu-open' : ''}`} id="btn-menu-indicadores-logistica">
                 <button
                   type="button"
-                  className={`nav-btn ${isParentNavActive(IND_LOGISTICA_PATHS) ? 'active-parent' : ''}`}
-                  onClick={() => setIsIndLogisticaSubmenuOpen(!isIndLogisticaSubmenuOpen)}
+                  className={`nav-btn ${isParentNavActive(IND_LOGISTICA_PATHS, indOpenGroup === 'logistica') ? 'active-parent' : ''}`}
+                  onClick={() => toggleIndGroup('logistica')}
                 >
                   <div className="nav-btn-left">
                     <NavIcon name="truck" />
                     <span className="nav-text">Logística</span>
                   </div>
-                  <ChevronSubmenu open={isIndLogisticaSubmenuOpen} />
+                  <ChevronSubmenu open={indOpenGroup === 'logistica'} />
                 </button>
 
                 <div
                   className="submenu-container"
                   style={{
                     display: isSidebarCollapsed ? undefined : 'block',
-                    maxHeight: isSidebarCollapsed ? undefined : (isIndLogisticaSubmenuOpen ? '80px' : '0px'),
+                    maxHeight: isSidebarCollapsed ? undefined : (indOpenGroup === 'logistica' ? '80px' : '0px'),
                     overflow: 'hidden',
                     transition: 'max-height 0.25s ease',
                   }}
@@ -680,24 +693,24 @@ const DashboardLayout: React.FC = () => {
               )}
 
               {allowedIndicadores.has('movimentacao-rh') && (
-              <div className="nav-group-wrapper" id="btn-menu-indicadores-rh">
+              <div className={`nav-group-wrapper${indOpenGroup === 'rh' ? ' submenu-open' : ''}`} id="btn-menu-indicadores-rh">
                 <button
                   type="button"
-                  className={`nav-btn ${isParentNavActive(IND_RH_PATHS) ? 'active-parent' : ''}`}
-                  onClick={() => setIsIndRHSubmenuOpen(!isIndRHSubmenuOpen)}
+                  className={`nav-btn ${isParentNavActive(IND_RH_PATHS, indOpenGroup === 'rh') ? 'active-parent' : ''}`}
+                  onClick={() => toggleIndGroup('rh')}
                 >
                   <div className="nav-btn-left">
                     <NavIcon name="people" />
                     <span className="nav-text">Recursos Humanos</span>
                   </div>
-                  <ChevronSubmenu open={isIndRHSubmenuOpen} />
+                  <ChevronSubmenu open={indOpenGroup === 'rh'} />
                 </button>
 
                 <div
                   className="submenu-container"
                   style={{
                     display: isSidebarCollapsed ? undefined : 'block',
-                    maxHeight: isSidebarCollapsed ? undefined : (isIndRHSubmenuOpen ? '80px' : '0px'),
+                    maxHeight: isSidebarCollapsed ? undefined : (indOpenGroup === 'rh' ? '80px' : '0px'),
                     overflow: 'hidden',
                     transition: 'max-height 0.25s ease',
                   }}
@@ -716,24 +729,24 @@ const DashboardLayout: React.FC = () => {
               )}
 
               {allowedIndicadores.has('satisfacao-clientes') && (
-              <div className="nav-group-wrapper" id="btn-menu-indicadores-sgq">
+              <div className={`nav-group-wrapper${indOpenGroup === 'sgq' ? ' submenu-open' : ''}`} id="btn-menu-indicadores-sgq">
                 <button
                   type="button"
-                  className={`nav-btn ${isParentNavActive(IND_SGQ_PATHS) ? 'active-parent' : ''}`}
-                  onClick={() => setIsIndSgqSubmenuOpen(!isIndSgqSubmenuOpen)}
+                  className={`nav-btn ${isParentNavActive(IND_SGQ_PATHS, indOpenGroup === 'sgq') ? 'active-parent' : ''}`}
+                  onClick={() => toggleIndGroup('sgq')}
                 >
                   <div className="nav-btn-left">
                     <NavIcon name="clipboard-check" />
                     <span className="nav-text">Gestão da qualidade</span>
                   </div>
-                  <ChevronSubmenu open={isIndSgqSubmenuOpen} />
+                  <ChevronSubmenu open={indOpenGroup === 'sgq'} />
                 </button>
 
                 <div
                   className="submenu-container"
                   style={{
                     display: isSidebarCollapsed ? undefined : 'block',
-                    maxHeight: isSidebarCollapsed ? undefined : (isIndSgqSubmenuOpen ? '80px' : '0px'),
+                    maxHeight: isSidebarCollapsed ? undefined : (indOpenGroup === 'sgq' ? '80px' : '0px'),
                     overflow: 'hidden',
                     transition: 'max-height 0.25s ease',
                   }}
@@ -752,24 +765,24 @@ const DashboardLayout: React.FC = () => {
               )}
 
               {allowedIndicadores.has('custos-frota') && (
-              <div className="nav-group-wrapper" id="btn-menu-indicadores-frota">
+              <div className={`nav-group-wrapper${indOpenGroup === 'frota' ? ' submenu-open' : ''}`} id="btn-menu-indicadores-frota">
                 <button
                   type="button"
-                  className={`nav-btn ${isParentNavActive(IND_FROTA_PATHS) ? 'active-parent' : ''}`}
-                  onClick={() => setIsIndFrotaSubmenuOpen(!isIndFrotaSubmenuOpen)}
+                  className={`nav-btn ${isParentNavActive(IND_FROTA_PATHS, indOpenGroup === 'frota') ? 'active-parent' : ''}`}
+                  onClick={() => toggleIndGroup('frota')}
                 >
                   <div className="nav-btn-left">
                     <NavIcon name="truck" />
                     <span className="nav-text">Frota</span>
                   </div>
-                  <ChevronSubmenu open={isIndFrotaSubmenuOpen} />
+                  <ChevronSubmenu open={indOpenGroup === 'frota'} />
                 </button>
 
                 <div
                   className="submenu-container"
                   style={{
                     display: isSidebarCollapsed ? undefined : 'block',
-                    maxHeight: isSidebarCollapsed ? undefined : (isIndFrotaSubmenuOpen ? '80px' : '0px'),
+                    maxHeight: isSidebarCollapsed ? undefined : (indOpenGroup === 'frota' ? '80px' : '0px'),
                     overflow: 'hidden',
                     transition: 'max-height 0.25s ease',
                   }}
@@ -819,10 +832,10 @@ const DashboardLayout: React.FC = () => {
               )}
 
               {(canAba('Financeiro', 'inclusao-relatorios') || canAba('Financeiro', 'saldos-bancarios') || canAba('Financeiro', 'ajustes-caixa') || canAba('Financeiro', 'faturamento')) && (
-              <div className="nav-group-wrapper" id="btn-menu-financeiro-cashflow">
+              <div className={`nav-group-wrapper${isCashflowSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-financeiro-cashflow">
                 <button 
                   type="button" 
-                  className={`nav-btn ${isParentNavActive(FINANCEIRO_CASHFLOW_PATHS) ? 'active-parent' : ''}`}
+                  className={`nav-btn ${isParentNavActive(FINANCEIRO_CASHFLOW_PATHS, isCashflowSubmenuOpen) ? 'active-parent' : ''}`}
                   onClick={() => setIsCashflowSubmenuOpen(!isCashflowSubmenuOpen)}
                 >
                   <div className="nav-btn-left">
@@ -908,10 +921,10 @@ const DashboardLayout: React.FC = () => {
                 )}
 
                 {canAba('Faturamento', 'envio-nf-cliente') && (
-                <div className="nav-group-wrapper" id="btn-menu-faturamento-envio-documentos">
+                <div className={`nav-group-wrapper${isEnvioDocumentosSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-faturamento-envio-documentos">
                   <button
                     type="button"
-                    className={`nav-btn ${isParentNavActive(FATURAMENTO_ENVIO_PATHS) ? 'active-parent' : ''}`}
+                    className={`nav-btn ${isParentNavActive(FATURAMENTO_ENVIO_PATHS, isEnvioDocumentosSubmenuOpen) ? 'active-parent' : ''}`}
                     onClick={() => setIsEnvioDocumentosSubmenuOpen(!isEnvioDocumentosSubmenuOpen)}
                     data-tooltip="Envio de documentos"
                   >
@@ -946,10 +959,10 @@ const DashboardLayout: React.FC = () => {
                 )}
 
                 {canAba('Faturamento', 'cadastro-clientes') && (
-                <div className="nav-group-wrapper" id="btn-menu-faturamento-cadastros">
+                <div className={`nav-group-wrapper${isCadastrosFaturamentoSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-faturamento-cadastros">
                   <button
                     type="button"
-                    className={`nav-btn ${isParentNavActive(FATURAMENTO_CADASTROS_PATHS) ? 'active-parent' : ''}`}
+                    className={`nav-btn ${isParentNavActive(FATURAMENTO_CADASTROS_PATHS, isCadastrosFaturamentoSubmenuOpen) ? 'active-parent' : ''}`}
                     onClick={() => setIsCadastrosFaturamentoSubmenuOpen(!isCadastrosFaturamentoSubmenuOpen)}
                     data-tooltip="Cadastros"
                   >
@@ -1158,10 +1171,10 @@ const DashboardLayout: React.FC = () => {
                 </Link>
                 )}
                 {(canAba('Frota', 'cadastro-condutores') || canAba('Frota', 'cadastro-veiculos')) && (
-                <div className="nav-group-wrapper" id="btn-menu-frota-cadastros">
+                <div className={`nav-group-wrapper${isCadastrosFrotaSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-frota-cadastros">
                   <button
                     type="button"
-                    className={`nav-btn ${isParentNavActive(FROTA_CADASTROS_PATHS) ? 'active-parent' : ''}`}
+                    className={`nav-btn ${isParentNavActive(FROTA_CADASTROS_PATHS, isCadastrosFrotaSubmenuOpen) ? 'active-parent' : ''}`}
                     onClick={() => setIsCadastrosFrotaSubmenuOpen(!isCadastrosFrotaSubmenuOpen)}
                     data-tooltip="Cadastros"
                   >
