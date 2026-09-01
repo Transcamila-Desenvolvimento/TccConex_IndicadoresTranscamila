@@ -122,7 +122,8 @@ body {
 }
 
 .sidebar-brand .logo-expanded.logo-indicadores {
-  max-height: 42px;
+  max-width: 92%;
+  max-height: 36px;
 }
 
 .sidebar-brand .logo-collapsed {
@@ -150,8 +151,8 @@ body {
 }
 
 .sidebar.collapsed .sidebar-brand .logo-collapsed.logo-indicadores {
-  max-width: 36px;
-  max-height: 36px;
+  max-width: 32px;
+  max-height: 32px;
 }
 
 /* Navigation List */
