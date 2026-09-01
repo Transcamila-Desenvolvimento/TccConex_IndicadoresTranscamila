@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import EmailTagsInput, { type EmailTagValue } from '../../components/EmailTagsInput';
 import { useGoogleContacts } from '../../hooks/useGoogleContacts';
-import { useEnviarResumoSgqPesquisas } from '../../hooks/useSgqPesquisas';
+import { useEnviarResumoSgqPesquisas, useSgqResumoAnos } from '../../hooks/useSgqPesquisas';
 
 interface SGQResumoEmailModalProps {
   onClose: () => void;
 }
 
 const SGQResumoEmailModal: React.FC<SGQResumoEmailModalProps> = ({ onClose }) => {
+  const anosQuery = useSgqResumoAnos();
   const enviarResumo = useEnviarResumoSgqPesquisas();
+  const [ano, setAno] = useState<number | ''>('');
   const [toTags, setToTags] = useState<EmailTagValue[]>([]);
   const [ccTags, setCcTags] = useState<EmailTagValue[]>([]);
   const [success, setSuccess] = useState<string | null>(null);
@@ -16,6 +18,14 @@ const SGQResumoEmailModal: React.FC<SGQResumoEmailModalProps> = ({ onClose }) =>
 
   const { data: contactsData } = useGoogleContacts(true);
   const contacts = contactsData?.contacts ?? [];
+  const anos = anosQuery.data?.anos ?? [];
+  const anoPadrao = anosQuery.data?.anoPadrao;
+
+  useEffect(() => {
+    if (ano === '' && anoPadrao != null) {
+      setAno(anoPadrao);
+    }
+  }, [ano, anoPadrao]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,9 +36,13 @@ const SGQResumoEmailModal: React.FC<SGQResumoEmailModalProps> = ({ onClose }) =>
       setErrorMsg('Informe ao menos um destinatário.');
       return;
     }
+    if (ano === '') {
+      setErrorMsg('Selecione o ano de referência.');
+      return;
+    }
 
     enviarResumo.mutate(
-      { to, cc: ccTags.map((tag) => tag.email) },
+      { to, cc: ccTags.map((tag) => tag.email), ano },
       {
         onSuccess: (res) => setSuccess(res.message ?? 'Resumo enviado com sucesso.'),
         onError: (err: unknown) => {
@@ -71,11 +85,33 @@ const SGQResumoEmailModal: React.FC<SGQResumoEmailModalProps> = ({ onClose }) =>
         ) : (
           <form style={{ padding: '20px 24px 24px 24px' }} onSubmit={handleSubmit}>
             <p style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.6, marginTop: 0 }}>
-              O resumo será enviado com <strong>todas as pesquisas</strong> de{' '}
-              <strong>Ibiporã e Rondonópolis</strong> no mesmo e-mail,
-              independentemente da filial selecionada na sessão, dos filtros da tabela
+              O resumo será enviado com as pesquisas de{' '}
+              <strong>Ibiporã e Rondonópolis</strong> do <strong>ano selecionado</strong>,
+              independentemente da filial da sessão, dos filtros da lista
               e das filiais liberadas no seu acesso ao SGQ.
             </p>
+
+            <div style={{ marginBottom: '14px' }}>
+              <label htmlFor="sgq-resumo-ano" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                Ano de referência
+              </label>
+              <select
+                id="sgq-resumo-ano"
+                className="rh-period-select"
+                value={ano === '' ? '' : String(ano)}
+                onChange={(e) => setAno(e.target.value ? Number(e.target.value) : '')}
+                disabled={anosQuery.isLoading || enviarResumo.isPending}
+                aria-label="Ano de referência do resumo"
+              >
+                {anosQuery.isLoading && <option value="">Carregando anos...</option>}
+                {!anosQuery.isLoading && anos.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+              <p style={{ margin: '6px 0 0', fontSize: '11.5px', color: '#94a3b8' }}>
+                Lista os anos com lançamento. O padrão é o ano atual.
+              </p>
+            </div>
 
             <EmailTagsInput
               id="sgq-resumo-email-to"
@@ -112,7 +148,7 @@ const SGQResumoEmailModal: React.FC<SGQResumoEmailModalProps> = ({ onClose }) =>
               <button
                 type="submit"
                 className="reports-action-btn primary"
-                disabled={enviarResumo.isPending}
+                disabled={enviarResumo.isPending || anosQuery.isLoading || ano === ''}
                 style={{ fontSize: '12.5px', height: '36px' }}
               >
                 {enviarResumo.isPending ? 'Enviando...' : 'Enviar resumo'}

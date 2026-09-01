@@ -11,7 +11,9 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 from apps.accounts.constants import branches_for_module
+from apps.faturamento.models import chave_nome_cliente
 
+from .clientes_cadastro import indice_cadastros_pesquisa, nome_exibicao_pesquisa
 from .models import PesquisaSatisfacao
 from .stats_service import build_pesquisa_stats, count_pesquisas_em_branco
 
@@ -70,10 +72,57 @@ def _score_medio_criterios(criterios: list[dict]) -> float:
     return round(sum(item['score'] for item in criterios) / len(criterios), 2)
 
 
-def _build_por_filial(filiais: list[str]) -> list[dict]:
+def anos_resumo_disponiveis(filiais: list[str]) -> dict:
+    """Anos com lançamento (data_inclusao) nas filiais do resumo + ano atual como padrão."""
+    atual = timezone.localdate().year
+    anos = {
+        dt.year
+        for dt in PesquisaSatisfacao.objects.filter(
+            filial__in=filiais,
+            data_inclusao__isnull=False,
+        ).dates('data_inclusao', 'year')
+    }
+    anos.add(atual)
+    return {
+        'anos': sorted(anos, reverse=True),
+        'anoPadrao': atual,
+    }
+
+
+def parse_ano_resumo(value) -> int:
+    atual = timezone.localdate().year
+    if value in (None, ''):
+        return atual
+    try:
+        ano = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Informe um ano de referência válido.') from exc
+    if ano < 2000 or ano > atual + 1:
+        raise ValueError('Ano de referência inválido.')
+    return ano
+
+
+def _qs_resumo(filiais: list[str], ano: int):
+    return PesquisaSatisfacao.objects.filter(filial__in=filiais, data_inclusao__year=ano)
+
+
+def _por_cliente(qs) -> list[dict]:
+    indice = indice_cadastros_pesquisa()
+    agrupado: dict[str, dict] = {}
+    for row in qs.values('cliente').annotate(total=Count('id')):
+        bruto = (row['cliente'] or '').strip() or '—'
+        label = nome_exibicao_pesquisa(bruto, indice) or bruto
+        chave = chave_nome_cliente(label) or label.casefold()
+        if chave not in agrupado:
+            agrupado[chave] = {'cliente': label, 'label': label, 'total': 0}
+        agrupado[chave]['total'] += row['total']
+    return sorted(agrupado.values(), key=lambda item: (-item['total'], item['label']))
+
+
+def _build_por_filial(filiais: list[str], ano: int) -> list[dict]:
     por_filial = []
     for nome in filiais:
-        f_qs = PesquisaSatisfacao.objects.filter(filial=nome)
+        f_qs = PesquisaSatisfacao.objects.filter(filial=nome, data_inclusao__year=ano)
         f_stats = build_pesquisa_stats(f_qs)
         ultima_inclusao = f_qs.aggregate(ultima=Max('data_inclusao'))['ultima']
         por_filial.append({
@@ -95,6 +144,7 @@ def send_pesquisa_resumo_email(
     *,
     to_emails: list[str],
     cc_emails: list[str] | None = None,
+    ano: int | None = None,
 ) -> None:
     del request  # resumo consolidado — não depende da filial da sessão
 
@@ -105,19 +155,12 @@ def send_pesquisa_resumo_email(
     if not filiais:
         raise ValueError('Usuário sem acesso a filiais do SGQ para enviar o resumo.')
 
-    qs = PesquisaSatisfacao.objects.filter(filial__in=filiais)
+    ano_ref = parse_ano_resumo(ano)
+    qs = _qs_resumo(filiais, ano_ref)
     stats = build_pesquisa_stats(qs)
     total_em_branco = count_pesquisas_em_branco(qs)
-    por_filial = _build_por_filial(filiais)
-
-    por_cliente = [
-        {
-            'cliente': row['cliente'],
-            'label': row['cliente'],
-            'total': row['total'],
-        }
-        for row in qs.values('cliente').annotate(total=Count('id')).order_by('-total', 'cliente')
-    ]
+    por_filial = _build_por_filial(filiais, ano_ref)
+    por_cliente = _por_cliente(qs)
 
     criterios = []
     for item in stats['criterios']:
@@ -130,7 +173,7 @@ def send_pesquisa_resumo_email(
 
     context = {
         'filiais_label': filiais_label_text,
-        'periodo': 'Todos os registros',
+        'periodo': f'Ano {ano_ref}',
         'enviado_por': _usuario_display(user),
         'ref_date': timezone.localtime(),
         'stats': stats,
@@ -145,7 +188,7 @@ def send_pesquisa_resumo_email(
 
     html_body = render_to_string('sgq/emails/resumo_pesquisa.html', context)
 
-    subject = f'Pesquisa de Satisfação — {filiais_label_text}'
+    subject = f'Pesquisa de Satisfação — {filiais_label_text} — {ano_ref}'
 
     email_obj = EmailMessage(
         subject=subject,

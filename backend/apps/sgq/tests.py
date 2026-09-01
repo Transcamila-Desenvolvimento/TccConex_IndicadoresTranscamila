@@ -562,6 +562,83 @@ class PesquisaSatisfacaoTests(APITestCase):
         message = mail.outbox[0]
         self.assertIn('>2<', message.body)
 
+    def test_enviar_resumo_agrupa_cliente_pelo_cadastro(self):
+        from datetime import date
+
+        from django.core import mail
+
+        ClienteProtocolo.objects.filter(nome='PRENTISS').update(
+            codigo='002431',
+            loja='01',
+            nome_interno='Prentiss Química Ltda.',
+        )
+        for cte, cliente in (
+            ('A', '002431|01'),
+            ('B', 'PRENTISS QUIMICA LTDA'),
+            ('C', 'Prentiss Química Ltda.'),
+        ):
+            PesquisaSatisfacao.objects.create(
+                filial=IBIPORA,
+                data_inclusao=date(2026, 7, 10),
+                motorista='João da Silva',
+                cte=cte,
+                data_entrega=date(2026, 7, 1),
+                nota_fiscal=cte,
+                cliente=cliente,
+                prazo_entrega='otimo',
+                condicoes_mercadoria='otimo',
+                condicoes_veiculo='bom',
+                apresentacao_motorista='otimo',
+                atendimento_dispensado='bom',
+                criado_por='Admin SGQ',
+            )
+
+        response = self.client.post(
+            '/api/sgq/pesquisas-satisfacao/enviar-resumo/',
+            {'to': ['destino@example.com'], 'ano': 2026},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        body = mail.outbox[0].body
+        self.assertIn('Prentiss Química Ltda.', body)
+        self.assertNotIn('002431|01', body)
+        self.assertNotIn('PRENTISS QUIMICA LTDA', body)
+
+    def test_enviar_resumo_filtra_por_ano(self):
+        from datetime import date
+
+        from django.core import mail
+
+        self._create(cte='2025', cliente='CCAB')
+        self._create(cte='2026', cliente='Braskem')
+        PesquisaSatisfacao.objects.filter(cte='2025').update(data_inclusao=date(2025, 3, 1))
+        PesquisaSatisfacao.objects.filter(cte='2026').update(data_inclusao=date(2026, 8, 1))
+
+        response = self.client.post(
+            '/api/sgq/pesquisas-satisfacao/enviar-resumo/',
+            {'to': ['destino@example.com'], 'ano': 2026},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        body = mail.outbox[0].body
+        self.assertIn('Ano 2026', body)
+        self.assertIn('>1<', body)
+        self.assertIn('BRASKEM', body)
+        self.assertNotIn('CCAB', body)
+
+    def test_anos_resumo_lista_lancamentos_e_ano_atual(self):
+        from datetime import date
+
+        self._create(cte='2025')
+        PesquisaSatisfacao.objects.update(data_inclusao=date(2025, 1, 10))
+        response = self.client.get('/api/sgq/pesquisas-satisfacao/anos-resumo/', **ENV_HEADER)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn(2025, response.data['anos'])
+        self.assertEqual(response.data['anoPadrao'], timezone.localdate().year)
+        self.assertIn(timezone.localdate().year, response.data['anos'])
+
     def test_enviar_resumo_exige_destinatario(self):
         response = self.client.post(
             '/api/sgq/pesquisas-satisfacao/enviar-resumo/',

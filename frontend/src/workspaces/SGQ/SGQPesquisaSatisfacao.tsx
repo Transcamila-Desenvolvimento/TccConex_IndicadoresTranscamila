@@ -8,7 +8,6 @@ import {
   useSgqMotoristas,
   useSgqLancadores,
   useSgqClientes,
-  useSgqLoteDraft,
   useSgqFormDraft,
   useSaveSgqFormDraft,
   useDeleteSgqFormDraft,
@@ -18,7 +17,6 @@ import {
 } from '../../hooks/useSgqPesquisas';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
-import SGQPesquisaLoteModal from './SGQPesquisaLoteModal';
 import SGQPesquisaImportModal from './SGQPesquisaImportModal';
 import SGQResumoEmailModal from './SGQResumoEmailModal';
 import SGQEscoposAnaliseModal from './SGQEscoposAnaliseModal';
@@ -262,13 +260,10 @@ const SGQPesquisaSatisfacao: React.FC = () => {
     return opts;
   }, [clientesLancamentoQuery.data, form.cliente]);
 
-  // Dropdown "Incluir" removido — formulário direto no botão; lote/importação em "Ações"
+  // Dropdown "Incluir" — formulário padrão; importação em "Ações"
   const [isResumoEmailOpen, setIsResumoEmailOpen] = useState(false);
-  const [isLoteModalOpen, setIsLoteModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isEscoposModalOpen, setIsEscoposModalOpen] = useState(false);
-  const loteDraftQuery = useSgqLoteDraft(selectedFilial);
-  const hasLoteDraft = Boolean(loteDraftQuery.data?.hasDraft);
   const formDraftQuery = useSgqFormDraft(canCreatePesquisas ? selectedFilial : null);
   const saveFormDraft = useSaveSgqFormDraft(selectedFilial);
   const deleteFormDraft = useDeleteSgqFormDraft(selectedFilial);
@@ -512,7 +507,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '4px' }}>
       {/* Sugestões de motorista (autocomplete nativo) — compartilhada entre filiais,
-          pelo formulário e pela inclusão em tabela, para reduzir o mesmo motorista
+          pelo formulário de lançamento, para reduzir o mesmo motorista
           sendo digitado de formas diferentes, sem exigir um cadastro formal deles. */}
       <datalist id="sgq-motoristas-sugestoes">
         {motoristasSugeridos.map((nome) => (
@@ -553,22 +548,8 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                       Enviar resumo
                     </span>
                   </span>
-                  {(((canCreatePesquisas && !hasLoteDraft) || canImportPesquisas)) && (
+                  {canImportPesquisas && (
                     <div className="reports-dropdown-divider" />
-                  )}
-                  {canCreatePesquisas && !hasLoteDraft && (
-                    <span
-                      className="reports-dropdown-item"
-                      onClick={() => {
-                        setIsActionsOpen(false);
-                        setIsLoteModalOpen(true);
-                      }}
-                    >
-                      <span className="reports-dropdown-item-left">
-                        <i className="bi bi-table" />
-                        Inclusão em Tabela
-                      </span>
-                    </span>
                   )}
                   {canImportPesquisas && (
                     <span
@@ -656,22 +637,6 @@ const SGQPesquisaSatisfacao: React.FC = () => {
                 <span>Incluir</span>
               </button>
             )
-          )}
-
-          {canCreatePesquisas && hasLoteDraft && (
-            <button
-              type="button"
-              className="reports-action-btn primary"
-              style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
-              onClick={() => {
-                setIsActionsOpen(false);
-                setIsLoteModalOpen(true);
-              }}
-              title="Continuar rascunho da inclusão em tabela"
-            >
-              <i className="bi bi-table" aria-hidden="true" />
-              <span>Rascunho tabela</span>
-            </button>
           )}
         </div>
       </header>
@@ -1135,16 +1100,6 @@ const SGQPesquisaSatisfacao: React.FC = () => {
             </form>
           </div>
         </div>
-      )}
-
-      {isLoteModalOpen && canCreatePesquisas && (
-        <SGQPesquisaLoteModal
-          clienteOptions={clientesLancamentoQuery.data ?? []}
-          onClose={() => {
-            setIsLoteModalOpen(false);
-            void loteDraftQuery.refetch();
-          }}
-        />
       )}
 
       {isImportModalOpen && canImportPesquisas && (

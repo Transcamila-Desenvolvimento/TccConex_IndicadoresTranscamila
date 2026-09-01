@@ -27,6 +27,7 @@ export const SGQ_KEYS = {
   clientes: (incluirHistorico: boolean) => ['sgq', 'clientes', incluirHistorico] as const,
   loteDraft: (filial: string | null) => ['sgq', 'lote-draft', filial] as const,
   formDraft: (filial: string | null) => ['sgq', 'form-draft', filial] as const,
+  resumoAnos: ['sgq', 'resumo-anos'] as const,
   escoposAnalise: (incluirInativos = false) => ['sgq', 'escopos-analise', incluirInativos] as const,
   userDirectory: ['sgq', 'user-directory'] as const,
   all: ['sgq'] as const,
@@ -234,6 +235,14 @@ export function useImportSgqPesquisasSpreadsheet() {
         invalidateSgqAndIndicador(queryClient);
       }
     },
+  });
+}
+
+export function useSgqResumoAnos() {
+  return useQuery({
+    queryKey: SGQ_KEYS.resumoAnos,
+    queryFn: () => apiService.getSgqResumoAnos(),
+    staleTime: 60_000,
   });
 }
 

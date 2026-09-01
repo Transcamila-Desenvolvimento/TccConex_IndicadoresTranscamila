@@ -33,7 +33,7 @@ import type {
   SgqClienteOption,
   SgqEscopoAnaliseCadastro,
   SgqEscopoAnaliseOpcaoCadastro,
-  SendSgqResumoEmailParams, SendSgqResumoEmailResponse,
+  SendSgqResumoEmailParams, SendSgqResumoEmailResponse, SgqResumoAnosResponse,
   CampanhaMarketing, CampanhaPayload, CampanhaQuadro, CampanhaComentario, CampanhaMembro, CampanhaMidia,
   GoogleDriveStatus, GoogleDriveBrowseResponse,
   UserDirectoryEntry,
@@ -1839,6 +1839,11 @@ export const apiService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return data as SgqPesquisaImportResult;
+  },
+
+  async getSgqResumoAnos(): Promise<SgqResumoAnosResponse> {
+    const { data } = await api.get('/api/sgq/pesquisas-satisfacao/anos-resumo/');
+    return data as SgqResumoAnosResponse;
   },
 
   async enviarResumoSgqPesquisas(payload: SendSgqResumoEmailParams): Promise<SendSgqResumoEmailResponse> {

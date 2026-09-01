@@ -20,7 +20,14 @@ from apps.financeiro.pagination import ReportPagination
 from .form_draft import form_draft_payload, has_meaningful_form_draft, sanitize_form_draft
 from .lote_draft import draft_payload, has_meaningful_draft, sanitize_draft_rows
 from .models import EscopoAnalise, EscopoAnaliseOpcao, PesquisaSatisfacao, PesquisaSatisfacaoFormDraft, PesquisaSatisfacaoLoteDraft
-from .pesquisa_email_service import filiais_label, parse_emails, resolve_resumo_filiais, send_pesquisa_resumo_email
+from .pesquisa_email_service import (
+    anos_resumo_disponiveis,
+    filiais_label,
+    parse_ano_resumo,
+    parse_emails,
+    resolve_resumo_filiais,
+    send_pesquisa_resumo_email,
+)
 from .pesquisa_import_service import (
     CRIADO_POR_IMPORTACAO,
     PesquisaImportError,
@@ -265,11 +272,13 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             )
 
         try:
+            ano = parse_ano_resumo(request.data.get('ano'))
             send_pesquisa_resumo_email(
                 request.user,
                 request,
                 to_emails=to_emails,
                 cc_emails=cc_emails,
+                ano=ano,
             )
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -283,12 +292,22 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         record_audit(
             request.user,
             'sgq.pesquisa.resumo_enviado',
-            f'Resumo de pesquisas de satisfação ({label_filiais}) enviado para {", ".join(to_emails)}.',
+            f'Resumo de pesquisas de satisfação ({label_filiais}, {ano}) enviado para {", ".join(to_emails)}.',
         )
         return Response(
-            {'success': True, 'message': f'Resumo enviado para {", ".join(to_emails)}.'},
+            {'success': True, 'message': f'Resumo de {ano} enviado para {", ".join(to_emails)}.'},
             status=status.HTTP_200_OK,
         )
+
+    @action(detail=False, methods=['get'], url_path='anos-resumo')
+    def anos_resumo(self, request):
+        filiais = resolve_resumo_filiais(request.user)
+        if not filiais:
+            return Response(
+                {'detail': 'Usuário sem acesso a filiais do SGQ para enviar o resumo.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(anos_resumo_disponiveis(filiais))
 
     @action(detail=False, methods=['get', 'put', 'delete'], url_path='lote-draft')
     def lote_draft(self, request):

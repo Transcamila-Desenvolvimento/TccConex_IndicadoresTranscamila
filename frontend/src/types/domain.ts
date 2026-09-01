@@ -1526,6 +1526,12 @@ export interface SgqPesquisaStats {
 export interface SendSgqResumoEmailParams {
   to: string[];
   cc?: string[];
+  ano: number;
+}
+
+export interface SgqResumoAnosResponse {
+  anos: number[];
+  anoPadrao: number;
 }
 
 export interface SendSgqResumoEmailResponse {
