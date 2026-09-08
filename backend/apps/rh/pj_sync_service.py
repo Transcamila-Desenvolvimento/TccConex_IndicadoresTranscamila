@@ -10,6 +10,7 @@ from django.db import transaction
 from .models import (
     ColaboradorPJ,
     ColaboradorPJHistorico,
+    InconsistenciaColaborador,
     LoteMovimentacaoRH,
     MovimentacaoColaborador,
 )
@@ -20,6 +21,17 @@ SITUACAO_PJ = 'ATIVO (PJ)'
 
 def _competencia_key(ano: int, mes: int) -> int:
     return ano * 12 + mes
+
+
+def competencia_anterior(ano: int, mes: int) -> tuple[int, int]:
+    if mes <= 1:
+        return ano - 1, 12
+    return ano, mes - 1
+
+
+def format_salario_br(valor) -> str:
+    numero = Decimal(valor or 0)
+    return f"R$ {numero:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 
 def _date_to_competencia(d: date | None) -> int | None:
@@ -72,6 +84,47 @@ def salario_e_overrides_para_competencia(
     return salario, cargo, filial
 
 
+def _motivo_historico_competencia(pj: ColaboradorPJ, ano: int, mes: int) -> str:
+    for entry in pj.historico.all():
+        if entry.ano == ano and entry.mes == mes:
+            return (entry.motivo or '').strip()
+    return ''
+
+
+def sync_alteracao_salarial_pj(pj: ColaboradorPJ, lote: LoteMovimentacaoRH, salario_atual) -> None:
+    """Gera/atualiza a linha em Alterações quando o salário do PJ mudou vs. o mês anterior."""
+    qs = InconsistenciaColaborador.objects.filter(lote=lote, cpf=pj.cpf, tipo='salario')
+    prev_ano, prev_mes = competencia_anterior(lote.ano, lote.mes)
+    if not pj_ativo_na_competencia(pj, prev_ano, prev_mes):
+        qs.delete()
+        return
+
+    salario_ant, _, _ = salario_e_overrides_para_competencia(pj, prev_ano, prev_mes)
+    atual = Decimal(salario_atual or 0)
+    anterior = Decimal(salario_ant or 0)
+    if atual == anterior:
+        qs.delete()
+        return
+
+    motivo = _motivo_historico_competencia(pj, lote.ano, lote.mes)
+    if not motivo:
+        motivo = (
+            'Redução salarial por governança'
+            if atual < anterior
+            else 'Alteração salarial PJ'
+        )
+    qs.delete()
+    InconsistenciaColaborador.objects.create(
+        lote=lote,
+        cpf=pj.cpf,
+        nome=pj.nome,
+        tipo='salario',
+        valor_anterior=format_salario_br(anterior),
+        valor_atual=format_salario_br(atual),
+        justificativa=motivo,
+    )
+
+
 def _linha_e_clt(mov: MovimentacaoColaborador) -> bool:
     situacao = (mov.situacao or '').upper()
     return 'PJ' not in situacao
@@ -99,6 +152,7 @@ def sync_pj_nos_lotes(pj: ColaboradorPJ) -> dict:
             if existente and not _linha_e_clt(existente):
                 existente.delete()
                 removed += 1
+            InconsistenciaColaborador.objects.filter(lote=lote, cpf=pj.cpf, tipo='salario').delete()
             continue
 
         salario, cargo, filial = salario_e_overrides_para_competencia(pj, lote.ano, lote.mes)
@@ -129,6 +183,7 @@ def sync_pj_nos_lotes(pj: ColaboradorPJ) -> dict:
                 **defaults,
             )
         upserted += 1
+        sync_alteracao_salarial_pj(pj, lote, salario)
 
     return {
         'upserted': upserted,
@@ -152,6 +207,9 @@ def sync_todos_pjs() -> dict:
 def remove_pj_de_todos_lotes(cpf: str) -> int:
     """Remove linhas ATIVO (PJ) do CPF em todos os lotes (não toca linhas CLT)."""
     qs = MovimentacaoColaborador.objects.filter(cpf=cpf, situacao__icontains='PJ')
+    lote_ids = list(qs.values_list('lote_id', flat=True))
     count = qs.count()
     qs.delete()
+    if lote_ids:
+        InconsistenciaColaborador.objects.filter(cpf=cpf, tipo='salario', lote_id__in=lote_ids).delete()
     return count

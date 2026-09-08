@@ -109,7 +109,7 @@ class MovimentacaoColaborador(models.Model):
 
 class InconsistenciaColaborador(models.Model):
     TIPO_CHOICES = [
-        ('salario', 'Aumento de Salário'),
+        ('salario', 'Alteração de Salário'),
         ('cargo', 'Alteração de Cargo'),
         ('outros', 'Outros'),
     ]
@@ -179,6 +179,13 @@ class ColaboradorPJHistorico(models.Model):
     salario = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Salário")
     cargo = models.CharField(max_length=100, null=True, blank=True, verbose_name="Cargo")
     filial = models.CharField(max_length=100, null=True, blank=True, verbose_name="Filial")
+    motivo = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name="Motivo",
+        help_text="Obrigatório em alteração salarial; use p.ex. redução por governança.",
+    )
     data_criacao = models.DateTimeField(auto_now_add=True)
 
     class Meta:

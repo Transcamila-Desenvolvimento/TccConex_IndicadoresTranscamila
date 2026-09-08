@@ -1,4 +1,4 @@
-/* style.css - Clean, Modern System UI - Light Mode */
+﻿/* style.css - Clean, Modern System UI - Light Mode */
 :root {
   /* Escala global da UI. O layout foi desenhado para 1920×1080; em telas
      menores a interface inteira é reduzida proporcionalmente via zoom. */
@@ -1234,6 +1234,10 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   gap: 10px;
   align-items: end;
   margin-bottom: 14px;
+}
+
+.rh-pj-hist-form__motivo {
+  grid-column: 1 / -1;
 }
 
 .rh-pj-hist-form .login-group {

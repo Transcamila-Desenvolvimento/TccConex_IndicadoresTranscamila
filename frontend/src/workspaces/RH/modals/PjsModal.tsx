@@ -32,7 +32,14 @@ const EMPTY_HIST = {
   mes: String(new Date().getMonth() + 1),
   ano: String(new Date().getFullYear()),
   salario: '',
+  motivo: '',
 };
+
+const MOTIVOS_SALARIO_PJ = [
+  'Redução salarial por governança',
+  'Atualização de dissídio ou mérito',
+  'Reajuste contratual',
+];
 
 const MESES = [
   { value: '1', label: 'Janeiro' },
@@ -191,6 +198,7 @@ const PjsModal: React.FC<PjsModalProps> = ({ onClose }) => {
       mes: String(entry.mes),
       ano: String(entry.ano),
       salario: String(entry.salario ?? ''),
+      motivo: entry.motivo || '',
     });
     setHistError(null);
   };
@@ -204,6 +212,7 @@ const PjsModal: React.FC<PjsModalProps> = ({ onClose }) => {
       ano: Number(histForm.ano),
       mes: Number(histForm.mes),
       salario: Number(histForm.salario || 0),
+      motivo: histForm.motivo.trim(),
     };
 
     if (editingHistId) {
@@ -488,6 +497,20 @@ const PjsModal: React.FC<PjsModalProps> = ({ onClose }) => {
                   onChange={(e) => setHistForm({ ...histForm, salario: e.target.value })}
                 />
               </div>
+              <div className="login-group rh-pj-hist-form__motivo">
+                <label>Motivo da alteração</label>
+                <input
+                  list="rh-pj-motivos-salario"
+                  value={histForm.motivo}
+                  onChange={(e) => setHistForm({ ...histForm, motivo: e.target.value })}
+                  placeholder="Obrigatório se o salário mudar; nas reduções use governança"
+                />
+                <datalist id="rh-pj-motivos-salario">
+                  {MOTIVOS_SALARIO_PJ.map((motivo) => (
+                    <option key={motivo} value={motivo} />
+                  ))}
+                </datalist>
+              </div>
               <div className="rh-pj-hist-form__actions">
                 <button type="submit" className="reports-action-btn primary" disabled={savingHist}>
                   {savingHist ? 'Salvando...' : editingHistId ? 'Atualizar' : 'Adicionar'}
@@ -515,13 +538,14 @@ const PjsModal: React.FC<PjsModalProps> = ({ onClose }) => {
                   <tr>
                     <th>Competência</th>
                     <th className="num">Salário</th>
+                    <th>Motivo</th>
                     <th style={{ width: 90 }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {historico.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="rh-pj-modal__empty">
+                      <td colSpan={4} className="rh-pj-modal__empty">
                         Sem alterações — vale o salário base em todos os meses do vínculo.
                       </td>
                     </tr>
@@ -530,6 +554,7 @@ const PjsModal: React.FC<PjsModalProps> = ({ onClose }) => {
                       <tr key={entry.id}>
                         <td>{String(entry.mes).padStart(2, '0')}/{entry.ano}</td>
                         <td className="num">{formatCurrency(entry.salario)}</td>
+                        <td>{entry.motivo || '—'}</td>
                         <td>
                           <div className="rh-pj-modal__actions">
                             <button type="button" className="reports-action-btn-icon" title="Editar" onClick={() => openEditHist(entry)}>

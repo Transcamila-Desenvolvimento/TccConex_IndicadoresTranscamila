@@ -1390,7 +1390,7 @@ export const apiService = {
 
   async createPjHistoricoRH(
     pjId: string,
-    payload: { ano: number; mes: number; salario: number; cargo?: string; filial?: string },
+    payload: { ano: number; mes: number; salario: number; cargo?: string; filial?: string; motivo?: string },
   ): Promise<ColaboradorPJHistorico> {
     const { data } = await api.post(`/api/rh/pjs/${pjId}/historico/`, payload);
     return data;
@@ -1399,7 +1399,7 @@ export const apiService = {
   async updatePjHistoricoRH(
     pjId: string,
     historicoId: string,
-    payload: Partial<{ ano: number; mes: number; salario: number; cargo?: string; filial?: string }>,
+    payload: Partial<{ ano: number; mes: number; salario: number; cargo?: string; filial?: string; motivo?: string }>,
   ): Promise<ColaboradorPJHistorico> {
     const { data } = await api.patch(`/api/rh/pjs/${pjId}/historico/${historicoId}/`, payload);
     return data;

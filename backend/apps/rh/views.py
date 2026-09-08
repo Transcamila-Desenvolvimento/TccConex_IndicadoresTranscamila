@@ -876,7 +876,7 @@ class ColaboradorPJViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             qs = pj.historico.all().order_by('-ano', '-mes')
             return Response(ColaboradorPJHistoricoSerializer(qs, many=True).data)
 
-        serializer = ColaboradorPJHistoricoSerializer(data=request.data)
+        serializer = ColaboradorPJHistoricoSerializer(data=request.data, context={'pj': pj})
         serializer.is_valid(raise_exception=True)
         ano = serializer.validated_data['ano']
         mes = serializer.validated_data['mes']
@@ -912,7 +912,7 @@ class ColaboradorPJViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             )
             return Response(status=status.HTTP_204_NO_CONTENT)
 
-        serializer = ColaboradorPJHistoricoSerializer(entry, data=request.data, partial=True)
+        serializer = ColaboradorPJHistoricoSerializer(entry, data=request.data, partial=True, context={'pj': pj})
         serializer.is_valid(raise_exception=True)
         ano = serializer.validated_data.get('ano', entry.ano)
         mes = serializer.validated_data.get('mes', entry.mes)

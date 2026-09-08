@@ -942,6 +942,7 @@ export interface ColaboradorPJHistorico {
   salario: number;
   cargo?: string;
   filial?: string;
+  motivo?: string;
   dataCriacao: string;
 }
 

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from decimal import Decimal
 from .models import (
     Colaborador,
     LoteMovimentacaoRH,
@@ -7,6 +8,11 @@ from .models import (
     CargoMapping,
     ColaboradorPJ,
     ColaboradorPJHistorico,
+)
+from .pj_sync_service import (
+    pj_ativo_na_competencia,
+    salario_e_overrides_para_competencia,
+    competencia_anterior,
 )
 
 
@@ -92,15 +98,58 @@ class ColaboradorPJHistoricoSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='pk', read_only=True)
     pjId = serializers.PrimaryKeyRelatedField(source='pj', read_only=True)
     dataCriacao = serializers.DateTimeField(source='data_criacao', format='%d/%m/%Y %H:%M:%S', read_only=True)
+    motivo = serializers.CharField(required=False, allow_blank=True, default='')
 
     class Meta:
         model = ColaboradorPJHistorico
-        fields = ['id', 'pjId', 'ano', 'mes', 'salario', 'cargo', 'filial', 'dataCriacao']
+        fields = ['id', 'pjId', 'ano', 'mes', 'salario', 'cargo', 'filial', 'motivo', 'dataCriacao']
 
     def validate_mes(self, value):
         if value < 1 or value > 12:
             raise serializers.ValidationError('Mês deve estar entre 1 e 12.')
         return value
+
+    def validate(self, attrs):
+        pj = self.context.get('pj') or getattr(self.instance, 'pj', None)
+        if not pj:
+            return attrs
+
+        ano = attrs.get('ano', getattr(self.instance, 'ano', None))
+        mes = attrs.get('mes', getattr(self.instance, 'mes', None))
+        salario = attrs.get('salario', getattr(self.instance, 'salario', None))
+        motivo = (attrs.get('motivo') if 'motivo' in attrs else getattr(self.instance, 'motivo', '') or '').strip()
+        attrs['motivo'] = motivo
+
+        if ano is None or mes is None or salario is None:
+            return attrs
+
+        prev_ano, prev_mes = competencia_anterior(ano, mes)
+        if not pj_ativo_na_competencia(pj, prev_ano, prev_mes):
+            return attrs
+
+        salario_ant, _, _ = salario_e_overrides_para_competencia(pj, prev_ano, prev_mes)
+        salario_mudou_vs_anterior = Decimal(salario) != Decimal(salario_ant or 0)
+        if not salario_mudou_vs_anterior or motivo:
+            return attrs
+
+        # Históricos já gravados sem motivo continuam válidos; exigimos motivo
+        # só em inclusão nova ou quando o salário do lançamento é alterado.
+        is_create = self.instance is None
+        salario_do_lancamento_mudou = (
+            is_create
+            or (
+                'salario' in attrs
+                and Decimal(attrs['salario']) != Decimal(self.instance.salario)
+            )
+        )
+        if salario_do_lancamento_mudou:
+            raise serializers.ValidationError({
+                'motivo': (
+                    'Informe o motivo da alteração salarial. '
+                    'Na redução, use o motivo de governança.'
+                ),
+            })
+        return attrs
 
 
 class ColaboradorPJSerializer(serializers.ModelSerializer):

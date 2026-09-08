@@ -370,7 +370,7 @@ class ExportarRelatorioMovimentacoesTests(TestCase):
         ocorrencias = {(row[0], row[1], row[3]) for row in rows[1:]}
         self.assertIn(('Ibiporã (Matriz)', 'COLABORADOR NOVO', 'Contratação'), ocorrencias)
         self.assertIn(('Rondonópolis', 'COLABORADOR DESLIGADO', 'Demissão'), ocorrencias)
-        self.assertIn(('Ibiporã (Matriz)', 'COLABORADOR NOVO', 'Aumento de Salário'), ocorrencias)
+        self.assertIn(('Ibiporã (Matriz)', 'COLABORADOR NOVO', 'Alteração de Salário'), ocorrencias)
 
     def test_exportar_relatorio_sem_lote_retorna_404(self):
         LoteMovimentacaoRH.objects.all().delete()
@@ -487,6 +487,22 @@ class PjSyncNosLotesTests(TestCase):
             Decimal(MovimentacaoColaborador.objects.get(lote=self.lotes[4], cpf=pj.cpf).salario),
             Decimal('4500.00'),
         )
+        alt_mar = InconsistenciaColaborador.objects.get(lote=self.lotes[3], cpf=pj.cpf, tipo='salario')
+        self.assertEqual(alt_mar.justificativa, 'Alteração salarial PJ')
+        self.assertIn('4.000', alt_mar.valor_anterior.replace('\xa0', ' '))
+        self.assertIn('4.500', alt_mar.valor_atual.replace('\xa0', ' '))
+        self.assertFalse(
+            InconsistenciaColaborador.objects.filter(lote=self.lotes[2], cpf=pj.cpf, tipo='salario').exists()
+        )
+        # Histórico legado sem motivo continua editável se o salário não mudar.
+        entry = ColaboradorPJHistorico.objects.get(pj=pj, ano=2026, mes=3)
+        patch_legado = self.client.patch(
+            f'/api/rh/pjs/{pj.pk}/historico/{entry.pk}/',
+            data={'salario': '4500.00'},
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(patch_legado.status_code, 200, patch_legado.data)
 
     def test_demissao_remove_meses_posteriores(self):
         response = self.client.post(
@@ -612,24 +628,43 @@ class PjSyncNosLotesTests(TestCase):
             format='json',
             **auth_headers(self.user, 'RH'),
         )
+        self.assertEqual(hist.status_code, 400, hist.data)
+
+        hist = self.client.post(
+            f'/api/rh/pjs/{pj_id}/historico/',
+            data={
+                'ano': 2026,
+                'mes': 3,
+                'salario': '1500.00',
+                'motivo': 'Atualização de dissídio ou mérito',
+            },
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
         self.assertEqual(hist.status_code, 201, hist.data)
         self.assertEqual(
             Decimal(MovimentacaoColaborador.objects.get(lote=self.lotes[3], cpf='999.999.999-99').salario),
             Decimal('1500.00'),
         )
+        alt = InconsistenciaColaborador.objects.get(lote=self.lotes[3], cpf='999.999.999-99', tipo='salario')
+        self.assertEqual(alt.justificativa, 'Atualização de dissídio ou mérito')
+        self.assertEqual(alt.get_tipo_display(), 'Alteração de Salário')
 
         hid = hist.data['id']
         patch = self.client.patch(
             f'/api/rh/pjs/{pj_id}/historico/{hid}/',
-            data={'salario': '1600.00'},
+            data={'salario': '800.00', 'motivo': 'Redução salarial por governança'},
             format='json',
             **auth_headers(self.user, 'RH'),
         )
         self.assertEqual(patch.status_code, 200, patch.data)
         self.assertEqual(
             Decimal(MovimentacaoColaborador.objects.get(lote=self.lotes[3], cpf='999.999.999-99').salario),
-            Decimal('1600.00'),
+            Decimal('800.00'),
         )
+        alt = InconsistenciaColaborador.objects.get(lote=self.lotes[3], cpf='999.999.999-99', tipo='salario')
+        self.assertEqual(alt.justificativa, 'Redução salarial por governança')
+        self.assertIn('800', alt.valor_atual)
 
         delete = self.client.delete(
             f'/api/rh/pjs/{pj_id}/historico/{hid}/',
@@ -639,4 +674,7 @@ class PjSyncNosLotesTests(TestCase):
         self.assertEqual(
             Decimal(MovimentacaoColaborador.objects.get(lote=self.lotes[3], cpf='999.999.999-99').salario),
             Decimal('1000.00'),
+        )
+        self.assertFalse(
+            InconsistenciaColaborador.objects.filter(lote=self.lotes[3], cpf='999.999.999-99', tipo='salario').exists()
         )

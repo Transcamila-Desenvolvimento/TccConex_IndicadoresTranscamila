@@ -5,8 +5,16 @@ import type { ColaboradorPJ, CargoMapping, RHMovimentacaoOrdering } from '../typ
 
 export function getRHErrorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
-    const message = error.response?.data?.error;
-    if (typeof message === 'string') return message;
+    const data = error.response?.data;
+    if (typeof data?.error === 'string') return data.error;
+    if (data && typeof data === 'object') {
+      const parts: string[] = [];
+      for (const value of Object.values(data as Record<string, unknown>)) {
+        if (typeof value === 'string') parts.push(value);
+        else if (Array.isArray(value) && typeof value[0] === 'string') parts.push(value[0]);
+      }
+      if (parts.length) return parts.join(' ');
+    }
   }
   return fallback;
 }
@@ -192,7 +200,7 @@ export function useCreatePjHistoricoRH() {
       payload,
     }: {
       pjId: string;
-      payload: { ano: number; mes: number; salario: number; cargo?: string; filial?: string };
+      payload: { ano: number; mes: number; salario: number; cargo?: string; filial?: string; motivo?: string };
     }) => apiService.createPjHistoricoRH(pjId, payload),
     onSuccess: (_data, vars) => invalidatePjRelated(queryClient, vars.pjId),
   });
@@ -208,7 +216,7 @@ export function useUpdatePjHistoricoRH() {
     }: {
       pjId: string;
       historicoId: string;
-      payload: Partial<{ ano: number; mes: number; salario: number; cargo?: string; filial?: string }>;
+      payload: Partial<{ ano: number; mes: number; salario: number; cargo?: string; filial?: string; motivo?: string }>;
     }) => apiService.updatePjHistoricoRH(pjId, historicoId, payload),
     onSuccess: (_data, vars) => invalidatePjRelated(queryClient, vars.pjId),
   });
