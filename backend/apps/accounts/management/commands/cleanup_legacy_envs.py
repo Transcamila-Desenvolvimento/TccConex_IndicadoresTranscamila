@@ -8,7 +8,7 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = 'Remove ambientes legados (Comercial) de usuários e papéis'
+    help = 'Remove ambientes fora de ACTIVE_ENVIRONMENTS de usuários e papéis'
 
     def handle(self, *args, **options):
         users_updated = 0

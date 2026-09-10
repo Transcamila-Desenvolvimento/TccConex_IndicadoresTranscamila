@@ -11,7 +11,7 @@ export interface AsyncQueryInput {
 export type QueryResultLike<T> = Pick<
   UseQueryResult<T, Error>,
   'isLoading' | 'isFetching' | 'isError' | 'data'
->;
+> & Partial<Pick<UseQueryResult<T, Error>, 'refetch' | 'error'>>;
 
 export function toAsyncQueryInput<T>(query: QueryResultLike<T>): AsyncQueryInput {
   return {
@@ -26,9 +26,9 @@ export function useAsyncQueryState(input: AsyncQueryInput | QueryResultLike<unkn
   const flags = 'hasData' in input ? input : toAsyncQueryInput(input);
   const { isLoading, isFetching, isError, hasData } = flags;
 
-  const showInitialLoader = isLoading && !hasData;
+  const showInitialLoader = !hasData && (isLoading || isFetching);
   const showRefreshing = isFetching && hasData;
-  const showError = isError && !hasData;
+  const showError = isError && !hasData && !isFetching;
   const canShowEmpty = !showInitialLoader && !showError && !isFetching && hasData;
 
   return {

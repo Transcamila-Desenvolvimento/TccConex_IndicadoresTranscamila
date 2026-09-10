@@ -42,6 +42,21 @@ import type {
   CondutorFrota, CondutorFrotaPayload,
   CustoFrotaLote, CustoFrotaLotesResponse, CustoFrotaImportResult, CustoFrotaReportType,
   CustoManutencaoRow, CustoAbastecimentoRow,
+  ClienteComercial, ClienteComercialPayload, ClienteComercialQueryParams,
+  ClienteComercialHistorico, ClienteComercialProdutosSugestoes, ClienteComercialValidacaoResumo,
+  PropostaComercial, PropostaComercialPayload, PropostaComercialQueryParams, PropostaComercialTipo, PropostaFreteLinha,
+  PropostaCondicaoComercial, CatalogoGeneralidadesComercial, TipoGeneralidadeComercial,
+  TabelaFrete, TabelaFreteLinha, TabelaFreteLinhaPayload, TabelaFretePayload,
+  TabelaFreteQueryParams, TabelaFreteRevisaoHistorico, TabelaFreteSimulacaoResult, TabelaFreteSimulacaoIcms, TabelaFreteTipo, TabelaFreteConfig, TabelaFreteFaixa,
+  IcmsUfConfig, IcmsUfAliquotas,
+  RotaDistanciaPayload, RotaDistanciaResult, EnderecoSugestao, GoogleMapsConfigComercial,
+  ProdutoComercial, ProdutoComercialPayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
+} from '../types/domain';
+import {
+  parseClienteComercialClasseRisco,
+  parseClienteComercialCompatibilidade,
+  parseClienteComercialFispq,
+  parseClienteComercialGrupoEmbalagem,
 } from '../types/domain';
 import { filterActiveEnvironments, ACTIVE_ENVIRONMENTS } from '../constants/environments';
 
@@ -107,6 +122,170 @@ function normalizeCustoFrotaLote(raw: any): CustoFrotaLote {
       abastecimento: Boolean(raw.importedReports?.abastecimento),
     },
     isActive: Boolean(raw.isActive ?? raw.is_active),
+  };
+}
+
+function normalizeClienteComercial(raw: any): ClienteComercial {
+  return {
+    id: String(raw.id),
+    tipoPessoa: 'J',
+    cnpj: raw.cnpj ?? '',
+    razaoSocial: raw.razaoSocial ?? '',
+    nomeFantasia: raw.nomeFantasia ?? '',
+    municipio: raw.municipio ?? '',
+    uf: raw.uf ?? '',
+    logradouro: raw.logradouro ?? '',
+    numero: raw.numero ?? '',
+    complemento: raw.complemento ?? '',
+    bairro: raw.bairro ?? '',
+    cep: raw.cep ?? '',
+    telefone: raw.telefone ?? '',
+    email: raw.email ?? '',
+    inscricaoEstadual: raw.inscricaoEstadual ?? '',
+    responsavel: raw.responsavel ?? '',
+    observacoes: raw.observacoes ?? '',
+    situacao: raw.situacao === 'cliente' ? 'cliente' : 'potencial',
+    compatibilidade: parseClienteComercialCompatibilidade(raw.compatibilidade),
+    homologadoPor: raw.homologadoPor ?? '',
+    homologadoEm: raw.homologadoEm ?? null,
+    homologacaoJustificativa: raw.homologacaoJustificativa ?? '',
+    homologacaoRevisao: Number(raw.homologacaoRevisao ?? 0),
+    produtosCount: Number(raw.produtosCount ?? 0),
+    previsaoVolumes: raw.previsaoVolumes ?? '',
+    tiposEmbalagens: raw.tiposEmbalagens ?? '',
+    quantidadeVolumes: raw.quantidadeVolumes ?? '',
+    posicoesPallets: raw.posicoesPallets ?? '',
+    produtos: Array.isArray(raw.produtos)
+      ? raw.produtos.map((item: { id?: string; produtoId?: string; nome?: string; fispq?: string; numeroOnu?: string; classeRisco?: string; grupoEmbalagem?: string; conformidade?: { status?: string; cargaPerigosa?: boolean; alertas?: string[] } }) => ({
+        id: item.id ? String(item.id) : undefined,
+        produtoId: item.produtoId ? String(item.produtoId) : undefined,
+        nome: item.nome ?? '',
+        fispq: parseClienteComercialFispq(item.fispq),
+        numeroOnu: item.numeroOnu ?? '',
+        classeRisco: parseClienteComercialClasseRisco(item.classeRisco),
+        grupoEmbalagem: parseClienteComercialGrupoEmbalagem(item.grupoEmbalagem),
+        conformidade: item.conformidade
+          ? {
+            status: item.conformidade.status === 'bloqueado' || item.conformidade.status === 'carga_perigosa'
+              ? item.conformidade.status
+              : 'nao_perigoso',
+            cargaPerigosa: Boolean(item.conformidade.cargaPerigosa),
+            alertas: Array.isArray(item.conformidade.alertas) ? item.conformidade.alertas : [],
+          }
+          : undefined,
+      }))
+      : [],
+    homologacaoResumo: raw.homologacaoResumo
+      ? {
+        produtosVinculados: Number(raw.homologacaoResumo.produtosVinculados ?? 0),
+        produtosPerigosos: Number(raw.homologacaoResumo.produtosPerigosos ?? 0),
+        produtosNaoPerigosos: Number(raw.homologacaoResumo.produtosNaoPerigosos ?? 0),
+        fispqPendente: Number(raw.homologacaoResumo.fispqPendente ?? 0),
+        onuIncompleta: Number(raw.homologacaoResumo.onuIncompleta ?? 0),
+        grupoEmbalagemPendente: Number(raw.homologacaoResumo.grupoEmbalagemPendente ?? 0),
+        classesRisco: Array.isArray(raw.homologacaoResumo.classesRisco) ? raw.homologacaoResumo.classesRisco : [],
+        bloqueados: Number(raw.homologacaoResumo.bloqueados ?? 0),
+        temImpeditivo: Boolean(raw.homologacaoResumo.temImpeditivo),
+        aptoHomologar: Boolean(raw.homologacaoResumo.aptoHomologar),
+        pendencias: Array.isArray(raw.homologacaoResumo.pendencias) ? raw.homologacaoResumo.pendencias : [],
+        resumoPendencia: raw.homologacaoResumo.resumoPendencia ?? '',
+      }
+      : undefined,
+    clienteDesde: raw.clienteDesde ?? null,
+    dataCriacao: raw.dataCriacao,
+    dataAtualizacao: raw.dataAtualizacao,
+  };
+}
+
+function normalizeProdutoComercial(raw: any): ProdutoComercial {
+  return {
+    id: String(raw.id),
+    nome: raw.nome ?? '',
+    fispq: parseClienteComercialFispq(raw.fispq),
+    numeroOnu: raw.numeroOnu ?? '',
+    classeRisco: parseClienteComercialClasseRisco(raw.classeRisco),
+    grupoEmbalagem: parseClienteComercialGrupoEmbalagem(raw.grupoEmbalagem),
+    ativo: raw.ativo !== false,
+    clientes: Array.isArray(raw.clientes)
+      ? raw.clientes.map((item: any) => ({
+        id: String(item.id),
+        razaoSocial: item.razaoSocial ?? '',
+        nomeFantasia: item.nomeFantasia ?? '',
+        cnpj: item.cnpj ?? '',
+        compatibilidade: parseClienteComercialCompatibilidade(item.compatibilidade),
+      }))
+      : [],
+    clientesCount: Number(raw.clientesCount ?? 0),
+    dataCriacao: raw.dataCriacao,
+    dataAtualizacao: raw.dataAtualizacao,
+  };
+}
+
+function normalizePropostaFreteLinha(raw: any): PropostaFreteLinha {
+  return {
+    id: raw.id != null ? String(raw.id) : undefined,
+    ordem: raw.ordem != null ? Number(raw.ordem) : undefined,
+    origem: raw.origem ?? '',
+    entrega: raw.entrega ?? '',
+    veiculo: raw.veiculo ?? '',
+    devolucaoContainer: raw.devolucaoContainer ?? '',
+    observacoes: raw.observacoes ?? '',
+    peso: raw.peso ?? '',
+    tarifaFrete: raw.tarifaFrete != null && raw.tarifaFrete !== '' ? String(raw.tarifaFrete) : null,
+    pedagio: raw.pedagio != null && raw.pedagio !== '' ? String(raw.pedagio) : null,
+    adValorem: raw.adValorem ?? '',
+    gris: raw.gris ?? '',
+    icms: raw.icms ?? '',
+    prazoDias: raw.prazoDias ?? '',
+    totalEstimado: raw.totalEstimado != null && raw.totalEstimado !== '' ? String(raw.totalEstimado) : null,
+  };
+}
+
+function normalizePropostaTipo(raw: unknown): PropostaComercialTipo {
+  if (raw === 'armazenagem') return 'armazenagem';
+  return 'transporte_rodoviario';
+}
+
+function normalizePropostaComercial(raw: any): PropostaComercial {
+  const tipo = normalizePropostaTipo(raw.tipo);
+  const status = ['enviada', 'aprovada', 'recusada'].includes(raw.status) ? raw.status : 'rascunho';
+  const condicoes = Array.isArray(raw.condicoes)
+    ? raw.condicoes.map((item: any) => ({
+        rotulo: String(item?.rotulo ?? ''),
+        valor: String(item?.valor ?? ''),
+      }))
+    : [];
+  return {
+    id: String(raw.id),
+    tipo,
+    status,
+    clienteId: raw.clienteId != null && raw.clienteId !== '' ? String(raw.clienteId) : null,
+    clienteNome: raw.clienteNome ?? '',
+    clienteEmail: raw.clienteEmail ?? '',
+    numeroIdentificacao: raw.numeroIdentificacao ?? '',
+    numero: raw.numero != null ? Number(raw.numero) : null,
+    ano: raw.ano != null ? Number(raw.ano) : null,
+    titulo: raw.titulo ?? '',
+    subtitulo: raw.subtitulo ?? '',
+    revisao: raw.revisao ?? '',
+    dataProposta: raw.dataProposta ?? null,
+    propostaReferente: raw.propostaReferente ?? '',
+    responsavel: raw.responsavel ?? '',
+    reajuste: raw.reajuste ?? '',
+    att: raw.att ?? '',
+    validade: raw.validade ?? '',
+    vigencia: raw.vigencia ?? '',
+    faturamento: raw.faturamento ?? '',
+    localEmissao: raw.localEmissao ?? '',
+    valorEstimado: raw.valorEstimado != null && raw.valorEstimado !== '' ? String(raw.valorEstimado) : null,
+    observacoes: raw.observacoes ?? '',
+    incluiTransferencia: Boolean(raw.incluiTransferencia),
+    incluiDistribuicao: Boolean(raw.incluiDistribuicao),
+    condicoes,
+    linhas: Array.isArray(raw.linhas) ? raw.linhas.map(normalizePropostaFreteLinha) : [],
+    dataCriacao: raw.dataCriacao,
+    dataAtualizacao: raw.dataAtualizacao,
+    dataVencimento: raw.dataVencimento ?? null,
   };
 }
 
@@ -743,6 +922,102 @@ function normalizeImportResult(raw: any, type: ReportImportType, fileName = ''):
   };
 }
 
+function mapTipoGeneralidade(raw: unknown, fallback: TipoGeneralidadeComercial): TipoGeneralidadeComercial {
+  if (raw === 'frete' || raw === 'distribuicao' || raw === 'armazenagem') return raw;
+  if (raw === 'transferencia_armazenagem') return 'frete';
+  return fallback;
+}
+
+function mapTabelaFreteLinha(raw: any): TabelaFreteLinha {
+  return {
+    id: String(raw.id),
+    tabelaId: raw.tabelaId != null ? String(raw.tabelaId) : undefined,
+    ordem: raw.ordem,
+    origem: raw.origem ?? '',
+    entrega: raw.entrega ?? '',
+    veiculo: raw.veiculo ?? '',
+    tarifaFrete: raw.tarifaFrete ?? null,
+    pedagio: raw.pedagio ?? null,
+    adValorem: raw.adValorem ?? '',
+    gris: raw.gris ?? '',
+    icms: raw.icms ?? '',
+    prazoDias: raw.prazoDias ?? '',
+    totalEstimado: raw.totalEstimado ?? null,
+  };
+}
+
+function mapSimulacaoTabelaFrete(raw: Record<string, unknown>): TabelaFreteSimulacaoResult {
+  const icmsRaw = raw.icms as Record<string, unknown> | null | undefined;
+  let icms: TabelaFreteSimulacaoResult['icms'] = null;
+  if (icmsRaw != null && typeof icmsRaw === 'object' && !Array.isArray(icmsRaw)) {
+    icms = {
+      ufOrigem: String(icmsRaw.ufOrigem ?? icmsRaw.uf_origem ?? ''),
+      ufDestino: String(icmsRaw.ufDestino ?? icmsRaw.uf_destino ?? ''),
+      tipo: icmsRaw.tipo === 'interno' ? 'interno' : 'interestadual',
+      aliquotaPercent: Number(icmsRaw.aliquotaPercent ?? icmsRaw.aliquota_percent ?? 0),
+      valor: String(icmsRaw.valor ?? '0.00'),
+      totalComIcms: String(icmsRaw.totalComIcms ?? icmsRaw.total_com_icms ?? raw.total ?? '0.00'),
+      incluiPedagioNaBase: icmsRaw.incluiPedagioNaBase !== false && icmsRaw.inclui_pedagio_na_base !== false,
+    };
+  }
+
+  return {
+    km: Number(raw.km ?? 0),
+    pesoKg: Number(raw.pesoKg ?? raw.peso_kg ?? 0),
+    modalidade: String(raw.modalidade ?? 'fracionado'),
+    faixaKm: raw.faixaKm as TabelaFreteSimulacaoResult['faixaKm'],
+    bandaPeso: raw.bandaPeso as TabelaFreteSimulacaoResult['bandaPeso'],
+    tarifa: raw.tarifa as TabelaFreteSimulacaoResult['tarifa'],
+    fretePeso: String(raw.fretePeso ?? raw.frete_peso ?? '0.00'),
+    freteMinimo: String(raw.freteMinimo ?? raw.frete_minimo ?? '0.00'),
+    freteBase: String(raw.freteBase ?? raw.frete_base ?? '0.00'),
+    pedagio: String(raw.pedagio ?? '0.00'),
+    grisAdvUnificado: Boolean(raw.grisAdvUnificado ?? raw.gris_adv_unificado),
+    grisAdv: raw.grisAdv != null ? String(raw.grisAdv) : raw.gris_adv != null ? String(raw.gris_adv) : null,
+    gris: String(raw.gris ?? '0.00'),
+    adv: String(raw.adv ?? '0.00'),
+    subtotal: String(raw.subtotal ?? '0.00'),
+    valorPorKm: String(raw.valorPorKm ?? raw.valor_por_km ?? '0.00'),
+    total: String(raw.total ?? '0.00'),
+    prazoDias: Number(raw.prazoDias ?? raw.prazo_dias ?? 0),
+    icms,
+  };
+}
+
+function mapTabelaFrete(raw: any): TabelaFrete {
+  return {
+    id: String(raw.id),
+    nome: raw.nome ?? '',
+    codigo: raw.codigo ?? '',
+    revisao: Number(raw.revisao ?? 1),
+    vigenciaInicio: raw.vigenciaInicio ?? null,
+    vigenciaFim: raw.vigenciaFim ?? null,
+    status: raw.status === 'publicada' || raw.status === 'expirada' || raw.status === 'arquivada'
+      ? raw.status
+      : 'rascunho',
+    observacoes: raw.observacoes ?? '',
+    tipo: raw.tipo === 'distribuicao' ? 'distribuicao' : 'transferencia',
+    clienteIds: Array.isArray(raw.clienteIds)
+      ? raw.clienteIds.map((id: unknown) => String(id))
+      : raw.clienteId != null && raw.clienteId !== ''
+        ? [String(raw.clienteId)]
+        : [],
+    clientesNomes: Array.isArray(raw.clientesNomes)
+      ? raw.clientesNomes.map((nome: unknown) => String(nome))
+      : raw.clienteNome
+        ? [String(raw.clienteNome)]
+        : [],
+    criadoPorNome: raw.criadoPorNome ?? '',
+    atualizadoPorNome: raw.atualizadoPorNome ?? '',
+    config: raw.config,
+    faixas: Array.isArray(raw.faixas) ? raw.faixas : undefined,
+    linhas: Array.isArray(raw.linhas) ? raw.linhas.map(mapTabelaFreteLinha) : undefined,
+    linhasCount: Number(raw.linhasCount ?? raw.linhas?.length ?? 0),
+    dataCriacao: raw.dataCriacao,
+    dataAtualizacao: raw.dataAtualizacao,
+  };
+}
+
 export const apiService = {
   getToken: (): string | null => localStorage.getItem(TOKEN_KEY),
   setToken: (token: string): void => localStorage.setItem(TOKEN_KEY, token),
@@ -771,7 +1046,11 @@ export const apiService = {
       if (axios.isAxiosError(err) && !err.response) {
         throw new Error('SERVER_OFFLINE');
       }
-      if (axios.isAxiosError(err) && (err.response?.status ?? 0) >= 500) {
+      const httpStatus = axios.isAxiosError(err) ? (err.response?.status ?? 0) : 0;
+      if (httpStatus === 404 || httpStatus === 502 || httpStatus === 503 || httpStatus === 504) {
+        throw new Error('SERVER_OFFLINE');
+      }
+      if (httpStatus >= 500) {
         throw new Error('LOGIN_SERVER_ERROR');
       }
       return null;
@@ -2117,6 +2396,428 @@ export const apiService = {
       valorTotal: parseReportAmount(raw.valorTotal) ?? 0,
       numeroNfe: raw.numeroNfe ?? '',
     }));
+  },
+
+  // ─── Comercial ──────────────────────────────────────────────────────────────
+
+  async getClientesComercial(params: ClienteComercialQueryParams = {}): Promise<PaginatedResponse<ClienteComercial>> {
+    const { data } = await api.get('/api/comercial/clientes/', {
+      params: {
+        page: params.page,
+        page_size: params.pageSize,
+        search: params.search || undefined,
+        situacao: params.situacao || undefined,
+        homologacao: params.homologacao || undefined,
+        fila: params.fila || undefined,
+        com_produtos: params.comProdutos ? '1' : undefined,
+        pendencia: params.pendencia || undefined,
+      },
+    });
+    return paginatedFromResponse(data, normalizeClienteComercial);
+  },
+
+  async consultarCnpjComercial(cnpj: string): Promise<CnpjConsultaResult> {
+    const { data } = await api.get('/api/comercial/clientes/consultar-cnpj/', {
+      params: { cnpj },
+    });
+    return data;
+  },
+
+  async getClienteProdutosSugestoesComercial(): Promise<ClienteComercialProdutosSugestoes> {
+    const { data } = await api.get('/api/comercial/clientes/produtos-sugestoes/');
+    return {
+      fispq: Array.isArray(data.fispq) ? data.fispq : [],
+      classesRisco: Array.isArray(data.classesRisco) ? data.classesRisco : [],
+      gruposEmbalagem: Array.isArray(data.gruposEmbalagem) ? data.gruposEmbalagem : [],
+      onuComuns: Array.isArray(data.onuComuns) ? data.onuComuns : [],
+      homologacao: Array.isArray(data.homologacao) ? data.homologacao : [],
+      produtos: Array.isArray(data.produtos)
+        ? data.produtos.map((item: { id?: string; nome?: string; fispq?: string; numeroOnu?: string; classeRisco?: string; grupoEmbalagem?: string }) => ({
+          id: item.id ? String(item.id) : undefined,
+          nome: item.nome ?? '',
+          fispq: parseClienteComercialFispq(item.fispq),
+          numeroOnu: item.numeroOnu ?? '',
+          classeRisco: parseClienteComercialClasseRisco(item.classeRisco),
+          grupoEmbalagem: parseClienteComercialGrupoEmbalagem(item.grupoEmbalagem),
+        }))
+        : [],
+    };
+  },
+
+  async getValidacaoResumoComercial(search?: string): Promise<ClienteComercialValidacaoResumo> {
+    const { data } = await api.get('/api/comercial/clientes/validacao-resumo/', {
+      params: { search: search || undefined },
+    });
+    return {
+      comProdutos: Number(data.comProdutos ?? 0),
+      pendentes: Number(data.pendentes ?? 0),
+      comImpeditivo: Number(data.comImpeditivo ?? 0),
+      homologados: Number(data.homologados ?? 0),
+      reprovados: Number(data.reprovados ?? 0),
+    };
+  },
+
+  async createClienteComercial(payload: ClienteComercialPayload): Promise<ClienteComercial> {
+    const { data } = await api.post('/api/comercial/clientes/', payload);
+    return normalizeClienteComercial(data);
+  },
+
+  async updateClienteComercial(id: string, payload: Partial<ClienteComercialPayload>): Promise<ClienteComercial> {
+    const { data } = await api.patch(`/api/comercial/clientes/${id}/`, payload);
+    return normalizeClienteComercial(data);
+  },
+
+  async deleteClienteComercial(id: string): Promise<void> {
+    await api.delete(`/api/comercial/clientes/${id}/`);
+  },
+
+  async homologarClienteComercial(id: string, payload: { decisao: 'homologado' | 'reprovado'; justificativa?: string }): Promise<ClienteComercial> {
+    const { data } = await api.post(`/api/comercial/clientes/${id}/homologar/`, payload);
+    return normalizeClienteComercial(data);
+  },
+
+  async getHomologacaoHistoricoClienteComercial(id: string): Promise<HomologacaoProdutoEvento[]> {
+    const { data } = await api.get(`/api/comercial/clientes/${id}/homologacao-historico/`);
+    return (Array.isArray(data) ? data : []).map((item: any) => ({
+      id: String(item.id),
+      status: item.status ?? '',
+      justificativa: item.justificativa ?? '',
+      produtosSnapshot: Array.isArray(item.produtosSnapshot) ? item.produtosSnapshot : [],
+      usuarioNome: item.usuarioNome ?? '',
+      dataCriacao: item.dataCriacao ?? '',
+    }));
+  },
+
+  async getProdutosComercial(params: ProdutoComercialQueryParams = {}): Promise<PaginatedResponse<ProdutoComercial>> {
+    const { data } = await api.get('/api/comercial/produtos/', {
+      params: {
+        page: params.page,
+        page_size: params.pageSize,
+        search: params.search || undefined,
+        cliente: params.clienteId || undefined,
+        ativo: params.ativo == null ? undefined : params.ativo ? 'true' : 'false',
+      },
+    });
+    return paginatedFromResponse(data, normalizeProdutoComercial);
+  },
+
+  async createProdutoComercial(payload: ProdutoComercialPayload): Promise<ProdutoComercial> {
+    const { data } = await api.post('/api/comercial/produtos/', payload);
+    return normalizeProdutoComercial(data);
+  },
+
+  async updateProdutoComercial(id: string, payload: Partial<ProdutoComercialPayload>): Promise<ProdutoComercial> {
+    const { data } = await api.patch(`/api/comercial/produtos/${id}/`, payload);
+    return normalizeProdutoComercial(data);
+  },
+
+  async deleteProdutoComercial(id: string): Promise<void> {
+    await api.delete(`/api/comercial/produtos/${id}/`);
+  },
+
+  async getHistoricoClienteComercial(id: string): Promise<ClienteComercialHistorico> {
+    const { data } = await api.get(`/api/comercial/clientes/${id}/historico/`);
+    return {
+      id: String(data.id),
+      razaoSocial: data.razaoSocial ?? '',
+      situacao: data.situacao === 'cliente' ? 'cliente' : 'potencial',
+      clienteDesde: data.clienteDesde ?? null,
+      totalPropostas: Number(data.totalPropostas) || 0,
+      propostasAceitasCount: Number(data.propostasAceitasCount) || 0,
+      propostasRecusadasCount: Number(data.propostasRecusadasCount) || 0,
+      indiceAceitacao: data.indiceAceitacao == null || data.indiceAceitacao === ''
+        ? null
+        : Number(data.indiceAceitacao),
+      propostasAceitas: Array.isArray(data.propostasAceitas)
+        ? data.propostasAceitas.map((item: any) => ({
+            id: String(item.id),
+            numeroIdentificacao: item.numeroIdentificacao ?? '',
+            tipo: normalizePropostaTipo(item.tipo),
+            status: item.status === 'aprovada' ? 'aprovada' : item.status,
+            dataProposta: item.dataProposta ?? null,
+            dataAtualizacao: item.dataAtualizacao,
+            vigencia: item.vigencia ?? '',
+            valorEstimado: item.valorEstimado != null ? String(item.valorEstimado) : null,
+          }))
+        : [],
+    };
+  },
+
+  async getPropostasComerciais(params: PropostaComercialQueryParams = {}): Promise<PaginatedResponse<PropostaComercial>> {
+    const { data } = await api.get('/api/comercial/propostas/', {
+      params: {
+        page: params.page,
+        page_size: params.pageSize,
+        search: params.search || undefined,
+        tipo: params.tipo,
+        status: params.status,
+        ordering: params.ordering,
+      },
+    });
+    return paginatedFromResponse(data, normalizePropostaComercial);
+  },
+
+  async createPropostaComercial(payload: PropostaComercialPayload): Promise<PropostaComercial> {
+    const { data } = await api.post('/api/comercial/propostas/', payload);
+    return normalizePropostaComercial(data);
+  },
+
+  async updatePropostaComercial(id: string, payload: Partial<PropostaComercialPayload>): Promise<PropostaComercial> {
+    const { data } = await api.patch(`/api/comercial/propostas/${id}/`, payload);
+    return normalizePropostaComercial(data);
+  },
+
+  async deletePropostaComercial(id: string): Promise<void> {
+    await api.delete(`/api/comercial/propostas/${id}/`);
+  },
+
+  async enviarEmailPropostaComercial(
+    id: string,
+    payload: { to?: string[]; cc?: string[]; pdf: Blob },
+  ): Promise<{ success: boolean; message: string; to: string[]; cc: string[] }> {
+    const form = new FormData();
+    (payload.to ?? []).forEach((email) => form.append('to', email));
+    (payload.cc ?? []).forEach((email) => form.append('cc', email));
+    form.append('pdf', payload.pdf, 'Proposta_comercial.pdf');
+    const { data } = await api.post(`/api/comercial/propostas/${id}/enviar-email/`, form);
+    return data;
+  },
+
+  async getTabelasFrete(params: TabelaFreteQueryParams = {}): Promise<PaginatedResponse<TabelaFrete>> {
+    const { data } = await api.get('/api/comercial/tabela-frete/', {
+      params: {
+        page: params.page,
+        page_size: params.pageSize,
+        search: params.search || undefined,
+        tipo: params.tipo || undefined,
+        cliente: params.cliente || undefined,
+        status: params.status || undefined,
+        vigente: params.vigente ? 'true' : undefined,
+      },
+    });
+    return paginatedFromResponse(data, mapTabelaFrete);
+  },
+
+  async getTabelaFrete(id: string): Promise<TabelaFrete> {
+    const { data } = await api.get(`/api/comercial/tabela-frete/${id}/`);
+    return mapTabelaFrete(data);
+  },
+
+  async getTabelaFreteHistoricoRevisoes(id: string): Promise<TabelaFreteRevisaoHistorico> {
+    const { data } = await api.get(`/api/comercial/tabela-frete/${id}/historico-revisoes/`);
+    return {
+      tabelaAtualId: String(data.tabelaAtualId),
+      codigo: data.codigo ?? '',
+      nome: data.nome ?? '',
+      revisoes: Array.isArray(data.revisoes)
+        ? data.revisoes.map((item: any) => ({
+            id: String(item.id),
+            revisao: Number(item.revisao ?? 1),
+            status: item.status === 'publicada' || item.status === 'expirada' || item.status === 'arquivada'
+              ? item.status
+              : 'rascunho',
+            dataCriacao: item.dataCriacao ?? '',
+            dataAtualizacao: item.dataAtualizacao ?? '',
+            usuarioNome: item.usuarioNome ?? null,
+            atual: Boolean(item.atual),
+          }))
+        : [],
+    };
+  },
+
+  async createTabelaFrete(payload: TabelaFretePayload): Promise<TabelaFrete> {
+    const { data } = await api.post('/api/comercial/tabela-frete/', payload);
+    return mapTabelaFrete(data);
+  },
+
+  async updateTabelaFrete(id: string, payload: Partial<TabelaFretePayload>): Promise<TabelaFrete> {
+    const { data } = await api.patch(`/api/comercial/tabela-frete/${id}/`, payload);
+    return mapTabelaFrete(data);
+  },
+
+  async deleteTabelaFrete(id: string): Promise<void> {
+    await api.delete(`/api/comercial/tabela-frete/${id}/`);
+  },
+
+  async previewTabelaFreteDistribuicao(config: Partial<TabelaFreteConfig>): Promise<{ config: TabelaFreteConfig; faixas: TabelaFreteFaixa[] }> {
+    const { data } = await api.post('/api/comercial/tabela-frete/preview/', { config });
+    return {
+      config: data.config,
+      faixas: Array.isArray(data.faixas) ? data.faixas : [],
+    };
+  },
+
+  async publicarTabelaFrete(id: string): Promise<TabelaFrete> {
+    const { data } = await api.post(`/api/comercial/tabela-frete/${id}/publicar/`);
+    return mapTabelaFrete(data);
+  },
+
+  async arquivarTabelaFrete(id: string): Promise<TabelaFrete> {
+    const { data } = await api.post(`/api/comercial/tabela-frete/${id}/arquivar/`);
+    return mapTabelaFrete(data);
+  },
+
+  async novaRevisaoTabelaFrete(id: string): Promise<TabelaFrete> {
+    const { data } = await api.post(`/api/comercial/tabela-frete/${id}/nova-revisao/`);
+    return mapTabelaFrete(data);
+  },
+
+  async exportarTabelaFrete(id: string): Promise<Blob> {
+    const { data, headers, status } = await api.get(`/api/comercial/tabela-frete/${id}/exportar/`, {
+      responseType: 'blob',
+      validateStatus: () => true,
+    });
+    if (status < 200 || status >= 300) {
+      throw new Error(await readBlobErrorMessage(data, 'Não foi possível exportar a tabela de frete.'));
+    }
+    return assertSpreadsheetBlob(data, headers);
+  },
+
+  async simularTabelaFrete(
+    id: string,
+    payload: {
+      km: number;
+      pesoKg: number;
+      modalidade?: string;
+      valorNf?: string | null;
+      ufOrigem?: string;
+      ufDestino?: string;
+    },
+  ): Promise<TabelaFreteSimulacaoResult> {
+    const { data } = await api.post(`/api/comercial/tabela-frete/${id}/simular/`, payload);
+    return mapSimulacaoTabelaFrete(data as Record<string, unknown>);
+  },
+
+  async calcularIcmsFreteComercial(payload: {
+    total: string;
+    subtotal?: string;
+    pedagio?: string;
+    ufOrigem: string;
+    ufDestino: string;
+  }): Promise<TabelaFreteSimulacaoIcms> {
+    const { data } = await api.post('/api/comercial/icms-frete/', payload);
+    return {
+      ufOrigem: data.ufOrigem ?? payload.ufOrigem,
+      ufDestino: data.ufDestino ?? payload.ufDestino,
+      tipo: data.tipo === 'interno' ? 'interno' : 'interestadual',
+      aliquotaPercent: Number(data.aliquotaPercent) || 0,
+      valor: String(data.valor ?? '0.00'),
+      totalComIcms: String(data.totalComIcms ?? payload.total),
+      incluiPedagioNaBase: data.incluiPedagioNaBase !== false,
+    };
+  },
+
+  async calcularRotaDistanciaComercial(payload: RotaDistanciaPayload): Promise<RotaDistanciaResult> {
+    const { data } = await api.post('/api/comercial/rota-distancia/', payload);
+    return {
+      modo: data.modo ?? payload.modo ?? 'cidade',
+      cidadeOrigem: data.cidadeOrigem ?? undefined,
+      cidadeDestino: data.cidadeDestino ?? undefined,
+      enderecoOrigem: data.enderecoOrigem ?? undefined,
+      enderecoDestino: data.enderecoDestino ?? undefined,
+      km: Number(data.km) || 0,
+      distanciaMetros: Number(data.distanciaMetros) || 0,
+      provedor: data.provedor === 'google' ? 'google' : data.provedor === 'osm' ? 'osm' : undefined,
+    };
+  },
+
+  async buscarEnderecosComercial(q: string): Promise<EnderecoSugestao[]> {
+    const { data } = await api.get('/api/comercial/enderecos/buscar/', { params: { q } });
+    const results = Array.isArray(data?.results) ? data.results : [];
+    return results.map((item: { label?: string; lat?: number; lon?: number }) => ({
+      label: item.label ?? '',
+      lat: Number(item.lat) || 0,
+      lon: Number(item.lon) || 0,
+    })).filter((item: EnderecoSugestao) => item.label);
+  },
+
+  async reversoEnderecoComercial(lat: number, lon: number): Promise<EnderecoSugestao> {
+    const { data } = await api.get('/api/comercial/enderecos/reverso/', { params: { lat, lon } });
+    return {
+      label: data?.label ?? '',
+      lat: Number(data?.lat) || lat,
+      lon: Number(data?.lon) || lon,
+      uf: data?.uf ? String(data.uf).toUpperCase().slice(0, 2) : undefined,
+    };
+  },
+
+  async getGoogleMapsConfigComercial(): Promise<GoogleMapsConfigComercial> {
+    const { data } = await api.get('/api/comercial/maps-config/');
+    return {
+      enabled: Boolean(data?.enabled && data?.apiKey),
+      apiKey: data?.apiKey ? String(data.apiKey) : null,
+    };
+  },
+
+  async createTabelaFreteLinha(payload: TabelaFreteLinhaPayload): Promise<TabelaFreteLinha> {
+    const { data } = await api.post('/api/comercial/tabela-frete-linhas/', payload);
+    return mapTabelaFreteLinha(data);
+  },
+
+  async updateTabelaFreteLinha(id: string, payload: Partial<TabelaFreteLinhaPayload>): Promise<TabelaFreteLinha> {
+    const { data } = await api.patch(`/api/comercial/tabela-frete-linhas/${id}/`, payload);
+    return mapTabelaFreteLinha(data);
+  },
+
+  async deleteTabelaFreteLinha(id: string): Promise<void> {
+    await api.delete(`/api/comercial/tabela-frete-linhas/${id}/`);
+  },
+
+  async getGeneralidadesComercial(
+    clienteId: string,
+    tipo: TipoGeneralidadeComercial,
+  ): Promise<CatalogoGeneralidadesComercial> {
+    const { data } = await api.get('/api/comercial/generalidades/', { params: { cliente: clienteId, tipo } });
+    return {
+      clienteId: String(data?.clienteId ?? clienteId),
+      tipo: mapTipoGeneralidade(data?.tipo, tipo),
+      origem: data?.origem === 'cliente' ? 'cliente' : 'padrao',
+      items: Array.isArray(data?.items) ? data.items : [],
+    };
+  },
+
+  async saveGeneralidadesComercial(
+    clienteId: string,
+    tipo: TipoGeneralidadeComercial,
+    items: PropostaCondicaoComercial[],
+  ): Promise<CatalogoGeneralidadesComercial> {
+    const { data } = await api.put('/api/comercial/generalidades/', { clienteId, tipo, items });
+    return {
+      clienteId: String(data?.clienteId ?? clienteId),
+      tipo: mapTipoGeneralidade(data?.tipo, tipo),
+      origem: data?.origem === 'cliente' ? 'cliente' : 'padrao',
+      items: Array.isArray(data?.items) ? data.items : [],
+    };
+  },
+
+  async getIcmsUfsComercial(): Promise<IcmsUfConfig> {
+    const { data } = await api.get('/api/comercial/icms-ufs/');
+    return {
+      ufs: Array.isArray(data?.ufs) ? data.ufs : [],
+      regioes: Array.isArray(data?.regioes) ? data.regioes : [],
+      aliquotas: data?.aliquotas ?? {},
+      atualizadoEm: data?.atualizadoEm ?? undefined,
+    };
+  },
+
+  async saveIcmsUfsComercial(aliquotas: IcmsUfAliquotas): Promise<IcmsUfConfig> {
+    const { data } = await api.put('/api/comercial/icms-ufs/', { aliquotas });
+    return {
+      ufs: Array.isArray(data?.ufs) ? data.ufs : [],
+      regioes: Array.isArray(data?.regioes) ? data.regioes : [],
+      aliquotas: data?.aliquotas ?? {},
+      atualizadoEm: data?.atualizadoEm ?? undefined,
+    };
+  },
+
+  async restaurarIcmsUfsComercial(): Promise<IcmsUfConfig> {
+    const { data } = await api.post('/api/comercial/icms-ufs/', { acao: 'restaurar-padrao' });
+    return {
+      ufs: Array.isArray(data?.ufs) ? data.ufs : [],
+      regioes: Array.isArray(data?.regioes) ? data.regioes : [],
+      aliquotas: data?.aliquotas ?? {},
+      atualizadoEm: data?.atualizadoEm ?? undefined,
+    };
   },
 
 };

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proposta comercial {{ numero }}</title>
+</head>
+<body style="margin:0;padding:0;background:#e9ecef;color:#1a2330;-webkit-text-size-adjust:100%;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#e9ecef;padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#ffffff;">
+          <tr>
+            <td style="background:#0f2744;padding:28px 40px 26px;">
+              <p style="margin:0;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:18px;line-height:1.35;font-weight:600;color:#ffffff;letter-spacing:0.02em;">
+                Transcamila Cargas e Armazéns Gerais Ltda.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="height:3px;line-height:3px;font-size:0;background:#1179b9;">&nbsp;</td>
+          </tr>
+          {% if logo_cid %}
+          <tr>
+            <td style="padding:28px 40px 4px;">
+              <img src="cid:{{ logo_cid }}" alt="Transcamila Luft Logistics" height="38" style="display:block;border:0;outline:none;height:38px;width:auto;max-width:200px;" />
+            </td>
+          </tr>
+          {% endif %}
+          <tr>
+            <td style="padding:{% if logo_cid %}18px{% else %}36px{% endif %} 40px 8px;font-family:'Segoe UI',Calibri,Arial,sans-serif;">
+              <p style="margin:0;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#6b7380;">
+                Área comercial
+              </p>
+              <h1 style="margin:8px 0 0;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:24px;line-height:1.25;font-weight:600;color:#0f2744;">
+                Proposta comercial
+              </h1>
+              <p style="margin:10px 0 0;font-size:14px;color:#4a5563;">
+                Nº {{ numero }}
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 40px 8px;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:15px;line-height:1.7;color:#2a3340;">
+              <p style="margin:0 0 18px;">{{ saudacao }}</p>
+              <p style="margin:0 0 18px;">
+                Encaminhamos a proposta comercial nº&nbsp;<strong style="color:#0f2744;">{{ numero }}</strong>, referente a <strong style="color:#0f2744;">{{ servico }}</strong>, elaborada para <strong style="color:#0f2744;">{{ cliente_nome }}</strong>.
+              </p>
+              <p style="margin:0;">
+                O documento integral segue em anexo, em PDF, para análise e arquivo.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 40px 8px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f7f9;">
+                <tr>
+                  <td style="padding:22px 24px 8px;font-family:'Segoe UI',Calibri,Arial,sans-serif;">
+                    <p style="margin:0 0 16px;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#6b7380;">
+                      Resumo
+                    </p>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td width="50%" valign="top" style="padding:0 12px 18px 0;">
+                          <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Número</p>
+                          <p style="margin:0;font-size:14px;font-weight:600;color:#0f2744;line-height:1.4;">{{ numero }}</p>
+                        </td>
+                        <td width="50%" valign="top" style="padding:0 0 18px 12px;">
+                          <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Emissão</p>
+                          <p style="margin:0;font-size:14px;color:#1a2330;line-height:1.4;">{{ emissao }}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="50%" valign="top" style="padding:0 12px 18px 0;">
+                          <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Serviço</p>
+                          <p style="margin:0;font-size:14px;color:#1a2330;line-height:1.4;">{{ servico }}</p>
+                        </td>
+                        <td width="50%" valign="top" style="padding:0 0 18px 12px;">
+                          <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Validade da proposta</p>
+                          <p style="margin:0;font-size:14px;color:#1a2330;line-height:1.4;">{{ validade }}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="50%" valign="top" style="padding:0 12px 18px 0;">
+                          <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Cliente</p>
+                          <p style="margin:0;font-size:14px;color:#1a2330;line-height:1.4;">{{ cliente_nome }}</p>
+                        </td>
+                        <td width="50%" valign="top" style="padding:0 0 18px 12px;">
+                          <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Vencimento</p>
+                          <p style="margin:0;font-size:14px;color:#1a2330;line-height:1.4;">{{ vencimento }}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="50%" valign="top" style="padding:0 12px 4px 0;">
+                          <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">CNPJ</p>
+                          <p style="margin:0;font-size:14px;color:#1a2330;line-height:1.4;">{{ cliente_cnpj }}</p>
+                        </td>
+                        <td width="50%" valign="top" style="padding:0 0 4px 12px;">
+                          <p style="margin:0 0 4px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Vigência do contrato</p>
+                          <p style="margin:0;font-size:14px;color:#1a2330;line-height:1.4;">{{ vigencia }}</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:12px 40px 8px;font-family:'Segoe UI',Calibri,Arial,sans-serif;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="width:3px;background:#1179b9;font-size:0;line-height:0;">&nbsp;</td>
+                  <td style="padding:12px 0 12px 16px;font-size:13px;line-height:1.5;color:#4a5563;">
+                    A proposta completa está anexada a esta mensagem em formato PDF.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 40px 8px;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:15px;line-height:1.6;color:#2a3340;">
+              <p style="margin:0 0 4px;">Permanecemos à disposição.</p>
+              <p style="margin:22px 0 0;font-size:13px;color:#6b7380;">Atenciosamente,</p>
+              <p style="margin:10px 0 0;font-size:15px;font-weight:600;color:#0f2744;">{{ enviado_por }}</p>
+              <p style="margin:4px 0 0;font-size:13px;color:#5c6570;">Comercial · Transcamila Cargas e Armazéns Gerais Ltda.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 40px 32px;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:11px;line-height:1.55;color:#8a93a0;border-top:1px solid #eceff2;">
+              Esta mensagem e o anexo destinam-se exclusivamente ao destinatário identificado e têm caráter confidencial.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

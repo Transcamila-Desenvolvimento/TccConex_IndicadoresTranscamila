@@ -40,6 +40,15 @@ export const ABA_ITEMS = [
   { module: 'Frota', key: 'custos-frota', label: 'Custos de frota', path: '/frota/custos' },
   { module: 'Frota', key: 'cadastro-condutores', label: 'Condutores', path: '/frota/cadastros/condutores' },
   { module: 'Frota', key: 'cadastro-veiculos', label: 'Veículos frota', path: '/frota/cadastros/veiculos' },
+
+  { module: 'Comercial', key: 'home', label: 'Home Comercial', path: '/comercial' },
+  { module: 'Comercial', key: 'cadastro-clientes', label: 'Clientes', path: '/comercial/cadastros/clientes' },
+  { module: 'Comercial', key: 'cadastro-tabela-frete', label: 'Tabela frete', path: '/comercial/cadastros/tabela-frete' },
+  { module: 'Comercial', key: 'cadastro-generalidades', label: 'Generalidades', path: '/comercial/cadastros/generalidades' },
+  { module: 'Comercial', key: 'cadastro-icms-ufs', label: 'ICMS por UF', path: '/comercial/cadastros/icms-ufs' },
+  { module: 'Comercial', key: 'cadastro-produtos', label: 'Produtos', path: '/comercial/cadastros/produtos' },
+  { module: 'Comercial', key: 'propostas-comerciais', label: 'Propostas comerciais', path: '/comercial/propostas' },
+  { module: 'Comercial', key: 'validacao-clientes', label: 'Validação clientes', path: '/comercial/validacao-clientes' },
 ] as const;
 
 export type AbaKey = (typeof ABA_ITEMS)[number]['key'];

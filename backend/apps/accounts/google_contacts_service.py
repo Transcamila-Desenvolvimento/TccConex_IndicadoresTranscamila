@@ -13,6 +13,7 @@ GOOGLE_LINK_SCOPES = [
     'https://www.googleapis.com/auth/contacts.readonly',
     'https://www.googleapis.com/auth/contacts.other.readonly',
     'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/gmail.send',
 ]
 
 
@@ -81,18 +82,25 @@ def ensure_valid_google_token(user):
     return refreshed
 
 
-def build_google_token_record(token_data: dict, userinfo: dict | None = None) -> dict:
+def build_google_token_record(token_data: dict, userinfo: dict | None = None, previous: dict | None = None) -> dict:
+    granted = (token_data.get('scope') or '').split()
+    previous_scopes = []
+    if previous:
+        raw_scopes = previous.get('scopes') or []
+        previous_scopes = raw_scopes.split() if isinstance(raw_scopes, str) else list(raw_scopes)
     record = {
         'token': token_data.get('access_token'),
-        'refresh_token': token_data.get('refresh_token'),
+        'refresh_token': token_data.get('refresh_token') or (previous or {}).get('refresh_token'),
         'token_uri': 'https://oauth2.googleapis.com/token',
         'client_id': settings.GOOGLE_OAUTH_CLIENT_ID,
         'client_secret': settings.GOOGLE_OAUTH_CLIENT_SECRET,
-        'scopes': token_data.get('scope', ' '.join(GOOGLE_LINK_SCOPES)).split(),
+        'scopes': granted or previous_scopes,
         'expires_at': time.time() + int(token_data.get('expires_in', 3600)),
     }
     if userinfo and userinfo.get('email'):
         record['email'] = userinfo['email']
+    elif previous and previous.get('email'):
+        record['email'] = previous['email']
     return record
 
 

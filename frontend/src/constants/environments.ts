@@ -3,7 +3,7 @@ export const ADMIN_ENVIRONMENT = 'Administração/Manutenção' as const;
 export const LEGACY_ADMIN_ENVIRONMENT = 'Administração' as const;
 
 /** Ordem canônica dos ambientes, crescente pelo código oficial (ver ENVIRONMENT_CODES). */
-export const ACTIVE_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Indicadores', 'Financeiro', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota'] as const;
+export const ACTIVE_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Indicadores', 'Financeiro', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial'] as const;
 
 /**
  * Ambientes sem filial obrigatória na sessão (visão consolidada).
@@ -25,6 +25,7 @@ export const ENVIRONMENT_CODES: Record<ActiveEnvironment, string> = {
   Marketing: '07',
   Logística: '08',
   Frota: '09',
+  Comercial: '10',
 };
 
 export function normalizeEnvironment(env: string): string {
@@ -41,6 +42,7 @@ export const GLOBAL_SESSION_ENVIRONMENTS: readonly string[] = [
   'Marketing',
   'Logística',
   'Frota',
+  'Comercial',
 ];
 
 export function environmentRequiresFilial(env: string | null | undefined): boolean {

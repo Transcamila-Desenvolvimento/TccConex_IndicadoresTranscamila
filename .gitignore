@@ -19,6 +19,7 @@ backend/client_secret.json
 
 # Dump de dados para migração inicial (contém dados reais — nunca versionar)
 dump.json
+frota_azure.json
 
 # Artefatos gerados por upload sem MEDIA_ROOT configurado (versões antigas do app RH)
 /rh/

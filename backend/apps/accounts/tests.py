@@ -427,3 +427,23 @@ class ResetUserPasswordCommandTests(TestCase):
         self.assertTrue(user.check_password('miguel@tcc08'))
         self.assertEqual(user.status, 'ativo')
         self.assertTrue(user.is_active)
+
+
+class GmailErrorFormattingTests(TestCase):
+    def test_api_desabilitada(self):
+        from apps.accounts.google_gmail_service import format_gmail_http_error
+
+        message = format_gmail_http_error(
+            403,
+            '{"error":{"message":"Gmail API has not been used in project 123 before or it is disabled."}}',
+        )
+        self.assertIn('API Gmail', message)
+
+    def test_permissao_insuficiente(self):
+        from apps.accounts.google_gmail_service import format_gmail_http_error
+
+        message = format_gmail_http_error(
+            403,
+            '{"error":{"message":"Request had insufficient authentication scopes."}}',
+        )
+        self.assertIn('permissão de envio', message.lower())

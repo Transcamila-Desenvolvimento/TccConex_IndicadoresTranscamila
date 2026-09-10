@@ -62,7 +62,7 @@ const SGQResumoEmailModal: React.FC<SGQResumoEmailModalProps> = ({ onClose }) =>
       style={{ display: 'flex', zIndex: 3000 }}
       onClick={(e) => { if (e.target === e.currentTarget && !enviarResumo.isPending) onClose(); }}
     >
-      <div className="search-modal-card" style={{ width: '500px' }}>
+      <div className="search-modal-card search-modal-card--allow-overflow" style={{ width: '500px' }}>
         <div className="search-input-wrapper" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#1e293b' }}>Pesquisa de Satisfação</h3>
           <span className="search-close-key" style={{ cursor: 'pointer', fontSize: '12px' }} onClick={onClose}>Fechar (X)</span>

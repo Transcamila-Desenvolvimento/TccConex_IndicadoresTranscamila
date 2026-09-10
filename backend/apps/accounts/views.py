@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .google_contacts_service import build_google_token_record, fetch_google_contacts
+from .google_gmail_service import GMAIL_SEND_SCOPE
 from .google_oauth import build_google_auth_url, exchange_code_for_link, google_oauth_configured
 from .models import Role
 from .pagination import UserPagination
@@ -83,7 +84,8 @@ def _apply_google_link(user, userinfo: dict, token_data: dict | None = None) -> 
     user.google_linked_at = timezone.now()
     user.google_picture_url = (userinfo.get('picture') or '')[:500]
     if token_data:
-        user.google_token = build_google_token_record(token_data, userinfo)
+        previous = user.google_token if isinstance(user.google_token, dict) else None
+        user.google_token = build_google_token_record(token_data, userinfo, previous=previous)
     user.save(update_fields=[
         'google_email', 'google_sub', 'google_linked_at', 'google_token', 'google_picture_url',
     ])
@@ -196,6 +198,19 @@ class GoogleCallbackAPIView(APIView):
             _apply_google_link(request.user, userinfo, token_data)
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        granted = (request.user.google_token or {}).get('scopes') or []
+        if GMAIL_SEND_SCOPE not in granted:
+            return Response(
+                {
+                    **UserSerializer(request.user).data,
+                    'googleMailWarning': (
+                        'A conta foi vinculada, mas o Google não autorizou o envio de e-mail. '
+                        'Confira se a permissão Gmail aparece na tela de consentimento.'
+                    ),
+                },
+                status=status.HTTP_200_OK,
+            )
 
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
 

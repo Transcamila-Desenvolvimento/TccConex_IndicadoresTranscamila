@@ -235,4 +235,134 @@ const EmailTagsInput: React.FC<EmailTagsInputProps> = ({
   );
 };
 
+interface EmailSuggestInputProps {
+  id: string;
+  value: string;
+  onChange: (email: string, contact?: GoogleContact) => void;
+  contacts?: GoogleContact[];
+  disabled?: boolean;
+  placeholder?: string;
+}
+
+export const EmailSuggestInput: React.FC<EmailSuggestInputProps> = ({
+  id,
+  value,
+  onChange,
+  contacts = [],
+  disabled = false,
+  placeholder,
+}) => {
+  const listId = useId();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+
+  const suggestions = useMemo(() => {
+    const term = value.trim().toLowerCase();
+    const filtered = term
+      ? contacts.filter(
+          (contact) =>
+            contact.name.toLowerCase().includes(term) || contact.email.toLowerCase().includes(term),
+        )
+      : contacts;
+    return filtered.slice(0, 20);
+  }, [contacts, value]);
+
+  useEffect(() => {
+    if (!open) setActiveIndex(-1);
+    else if (activeIndex >= suggestions.length) setActiveIndex(suggestions.length - 1);
+  }, [activeIndex, open, suggestions.length]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!wrapperRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const applyContact = (contact: GoogleContact) => {
+    onChange(contact.email, contact);
+    setOpen(false);
+    setActiveIndex(-1);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (!open && suggestions.length > 0) setOpen(true);
+      setActiveIndex((prev) => (prev + 1) % Math.max(suggestions.length, 1));
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!open && suggestions.length > 0) setOpen(true);
+      setActiveIndex((prev) => {
+        if (suggestions.length === 0) return -1;
+        if (prev <= 0) return suggestions.length - 1;
+        return prev - 1;
+      });
+      return;
+    }
+    if (event.key === 'Enter' && open && activeIndex >= 0 && suggestions[activeIndex]) {
+      event.preventDefault();
+      applyContact(suggestions[activeIndex]);
+      return;
+    }
+    if (event.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="email-tags-autocomplete" ref={wrapperRef}>
+      <input
+        id={id}
+        type="text"
+        className="form-input"
+        value={value}
+        autoComplete="off"
+        placeholder={placeholder}
+        disabled={disabled}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setOpen(true);
+          setActiveIndex(-1);
+        }}
+        onFocus={() => {
+          if (!disabled && contacts.length > 0) setOpen(true);
+        }}
+        onKeyDown={handleKeyDown}
+        aria-expanded={open && suggestions.length > 0}
+        aria-controls={listId}
+        aria-autocomplete="list"
+      />
+      {open && suggestions.length > 0 && (
+        <div id={listId} className="email-tags-autocomplete-list" role="listbox">
+          {suggestions.map((contact, index) => (
+            <button
+              key={contact.email}
+              type="button"
+              role="option"
+              aria-selected={index === activeIndex}
+              className={`email-tags-autocomplete-item${index === activeIndex ? ' email-tags-autocomplete-item--active' : ''}`}
+              onMouseEnter={() => setActiveIndex(index)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => applyContact(contact)}
+            >
+              <ContactAvatar name={contact.name} photo={contact.photo} />
+              <span className="email-tags-autocomplete-info">
+                <span className="email-tags-autocomplete-name">{contact.name}</span>
+                <span className="email-tags-autocomplete-email">{contact.email}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default EmailTagsInput;

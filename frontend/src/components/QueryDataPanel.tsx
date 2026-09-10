@@ -1,9 +1,29 @@
 import React from 'react';
 import {
-  toAsyncQueryInput,
   useAsyncQueryState,
   type QueryResultLike,
 } from '../hooks/useAsyncQueryState';
+
+function describeQueryError(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  const err = error as {
+    message?: string;
+    response?: { status?: number; data?: { detail?: unknown } };
+  };
+  const detail = err.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  const status = err.response?.status;
+  if (status === 401) return 'Sessão expirada. Saia e entre novamente.';
+  if (status === 403) return 'Sem permissão para carregar estes registros.';
+  if (status === 500) return 'Erro interno no servidor.';
+  if (err.message && /network error/i.test(err.message)) {
+    return 'Sem conexão com a API. Verifique se o backend está em execução.';
+  }
+  if (err.message && /status code 50/i.test(err.message)) {
+    return 'O servidor da API não respondeu corretamente.';
+  }
+  return err.message?.trim() || null;
+}
 
 interface QueryDataPanelProps {
   query: QueryResultLike<unknown>;
@@ -65,9 +85,22 @@ const QueryDataPanel: React.FC<QueryDataPanelProps> = ({
   }
 
   if (showError) {
+    const errorDetail = describeQueryError(query.error);
     return (
       <div className={errorClass} role="alert">
-        {errorMessage}
+        <span>{errorMessage}</span>
+        {errorDetail && errorDetail !== errorMessage ? (
+          <span className="async-query-error-detail">{errorDetail}</span>
+        ) : null}
+        {query.refetch ? (
+          <button
+            type="button"
+            className="async-query-error-retry"
+            onClick={() => { void query.refetch?.({ cancelRefetch: true }); }}
+          >
+            Tentar novamente
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -112,4 +145,3 @@ const QueryDataPanel: React.FC<QueryDataPanelProps> = ({
 };
 
 export default QueryDataPanel;
-export { toAsyncQueryInput };

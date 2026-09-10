@@ -35,6 +35,13 @@ def format_documento(value: str, tipo_pessoa: str = 'J') -> str:
     return format_cnpj(value)
 
 
+def format_cep(cep: str) -> str:
+    digits = only_digits(cep, 8)
+    if len(digits) != 8:
+        return (cep or '').strip()
+    return f'{digits[:5]}-{digits[5:]}'
+
+
 from .models import format_municipio_cadastro, format_nome_cadastro
 
 
@@ -51,6 +58,24 @@ def _get_json(url: str, timeout: int = 8) -> dict:
         return json.loads(response.read().decode('utf-8'))
 
 
+def _cnpj_payload(digits: str, razao: str, fantasia: str, data: dict, telefone_key: str) -> dict:
+    telefone = (data.get(telefone_key) or data.get('telefone') or '').strip()
+    return {
+        'cnpj': format_cnpj(digits),
+        'razaoSocial': format_nome_cadastro(razao),
+        'nomeFantasia': format_nome_cadastro(fantasia),
+        'municipio': format_municipio_cadastro(data.get('municipio') or ''),
+        'uf': (data.get('uf') or '').strip().upper()[:2],
+        'logradouro': (data.get('logradouro') or '').strip(),
+        'numero': (data.get('numero') or '').strip(),
+        'complemento': (data.get('complemento') or '').strip(),
+        'bairro': (data.get('bairro') or '').strip(),
+        'cep': format_cep(data.get('cep') or ''),
+        'telefone': telefone,
+        'email': (data.get('email') or '').strip().lower(),
+    }
+
+
 def consultar_cnpj(cnpj: str) -> dict:
     digits = only_digits(cnpj)
     if len(digits) != 14:
@@ -61,12 +86,7 @@ def consultar_cnpj(cnpj: str) -> dict:
         razao = (data.get('razao_social') or '').strip()
         fantasia = (data.get('nome_fantasia') or '').strip()
         if razao:
-            return {
-                'cnpj': format_cnpj(digits),
-                'razaoSocial': format_nome_cadastro(razao),
-                'nomeFantasia': format_nome_cadastro(fantasia),
-                'municipio': format_municipio_cadastro(data.get('municipio') or ''),
-            }
+            return _cnpj_payload(digits, razao, fantasia, data, 'ddd_telefone_1')
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
         pass
 
@@ -78,12 +98,7 @@ def consultar_cnpj(cnpj: str) -> dict:
         fantasia = (data.get('fantasia') or '').strip()
         if not razao:
             raise CnpjLookupError('CNPJ não encontrado na Receita Federal.', 404)
-        return {
-            'cnpj': format_cnpj(digits),
-            'razaoSocial': format_nome_cadastro(razao),
-            'nomeFantasia': format_nome_cadastro(fantasia),
-            'municipio': format_municipio_cadastro(data.get('municipio') or ''),
-        }
+        return _cnpj_payload(digits, razao, fantasia, data, 'telefone')
     except CnpjLookupError:
         raise
     except urllib.error.HTTPError as exc:

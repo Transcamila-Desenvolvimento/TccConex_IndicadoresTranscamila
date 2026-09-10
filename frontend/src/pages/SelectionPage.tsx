@@ -35,6 +35,7 @@ const ENV_META: Record<string, { code: string; color: string; text: string }> = 
   Marketing: { code: ENVIRONMENT_CODES.Marketing, color: ENV_BADGE_COLOR, text: 'Marketing' },
   Logística: { code: ENVIRONMENT_CODES.Logística, color: ENV_BADGE_COLOR, text: 'Logística' },
   Frota: { code: ENVIRONMENT_CODES.Frota, color: ENV_BADGE_COLOR, text: 'Frota' },
+  Comercial: { code: ENVIRONMENT_CODES.Comercial, color: ENV_BADGE_COLOR, text: 'Módulo Comercial' },
 };
 
 const formatLastLogin = (value: string | null) => {

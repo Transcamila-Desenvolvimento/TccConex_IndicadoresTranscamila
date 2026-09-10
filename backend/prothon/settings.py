@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'apps.marketing',
     'apps.logistica',
     'apps.frota',
+    'apps.comercial',
 ]
 
 MIDDLEWARE = [
@@ -300,4 +301,5 @@ GOOGLE_OAUTH_REDIRECT_URI = os.environ.get(
     f'{FRONTEND_BASE_URL.rstrip("/")}/auth/google/callback',
 )
 GOOGLE_OAUTH_HD = os.environ.get('GOOGLE_OAUTH_HD', 'transcamila.com.br')
+GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY', '')
 

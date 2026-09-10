@@ -1112,6 +1112,14 @@ export interface CnpjConsultaResult {
   razaoSocial: string;
   nomeFantasia: string;
   municipio?: string;
+  uf?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cep?: string;
+  telefone?: string;
+  email?: string;
 }
 
 export interface ProtocoloNotaDraft {
@@ -2011,4 +2019,789 @@ export interface CustoAbastecimentoRow {
   valorTotal: number;
   numeroNfe: string;
 }
+
+export type ClienteComercialTipoPessoa = 'J';
+export type ClienteComercialSituacao = 'potencial' | 'cliente';
+export type ClienteComercialCompatibilidade =
+  | 'nao_analisado'
+  | 'pendente_validacao'
+  | 'homologado'
+  | 'reprovado';
+
+export const CLIENTE_COMERCIAL_SITUACAO_LABEL: Record<ClienteComercialSituacao, string> = {
+  potencial: 'Potencial cliente',
+  cliente: 'Cliente',
+};
+
+export const CLIENTE_COMERCIAL_COMPATIBILIDADE_LABEL: Record<ClienteComercialCompatibilidade, string> = {
+  nao_analisado: 'Pendente de validação',
+  pendente_validacao: 'Pendente de validação',
+  homologado: 'Homologado',
+  reprovado: 'Reprovado',
+};
+
+export function parseClienteComercialCompatibilidade(value?: string | null): ClienteComercialCompatibilidade {
+  const raw = (value || '').trim();
+  if (raw === 'compativel') return 'homologado';
+  if (raw === 'incompativel') return 'reprovado';
+  if (raw === 'pendente_validacao' || raw === 'homologado' || raw === 'reprovado') return raw;
+  return 'nao_analisado';
+}
+
+export type ClienteComercialClasseRisco =
+  | 'nao_classificado'
+  | '1' | '2' | '2.1' | '2.2' | '2.3' | '3'
+  | '4.1' | '4.2' | '4.3' | '5.1' | '5.2' | '6.1' | '6.2' | '8' | '9';
+
+export type ClienteComercialGrupoEmbalagem = 'nao_aplicavel' | 'I' | 'II' | 'III';
+
+export const CLIENTE_COMERCIAL_CLASSE_RISCO_OPTIONS: { value: ClienteComercialClasseRisco; label: string }[] = [
+  { value: 'nao_classificado', label: 'Não classificado / não perigoso' },
+  { value: '1', label: '1 — Explosivos' },
+  { value: '2', label: '2 — Gases' },
+  { value: '2.1', label: '2.1 — Gases inflamáveis' },
+  { value: '2.2', label: '2.2 — Gases não inflamáveis' },
+  { value: '2.3', label: '2.3 — Gases tóxicos' },
+  { value: '3', label: '3 — Líquidos inflamáveis' },
+  { value: '4.1', label: '4.1 — Sólidos inflamáveis' },
+  { value: '4.2', label: '4.2 — Combustão espontânea' },
+  { value: '4.3', label: '4.3 — Perigosos quando molhados' },
+  { value: '5.1', label: '5.1 — Oxidantes' },
+  { value: '5.2', label: '5.2 — Peróxidos orgânicos' },
+  { value: '6.1', label: '6.1 — Substâncias tóxicas' },
+  { value: '6.2', label: '6.2 — Substâncias infectantes' },
+  { value: '8', label: '8 — Corrosivos' },
+  { value: '9', label: '9 — Substâncias e artigos perigosos diversos' },
+];
+
+export const CLIENTE_COMERCIAL_GRUPO_EMBALAGEM_OPTIONS: { value: ClienteComercialGrupoEmbalagem; label: string }[] = [
+  { value: 'nao_aplicavel', label: 'Não se aplica' },
+  { value: 'I', label: 'Grupo I' },
+  { value: 'II', label: 'Grupo II' },
+  { value: 'III', label: 'Grupo III' },
+];
+
+export function parseClienteComercialClasseRisco(value?: string | null): ClienteComercialClasseRisco {
+  const raw = (value || '').trim();
+  return CLIENTE_COMERCIAL_CLASSE_RISCO_OPTIONS.some((item) => item.value === raw)
+    ? raw as ClienteComercialClasseRisco
+    : 'nao_classificado';
+}
+
+export function parseClienteComercialFispq(value?: string | null): string {
+  const raw = (value || '').trim();
+  const legado = new Set([
+    'pendente',
+    'portal_fabricante',
+    'arquivo_interno',
+    'disponivel_embarque',
+    'nao_se_aplica',
+    'portal do fabricante',
+    'arquivo interno',
+    'disponível no embarque',
+    'disponivel no embarque',
+  ]);
+  if (!raw || legado.has(raw.toLowerCase())) return '';
+  return raw;
+}
+
+export function parseClienteComercialGrupoEmbalagem(value?: string | null): ClienteComercialGrupoEmbalagem {
+  const raw = (value || '').trim();
+  return CLIENTE_COMERCIAL_GRUPO_EMBALAGEM_OPTIONS.some((item) => item.value === raw)
+    ? raw as ClienteComercialGrupoEmbalagem
+    : 'nao_aplicavel';
+}
+
+export interface ClienteComercialProdutoConformidade {
+  status: 'bloqueado' | 'carga_perigosa' | 'nao_perigoso';
+  cargaPerigosa: boolean;
+  alertas: string[];
+}
+
+export interface ClienteComercialProduto {
+  id?: string;
+  produtoId?: string;
+  nome: string;
+  fispq: string;
+  numeroOnu: string;
+  classeRisco: ClienteComercialClasseRisco;
+  grupoEmbalagem: ClienteComercialGrupoEmbalagem;
+  conformidade?: ClienteComercialProdutoConformidade;
+}
+
+export interface ClienteComercialHomologacaoResumo {
+  produtosVinculados: number;
+  produtosPerigosos: number;
+  produtosNaoPerigosos: number;
+  fispqPendente: number;
+  onuIncompleta: number;
+  grupoEmbalagemPendente: number;
+  classesRisco: string[];
+  bloqueados: number;
+  temImpeditivo: boolean;
+  aptoHomologar: boolean;
+  pendencias: string[];
+  resumoPendencia: string;
+}
+
+export interface ClienteComercialValidacaoResumo {
+  comProdutos: number;
+  pendentes: number;
+  comImpeditivo: number;
+  homologados: number;
+  reprovados: number;
+}
+
+export interface ClienteComercialCatalogoOpcao {
+  value: string;
+  label: string;
+}
+
+export interface ClienteComercialOnuComum {
+  numeroOnu: string;
+  classeRisco: ClienteComercialClasseRisco;
+}
+
+export interface ClienteComercialProdutosSugestoes {
+  fispq: ClienteComercialCatalogoOpcao[];
+  classesRisco: ClienteComercialCatalogoOpcao[];
+  gruposEmbalagem: ClienteComercialCatalogoOpcao[];
+  onuComuns: ClienteComercialOnuComum[];
+  homologacao: ClienteComercialCatalogoOpcao[];
+  produtos: ClienteComercialProduto[];
+}
+
+export interface ClienteComercial {
+  id: string;
+  tipoPessoa: ClienteComercialTipoPessoa;
+  cnpj: string;
+  razaoSocial: string;
+  nomeFantasia: string;
+  municipio: string;
+  uf: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cep: string;
+  telefone: string;
+  email: string;
+  inscricaoEstadual: string;
+  responsavel: string;
+  observacoes: string;
+  situacao: ClienteComercialSituacao;
+  compatibilidade: ClienteComercialCompatibilidade;
+  homologadoPor?: string;
+  homologadoEm?: string | null;
+  homologacaoJustificativa?: string;
+  homologacaoRevisao?: number;
+  produtosCount?: number;
+  previsaoVolumes: string;
+  tiposEmbalagens: string;
+  quantidadeVolumes: string;
+  posicoesPallets: string;
+  produtos: ClienteComercialProduto[];
+  homologacaoResumo?: ClienteComercialHomologacaoResumo;
+  clienteDesde?: string | null;
+  dataCriacao?: string;
+  dataAtualizacao?: string;
+}
+
+export interface ClienteComercialPayload {
+  tipoPessoa?: ClienteComercialTipoPessoa;
+  cnpj: string;
+  razaoSocial: string;
+  nomeFantasia?: string;
+  municipio?: string;
+  uf?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cep?: string;
+  telefone?: string;
+  email?: string;
+  inscricaoEstadual?: string;
+  responsavel?: string;
+  observacoes?: string;
+  situacao: ClienteComercialSituacao;
+  compatibilidade?: ClienteComercialCompatibilidade;
+  previsaoVolumes?: string;
+  tiposEmbalagens?: string;
+  quantidadeVolumes?: string;
+  posicoesPallets?: string;
+  produtos?: ClienteComercialProduto[];
+}
+
+export interface ClienteComercialQueryParams extends ListQueryParams {
+  situacao?: ClienteComercialSituacao;
+  homologacao?: ClienteComercialCompatibilidade;
+  fila?: 'validacao';
+  comProdutos?: boolean;
+  pendencia?: 'impeditivo';
+}
+
+export interface ProdutoComercialClienteVinculo {
+  id: string;
+  razaoSocial: string;
+  nomeFantasia: string;
+  cnpj: string;
+  compatibilidade: ClienteComercialCompatibilidade;
+}
+
+export interface ProdutoComercial {
+  id: string;
+  nome: string;
+  fispq: string;
+  numeroOnu: string;
+  classeRisco: ClienteComercialClasseRisco;
+  grupoEmbalagem: ClienteComercialGrupoEmbalagem;
+  ativo: boolean;
+  clientes: ProdutoComercialClienteVinculo[];
+  clientesCount: number;
+  dataCriacao?: string;
+  dataAtualizacao?: string;
+}
+
+export interface ProdutoComercialPayload {
+  nome: string;
+  fispq?: string;
+  numeroOnu?: string;
+  classeRisco?: ClienteComercialClasseRisco;
+  grupoEmbalagem?: ClienteComercialGrupoEmbalagem;
+  ativo?: boolean;
+  clienteIds: string[];
+}
+
+export interface ProdutoComercialQueryParams extends ListQueryParams {
+  ativo?: boolean;
+  clienteId?: string;
+}
+
+export interface HomologacaoProdutoEvento {
+  id: string;
+  status: string;
+  justificativa: string;
+  produtosSnapshot: ClienteComercialProduto[];
+  usuarioNome: string;
+  dataCriacao: string;
+}
+
+export type PropostaComercialTipo = 'transporte_rodoviario' | 'armazenagem';
+export type PropostaComercialStatus = 'rascunho' | 'enviada' | 'aprovada' | 'recusada';
+
+export const PROPOSTA_COMERCIAL_TIPO_LABEL: Record<PropostaComercialTipo, string> = {
+  transporte_rodoviario: 'Transporte rodoviário',
+  armazenagem: 'Armazenagem',
+};
+
+export const PROPOSTA_COMERCIAL_STATUS_LABEL: Record<PropostaComercialStatus, string> = {
+  rascunho: 'Rascunho',
+  enviada: 'Enviada',
+  aprovada: 'Aceita',
+  recusada: 'Recusada',
+};
+
+export interface ClienteComercialHistoricoProposta {
+  id: string;
+  numeroIdentificacao: string;
+  tipo: PropostaComercialTipo;
+  status: PropostaComercialStatus;
+  dataProposta: string | null;
+  dataAtualizacao?: string;
+  vigencia: string;
+  valorEstimado: string | null;
+}
+
+export interface ClienteComercialHistorico {
+  id: string;
+  razaoSocial: string;
+  situacao: ClienteComercialSituacao;
+  clienteDesde: string | null;
+  totalPropostas: number;
+  propostasAceitasCount: number;
+  propostasRecusadasCount: number;
+  indiceAceitacao: number | null;
+  propostasAceitas: ClienteComercialHistoricoProposta[];
+};
+
+export type TipoGeneralidadeComercial = 'frete' | 'distribuicao' | 'armazenagem';
+
+export const TIPOS_GENERALIDADE_COMERCIAL: Array<{ key: TipoGeneralidadeComercial; label: string }> = [
+  { key: 'frete', label: 'Transferência' },
+  { key: 'distribuicao', label: 'Distribuição' },
+  { key: 'armazenagem', label: 'Armazenagem' },
+];
+
+export function tiposGeneralidadeDaProposta(
+  tipo: PropostaComercialTipo,
+  incluiTransferencia = false,
+  incluiDistribuicao = false,
+): TipoGeneralidadeComercial[] {
+  if (tipo === 'armazenagem') return ['armazenagem'];
+  const tipos: TipoGeneralidadeComercial[] = [];
+  if (incluiDistribuicao) tipos.push('distribuicao');
+  if (incluiTransferencia) tipos.push('frete');
+  return tipos;
+}
+
+export interface PropostaCondicaoComercial {
+  rotulo: string;
+  valor: string;
+}
+
+export interface CatalogoGeneralidadesComercial {
+  clienteId: string;
+  tipo: TipoGeneralidadeComercial;
+  origem: 'cliente' | 'padrao';
+  items: PropostaCondicaoComercial[];
+}
+
+export interface PropostaFreteLinha {
+  id?: string;
+  ordem?: number;
+  origem: string;
+  entrega: string;
+  veiculo: string;
+  devolucaoContainer: string;
+  observacoes: string;
+  peso: string;
+  tarifaFrete: string | null;
+  pedagio: string | null;
+  adValorem: string;
+  gris: string;
+  icms: string;
+  prazoDias: string;
+  totalEstimado: string | null;
+}
+
+export const CONDICOES_FRETE_PADRAO: PropostaCondicaoComercial[] = [
+  { rotulo: 'Capacidade dos veículos - Carreta', valor: 'Carreta Graneleira (Até 33ton) 26 Pallets' },
+  { rotulo: 'Limite por Embarque', valor: 'R$ 2.000.000,00' },
+  { rotulo: 'Custo da Escolta', valor: 'Não incluso. Se necessário, mediante negociação.' },
+  { rotulo: 'Cubagem', valor: '1.000 kg por palete ou 300 kg por m³' },
+  { rotulo: 'ICMS / ISS', valor: 'Não incluso nos valores acima, cobrado conforme legislação vigente' },
+  { rotulo: 'Ad valorem / Griss', valor: 'Cobrado sobre o valor das notas fiscais de acordo com percentual descrito na tabela' },
+  { rotulo: 'Pedágios', valor: 'Conforme Legislação' },
+  { rotulo: 'Serviços de Ajudantes', valor: 'Não incluso. Se necessário, mediante negociação' },
+  { rotulo: 'Devolução', valor: 'Mediante a Negociação' },
+  { rotulo: 'Reentrega', valor: 'Mediante a Negociação' },
+  { rotulo: 'Carga e Descarga', valor: 'Não incluso (em caso de cobrança será repassado comprovante e cobrado o reembolso)' },
+  { rotulo: 'Prazo de entrega', valor: 'Em dias úteis, contados à partir do dia seguinte ao carregamento' },
+  { rotulo: 'Diária', valor: 'Conforme legislação ANTT' },
+  { rotulo: 'Franquia de Carga e Descarga', valor: '5 horas, acima deste período segue conforme legislação ANTT' },
+  { rotulo: 'Faturamento', valor: 'Semanal' },
+  { rotulo: 'Prazo de Pagamento', valor: '30 DDL' },
+  { rotulo: 'Validade da Proposta', valor: '30 dias' },
+  { rotulo: 'Vigência', valor: '12 meses' },
+  { rotulo: 'Reajuste', valor: 'Anual com base no índice INCT' },
+];
+
+export const CONSIDERACOES_DISTRIBUICAO_PADRAO: PropostaCondicaoComercial[] = [
+  { rotulo: 'Limite de embarque', valor: 'R$ 2.000.000,00' },
+  { rotulo: 'Capacidades dos veículos', valor: 'Truck (14 ton) 14 pallets — Carreta graneleira / sider (até 32 ton) 24, 26, 28 pallets' },
+  { rotulo: 'Carga e descarga', valor: 'Tarifas livres de cargas e descargas' },
+  { rotulo: 'Franquia de carga e descarga', valor: '5 horas, acima deste período segue conforme legislação ANTT' },
+  { rotulo: 'Pedágios', valor: 'Conforme tabela acima' },
+  { rotulo: 'Diárias', valor: 'Conforme legislação ANTT' },
+  { rotulo: 'Balsa', valor: 'Não incluído nas tarifas' },
+  { rotulo: 'Escolta', valor: 'Não incluído nas tarifas' },
+  { rotulo: 'Prazo de coleta', valor: '48 horas após a data do recebimento da NF-e (D+2)' },
+  { rotulo: 'Prazo de entrega', valor: 'Em dias úteis, contados a partir do dia seguinte ao carregamento conforme tabela' },
+  { rotulo: 'Devolução e/ou reentrega', valor: 'Conforme negociação no ato da ocorrência' },
+  { rotulo: 'ICMS/ISS', valor: 'Não incluso nos valores acima, cobrado conforme legislação vigente' },
+  { rotulo: '+ de 1 NF mesmo CNPJ', valor: 'Emitimos no mesmo dia 1 único CT-e; datas diferentes, mais de 1 CT-e' },
+  { rotulo: 'Faturamento', valor: 'Semanal' },
+  { rotulo: 'Prazo de pagamento', valor: '30 DDL' },
+  { rotulo: 'Vigência', valor: '12 meses' },
+];
+
+export const OBSERVACOES_ARMAZENAGEM_PADRAO: PropostaCondicaoComercial[] = [
+  { rotulo: '(1)', valor: 'Faturamento mínimo considerando 50% da capacidade máxima acordada.' },
+  { rotulo: '(2)', valor: 'Cobrado pela quantidade das posições palete no pico da ocupação mensal até o limite de 1.000 posições pallets.' },
+  { rotulo: '(3)', valor: 'Cobrada por tonelada movimentada. Cobrado na entrada e/ou saída dos produtos no armazém. (Capacidade diária de 100 toneladas na entrada e 150 toneladas na saída).' },
+  { rotulo: '(4)', valor: 'Cobrado sobre o valor da mercadoria armazenada no pico da ocupação mensal. (Propriedade Albaugh)' },
+  { rotulo: '(5)', valor: 'Cobrado sobre o valor da mercadoria armazenada no pico da ocupação mensal. (Em regime de AG)' },
+  { rotulo: '(6)', valor: 'Custo para um colaborador dedicado a ser cobrado apenas quando a quantidade de clientes AG for superior a 20.' },
+  { rotulo: '(7)', valor: 'Custo por tonelada movimentada em horários extraordinários.' },
+  { rotulo: 'a)', valor: 'A utilização acima da capacidade máxima acordada será sob disponibilidade.' },
+  { rotulo: 'b)', valor: 'Os custos de carga e descarga serão cobrados dos transportadores contratados pelo cliente: R$ 25,00/ton + ISS.' },
+  { rotulo: 'c)', valor: 'Essa proposta não contempla custos para reetiquetagem e montagem de kits.' },
+  { rotulo: 'd)', valor: 'As notas fiscais consideradas para separação num determinado dia serão as emitidas até as 15 horas deste dia.' },
+  { rotulo: 'e)', valor: 'Taxa de inventário será tratada conforme necessidade.' },
+  { rotulo: 'f)', valor: 'Faturamento mensal, com prazo de pagamento de 120 DDL.' },
+  { rotulo: 'g)', valor: 'ISS por conta da contratante.' },
+  { rotulo: 'h)', valor: 'O reajuste nas tarifas é aplicado anualmente através de nova negociação entre as partes.' },
+];
+
+export function catalogoGeneralidadesPadrao(tipo: TipoGeneralidadeComercial): PropostaCondicaoComercial[] {
+  if (tipo === 'distribuicao') return CONSIDERACOES_DISTRIBUICAO_PADRAO;
+  if (tipo === 'armazenagem') return OBSERVACOES_ARMAZENAGEM_PADRAO;
+  return CONDICOES_FRETE_PADRAO;
+}
+
+export interface PropostaComercial {
+  id: string;
+  numeroIdentificacao: string;
+  numero?: number | null;
+  ano?: number | null;
+  tipo: PropostaComercialTipo;
+  status: PropostaComercialStatus;
+  clienteId: string | null;
+  clienteNome: string;
+  clienteEmail?: string;
+  titulo: string;
+  subtitulo: string;
+  revisao: string;
+  dataProposta: string | null;
+  propostaReferente: string;
+  responsavel: string;
+  reajuste: string;
+  att: string;
+  validade: string;
+  vigencia: string;
+  faturamento: string;
+  localEmissao: string;
+  valorEstimado: string | null;
+  observacoes: string;
+  incluiTransferencia: boolean;
+  incluiDistribuicao: boolean;
+  condicoes: PropostaCondicaoComercial[];
+  linhas: PropostaFreteLinha[];
+  dataCriacao?: string;
+  dataAtualizacao?: string;
+  dataVencimento?: string | null;
+}
+
+export interface PropostaComercialPayload {
+  tipo: PropostaComercialTipo;
+  status?: PropostaComercialStatus;
+  clienteId?: string | null;
+  clienteNome?: string;
+  titulo: string;
+  subtitulo?: string;
+  revisao?: string;
+  dataProposta?: string | null;
+  propostaReferente?: string;
+  responsavel?: string;
+  reajuste?: string;
+  att?: string;
+  validade?: string;
+  vigencia?: string;
+  faturamento?: string;
+  localEmissao?: string;
+  valorEstimado?: string | null;
+  observacoes?: string;
+  incluiTransferencia?: boolean;
+  incluiDistribuicao?: boolean;
+  condicoes?: PropostaCondicaoComercial[];
+  linhas?: Array<Omit<PropostaFreteLinha, 'id' | 'totalEstimado'> & { totalEstimado?: string | null }>;
+}
+
+export type PropostaComercialOrdering =
+  | 'data_criacao_asc'
+  | 'data_criacao_desc'
+  | 'vencimento_asc'
+  | 'vencimento_desc';
+
+export interface PropostaComercialQueryParams extends ListQueryParams {
+  tipo?: PropostaComercialTipo;
+  status?: PropostaComercialStatus;
+  ordering?: PropostaComercialOrdering;
+}
+
+export type TabelaFreteStatus = 'rascunho' | 'publicada' | 'expirada' | 'arquivada';
+
+export const TABELA_FRETE_STATUS_LABEL: Record<TabelaFreteStatus, string> = {
+  rascunho: 'Rascunho',
+  publicada: 'Publicada',
+  expirada: 'Expirada',
+  arquivada: 'Arquivada',
+};
+
+export type TabelaFreteTipo = 'transferencia' | 'distribuicao';
+
+export const TABELA_FRETE_TIPO_LABEL: Record<TabelaFreteTipo, string> = {
+  transferencia: 'Transferência',
+  distribuicao: 'Distribuição',
+};
+
+export interface TabelaFretePassoKm {
+  ateKm: number;
+  passo: number;
+}
+
+export type TabelaFreteModoTarifa = 'incremento_primeira_faixa' | 'linear_km_ate';
+
+export type TabelaFreteBandaCalculo =
+  | 'multiplicador'
+  | 'divisor'
+  | 'referencia'
+  | 'mult_anterior'
+  | 'mult_referencia';
+
+export interface TabelaFreteBanda {
+  key: string;
+  rotulo: string;
+  unidade: 'ton' | 'veiculo' | string;
+  fator?: string;
+  calculo?: TabelaFreteBandaCalculo;
+  valor?: string;
+}
+
+export interface TabelaFretePrazoRegra {
+  ateKm: number;
+  dias: number;
+}
+
+export interface TabelaFreteFaixaTarifa {
+  key: string;
+  rotulo: string;
+  unidade: string;
+  valor: string;
+}
+
+export interface TabelaFreteFaixa {
+  kmDe: number;
+  kmAte: number;
+  freteMinimo: string;
+  tarifas: TabelaFreteFaixaTarifa[];
+  pedagioTon: string;
+  grisPercent: string;
+  advPercent: string;
+  prazoFracionado: number;
+  prazoFechado: number;
+  extras?: TabelaFreteFaixaExtra[];
+}
+
+export type TabelaFreteColunaCalculo =
+  | 'fixo'
+  | 'percentual_nf'
+  | 'percentual_frete'
+  | 'por_tonelada'
+  | 'por_km';
+
+export interface TabelaFreteColunaExtra {
+  key: string;
+  rotulo: string;
+  calculo: TabelaFreteColunaCalculo;
+  valor: string;
+  incluirNoTotal?: boolean;
+  formato?: 'moeda' | 'percentual';
+}
+
+export interface TabelaFreteFaixaExtra {
+  key: string;
+  rotulo: string;
+  calculo?: TabelaFreteColunaCalculo;
+  valor: string;
+  formato?: 'moeda' | 'percentual';
+  incluirNoTotal?: boolean;
+}
+
+export interface TabelaFreteConfig {
+  kmInicio: number;
+  kmFim: number;
+  modoTarifa?: TabelaFreteModoTarifa;
+  passos: TabelaFretePassoKm[];
+  tarifaBase: string;
+  incrementoPorKm: string;
+  tarifaFixa?: string;
+  tarifaPorKm?: string;
+  fatorFreteMinimo?: string;
+  pedagioBase: string;
+  pedagioFator: string;
+  grisPercent: string;
+  advPercent: string;
+  grisAdvPercent?: string;
+  grisAdvUnificado?: boolean;
+  bandas: TabelaFreteBanda[];
+  prazosFracionado: TabelaFretePrazoRegra[];
+  prazosFechado: TabelaFretePrazoRegra[];
+  colunasExtras?: TabelaFreteColunaExtra[];
+  overrides?: Record<string, Record<string, unknown>>;
+}
+
+export interface TabelaFrete {
+  id: string;
+  nome: string;
+  codigo: string;
+  revisao: number;
+  vigenciaInicio: string | null;
+  vigenciaFim: string | null;
+  status: TabelaFreteStatus;
+  observacoes: string;
+  tipo: TabelaFreteTipo;
+  clienteIds: string[];
+  clientesNomes: string[];
+  criadoPorNome?: string;
+  atualizadoPorNome?: string;
+  config?: TabelaFreteConfig;
+  faixas?: TabelaFreteFaixa[];
+  linhas?: TabelaFreteLinha[];
+  linhasCount: number;
+  dataCriacao?: string;
+  dataAtualizacao?: string;
+}
+
+export interface TabelaFreteSimulacaoResult {
+  km: number;
+  pesoKg: number;
+  modalidade: string;
+  faixaKm: { de: number; ate: number };
+  bandaPeso: { key: string; rotulo: string };
+  tarifa: { valor: string; unidade: string };
+  fretePeso: string;
+  freteMinimo: string;
+  freteBase: string;
+  pedagio: string;
+  grisAdvUnificado?: boolean;
+  grisAdv?: string | null;
+  gris: string;
+  adv: string;
+  subtotal: string;
+  extras?: Array<{ key: string; rotulo: string; valor: string; incluirNoTotal?: boolean }>;
+  valorPorKm: string;
+  total: string;
+  prazoDias: number;
+  icms?: TabelaFreteSimulacaoIcms | null;
+}
+
+export interface TabelaFreteSimulacaoIcms {
+  ufOrigem: string;
+  ufDestino: string;
+  tipo: 'interno' | 'interestadual';
+  aliquotaPercent: number;
+  valor: string;
+  totalComIcms: string;
+  incluiPedagioNaBase?: boolean;
+}
+
+export const UFS_BRASIL = [
+  'AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT',
+  'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO',
+] as const;
+
+export type RotaDistanciaModo = 'cidade' | 'endereco';
+
+export interface EnderecoSugestao {
+  label: string;
+  lat: number;
+  lon: number;
+  uf?: string;
+}
+
+export interface GoogleMapsConfigComercial {
+  enabled: boolean;
+  apiKey: string | null;
+}
+
+export interface RotaDistanciaPayload {
+  modo?: RotaDistanciaModo;
+  cidadeOrigem?: string;
+  cidadeDestino?: string;
+  ufOrigem?: string;
+  ufDestino?: string;
+  enderecoOrigem?: string;
+  enderecoDestino?: string;
+  origemLat?: number;
+  origemLon?: number;
+  destinoLat?: number;
+  destinoLon?: number;
+}
+
+export interface RotaDistanciaResult {
+  modo?: RotaDistanciaModo;
+  cidadeOrigem?: string;
+  cidadeDestino?: string;
+  enderecoOrigem?: string;
+  enderecoDestino?: string;
+  km: number;
+  distanciaMetros: number;
+  provedor?: 'google' | 'osm';
+}
+
+export type IcmsUfAliquotas = Record<string, number>;
+
+export interface IcmsUfRegiao {
+  key: string;
+  label: string;
+  ufs: string[];
+}
+
+export interface IcmsUfConfig {
+  ufs: string[];
+  regioes: IcmsUfRegiao[];
+  aliquotas: IcmsUfAliquotas;
+  atualizadoEm?: string;
+}
+
+export interface TabelaFretePayload {
+  nome: string;
+  codigo?: string;
+  revisao?: number;
+  vigenciaInicio?: string | null;
+  vigenciaFim?: string | null;
+  observacoes?: string;
+  tipo: TabelaFreteTipo;
+  clienteIds?: string[];
+  config?: Partial<TabelaFreteConfig>;
+}
+
+export interface TabelaFreteLinha {
+  id: string;
+  tabelaId?: string;
+  ordem?: number;
+  origem: string;
+  entrega: string;
+  veiculo: string;
+  tarifaFrete: string | null;
+  pedagio: string | null;
+  adValorem: string;
+  gris: string;
+  icms: string;
+  prazoDias: string;
+  totalEstimado: string | null;
+}
+
+export interface TabelaFreteLinhaPayload {
+  tabelaId: string;
+  origem?: string;
+  entrega?: string;
+  veiculo?: string;
+  tarifaFrete?: string | null;
+  pedagio?: string | null;
+  adValorem?: string;
+  gris?: string;
+  icms?: string;
+  prazoDias?: string;
+  ordem?: number;
+}
+
+export interface TabelaFreteQueryParams extends ListQueryParams {
+  tipo?: TabelaFreteTipo;
+  cliente?: string;
+  status?: TabelaFreteStatus;
+  vigente?: boolean;
+}
+
+export interface TabelaFreteRevisaoHistoricoItem {
+  id: string;
+  revisao: number;
+  status: TabelaFreteStatus;
+  dataCriacao: string;
+  dataAtualizacao: string;
+  usuarioNome: string | null;
+  atual: boolean;
+}
+
+export interface TabelaFreteRevisaoHistorico {
+  tabelaAtualId: string;
+  codigo: string;
+  nome: string;
+  revisoes: TabelaFreteRevisaoHistoricoItem[];
+}
+
+
+
 

@@ -110,6 +110,55 @@ export const FUNCAO_ITEMS = [
     label: 'Importar relatórios',
     description: 'Permite importar planilhas de manutenção e abastecimento para o indicador de custos da frota.',
   },
+  {
+    module: 'Comercial',
+    aba: 'cadastro-clientes',
+    key: 'gerenciar-clientes',
+    label: 'Cadastrar e editar',
+    description: 'Permite cadastrar, editar e excluir clientes do ambiente Comercial.',
+  },
+  {
+    module: 'Comercial',
+    aba: 'propostas-comerciais',
+    key: 'gerenciar-propostas',
+    label: 'Cadastrar e editar',
+    description: 'Permite cadastrar, editar e excluir propostas de frete e armazenagem.',
+  },
+  {
+    module: 'Comercial',
+    aba: 'cadastro-tabela-frete',
+    key: 'gerenciar-tabela-frete',
+    label: 'Cadastrar e editar',
+    description: 'Permite cadastrar, editar e excluir linhas da tabela de frete.',
+  },
+  {
+    module: 'Comercial',
+    aba: 'cadastro-generalidades',
+    key: 'gerenciar-generalidades',
+    label: 'Cadastrar e editar',
+    description: 'Permite cadastrar generalidades por cliente e tipo de serviço (transferência, distribuição ou armazenagem).',
+  },
+    {
+    module: 'Comercial',
+    aba: 'cadastro-icms-ufs',
+    key: 'gerenciar-icms-ufs',
+    label: 'Cadastrar e editar',
+    description: 'Permite configurar a matriz de alíquotas ICMS por UF de origem e destino.',
+  },
+  {
+    module: 'Comercial',
+    aba: 'cadastro-produtos',
+    key: 'gerenciar-produtos',
+    label: 'Cadastrar e editar',
+    description: 'Permite cadastrar produtos, classificar ONU/FISPQ e vincular a um cliente.',
+  },
+  {
+    module: 'Comercial',
+    aba: 'validacao-clientes',
+    key: 'validar-clientes',
+    label: 'Homologar produtos',
+    description: 'Permite aprovar ou reprovar a homologação de produtos dos clientes.',
+  },
 ] as const;
 
 export type FuncaoKey = (typeof FUNCAO_ITEMS)[number]['key'];

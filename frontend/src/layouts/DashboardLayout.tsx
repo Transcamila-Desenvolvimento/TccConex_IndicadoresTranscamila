@@ -49,6 +49,7 @@ const DashboardLayout: React.FC = () => {
   const [isEnvioDocumentosSubmenuOpen, setIsEnvioDocumentosSubmenuOpen] = useState(false);
   const [isCadastrosFaturamentoSubmenuOpen, setIsCadastrosFaturamentoSubmenuOpen] = useState(false);
   const [isCadastrosFrotaSubmenuOpen, setIsCadastrosFrotaSubmenuOpen] = useState(false);
+  const [isCadastrosComercialSubmenuOpen, setIsCadastrosComercialSubmenuOpen] = useState(false);
   const [, setIsAdminSubmenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
@@ -95,6 +96,9 @@ const DashboardLayout: React.FC = () => {
     }
     if (location.pathname.startsWith('/frota/cadastros')) {
       setIsCadastrosFrotaSubmenuOpen(true);
+    }
+    if (location.pathname.startsWith('/comercial/cadastros')) {
+      setIsCadastrosComercialSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/admin')) {
       setIsAdminSubmenuOpen(true);
@@ -453,6 +457,66 @@ const DashboardLayout: React.FC = () => {
         action: () => navigate('/frota/cadastros/veiculos'),
         show: selectedEnvironment === 'Frota' && canAba('Frota', 'cadastro-veiculos')
       },
+      {
+        title: "Home Comercial",
+        path: "Comercial / Home",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+          </svg>
+        ),
+        action: () => navigate('/comercial'),
+        show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'home')
+      },
+      {
+        title: "Clientes",
+        path: "Comercial / Cadastros / Clientes",
+        icon: <i className="bi bi-people search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/comercial/cadastros/clientes'),
+        show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-clientes')
+      },
+      {
+        title: "Tabela frete",
+        path: "Comercial / Cadastros / Tabela frete",
+        icon: <i className="bi bi-table search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/comercial/cadastros/tabela-frete'),
+        show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-tabela-frete')
+      },
+      {
+        title: "Generalidades",
+        path: "Comercial / Cadastros / Generalidades",
+        icon: <i className="bi bi-list-check search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/comercial/cadastros/generalidades'),
+        show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-generalidades')
+      },
+      {
+        title: "ICMS por UF",
+        path: "Comercial / Cadastros / ICMS por UF",
+        icon: <i className="bi bi-percent search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/comercial/cadastros/icms-ufs'),
+        show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-icms-ufs')
+      },
+      {
+        title: "Produtos",
+        path: "Comercial / Cadastros / Produtos",
+        icon: <i className="bi bi-box-seam search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/comercial/cadastros/produtos'),
+        show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-produtos')
+      },
+      {
+        title: "Propostas comerciais",
+        path: "Comercial / Propostas comerciais",
+        icon: <i className="bi bi-file-earmark-text search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/comercial/propostas'),
+        show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'propostas-comerciais')
+      },
+      {
+        title: "Validação clientes",
+        path: "Comercial / Validação clientes",
+        icon: <i className="bi bi-person-check search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/comercial/validacao-clientes'),
+        show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'validacao-clientes')
+      },
     ];
 
     return list.filter(f => f.show);
@@ -495,6 +559,13 @@ const DashboardLayout: React.FC = () => {
   const FATURAMENTO_ENVIO_PATHS = ['/faturamento/protocolos'];
   const FATURAMENTO_CADASTROS_PATHS = ['/faturamento/cadastros/clientes'];
   const FROTA_CADASTROS_PATHS = ['/frota/cadastros/condutores', '/frota/cadastros/veiculos'];
+  const COMERCIAL_CADASTROS_PATHS = [
+    '/comercial/cadastros/clientes',
+    '/comercial/cadastros/tabela-frete',
+    '/comercial/cadastros/generalidades',
+    '/comercial/cadastros/icms-ufs',
+    '/comercial/cadastros/produtos',
+  ];
 
   // Get Breadcrumb text based on active route and environment
   const getBreadcrumbText = () => {
@@ -520,6 +591,14 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/frota/cadastros/veiculos')) return `${env} / Cadastros / Veículos frota`;
     if (path.startsWith('/frota/custos')) return `${env} / Custos de frota`;
     if (path.startsWith('/frota')) return env;
+    if (path.startsWith('/comercial/cadastros/clientes')) return `${env} / Cadastros / Clientes`;
+    if (path.startsWith('/comercial/cadastros/tabela-frete')) return `${env} / Cadastros / Tabela frete`;
+    if (path.startsWith('/comercial/cadastros/generalidades')) return `${env} / Cadastros / Generalidades`;
+    if (path.startsWith('/comercial/cadastros/icms-ufs')) return `${env} / Cadastros / ICMS por UF`;
+    if (path.startsWith('/comercial/cadastros/produtos')) return `${env} / Cadastros / Produtos`;
+    if (path.startsWith('/comercial/propostas')) return `${env} / Propostas comerciais`;
+    if (path.startsWith('/comercial/validacao-clientes')) return `${env} / Validação clientes`;
+    if (path.startsWith('/comercial')) return env;
     if (path.startsWith('/marketing/campanhas')) return `${env} / Calendario Transcamila`;
     if (path.startsWith('/marketing')) return env;
     if (path.startsWith('/admin/usuarios')) return `Administração / Controle Geral`;
@@ -564,7 +643,7 @@ const DashboardLayout: React.FC = () => {
         
         <nav className="sidebar-nav">
           {/* General Home/Dashboard — oculto nos ambientes com home própria */}
-          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && selectedEnvironment !== 'Faturamento' && selectedEnvironment !== 'SGQ' && selectedEnvironment !== 'Marketing' && selectedEnvironment !== 'Logística' && selectedEnvironment !== 'Frota' && !isAdminEnvironment(selectedEnvironment) && (
+          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && selectedEnvironment !== 'Faturamento' && selectedEnvironment !== 'SGQ' && selectedEnvironment !== 'Marketing' && selectedEnvironment !== 'Logística' && selectedEnvironment !== 'Frota' && selectedEnvironment !== 'Comercial' && !isAdminEnvironment(selectedEnvironment) && (
             <Link 
               to="/" 
               className={`nav-btn ${isRouteActive('/') ? 'active' : ''}`} 
@@ -1215,6 +1294,133 @@ const DashboardLayout: React.FC = () => {
                       <div className="nav-btn-left">
                         <NavIcon name="truck" sub />
                         <span className="nav-text">Veículos frota</span>
+                      </div>
+                    </Link>
+                    )}
+                  </div>
+                </div>
+                )}
+              </div>
+            )}
+
+            {selectedEnvironment === 'Comercial' && (
+              <div id="sidebar-comercial-group" style={{ width: '100%' }}>
+                {canAba('Comercial', 'home') && (
+                <Link
+                  to="/comercial"
+                  className={`nav-btn ${location.pathname === '/comercial' || location.pathname === '/comercial/' ? 'active' : ''}`}
+                  data-tooltip="Home Comercial"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="briefcase" />
+                    <span className="nav-text">Home Comercial</span>
+                  </div>
+                </Link>
+                )}
+                {canAba('Comercial', 'propostas-comerciais') && (
+                <Link
+                  to="/comercial/propostas"
+                  className={`nav-btn ${isRouteActive('/comercial/propostas') ? 'active' : ''}`}
+                  data-tooltip="Propostas comerciais"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="file-earmark-text" />
+                    <span className="nav-text">Propostas comerciais</span>
+                  </div>
+                </Link>
+                )}
+                {canAba('Comercial', 'validacao-clientes') && (
+                <Link
+                  to="/comercial/validacao-clientes"
+                  className={`nav-btn ${isRouteActive('/comercial/validacao-clientes') ? 'active' : ''}`}
+                  data-tooltip="Validação clientes"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="person-check" />
+                    <span className="nav-text">Validação clientes</span>
+                  </div>
+                </Link>
+                )}
+                {(canAba('Comercial', 'cadastro-clientes') || canAba('Comercial', 'cadastro-tabela-frete') || canAba('Comercial', 'cadastro-generalidades') || canAba('Comercial', 'cadastro-icms-ufs') || canAba('Comercial', 'cadastro-produtos')) && (
+                <div className={`nav-group-wrapper${isCadastrosComercialSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-comercial-cadastros">
+                  <button
+                    type="button"
+                    className={`nav-btn ${isParentNavActive(COMERCIAL_CADASTROS_PATHS, isCadastrosComercialSubmenuOpen) ? 'active-parent' : ''}`}
+                    onClick={() => setIsCadastrosComercialSubmenuOpen(!isCadastrosComercialSubmenuOpen)}
+                    data-tooltip="Cadastros"
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="journal-text" />
+                      <span className="nav-text">Cadastros</span>
+                    </div>
+                    <ChevronSubmenu open={isCadastrosComercialSubmenuOpen} />
+                  </button>
+                  <div
+                    className="submenu-container"
+                    style={{
+                      display: isSidebarCollapsed ? undefined : 'block',
+                      maxHeight: isSidebarCollapsed ? undefined : (isCadastrosComercialSubmenuOpen ? '300px' : '0px'),
+                      overflow: 'hidden',
+                      transition: 'max-height 0.25s ease',
+                    }}
+                  >
+                    {canAba('Comercial', 'cadastro-clientes') && (
+                    <Link
+                      to="/comercial/cadastros/clientes"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/comercial/cadastros/clientes') ? 'active' : ''}`}
+                      data-tooltip="Clientes"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="people" sub />
+                        <span className="nav-text">Clientes</span>
+                      </div>
+                    </Link>
+                    )}
+                    {canAba('Comercial', 'cadastro-tabela-frete') && (
+                    <Link
+                      to="/comercial/cadastros/tabela-frete"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/comercial/cadastros/tabela-frete') ? 'active' : ''}`}
+                      data-tooltip="Tabela frete"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="table" sub />
+                        <span className="nav-text">Tabela frete</span>
+                      </div>
+                    </Link>
+                    )}
+                    {canAba('Comercial', 'cadastro-generalidades') && (
+                    <Link
+                      to="/comercial/cadastros/generalidades"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/comercial/cadastros/generalidades') ? 'active' : ''}`}
+                      data-tooltip="Generalidades"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="list-check" sub />
+                        <span className="nav-text">Generalidades</span>
+                      </div>
+                    </Link>
+                    )}
+                    {canAba('Comercial', 'cadastro-icms-ufs') && (
+                    <Link
+                      to="/comercial/cadastros/icms-ufs"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/comercial/cadastros/icms-ufs') ? 'active' : ''}`}
+                      data-tooltip="ICMS por UF"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="percent" sub />
+                        <span className="nav-text">ICMS por UF</span>
+                      </div>
+                    </Link>
+                    )}
+                    {canAba('Comercial', 'cadastro-produtos') && (
+                    <Link
+                      to="/comercial/cadastros/produtos"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/comercial/cadastros/produtos') ? 'active' : ''}`}
+                      data-tooltip="Produtos"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="box-seam" sub />
+                        <span className="nav-text">Produtos</span>
                       </div>
                     </Link>
                     )}

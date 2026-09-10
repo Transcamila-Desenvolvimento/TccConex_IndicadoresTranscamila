@@ -3,9 +3,9 @@
 ADMIN_ENVIRONMENT = 'Administração/Manutenção'
 LEGACY_ADMIN_ENVIRONMENT = 'Administração'
 
-ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota'})
+ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial'})
 
-DEPRECATED_ENVIRONMENTS = frozenset({'Comercial'})
+DEPRECATED_ENVIRONMENTS = frozenset()
 
 # Filiais operacionais às quais um usuário pode ser vinculado por ambiente
 # (permissões/escopo de dados). Não confundir com listas de domínio específicas,
@@ -60,6 +60,16 @@ ABAS_POR_AMBIENTE = {
     'Marketing': frozenset({'home', 'campanhas'}),
     'Logística': frozenset({'home', 'configuracoes'}),
     'Frota': frozenset({'home', 'cadastro-veiculos', 'cadastro-condutores', 'custos-frota'}),
+    'Comercial': frozenset({
+        'home',
+        'cadastro-clientes',
+        'cadastro-tabela-frete',
+        'cadastro-generalidades',
+        'cadastro-icms-ufs',
+        'cadastro-produtos',
+        'propostas-comerciais',
+        'validacao-clientes',
+    }),
 }
 
 # Funções liberáveis por ambiente para operadores (admin sempre tem todas).
@@ -87,6 +97,15 @@ FUNCOES_POR_AMBIENTE = {
         'gerenciar-veiculos',
         'gerenciar-condutores',
         'gerenciar-custos-frota',
+    }),
+    'Comercial': frozenset({
+        'gerenciar-clientes',
+        'gerenciar-propostas',
+        'gerenciar-tabela-frete',
+        'gerenciar-generalidades',
+        'gerenciar-icms-ufs',
+        'gerenciar-produtos',
+        'validar-clientes',
     }),
 }
 
