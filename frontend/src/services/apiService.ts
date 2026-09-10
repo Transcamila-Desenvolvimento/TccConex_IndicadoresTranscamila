@@ -47,7 +47,7 @@ import type {
   PropostaComercial, PropostaComercialPayload, PropostaComercialQueryParams, PropostaComercialTipo, PropostaFreteLinha,
   PropostaCondicaoComercial, CatalogoGeneralidadesComercial, TipoGeneralidadeComercial,
   TabelaFrete, TabelaFreteLinha, TabelaFreteLinhaPayload, TabelaFretePayload,
-  TabelaFreteQueryParams, TabelaFreteRevisaoHistorico, TabelaFreteSimulacaoResult, TabelaFreteSimulacaoIcms, TabelaFreteTipo, TabelaFreteConfig, TabelaFreteFaixa,
+  TabelaFreteQueryParams, TabelaFreteRevisaoHistorico, TabelaFreteSimulacaoResult, TabelaFreteSimulacaoIcms, TabelaFreteConfig, TabelaFreteFaixa,
   IcmsUfConfig, IcmsUfAliquotas,
   RotaDistanciaPayload, RotaDistanciaResult, EnderecoSugestao, GoogleMapsConfigComercial,
   ProdutoComercial, ProdutoComercialPayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,

@@ -1,4 +1,3 @@
-import React from 'react';
 import type { TabelaFreteStatus } from '../../types/domain';
 import { TABELA_FRETE_STATUS_LABEL } from '../../types/domain';
 

@@ -1,4 +1,3 @@
-import React from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useTabelaFreteHistoricoRevisoes } from '../../hooks/useComercialClientes';
 import ComercialTabelaFreteStatusBadge from './ComercialTabelaFreteStatusBadge';

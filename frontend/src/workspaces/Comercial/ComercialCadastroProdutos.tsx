@@ -12,7 +12,7 @@ import {
   useProdutosComercial,
   useUpdateProdutoComercial,
 } from '../../hooks/useComercialClientes';
-import type { ProdutoComercial } from '../../types/domain';
+import type { ClienteComercialClasseRisco, ClienteComercialGrupoEmbalagem, ProdutoComercial } from '../../types/domain';
 import {
   CLIENTE_COMERCIAL_CLASSE_RISCO_OPTIONS,
   CLIENTE_COMERCIAL_GRUPO_EMBALAGEM_OPTIONS,
@@ -23,11 +23,18 @@ import ComercialHomologacaoBadge from './ComercialHomologacaoBadge';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
-const emptyForm = () => ({
+const emptyForm = (): {
+  nome: string;
+  classeRisco: ClienteComercialClasseRisco;
+  numeroOnu: string;
+  grupoEmbalagem: ClienteComercialGrupoEmbalagem;
+  fispq: string;
+  clienteId: string;
+} => ({
   nome: '',
-  classeRisco: 'nao_classificado' as const,
+  classeRisco: 'nao_classificado',
   numeroOnu: '',
-  grupoEmbalagem: 'nao_aplicavel' as const,
+  grupoEmbalagem: 'nao_aplicavel',
   fispq: '',
   clienteId: '',
 });
