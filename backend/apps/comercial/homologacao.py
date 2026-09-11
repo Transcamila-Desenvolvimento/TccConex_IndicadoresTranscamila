@@ -172,7 +172,12 @@ def _salvar_status(cliente, status, usuario=None, justificativa='', evento=None)
         'homologacao_revisao',
         'data_atualizacao',
     ])
-    _registrar_evento(cliente, evento or status, usuario, justificativa)
+    evento_final = evento or status
+    _registrar_evento(cliente, evento_final, usuario, justificativa)
+    if evento_final in {COMPATIBILIDADE_PENDENTE_VALIDACAO, HomologacaoProdutoEvento.EVENTO_REABERTO}:
+        from .homologacao_email_service import notificar_homologacao_pendente
+
+        notificar_homologacao_pendente(cliente.pk, getattr(usuario, 'pk', None))
 
 
 @transaction.atomic

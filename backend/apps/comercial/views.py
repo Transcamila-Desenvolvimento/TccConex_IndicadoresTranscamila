@@ -2,6 +2,7 @@ import re
 
 from datetime import timedelta
 
+from django.db import transaction
 from django.db.models import Case, CharField, Count, DateField, DurationField, ExpressionWrapper, F, IntegerField, Q, Value, When, Window
 from django.db.models.functions import Cast, Coalesce, Concat, Lower, NullIf, Replace, RowNumber, TruncDate
 from django.http import HttpResponse
@@ -390,6 +391,67 @@ class ProdutoComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if denied:
             return denied
         return super().create(request, *args, **kwargs)
+
+    @action(detail=False, methods=['post'], url_path='lote')
+    def lote(self, request):
+        denied = _funcao_required_response(request, 'gerenciar-produtos', _GERENCIAR_PRODUTOS_DETAIL)
+        if denied:
+            return denied
+        cliente_id = str(request.data.get('clienteId') or '').strip()
+        itens = request.data.get('produtos')
+        if not cliente_id:
+            return Response({'clienteId': ['Selecione o cliente dos produtos.']}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(itens, list) or not itens:
+            return Response({'produtos': ['Informe ao menos um produto.']}, status=status.HTTP_400_BAD_REQUEST)
+        if len(itens) > 50:
+            return Response({'produtos': ['Cadastre no máximo 50 produtos por vez.']}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            cliente_pk = int(cliente_id)
+        except (TypeError, ValueError):
+            return Response({'clienteId': ['Cliente inválido.']}, status=status.HTTP_400_BAD_REQUEST)
+        if not ClienteComercial.objects.filter(pk=cliente_pk).exists():
+            return Response({'clienteId': ['Cliente não encontrado.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .homologacao import sincronizar_homologacao_por_produtos
+
+        serializers_validos = []
+        nomes_lote = []
+        for index, item in enumerate(itens):
+            data = dict(item) if isinstance(item, dict) else {}
+            data['clienteIds'] = [str(cliente_pk)]
+            serializer = self.get_serializer(data=data)
+            serializer.context['defer_homologacao'] = True
+            if not serializer.is_valid():
+                return Response(
+                    {'produtos': {str(index): serializer.errors}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            nome = (serializer.validated_data.get('nome') or '').strip().casefold()
+            if nome in nomes_lote:
+                return Response(
+                    {'produtos': {str(index): {'nome': ['Nome repetido neste cadastro.']}}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            nomes_lote.append(nome)
+            serializers_validos.append(serializer)
+
+        with transaction.atomic():
+            criados = [
+                serializer.save(criado_por=request.user, atualizado_por=request.user)
+                for serializer in serializers_validos
+            ]
+            cliente = ClienteComercial.objects.get(pk=cliente_pk)
+            sincronizar_homologacao_por_produtos(cliente, request.user)
+
+        record_audit(
+            request.user,
+            'comercial.produto.lote',
+            f'{len(criados)} produto(s) comercial(is) cadastrado(s) para o cliente "{cliente.razao_social}".',
+        )
+        return Response(
+            {'count': len(criados), 'results': self.get_serializer(criados, many=True).data},
+            status=status.HTTP_201_CREATED,
+        )
 
     def update(self, request, *args, **kwargs):
         denied = _funcao_required_response(request, 'gerenciar-produtos', _GERENCIAR_PRODUTOS_DETAIL)

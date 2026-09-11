@@ -2273,6 +2273,11 @@ export interface ProdutoComercialPayload {
   clienteIds: string[];
 }
 
+export interface ProdutoComercialLotePayload {
+  clienteId: string;
+  produtos: Omit<ProdutoComercialPayload, 'clienteIds'>[];
+}
+
 export interface ProdutoComercialQueryParams extends ListQueryParams {
   ativo?: boolean;
   clienteId?: string;

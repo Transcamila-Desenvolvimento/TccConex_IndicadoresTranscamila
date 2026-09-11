@@ -16,7 +16,7 @@ import {
   normalizeEnvironment,
 } from '../../constants/environments';
 import { INDICADOR_ITEMS, type IndicadorKey } from '../../constants/indicadores';
-import { funcoesDaAba, funcoesDoModulo, type FuncaoKey } from '../../constants/funcoes';
+import { funcoesDaAba, funcoesDoModulo, isFuncaoOptIn, type FuncaoKey } from '../../constants/funcoes';
 import { abasDoModulo, HOME_ABA_KEY, rotinasConfiguraveisDoModulo } from '../../constants/abas';
 import { branchesForModule } from '../../constants/filiais';
 import QueryDataPanel from '../../components/QueryDataPanel';
@@ -406,12 +406,17 @@ const AdminUsersPanel: React.FC = () => {
       return;
     }
     if (preset === 'so-consulta') {
-      setFuncoes((prev) => ({ ...prev, [module]: [] }));
+      setFuncoes((prev) => ({
+        ...prev,
+        [module]: (prev[module] ?? []).filter((key) =>
+          funcoesDoModulo(module).some((item) => item.key === key && isFuncaoOptIn(item)),
+        ),
+      }));
       return;
     }
     setFuncoes((prev) => ({
       ...prev,
-      [module]: funcoesDoModulo(module).map((item) => item.key),
+      [module]: funcoesDoModulo(module).filter((item) => !isFuncaoOptIn(item)).map((item) => item.key),
     }));
   };
 
@@ -546,6 +551,7 @@ const AdminUsersPanel: React.FC = () => {
                   </th>
                   <th>Usuário</th>
                   <th>Nome Completo</th>
+                  <th>Conta Google</th>
                   <th>Função</th>
                   <th>Status</th>
                   <th>Senha</th>
@@ -555,7 +561,7 @@ const AdminUsersPanel: React.FC = () => {
               <tbody>
                 {usersQueryState.canShowEmpty && usersList.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
                       Nenhum usuário operacional cadastrado com os filtros ativos.
                     </td>
                   </tr>
@@ -568,6 +574,7 @@ const AdminUsersPanel: React.FC = () => {
                     const lastLoginStr = u.lastLogin
                       ? new Date(u.lastLogin).toLocaleDateString('pt-BR') + ' ' + new Date(u.lastLogin).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
                       : 'Nunca logou';
+                    const googleEmail = (u.googleEmail || '').trim();
 
                     return (
                       <tr key={u.id}>
@@ -588,6 +595,13 @@ const AdminUsersPanel: React.FC = () => {
                           </div>
                         </td>
                         <td>{u.name}</td>
+                        <td>
+                          {googleEmail ? (
+                            <span title={googleEmail}>{googleEmail}</span>
+                          ) : (
+                            <small style={{ color: 'var(--text-muted)' }}>Não vinculado</small>
+                          )}
+                        </td>
                         <td><span style={{ fontWeight: 600 }}>{roleName}</span></td>
                         <td>
                           <span className={`status-dot-label ${u.status === 'ativo' ? 'is-active' : 'is-inactive'}`}>
@@ -950,6 +964,8 @@ const AdminUsersPanel: React.FC = () => {
                                   const saved = selectedAbas[group.module] ?? [];
                                   const visible = saved.length === 0 || saved.includes(item.key);
                                   const rotinaFuncoes = funcoesDaAba(group.module, item.key);
+                                  const acoesOptIn = rotinaFuncoes.filter((fn) => isFuncaoOptIn(fn));
+                                  const acoesVisiveis = isSelectedAdmin ? acoesOptIn : rotinaFuncoes;
                                   return (
                                     <tr key={item.key} className={visible ? '' : 'is-off'}>
                                       <td>
@@ -968,11 +984,11 @@ const AdminUsersPanel: React.FC = () => {
                                       <td>
                                         {!visible ? (
                                           <span className="perm-matrix-muted">Oculta no menu</span>
-                                        ) : rotinaFuncoes.length === 0 || isSelectedAdmin ? (
+                                        ) : acoesVisiveis.length === 0 ? (
                                           <span className="perm-matrix-muted">Só consulta</span>
                                         ) : (
                                           <div className="perm-check-row">
-                                            {rotinaFuncoes.map((fn) => (
+                                            {acoesVisiveis.map((fn) => (
                                               <label key={fn.key} className="perm-check" title={fn.description}>
                                                 <input
                                                   type="checkbox"

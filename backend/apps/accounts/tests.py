@@ -88,6 +88,15 @@ class AuthAPITests(TestCase):
         self.assertIn('results', response.data)
         self.assertIn('count', response.data)
 
+    def test_admin_list_users_includes_google_email(self):
+        self.admin.google_email = 'admin.google@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        response = self.client.get('/api/auth/users/', **auth_headers(self.admin, 'Administração'))
+        self.assertEqual(response.status_code, 200)
+        by_username = {row['username']: row for row in response.data['results']}
+        self.assertEqual(by_username['admin_test']['googleEmail'], 'admin.google@transcamila.com.br')
+        self.assertIn(by_username['oper_test'].get('googleEmail'), (None, ''))
+
     def test_google_link_requires_configuration(self):
         response = self.client.get('/api/auth/profile/google/link/', **auth_headers(self.admin))
         if response.status_code == 503:

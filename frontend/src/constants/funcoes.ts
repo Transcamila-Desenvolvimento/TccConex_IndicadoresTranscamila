@@ -159,9 +159,22 @@ export const FUNCAO_ITEMS = [
     label: 'Homologar produtos',
     description: 'Permite aprovar ou reprovar a homologação de produtos dos clientes.',
   },
+  {
+    module: 'Comercial',
+    aba: 'validacao-clientes',
+    key: 'receber-email-homologacao',
+    label: 'Receber e-mail de pendência',
+    description: 'Envia e-mail quando um cliente entra em pendente de homologação de produtos.',
+    optIn: true,
+  },
 ] as const;
 
 export type FuncaoKey = (typeof FUNCAO_ITEMS)[number]['key'];
+export type FuncaoItem = (typeof FUNCAO_ITEMS)[number];
+
+export function isFuncaoOptIn(item: FuncaoItem): boolean {
+  return 'optIn' in item && item.optIn === true;
+}
 
 export function funcoesDoModulo(module: string) {
   return FUNCAO_ITEMS.filter((item) => item.module === module);

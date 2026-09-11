@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Homologação pendente</title>
+</head>
+<body style="margin:0;padding:0;background:#e9ecef;color:#1a2330;-webkit-text-size-adjust:100%;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#e9ecef;padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;width:100%;background:#ffffff;">
+          <tr>
+            <td style="background:#0f2744;padding:22px 32px;">
+              {% if logo_cid %}
+              <img src="cid:{{ logo_cid }}" alt="TccConex" height="36" style="display:block;border:0;height:36px;width:auto;max-width:180px;" />
+              {% else %}
+              <p style="margin:0;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:18px;font-weight:600;color:#ffffff;">TccConex</p>
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td style="height:3px;line-height:3px;font-size:0;background:#118CC4;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="padding:28px 32px 8px;font-family:'Segoe UI',Calibri,Arial,sans-serif;">
+              <p style="margin:0;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#6b7380;">
+                ERP · Comercial
+              </p>
+              <h1 style="margin:8px 0 0;font-size:22px;line-height:1.25;font-weight:600;color:#0f2744;">
+                Homologação de produtos pendente
+              </h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 8px;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:15px;line-height:1.7;color:#2a3340;">
+              <p style="margin:0;">
+                O cliente <strong style="color:#0f2744;">{{ cliente_nome }}</strong> entrou na fila de validação.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 32px 16px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f7f9;">
+                <tr>
+                  <td style="padding:18px 20px;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:14px;color:#1a2330;">
+                    <p style="margin:0 0 10px;"><strong>Cliente:</strong> {{ cliente_nome }}</p>
+                    <p style="margin:0 0 10px;"><strong>CNPJ / CPF:</strong> {{ cnpj }}</p>
+                    <p style="margin:0 0 10px;"><strong>Solicitado por:</strong> {{ solicitado_por }}</p>
+                    <p style="margin:0 0 10px;"><strong>Resumo:</strong> {{ resumo }}</p>
+                    <p style="margin:0;"><strong>Produtos:</strong> {{ produtosVinculados }} no total{% if produtosPerigosos %} · {{ produtosPerigosos }} carga perigosa{% endif %}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          {% if produtos %}
+          <tr>
+            <td style="padding:0 32px 24px;font-family:'Segoe UI',Calibri,Arial,sans-serif;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e6e8ec;">
+                <tr>
+                  <td style="background:#f0f3f7;padding:8px 10px;font-size:11px;font-weight:600;color:#4a5563;">Produto</td>
+                  <td style="background:#f0f3f7;padding:8px 10px;font-size:11px;font-weight:600;color:#4a5563;">Classe</td>
+                  <td style="background:#f0f3f7;padding:8px 10px;font-size:11px;font-weight:600;color:#4a5563;">ONU</td>
+                  <td style="background:#f0f3f7;padding:8px 10px;font-size:11px;font-weight:600;color:#4a5563;">Grupo</td>
+                  <td style="background:#f0f3f7;padding:8px 10px;font-size:11px;font-weight:600;color:#4a5563;">Situação</td>
+                </tr>
+                {% for item in produtos %}
+                <tr>
+                  <td style="padding:8px 10px;font-size:12px;color:#0f2744;border-top:1px solid #e6e8ec;">{{ item.nome }}</td>
+                  <td style="padding:8px 10px;font-size:12px;color:#1a2330;border-top:1px solid #e6e8ec;">{{ item.classe }}</td>
+                  <td style="padding:8px 10px;font-size:12px;color:#1a2330;border-top:1px solid #e6e8ec;">{{ item.onu }}</td>
+                  <td style="padding:8px 10px;font-size:12px;color:#1a2330;border-top:1px solid #e6e8ec;">{{ item.grupo }}</td>
+                  <td style="padding:8px 10px;font-size:12px;color:#1a2330;border-top:1px solid #e6e8ec;">{{ item.situacao }}</td>
+                </tr>
+                {% endfor %}
+              </table>
+              {% if produtos_restantes %}
+              <p style="margin:8px 0 0;font-size:12px;color:#6b7380;">e mais {{ produtos_restantes }} produto(s) no cadastro.</p>
+              {% endif %}
+            </td>
+          </tr>
+          {% endif %}
+          {% if validacao_url %}
+          <tr>
+            <td style="padding:8px 32px 8px;" align="center">
+              <a href="{{ validacao_url }}" style="display:inline-block;background:#118CC4;color:#ffffff;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:14px;font-weight:600;text-decoration:none;padding:12px 22px;border-radius:6px;">
+                Abrir para aprovar
+              </a>
+            </td>
+          </tr>
+          {% endif %}
+          <tr>
+            <td style="padding:16px 32px 32px;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:13px;color:#6b7380;">
+              O botão abre o TccConex na homologação deste cliente. É preciso estar logado e ter permissão para aprovar.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

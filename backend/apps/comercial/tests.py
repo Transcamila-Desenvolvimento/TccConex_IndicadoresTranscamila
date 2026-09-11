@@ -1754,3 +1754,130 @@ class HomologacaoProdutosComercialTests(TestCase):
         self.assertIn('PRODUTO A', nomes)
         self.assertNotIn('PRODUTO B', nomes)
 
+    def _usuario_notificacao(self, username, google_email=None, **kwargs):
+        defaults = {
+            'password': 'test123',
+            'name': username,
+            'role_id': '2',
+            'status': 'ativo',
+            'environments': ['Comercial'],
+            'funcoes': {'Comercial': ['receber-email-homologacao']},
+            'google_email': google_email,
+        }
+        defaults.update(kwargs)
+        return User.objects.create_user(username=username, **defaults)
+
+    def _vincular_produto(self, cliente_id, nome='Glifosato 480'):
+        self._auth(self.produtos)
+        created = self.api.post(
+            '/api/comercial/produtos/',
+            {
+                'nome': nome,
+                'numeroOnu': '3082',
+                'classeRisco': '9',
+                'grupoEmbalagem': 'III',
+                'fispq': 'https://exemplo.com/glifosato.pdf',
+                'clienteIds': [cliente_id],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        return created
+
+    @patch('apps.comercial.homologacao_email_service.send_gmail_as_user')
+    def test_pendente_envia_email_para_quem_optou(self, mock_send):
+        self.produtos.google_email = 'produtos@transcamila.com.br'
+        self.produtos.save(update_fields=['google_email'])
+        self._usuario_notificacao('homolog.mail', 'validador@transcamila.com.br')
+        cliente_id = self._cliente()
+        self._vincular_produto(cliente_id)
+        self.assertTrue(mock_send.called)
+        email_obj = mock_send.call_args.args[1]
+        self.assertIn('validador@transcamila.com.br', email_obj.to)
+        self.assertIn('TccConex', email_obj.subject)
+        self.assertIn('GLIFOSATO', email_obj.body)
+        self.assertIn('3082', email_obj.body)
+        self.assertIn('Abrir para aprovar', email_obj.body)
+        self.assertIn(f'validacao-clientes?cliente={cliente_id}', email_obj.body)
+
+    @patch('apps.comercial.homologacao_email_service.send_gmail_as_user')
+    def test_admin_sem_opt_in_nao_recebe_email(self, mock_send):
+        self.admin.google_email = 'admin@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        self.produtos.google_email = 'produtos@transcamila.com.br'
+        self.produtos.save(update_fields=['google_email'])
+        cliente_id = self._cliente()
+        self._vincular_produto(cliente_id)
+        mock_send.assert_not_called()
+
+    @patch('apps.comercial.homologacao_email_service.send_gmail_as_user')
+    def test_ja_pendente_nao_reenvia_email(self, mock_send):
+        self.produtos.google_email = 'produtos@transcamila.com.br'
+        self.produtos.save(update_fields=['google_email'])
+        self._usuario_notificacao('homolog.mail2', 'validador2@transcamila.com.br')
+        cliente_id = self._cliente()
+        self._vincular_produto(cliente_id, 'Produto um')
+        self.assertEqual(mock_send.call_count, 1)
+        self._vincular_produto(cliente_id, 'Produto dois')
+        self.assertEqual(mock_send.call_count, 1)
+
+    @patch('apps.comercial.homologacao_email_service.send_gmail_as_user')
+    def test_opt_in_sem_google_e_ignorado(self, mock_send):
+        self.produtos.google_email = 'produtos@transcamila.com.br'
+        self.produtos.save(update_fields=['google_email'])
+        self._usuario_notificacao('homolog.semgmail', google_email=None)
+        self._usuario_notificacao('homolog.comgmail', 'com.gmail@transcamila.com.br')
+        cliente_id = self._cliente()
+        self._vincular_produto(cliente_id)
+        self.assertTrue(mock_send.called)
+        email_obj = mock_send.call_args.args[1]
+        self.assertEqual(email_obj.to, ['com.gmail@transcamila.com.br'])
+
+    @patch('apps.comercial.homologacao_email_service.send_gmail_as_user')
+    def test_lote_cadastra_varios_e_dispara_um_email(self, mock_send):
+        self.produtos.google_email = 'produtos@transcamila.com.br'
+        self.produtos.save(update_fields=['google_email'])
+        self._usuario_notificacao('homolog.lote', 'lote@transcamila.com.br')
+        cliente_id = self._cliente()
+        self._auth(self.produtos)
+        created = self.api.post(
+            '/api/comercial/produtos/lote/',
+            {
+                'clienteId': cliente_id,
+                'produtos': [
+                    {
+                        'nome': 'Glifosato 480',
+                        'numeroOnu': '3082',
+                        'classeRisco': '9',
+                        'grupoEmbalagem': 'III',
+                        'fispq': 'https://exemplo.com/glifosato.pdf',
+                    },
+                    {
+                        'nome': 'Ureia agrícola',
+                        'classeRisco': 'nao_classificado',
+                    },
+                    {
+                        'nome': 'Solvente especial',
+                        'numeroOnu': '1993',
+                        'classeRisco': '3',
+                        'grupoEmbalagem': 'II',
+                    },
+                ],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertEqual(created.json()['count'], 3)
+        self.assertEqual(mock_send.call_count, 1)
+        email_obj = mock_send.call_args.args[1]
+        self.assertIn('GLIFOSATO', email_obj.body)
+        self.assertIn('UREIA', email_obj.body)
+        self.assertIn('SOLVENTE', email_obj.body)
+        self.assertIn('1993', email_obj.body)
+        self._auth(self.admin)
+        cliente = self.api.get(f'/api/comercial/clientes/{cliente_id}/', **HEADERS)
+        self.assertEqual(cliente.json()['compatibilidade'], 'pendente_validacao')
+        self.assertEqual(cliente.json()['produtosCount'], 3)
+

@@ -106,6 +106,7 @@ FUNCOES_POR_AMBIENTE = {
         'gerenciar-icms-ufs',
         'gerenciar-produtos',
         'validar-clientes',
+        'receber-email-homologacao',
     }),
 }
 

@@ -14148,20 +14148,100 @@ textarea.form-input {
   background: #fff;
 }
 
-.comercial-homologacao-historico {
-  margin-top: 0;
-  max-height: 168px;
+.comercial-homologacao-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+  padding-right: 2px;
 }
 
-.comercial-homologacao-historico-table .col-data { width: 140px; }
-.comercial-homologacao-historico-table .col-status { width: 128px; }
-.comercial-homologacao-historico-table .col-usuario { width: 22%; }
-.comercial-homologacao-historico-table .col-justificativa { width: auto; }
+.comercial-hist-item {
+  padding: 10px 12px;
+  border: 1px solid #e6eaf0;
+  border-radius: 8px;
+  background: #fff;
+}
 
-.comercial-homologacao-historico-table td.col-justificativa {
+.comercial-hist-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.comercial-hist-data {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.comercial-hist-user {
+  font-size: 12px;
+  color: #475569;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.comercial-hist-just {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #475569;
+}
+
+.comercial-hist-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #eef1f5;
+}
+
+.comercial-hist-change {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.comercial-hist-change-nome {
+  font-weight: 600;
+}
+
+.comercial-hist-change-detalhe {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.comercial-hist-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.comercial-hist-tag.is-incluido {
+  background: #e8f4f1;
+  color: #0f766e;
+}
+
+.comercial-hist-tag.is-removido {
+  background: #f4eee8;
+  color: #9a6b3a;
+}
+
+.comercial-hist-tag.is-alterado {
+  background: #eef2f6;
   color: #475569;
 }
 
@@ -14514,22 +14594,52 @@ textarea.form-input {
   background: #fff;
 }
 
-.comercial-produtos-table .col-nome { width: 28%; }
+.comercial-produtos-table .col-expand { width: 40px; }
+.comercial-produtos-table .col-nome { width: 32%; }
 .comercial-produtos-table .col-classe { width: 24%; }
 .comercial-produtos-table .col-onu { width: 72px; }
 .comercial-produtos-table .col-grupo { width: 120px; }
-.comercial-produtos-table .col-fispq { width: 150px; }
-.comercial-produtos-table .col-clientes { width: 22%; }
+.comercial-produtos-table .col-fispq { width: 88px; }
 .comercial-produtos-table .col-acoes { width: 88px; }
 
 .comercial-produtos-table td.col-acoes {
   padding-right: 10px !important;
 }
 
+.comercial-grupo-cliente-row td {
+  background: #f3f6f9 !important;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.comercial-grupo-produto-row td {
+  background: #fff;
+}
+
+.comercial-grupo-toggle {
+  width: 28px;
+  height: 28px;
+}
+
 .comercial-produtos-acoes {
   display: flex;
-  justify-content: flex-end;
   gap: 4px;
+  justify-content: flex-end;
+}
+
+.comercial-produto-lote-item {
+  margin-top: 16px;
+  padding: 14px 14px 16px;
+  border: 1px solid var(--border-color, #e6e8ec);
+  border-radius: 10px;
+  background: #fbfcfd;
+}
+
+.comercial-produto-lote-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
 }
 
 .comercial-browse-card .erp-pagination-bar {

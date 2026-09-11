@@ -50,7 +50,7 @@ import type {
   TabelaFreteQueryParams, TabelaFreteRevisaoHistorico, TabelaFreteSimulacaoResult, TabelaFreteSimulacaoIcms, TabelaFreteConfig, TabelaFreteFaixa,
   IcmsUfConfig, IcmsUfAliquotas,
   RotaDistanciaPayload, RotaDistanciaResult, EnderecoSugestao, GoogleMapsConfigComercial,
-  ProdutoComercial, ProdutoComercialPayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
+  ProdutoComercial, ProdutoComercialPayload, ProdutoComercialLotePayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
 } from '../types/domain';
 import {
   parseClienteComercialClasseRisco,
@@ -2400,6 +2400,11 @@ export const apiService = {
 
   // ─── Comercial ──────────────────────────────────────────────────────────────
 
+  async getClienteComercial(id: string): Promise<ClienteComercial> {
+    const { data } = await api.get(`/api/comercial/clientes/${id}/`);
+    return normalizeClienteComercial(data);
+  },
+
   async getClientesComercial(params: ClienteComercialQueryParams = {}): Promise<PaginatedResponse<ClienteComercial>> {
     const { data } = await api.get('/api/comercial/clientes/', {
       params: {
@@ -2504,6 +2509,12 @@ export const apiService = {
   async createProdutoComercial(payload: ProdutoComercialPayload): Promise<ProdutoComercial> {
     const { data } = await api.post('/api/comercial/produtos/', payload);
     return normalizeProdutoComercial(data);
+  },
+
+  async createProdutosComercialLote(payload: ProdutoComercialLotePayload): Promise<ProdutoComercial[]> {
+    const { data } = await api.post('/api/comercial/produtos/lote/', payload);
+    const results = Array.isArray(data?.results) ? data.results : [];
+    return results.map(normalizeProdutoComercial);
   },
 
   async updateProdutoComercial(id: string, payload: Partial<ProdutoComercialPayload>): Promise<ProdutoComercial> {

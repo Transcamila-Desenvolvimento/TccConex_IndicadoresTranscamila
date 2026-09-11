@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
   getComercialErrorMessage,
+  useClienteComercial,
   useClientesComercial,
   useHomologacaoHistoricoCliente,
   useHomologarClienteComercial,
@@ -15,6 +17,7 @@ import {
   CLIENTE_COMERCIAL_GRUPO_EMBALAGEM_OPTIONS,
 } from '../../types/domain';
 import ComercialHomologacaoBadge from './ComercialHomologacaoBadge';
+import { alteracoesDoEvento, HOMOLOGACAO_ALTERACAO_LABEL } from './diffHomologacaoProdutos';
 
 type FiltroValidacao = 'pendente' | 'homologado' | 'reprovado' | 'todos';
 
@@ -70,12 +73,16 @@ const resumoPendencia = (cliente: ClienteComercial) =>
 const ComercialValidacaoClientes: React.FC = () => {
   const { user } = useAuth();
   const canValidate = userHasFuncao(user, 'Comercial', 'validar-clientes');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [filtro, setFiltro] = useState<FiltroValidacao>('todos');
   const [selected, setSelected] = useState<ClienteComercial | null>(null);
   const [justificativa, setJustificativa] = useState('');
+  const [historicoAberto, setHistoricoAberto] = useState(false);
+  const clienteLinkId = (searchParams.get('cliente') || '').trim() || null;
+  const clienteLinkQuery = useClienteComercial(clienteLinkId);
 
   const clientesQuery = useClientesComercial({
     page,
@@ -100,12 +107,25 @@ const ComercialValidacaoClientes: React.FC = () => {
   const abrir = (cliente: ClienteComercial) => {
     setSelected(cliente);
     setJustificativa('');
+    setHistoricoAberto(false);
   };
 
   const fechar = () => {
     setSelected(null);
     setJustificativa('');
+    setHistoricoAberto(false);
+    if (searchParams.get('cliente')) {
+      searchParams.delete('cliente');
+      setSearchParams(searchParams, { replace: true });
+    }
   };
+
+  useEffect(() => {
+    if (!clienteLinkQuery.data) return;
+    setSelected(clienteLinkQuery.data);
+    setJustificativa('');
+    setHistoricoAberto(false);
+  }, [clienteLinkQuery.data]);
 
   const decidir = (decisao: 'homologado' | 'reprovado') => {
     if (!selected) return;
@@ -312,41 +332,54 @@ const ComercialValidacaoClientes: React.FC = () => {
               )}
 
               {historicoQuery.data && historicoQuery.data.length > 0 ? (
-                <>
-                  <h5 className="admin-form-section-title" style={{ marginTop: 16 }}>Histórico</h5>
-                  <div className="table-container comercial-homologacao-historico">
-                    <table className="data-table comercial-browse-table comercial-homologacao-historico-table">
-                      <colgroup>
-                        <col className="col-data" />
-                        <col className="col-status" />
-                        <col className="col-usuario" />
-                        <col className="col-justificativa" />
-                      </colgroup>
-                      <thead>
-                        <tr>
-                          <th>Data</th>
-                          <th>Situação</th>
-                          <th>Usuário</th>
-                          <th>Justificativa</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {historicoQuery.data.map((evento) => (
-                          <tr key={evento.id}>
-                            <td>{formatDateTime(evento.dataCriacao)}</td>
-                            <td>
+                <div className="cliente-cadastro-fold" style={{ marginTop: 16 }}>
+                  <button
+                    type="button"
+                    className="cliente-cadastro-fold-trigger"
+                    aria-expanded={historicoAberto}
+                    onClick={() => setHistoricoAberto((aberto) => !aberto)}
+                  >
+                    <i className={`bi ${historicoAberto ? 'bi-chevron-down' : 'bi-chevron-right'}`} aria-hidden />
+                    <span className="admin-form-section-title" style={{ margin: 0 }}>Histórico</span>
+                    <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>
+                      {historicoQuery.data.length} evento{historicoQuery.data.length === 1 ? '' : 's'}
+                    </span>
+                  </button>
+                  {historicoAberto ? (
+                    <div className="comercial-homologacao-timeline">
+                      {historicoQuery.data.map((evento, indice) => {
+                        const alteracoes = alteracoesDoEvento(historicoQuery.data, indice);
+                        return (
+                          <article key={evento.id} className="comercial-hist-item">
+                            <div className="comercial-hist-top">
                               <ComercialHomologacaoBadge status={statusHistorico(evento.status)} />
-                            </td>
-                            <td>{evento.usuarioNome || 'Sistema'}</td>
-                            <td className="col-justificativa" title={evento.justificativa || undefined}>
-                              {evento.justificativa || '—'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
+                              <span className="comercial-hist-data">{formatDateTime(evento.dataCriacao)}</span>
+                              <span className="comercial-hist-user">{evento.usuarioNome || 'Sistema'}</span>
+                            </div>
+                            {evento.justificativa ? (
+                              <p className="comercial-hist-just">{evento.justificativa}</p>
+                            ) : null}
+                            {alteracoes.length > 0 ? (
+                              <div className="comercial-hist-changes">
+                                {alteracoes.map((item) => (
+                                  <div key={`${evento.id}-${item.tipo}-${item.nome}`} className="comercial-hist-change">
+                                    <span className={`comercial-hist-tag is-${item.tipo}`}>
+                                      {HOMOLOGACAO_ALTERACAO_LABEL[item.tipo]}
+                                    </span>
+                                    <span className="comercial-hist-change-nome">{item.nome}</span>
+                                    {item.tipo === 'alterado' && item.detalhe ? (
+                                      <span className="comercial-hist-change-detalhe">{item.detalhe}</span>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
             </div>
 

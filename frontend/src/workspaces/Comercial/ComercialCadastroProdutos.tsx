@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
@@ -7,7 +7,7 @@ import {
   getComercialErrorMessage,
   useClienteProdutosSugestoesComercial,
   useClientesComercial,
-  useCreateProdutoComercial,
+  useCreateProdutosComercialLote,
   useDeleteProdutoComercial,
   useProdutosComercial,
   useUpdateProdutoComercial,
@@ -23,20 +23,23 @@ import ComercialHomologacaoBadge from './ComercialHomologacaoBadge';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
-const emptyForm = (): {
+type ProdutoLinha = {
+  key: string;
   nome: string;
   classeRisco: ClienteComercialClasseRisco;
   numeroOnu: string;
   grupoEmbalagem: ClienteComercialGrupoEmbalagem;
   fispq: string;
-  clienteId: string;
-} => ({
+};
+
+let linhaSeq = 0;
+const novaLinha = (): ProdutoLinha => ({
+  key: `produto-${Date.now()}-${linhaSeq += 1}`,
   nome: '',
   classeRisco: 'nao_classificado',
   numeroOnu: '',
   grupoEmbalagem: 'nao_aplicavel',
   fispq: '',
-  clienteId: '',
 });
 
 const ComercialCadastroProdutos: React.FC = () => {
@@ -48,7 +51,8 @@ const ComercialCadastroProdutos: React.FC = () => {
   const [filterClienteId, setFilterClienteId] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm());
+  const [clienteId, setClienteId] = useState('');
+  const [linhas, setLinhas] = useState<ProdutoLinha[]>([novaLinha()]);
 
   const produtosQuery = useProdutosComercial({
     page,
@@ -58,7 +62,7 @@ const ComercialCadastroProdutos: React.FC = () => {
   });
   const clientesQuery = useClientesComercial({ page: 1, pageSize: 100 });
   const sugestoesQuery = useClienteProdutosSugestoesComercial(isModalOpen);
-  const createProduto = useCreateProdutoComercial();
+  const createLote = useCreateProdutosComercialLote();
   const updateProduto = useUpdateProdutoComercial();
   const deleteProduto = useDeleteProdutoComercial();
   const { canShowEmpty } = useAsyncQueryState(produtosQuery);
@@ -69,61 +73,91 @@ const ComercialCadastroProdutos: React.FC = () => {
   const clampedPage = Math.min(page, totalPages);
   const clientes = clientesQuery.data?.results ?? [];
   const sugestoes = sugestoesQuery.data;
-  const isPending = createProduto.isPending || updateProduto.isPending;
+  const isPending = createLote.isPending || updateProduto.isPending;
 
   const classeOptions = sugestoes?.classesRisco?.length ? sugestoes.classesRisco : CLIENTE_COMERCIAL_CLASSE_RISCO_OPTIONS;
   const grupoOptions = sugestoes?.gruposEmbalagem?.length ? sugestoes.gruposEmbalagem : CLIENTE_COMERCIAL_GRUPO_EMBALAGEM_OPTIONS;
 
   const startCreate = () => {
     setEditingId(null);
-    setForm(emptyForm());
+    setClienteId(filterClienteId);
+    setLinhas([novaLinha()]);
     setIsModalOpen(true);
   };
 
   const startEdit = (produto: ProdutoComercial) => {
     setEditingId(produto.id);
-    setForm({
+    setClienteId(produto.clientes[0]?.id || '');
+    setLinhas([{
+      key: `edit-${produto.id}`,
       nome: produto.nome,
       classeRisco: produto.classeRisco,
       numeroOnu: produto.numeroOnu,
       grupoEmbalagem: produto.grupoEmbalagem,
       fispq: produto.fispq,
-      clienteId: produto.clientes[0]?.id || '',
-    });
+    }]);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
-    setForm(emptyForm());
+    setClienteId('');
+    setLinhas([novaLinha()]);
+  };
+
+  const patchLinha = (key: string, patch: Partial<ProdutoLinha>) => {
+    setLinhas((prev) => prev.map((linha) => (linha.key === key ? { ...linha, ...patch } : linha)));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nome.trim()) {
-      alert('Informe o nome do produto.');
+    if (!clienteId) {
+      alert('Selecione o cliente dos produtos.');
       return;
     }
-    if (!form.clienteId) {
-      alert('Selecione o cliente do produto.');
+    const preenchidas = linhas.map((linha) => ({
+      ...linha,
+      nome: linha.nome.trim(),
+    }));
+    if (preenchidas.some((linha) => !linha.nome)) {
+      alert('Informe o nome de todos os produtos.');
       return;
     }
-    const payload = {
-      nome: form.nome.trim(),
-      classeRisco: form.classeRisco,
-      numeroOnu: form.numeroOnu,
-      grupoEmbalagem: form.grupoEmbalagem,
-      fispq: form.fispq,
-      clienteIds: form.clienteId ? [form.clienteId] : [],
-    };
+    const nomes = preenchidas.map((linha) => linha.nome.toLowerCase());
+    if (new Set(nomes).size !== nomes.length) {
+      alert('Há produtos com o mesmo nome neste cadastro.');
+      return;
+    }
     const callbacks = {
       onSuccess: () => closeModal(),
       onError: (err: unknown) => alert(getComercialErrorMessage(err)),
     };
-    editingId
-      ? updateProduto.mutate({ id: editingId, payload }, callbacks)
-      : createProduto.mutate(payload, callbacks);
+    if (editingId) {
+      const linha = preenchidas[0];
+      updateProduto.mutate({
+        id: editingId,
+        payload: {
+          nome: linha.nome,
+          classeRisco: linha.classeRisco,
+          numeroOnu: linha.numeroOnu,
+          grupoEmbalagem: linha.grupoEmbalagem,
+          fispq: linha.fispq,
+          clienteIds: [clienteId],
+        },
+      }, callbacks);
+      return;
+    }
+    createLote.mutate({
+      clienteId,
+      produtos: preenchidas.map((linha) => ({
+        nome: linha.nome,
+        classeRisco: linha.classeRisco,
+        numeroOnu: linha.numeroOnu,
+        grupoEmbalagem: linha.grupoEmbalagem,
+        fispq: linha.fispq,
+      })),
+    }, callbacks);
   };
 
   const handleDelete = (produto: ProdutoComercial) => {
@@ -133,9 +167,24 @@ const ComercialCadastroProdutos: React.FC = () => {
     });
   };
 
-  const clienteSelecionado = clientes.find((item) => item.id === form.clienteId);
-  const clienteDoProduto = (produto: ProdutoComercial) =>
-    produto.clientes[0]?.nomeFantasia || produto.clientes[0]?.razaoSocial || '—';
+  const clienteSelecionado = clientes.find((item) => item.id === clienteId);
+  const grupos = useMemo(() => {
+    const mapa = new Map<string, { id: string; nome: string; produtos: ProdutoComercial[] }>();
+    for (const produto of produtos) {
+      const cliente = produto.clientes[0];
+      const id = cliente?.id || 'sem-cliente';
+      const nome = cliente?.nomeFantasia || cliente?.razaoSocial || 'Sem cliente';
+      const grupo = mapa.get(id) ?? { id, nome, produtos: [] };
+      grupo.produtos.push(produto);
+      mapa.set(id, grupo);
+    }
+    return Array.from(mapa.values());
+  }, [produtos]);
+  const [recolhidos, setRecolhidos] = useState<Record<string, boolean>>({});
+
+  const toggleGrupo = (id: string) => {
+    setRecolhidos((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   return (
     <div className="fat-list-compact" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '0 4px 4px' }}>
@@ -146,7 +195,7 @@ const ComercialCadastroProdutos: React.FC = () => {
         </div>
         {canManage && (
           <button type="button" className="reports-action-btn primary" onClick={startCreate}>
-            Novo produto
+            Cadastrar produtos
           </button>
         )}
       </header>
@@ -191,22 +240,22 @@ const ComercialCadastroProdutos: React.FC = () => {
           <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
             <table className="data-table comercial-browse-table comercial-produtos-table">
               <colgroup>
+                <col className="col-expand" />
                 <col className="col-nome" />
                 <col className="col-classe" />
                 <col className="col-onu" />
                 <col className="col-grupo" />
                 <col className="col-fispq" />
-                <col className="col-clientes" />
                 <col className="col-acoes" />
               </colgroup>
               <thead>
                 <tr>
-                  <th>Produto</th>
+                  <th aria-label="Expandir" />
+                  <th>Cliente / Produto</th>
                   <th>Classe</th>
                   <th>ONU</th>
                   <th>Grupo</th>
                   <th>FISPQ</th>
-                  <th>Cliente</th>
                   <th aria-label="Ações" />
                 </tr>
               </thead>
@@ -217,41 +266,68 @@ const ComercialCadastroProdutos: React.FC = () => {
                       Não há registros a serem exibidos.
                     </td>
                   </tr>
-                ) : produtos.map((produto) => (
-                  <tr key={produto.id}>
-                    <td className="col-nome"><strong>{produto.nome}</strong></td>
-                    <td>{classeOptions.find((item) => item.value === produto.classeRisco)?.label || produto.classeRisco}</td>
-                    <td>{produto.numeroOnu || '—'}</td>
-                    <td>{grupoOptions.find((item) => item.value === produto.grupoEmbalagem)?.label || produto.grupoEmbalagem}</td>
-                    <td>
-                      {produto.fispq ? (
-                        <a
-                          href={/^https?:\/\//i.test(produto.fispq) ? produto.fispq : `https://${produto.fispq}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="comercial-fispq-link"
-                          title="Abrir FISPQ/FDS"
-                          aria-label="Abrir FISPQ/FDS"
-                        >
-                          <i className="bi bi-link-45deg" aria-hidden="true" />
-                        </a>
-                      ) : '—'}
-                    </td>
-                    <td>{clienteDoProduto(produto)}</td>
-                    <td className="col-acoes">
-                      <div className="comercial-produtos-acoes">
-                        <button type="button" className="btn-icon" title="Editar produto" onClick={() => startEdit(produto)}>
-                          <i className="bi bi-pencil" />
-                        </button>
-                        {canManage && (
-                          <button type="button" className="btn-icon" title="Excluir produto" onClick={() => handleDelete(produto)}>
-                            <i className="bi bi-trash" />
+                ) : grupos.map((grupo) => {
+                  const aberto = !recolhidos[grupo.id];
+                  return (
+                    <React.Fragment key={grupo.id}>
+                      <tr className="comercial-grupo-cliente-row" onClick={() => toggleGrupo(grupo.id)}>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn-icon comercial-grupo-toggle"
+                            aria-expanded={aberto}
+                            aria-label={aberto ? 'Recolher produtos' : 'Expandir produtos'}
+                            onClick={(e) => { e.stopPropagation(); toggleGrupo(grupo.id); }}
+                          >
+                            <i className={`bi ${aberto ? 'bi-chevron-down' : 'bi-chevron-right'}`} />
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        </td>
+                        <td colSpan={5}>
+                          <strong>{grupo.nome}</strong>
+                          <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
+                            {grupo.produtos.length} produto{grupo.produtos.length === 1 ? '' : 's'}
+                          </span>
+                        </td>
+                        <td />
+                      </tr>
+                      {aberto && grupo.produtos.map((produto) => (
+                        <tr key={produto.id} className="comercial-grupo-produto-row">
+                          <td />
+                          <td className="col-nome"><strong>{produto.nome}</strong></td>
+                          <td>{classeOptions.find((item) => item.value === produto.classeRisco)?.label || produto.classeRisco}</td>
+                          <td>{produto.numeroOnu || '—'}</td>
+                          <td>{grupoOptions.find((item) => item.value === produto.grupoEmbalagem)?.label || produto.grupoEmbalagem}</td>
+                          <td>
+                            {produto.fispq ? (
+                              <a
+                                href={/^https?:\/\//i.test(produto.fispq) ? produto.fispq : `https://${produto.fispq}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="comercial-fispq-link"
+                                title="Abrir FISPQ/FDS"
+                                aria-label="Abrir FISPQ/FDS"
+                              >
+                                <i className="bi bi-link-45deg" aria-hidden="true" />
+                              </a>
+                            ) : '—'}
+                          </td>
+                          <td className="col-acoes">
+                            <div className="comercial-produtos-acoes">
+                              <button type="button" className="btn-icon" title="Editar produto" onClick={() => startEdit(produto)}>
+                                <i className="bi bi-pencil" />
+                              </button>
+                              {canManage && (
+                                <button type="button" className="btn-icon" title="Excluir produto" onClick={() => handleDelete(produto)}>
+                                  <i className="bi bi-trash" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -283,97 +359,30 @@ const ComercialCadastroProdutos: React.FC = () => {
 
       {isModalOpen && (
         <div className="search-backdrop" style={{ display: 'flex', alignItems: 'center', padding: '24px 16px' }} onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className="modal-card cliente-cadastro-modal" style={{ width: 'min(720px, 96vw)', maxHeight: '90vh' }} role="dialog" aria-modal="true">
+          <div className="modal-card cliente-cadastro-modal" style={{ width: 'min(860px, 96vw)', maxHeight: '90vh' }} role="dialog" aria-modal="true">
             <div className="modal-header">
-              <h2>{editingId ? 'Editar produto' : 'Novo produto'}</h2>
+              <h2>{editingId ? 'Editar produto' : 'Cadastrar produtos'}</h2>
               <button type="button" className="btn-icon" onClick={closeModal} aria-label="Fechar"><i className="bi bi-x-lg" /></button>
             </div>
             <form className="modal-body" onSubmit={handleSubmit}>
-              <label>
-                Produto
-                <input className="form-input" value={form.nome} disabled={!canManage} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
-              </label>
-              <div className="form-grid two-cols" style={{ marginTop: '12px' }}>
-                <label>
-                  Classe de risco
-                  <select
-                    className="form-input"
-                    value={form.classeRisco}
-                    disabled={!canManage}
-                    onChange={(e) => {
-                      const classeRisco = parseClienteComercialClasseRisco(e.target.value);
-                      setForm({
-                        ...form,
-                        classeRisco,
-                        grupoEmbalagem: classeRisco === 'nao_classificado' ? 'nao_aplicavel' : form.grupoEmbalagem,
-                      });
-                    }}
-                  >
-                    {classeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </label>
-                <label>
-                  Nº ONU
-                  <input
-                    className="form-input"
-                    inputMode="numeric"
-                    maxLength={4}
-                    placeholder="0000"
-                    value={form.numeroOnu}
-                    disabled={!canManage}
-                    onChange={(e) => {
-                      const numeroOnu = e.target.value.replace(/\D/g, '').slice(0, 4);
-                      const onuPadrao = sugestoes?.onuComuns.find((item) => item.numeroOnu === numeroOnu);
-                      setForm({
-                        ...form,
-                        numeroOnu,
-                        ...(onuPadrao && (form.classeRisco === 'nao_classificado' || form.classeRisco === onuPadrao.classeRisco)
-                          ? { classeRisco: parseClienteComercialClasseRisco(onuPadrao.classeRisco) }
-                          : {}),
-                      });
-                    }}
-                  />
-                </label>
-                <label>
-                  Grupo de embalagem
-                  <select
-                    className="form-input"
-                    value={form.grupoEmbalagem}
-                    disabled={!canManage || form.classeRisco === 'nao_classificado'}
-                    onChange={(e) => setForm({ ...form, grupoEmbalagem: parseClienteComercialGrupoEmbalagem(e.target.value) })}
-                  >
-                    {grupoOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </label>
-                <label>
-                  Link da FISPQ/FDS
-                  <input
-                    className="form-input"
-                    type="text"
-                    placeholder="https:// (opcional)"
-                    value={form.fispq}
-                    disabled={!canManage}
-                    onChange={(e) => setForm({ ...form, fispq: e.target.value })}
-                  />
-                </label>
-              </div>
-
-              <div className="admin-form-section" style={{ marginTop: '18px' }}>
+              <div className="admin-form-section">
                 <h5 className="admin-form-section-title">Cliente</h5>
                 <p className="muted" style={{ margin: '0 0 10px', fontSize: '13px' }}>
-                  Cada produto pertence a um cliente. Ao vincular, a homologação fica pendente de validação.
+                  {editingId
+                    ? 'Ao alterar o produto ou o cliente, a homologação volta para pendente de validação.'
+                    : 'Inclua quantos produtos forem necessários. A homologação fica pendente só depois de salvar todos.'}
                 </p>
                 <label>
                   Cliente
                   <select
                     className="form-input"
-                    value={form.clienteId}
+                    value={clienteId}
                     disabled={!canManage}
-                    onChange={(e) => setForm({ ...form, clienteId: e.target.value })}
+                    onChange={(e) => setClienteId(e.target.value)}
                   >
                     <option value="">Selecione o cliente</option>
-                    {form.clienteId && !clientes.some((item) => item.id === form.clienteId) ? (
-                      <option value={form.clienteId}>
+                    {clienteId && !clientes.some((item) => item.id === clienteId) ? (
+                      <option value={clienteId}>
                         {produtos.find((item) => item.id === editingId)?.clientes[0]?.razaoSocial || 'Cliente atual'}
                       </option>
                     ) : null}
@@ -392,11 +401,106 @@ const ComercialCadastroProdutos: React.FC = () => {
                 ) : null}
               </div>
 
+              {linhas.map((linha, index) => (
+                <div key={linha.key} className="comercial-produto-lote-item">
+                  <div className="comercial-produto-lote-item-head">
+                    <strong>Produto {index + 1}</strong>
+                    {!editingId && linhas.length > 1 && canManage ? (
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        title="Remover produto"
+                        onClick={() => setLinhas((prev) => prev.filter((item) => item.key !== linha.key))}
+                      >
+                        <i className="bi bi-trash" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <label>
+                    Nome
+                    <input className="form-input" value={linha.nome} disabled={!canManage} onChange={(e) => patchLinha(linha.key, { nome: e.target.value })} />
+                  </label>
+                  <div className="form-grid two-cols" style={{ marginTop: '12px' }}>
+                    <label>
+                      Classe de risco
+                      <select
+                        className="form-input"
+                        value={linha.classeRisco}
+                        disabled={!canManage}
+                        onChange={(e) => {
+                          const classeRisco = parseClienteComercialClasseRisco(e.target.value);
+                          patchLinha(linha.key, {
+                            classeRisco,
+                            grupoEmbalagem: classeRisco === 'nao_classificado' ? 'nao_aplicavel' : linha.grupoEmbalagem,
+                          });
+                        }}
+                      >
+                        {classeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      Nº ONU
+                      <input
+                        className="form-input"
+                        inputMode="numeric"
+                        maxLength={4}
+                        placeholder="0000"
+                        value={linha.numeroOnu}
+                        disabled={!canManage}
+                        onChange={(e) => {
+                          const numeroOnu = e.target.value.replace(/\D/g, '').slice(0, 4);
+                          const onuPadrao = sugestoes?.onuComuns.find((item) => item.numeroOnu === numeroOnu);
+                          patchLinha(linha.key, {
+                            numeroOnu,
+                            ...(onuPadrao && (linha.classeRisco === 'nao_classificado' || linha.classeRisco === onuPadrao.classeRisco)
+                              ? { classeRisco: parseClienteComercialClasseRisco(onuPadrao.classeRisco) }
+                              : {}),
+                          });
+                        }}
+                      />
+                    </label>
+                    <label>
+                      Grupo de embalagem
+                      <select
+                        className="form-input"
+                        value={linha.grupoEmbalagem}
+                        disabled={!canManage || linha.classeRisco === 'nao_classificado'}
+                        onChange={(e) => patchLinha(linha.key, { grupoEmbalagem: parseClienteComercialGrupoEmbalagem(e.target.value) })}
+                      >
+                        {grupoOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      Link da FISPQ/FDS
+                      <input
+                        className="form-input"
+                        type="text"
+                        placeholder="https:// (opcional)"
+                        value={linha.fispq}
+                        disabled={!canManage}
+                        onChange={(e) => patchLinha(linha.key, { fispq: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+
+              {!editingId && canManage ? (
+                <button
+                  type="button"
+                  className="reports-action-btn secondary"
+                  style={{ marginTop: '4px' }}
+                  onClick={() => setLinhas((prev) => [...prev, novaLinha()])}
+                >
+                  Adicionar outro produto
+                </button>
+              ) : null}
+
               <div className="modal-footer" style={{ marginTop: '20px' }}>
                 <button type="button" className="reports-action-btn secondary" onClick={closeModal}>Cancelar</button>
                 {canManage && (
                   <button type="submit" className="reports-action-btn primary" disabled={isPending}>
-                    {isPending ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Cadastrar produto'}
+                    {isPending ? 'Salvando...' : editingId ? 'Salvar alterações' : linhas.length > 1 ? `Cadastrar ${linhas.length} produtos` : 'Cadastrar produto'}
                   </button>
                 )}
               </div>

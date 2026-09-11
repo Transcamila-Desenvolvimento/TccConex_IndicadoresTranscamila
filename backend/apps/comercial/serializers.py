@@ -257,6 +257,8 @@ class ProdutoComercialSerializer(serializers.ModelSerializer):
         for cliente_id in sorted(novos - atuais):
             ordem += 1
             ClienteComercialProduto.objects.create(cliente_id=cliente_id, produto=produto, ordem=ordem)
+        if self.context.get('defer_homologacao'):
+            return
         for cliente in ClienteComercial.objects.filter(pk__in=afetados):
             sincronizar_homologacao_por_produtos(cliente, usuario)
 

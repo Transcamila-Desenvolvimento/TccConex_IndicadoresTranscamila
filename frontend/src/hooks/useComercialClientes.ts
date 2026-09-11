@@ -14,6 +14,7 @@ import type {
   TabelaFreteQueryParams,
   IcmsUfAliquotas,
   ProdutoComercialPayload,
+  ProdutoComercialLotePayload,
   ProdutoComercialQueryParams,
   RotaDistanciaPayload,
 } from '../types/domain';
@@ -27,6 +28,14 @@ export const COMERCIAL_TABELA_FRETE_KEY = ['comercial', 'tabela-frete'] as const
 export const COMERCIAL_GENERALIDADES_KEY = ['comercial', 'generalidades'] as const;
 export const COMERCIAL_ICMS_UFS_KEY = ['comercial', 'icms-ufs'] as const;
 export const COMERCIAL_PRODUTOS_KEY = ['comercial', 'produtos'] as const;
+
+export function useClienteComercial(id: string | null) {
+  return useQuery({
+    queryKey: [...COMERCIAL_CLIENTES_KEY, 'detail', id],
+    queryFn: () => apiService.getClienteComercial(id as string),
+    enabled: Boolean(id),
+  });
+}
 
 export function useClientesComercial(params: ClienteComercialQueryParams) {
   return useQuery({
@@ -434,6 +443,17 @@ export function useCreateProdutoComercial() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: ProdutoComercialPayload) => apiService.createProdutoComercial(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: COMERCIAL_PRODUTOS_KEY });
+      queryClient.invalidateQueries({ queryKey: COMERCIAL_CLIENTES_KEY });
+    },
+  });
+}
+
+export function useCreateProdutosComercialLote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ProdutoComercialLotePayload) => apiService.createProdutosComercialLote(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: COMERCIAL_PRODUTOS_KEY });
       queryClient.invalidateQueries({ queryKey: COMERCIAL_CLIENTES_KEY });
