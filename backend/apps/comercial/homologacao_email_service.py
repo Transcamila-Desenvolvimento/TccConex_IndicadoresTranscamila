@@ -6,13 +6,10 @@ import logging
 import os
 from email.mime.image import MIMEImage
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMessage
 from django.template.loader import render_to_string
-
-from apps.accounts.google_gmail_service import send_gmail_as_user
-
-from django.conf import settings
 
 from .models import CLASSE_RISCO_CHOICES, GRUPO_EMBALAGEM_CHOICES, ClienteComercial
 from .proposta_email_service import _usuario_display
@@ -47,10 +44,11 @@ def destinatarios_homologacao_pendente():
     return [user for user in candidatos if _usuario_optou_email(user) and _google_email(user)]
 
 
-def _remetente(ator, destinatarios):
-    if ator is not None and _google_email(ator):
-        return ator
-    return destinatarios[0] if destinatarios else None
+def _from_email_sistema() -> str:
+    endereco = (getattr(settings, 'DEFAULT_FROM_EMAIL', '') or 'digitalmidia@transcamila.com.br').strip()
+    if '<' in endereco:
+        return endereco
+    return f'TccConex <{endereco}>'
 
 
 def _logo_tccconex_bytes() -> bytes | None:
@@ -114,14 +112,6 @@ def _enviar_homologacao_pendente(cliente_id, usuario_id=None) -> None:
     User = get_user_model()
     ator = User.objects.filter(pk=usuario_id).first() if usuario_id else None
     destinatarios = destinatarios_homologacao_pendente()
-    if not destinatarios:
-        return
-
-    remetente = _remetente(ator, destinatarios)
-    if remetente is None:
-        return
-
-    from_email = _google_email(remetente)
     to_emails = list(dict.fromkeys(_google_email(user) for user in destinatarios if _google_email(user)))
     if not to_emails:
         return
@@ -148,7 +138,7 @@ def _enviar_homologacao_pendente(cliente_id, usuario_id=None) -> None:
     email_obj = EmailMessage(
         subject=f'TccConex — Homologação pendente: {cliente_nome}',
         body=html_body,
-        from_email=f'{_usuario_display(remetente)} <{from_email}>',
+        from_email=_from_email_sistema(),
         to=to_emails,
     )
     email_obj.content_subtype = 'html'
@@ -158,4 +148,4 @@ def _enviar_homologacao_pendente(cliente_id, usuario_id=None) -> None:
         logo.add_header('Content-ID', f'<{LOGO_CID}>')
         logo.add_header('Content-Disposition', 'inline', filename=LOGO_FILENAME)
         email_obj.attach(logo)
-    send_gmail_as_user(remetente, email_obj)
+    email_obj.send(fail_silently=False)
