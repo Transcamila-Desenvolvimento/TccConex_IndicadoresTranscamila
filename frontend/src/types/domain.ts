@@ -2353,6 +2353,7 @@ export function tiposGeneralidadeDaProposta(
 export interface PropostaCondicaoComercial {
   rotulo: string;
   valor: string;
+  tipo?: TipoGeneralidadeComercial;
 }
 
 export interface CatalogoGeneralidadesComercial {
@@ -2439,10 +2440,104 @@ export const OBSERVACOES_ARMAZENAGEM_PADRAO: PropostaCondicaoComercial[] = [
   { rotulo: 'h)', valor: 'O reajuste nas tarifas é aplicado anualmente através de nova negociação entre as partes.' },
 ];
 
+export interface TabelaArmazenagemItem {
+  rotulo: string;
+  valor: string;
+}
+
+export interface TabelaArmazenagemHoraExtra {
+  periodo: string;
+  valor: string;
+}
+
+export interface TabelaArmazenagem {
+  codigo: string;
+  local: string;
+  periodoInicio: string;
+  periodoFim: string;
+  unidade: string;
+  itens: TabelaArmazenagemItem[];
+  horaExtraTitulo: string;
+  horaExtra: TabelaArmazenagemHoraExtra[];
+  expediente: string;
+}
+
+export const TABELA_ARMAZENAGEM_PADRAO: TabelaArmazenagem = {
+  codigo: 'AG',
+  local: 'RONDONÓPOLIS-MT',
+  periodoInicio: '',
+  periodoFim: '',
+  unidade: 'MT',
+  itens: [
+    { rotulo: 'FATURAMENTO MÍNIMO (1)', valor: 'R$ 17.650,00' },
+    { rotulo: 'VALOR POR POSIÇÃO PALLET ATÉ A CAPACIDADE MÁXIMA ACORDADA (2)', valor: 'R$ 35,30' },
+    { rotulo: 'MOVIMENTAÇÃO (R$/TON) (3)', valor: 'R$ 13,87' },
+    { rotulo: 'SEGURO (4)', valor: '0,02%' },
+    { rotulo: 'SEGURO "AG" (5)', valor: '0,10%' },
+    { rotulo: 'COLABORADOR DEDICADO (6)', valor: 'R$ 1.500,00' },
+    { rotulo: 'CAPACIDADE MÁXIMA ACORDADA (POSIÇÕES PALETE)', valor: '1.000' },
+  ],
+  horaExtraTitulo: 'Hora-extra (7)',
+  horaExtra: [
+    { periodo: 'De segunda a sábado', valor: 'R$ 20,81/ton' },
+    { periodo: 'Domingos e feriados', valor: 'R$ 27,74/ton' },
+  ],
+  expediente: 'Expediente do CD: de seg a sex das 08:00 às 17:00h',
+};
+
+export function cloneTabelaArmazenagem(tabela?: TabelaArmazenagem | null): TabelaArmazenagem {
+  const fonte = tabela && Array.isArray(tabela.itens) ? tabela : TABELA_ARMAZENAGEM_PADRAO;
+  return {
+    codigo: fonte.codigo || TABELA_ARMAZENAGEM_PADRAO.codigo,
+    local: fonte.local || TABELA_ARMAZENAGEM_PADRAO.local,
+    periodoInicio: fonte.periodoInicio || '',
+    periodoFim: fonte.periodoFim || '',
+    unidade: fonte.unidade || 'MT',
+    itens: fonte.itens.map((item) => ({ rotulo: item.rotulo, valor: item.valor })),
+    horaExtraTitulo: fonte.horaExtraTitulo || TABELA_ARMAZENAGEM_PADRAO.horaExtraTitulo,
+    horaExtra: (fonte.horaExtra ?? []).map((item) => ({ periodo: item.periodo, valor: item.valor })),
+    expediente: fonte.expediente ?? '',
+  };
+}
+
 export function catalogoGeneralidadesPadrao(tipo: TipoGeneralidadeComercial): PropostaCondicaoComercial[] {
   if (tipo === 'distribuicao') return CONSIDERACOES_DISTRIBUICAO_PADRAO;
   if (tipo === 'armazenagem') return OBSERVACOES_ARMAZENAGEM_PADRAO;
   return CONDICOES_FRETE_PADRAO;
+}
+
+export function marcarCondicoesTipo(
+  items: PropostaCondicaoComercial[],
+  tipo: TipoGeneralidadeComercial,
+): PropostaCondicaoComercial[] {
+  return items.map((item) => ({ rotulo: item.rotulo, valor: item.valor, tipo }));
+}
+
+export function condicoesDoTipo(
+  items: PropostaCondicaoComercial[],
+  tipo: TipoGeneralidadeComercial,
+): PropostaCondicaoComercial[] {
+  return items
+    .filter((item) => item.tipo === tipo)
+    .map((item) => ({ rotulo: item.rotulo, valor: item.valor, tipo }));
+}
+
+export function separarCondicoesProposta(
+  items: PropostaCondicaoComercial[],
+  tipo: TipoGeneralidadeComercial,
+  catalogo: PropostaCondicaoComercial[],
+  usarNaoTipadas: boolean,
+): PropostaCondicaoComercial[] {
+  const tipadas = condicoesDoTipo(items, tipo);
+  if (tipadas.length) return tipadas;
+  const semTipo = items.filter((item) => !item.tipo);
+  if (!usarNaoTipadas) return [];
+  if (!catalogo.length) {
+    return marcarCondicoesTipo(semTipo.length ? semTipo : items, tipo);
+  }
+  const rotulos = new Set(catalogo.map((item) => item.rotulo));
+  const filtradas = semTipo.filter((item) => rotulos.has(item.rotulo));
+  return marcarCondicoesTipo(filtradas, tipo);
 }
 
 export interface PropostaComercial {
@@ -2472,6 +2567,7 @@ export interface PropostaComercial {
   incluiTransferencia: boolean;
   incluiDistribuicao: boolean;
   condicoes: PropostaCondicaoComercial[];
+  tabelaArmazenagem?: TabelaArmazenagem;
   linhas: PropostaFreteLinha[];
   dataCriacao?: string;
   dataAtualizacao?: string;
@@ -2500,6 +2596,7 @@ export interface PropostaComercialPayload {
   incluiTransferencia?: boolean;
   incluiDistribuicao?: boolean;
   condicoes?: PropostaCondicaoComercial[];
+  tabelaArmazenagem?: TabelaArmazenagem;
   linhas?: Array<Omit<PropostaFreteLinha, 'id' | 'totalEstimado'> & { totalEstimado?: string | null }>;
 }
 

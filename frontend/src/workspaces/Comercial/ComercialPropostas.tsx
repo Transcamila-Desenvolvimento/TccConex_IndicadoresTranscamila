@@ -6,10 +6,11 @@ import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
   getComercialErrorMessage,
   useClientesComercial,
-  useComercialGeneralidadesProposta,
+  useComercialGeneralidades,
   useCreatePropostaComercial,
   useDeletePropostaComercial,
   usePropostasComerciais,
+  useTabelaFreteDistribuicaoCliente,
   useUpdatePropostaComercial,
 } from '../../hooks/useComercialClientes';
 import type {
@@ -19,14 +20,20 @@ import type {
   PropostaComercialStatus,
   PropostaComercialTipo,
   PropostaCondicaoComercial,
+  TabelaArmazenagem,
 } from '../../types/domain';
 import {
+  cloneTabelaArmazenagem,
   CONDICOES_FRETE_PADRAO,
   PROPOSTA_COMERCIAL_STATUS_LABEL,
   PROPOSTA_COMERCIAL_TIPO_LABEL,
+  marcarCondicoesTipo,
+  separarCondicoesProposta,
 } from '../../types/domain';
 import { printPropostaComercial } from './printPropostaComercial';
 import ComercialPropostaEmailModal from './ComercialPropostaEmailModal';
+import PropostaGeneralidadesRevisao from './PropostaGeneralidadesRevisao';
+import PropostaTabelaArmazenagem from './PropostaTabelaArmazenagem';
 import PropostaTabelaDistribuicao from './PropostaTabelaDistribuicao';
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -118,7 +125,31 @@ type PropostaForm = {
   incluiTransferencia: boolean;
   incluiDistribuicao: boolean;
   condicoes: PropostaCondicaoComercial[];
+  condicoesTransferencia: PropostaCondicaoComercial[];
+  condicoesDistribuicao: PropostaCondicaoComercial[];
+  tabelaArmazenagem: TabelaArmazenagem;
   linhas: LinhaForm[];
+};
+
+const MENSAGEM_DESTINOS_OBRIGATORIOS = 'Preencha a tabela de destinos para salvar a proposta com Transferência.';
+
+const linhaDestinoVazia = (linha: LinhaForm) =>
+  ![linha.origem, linha.entrega, linha.veiculo, linha.tarifaFrete, linha.pedagio, linha.adValorem, linha.prazoDias]
+    .some((valor) => valor.trim());
+
+const linhaDestinoPreenchida = (linha: LinhaForm) =>
+  Boolean(
+    linha.origem.trim()
+    && linha.entrega.trim()
+    && linha.veiculo.trim()
+    && linha.tarifaFrete.trim()
+    && linha.prazoDias.trim(),
+  );
+
+const destinosProntosParaSalvar = (form: PropostaForm) => {
+  if (form.tipo !== 'transporte_rodoviario' || !form.incluiTransferencia) return true;
+  const relevantes = form.linhas.filter((linha) => !linhaDestinoVazia(linha));
+  return relevantes.length > 0 && relevantes.every(linhaDestinoPreenchida);
 };
 
 const emptyLinha = (): LinhaForm => ({
@@ -158,8 +189,34 @@ const emptyForm = (condicoes?: PropostaCondicaoComercial[]): PropostaForm => ({
   incluiTransferencia: false,
   incluiDistribuicao: false,
   condicoes: (condicoes?.length ? condicoes : CONDICOES_FRETE_PADRAO).map((item) => ({ ...item })),
+  condicoesTransferencia: [],
+  condicoesDistribuicao: [],
+  tabelaArmazenagem: cloneTabelaArmazenagem(),
   linhas: [emptyLinha()],
 });
+
+const condicoesDoFormulario = (form: PropostaForm): PropostaCondicaoComercial[] => {
+  if (form.tipo === 'armazenagem') {
+    return marcarCondicoesTipo(
+      form.condicoes.filter((item) => item.rotulo.trim() || item.valor.trim()),
+      'armazenagem',
+    );
+  }
+  const items: PropostaCondicaoComercial[] = [];
+  if (form.incluiDistribuicao) {
+    items.push(...marcarCondicoesTipo(
+      form.condicoesDistribuicao.filter((item) => item.rotulo.trim() || item.valor.trim()),
+      'distribuicao',
+    ));
+  }
+  if (form.incluiTransferencia) {
+    items.push(...marcarCondicoesTipo(
+      form.condicoesTransferencia.filter((item) => item.rotulo.trim() || item.valor.trim()),
+      'frete',
+    ));
+  }
+  return items;
+};
 
 const linhaTotal = (linha: LinhaForm) => {
   const tarifa = parseMoney(linha.tarifaFrete);
@@ -302,11 +359,23 @@ const ComercialPropostas: React.FC = () => {
   });
   const { canShowEmpty } = useAsyncQueryState(propostasQuery);
   const clientesQuery = useClientesComercial({ page: 1, pageSize: 100 });
-  const generalidadesProposta = useComercialGeneralidadesProposta(
-    isModalOpen && !editingId ? (form.clienteId || null) : null,
-    form.tipo,
-    form.incluiTransferencia,
-    form.incluiDistribuicao,
+  const generalidadesTransferencia = useComercialGeneralidades(
+    isModalOpen && form.clienteId && form.tipo === 'transporte_rodoviario' && form.incluiTransferencia
+      ? form.clienteId
+      : null,
+    'frete',
+  );
+  const generalidadesDistribuicao = useComercialGeneralidades(
+    isModalOpen && form.clienteId && form.incluiDistribuicao ? form.clienteId : null,
+    'distribuicao',
+  );
+  const generalidadesArmazenagem = useComercialGeneralidades(
+    isModalOpen && !editingId && form.tipo === 'armazenagem' ? (form.clienteId || null) : null,
+    'armazenagem',
+  );
+  const tabelaDistribuicaoCliente = useTabelaFreteDistribuicaoCliente(
+    isModalOpen && form.tipo === 'transporte_rodoviario' ? (form.clienteId || null) : null,
+    isModalOpen && form.tipo === 'transporte_rodoviario' && Boolean(form.clienteId),
   );
   const createProposta = useCreatePropostaComercial();
   const updateProposta = useUpdatePropostaComercial();
@@ -317,12 +386,17 @@ const ComercialPropostas: React.FC = () => {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const clampedPage = Math.min(page, totalPages);
   const clientes = clientesQuery.data?.results ?? [];
+  const temTabelaDistribuicao = (tabelaDistribuicaoCliente.listQuery.data?.results.length ?? 0) > 0;
+  const tabelaDistribuicaoPronta = !form.clienteId || tabelaDistribuicaoCliente.listQuery.isFetched;
+  const podeMarcarDistribuicao = Boolean(form.clienteId) && tabelaDistribuicaoPronta && temTabelaDistribuicao;
   const selectedPropostas = useMemo(
     () => propostas.filter((item) => selectedIds.includes(item.id)),
     [propostas, selectedIds],
   );
   const isAllSelected = propostas.length > 0 && propostas.every((item) => selectedIds.includes(item.id));
-  const catalogoAplicadoRef = useRef('');
+  const catalogoTransferenciaRef = useRef('');
+  const catalogoDistribuicaoRef = useRef('');
+  const catalogoArmazenagemRef = useRef('');
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
@@ -335,26 +409,60 @@ const ComercialPropostas: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!isModalOpen || editingId) {
-      catalogoAplicadoRef.current = '';
+    if (!isModalOpen) {
+      catalogoTransferenciaRef.current = '';
+      catalogoDistribuicaoRef.current = '';
+      catalogoArmazenagemRef.current = '';
       return;
     }
-    if (!form.clienteId || generalidadesProposta.tipos.length === 0 || !generalidadesProposta.isSuccess) {
+    if (form.tipo === 'armazenagem') {
+      if (editingId || !form.clienteId || !generalidadesArmazenagem.isSuccess) return;
+      const chave = `${form.clienteId}:armazenagem`;
+      if (catalogoArmazenagemRef.current === chave) return;
+      catalogoArmazenagemRef.current = chave;
+      const condicoes = (generalidadesArmazenagem.data?.items.length
+        ? generalidadesArmazenagem.data.items
+        : CONDICOES_FRETE_PADRAO).map((item) => ({ ...item, tipo: 'armazenagem' as const }));
+      setForm((current) => ({ ...current, condicoes }));
       return;
     }
-    const chave = `${form.clienteId}:${generalidadesProposta.tipos.join(',')}`;
-    if (catalogoAplicadoRef.current === chave) return;
-    catalogoAplicadoRef.current = chave;
-    const condicoes = generalidadesProposta.items.length
-      ? generalidadesProposta.items.map((item) => ({ ...item }))
-      : CONDICOES_FRETE_PADRAO.map((item) => ({ ...item }));
-    setForm((current) => ({ ...current, condicoes }));
+    if (!form.clienteId) return;
+    if (form.incluiTransferencia && generalidadesTransferencia.isSuccess) {
+      const chave = `${editingId ?? 'novo'}:${form.clienteId}:frete`;
+      if (catalogoTransferenciaRef.current !== chave) {
+        catalogoTransferenciaRef.current = chave;
+        const items = (generalidadesTransferencia.data?.items ?? []).map((item) => ({ ...item, tipo: 'frete' as const }));
+        setForm((current) => (
+          current.condicoesTransferencia.length > 0
+            ? current
+            : { ...current, condicoesTransferencia: items }
+        ));
+      }
+    }
+    if (form.incluiDistribuicao && generalidadesDistribuicao.isSuccess) {
+      const chave = `${editingId ?? 'novo'}:${form.clienteId}:distribuicao`;
+      if (catalogoDistribuicaoRef.current !== chave) {
+        catalogoDistribuicaoRef.current = chave;
+        const items = (generalidadesDistribuicao.data?.items ?? []).map((item) => ({ ...item, tipo: 'distribuicao' as const }));
+        setForm((current) => (
+          current.condicoesDistribuicao.length > 0
+            ? current
+            : { ...current, condicoesDistribuicao: items }
+        ));
+      }
+    }
   }, [
     editingId,
     form.clienteId,
-    generalidadesProposta.isSuccess,
-    generalidadesProposta.items,
-    generalidadesProposta.tipos,
+    form.incluiDistribuicao,
+    form.incluiTransferencia,
+    form.tipo,
+    generalidadesArmazenagem.data?.items,
+    generalidadesArmazenagem.isSuccess,
+    generalidadesDistribuicao.data?.items,
+    generalidadesDistribuicao.isSuccess,
+    generalidadesTransferencia.data?.items,
+    generalidadesTransferencia.isSuccess,
     isModalOpen,
   ]);
 
@@ -405,6 +513,19 @@ const ComercialPropostas: React.FC = () => {
       incluiTransferencia: proposta.incluiTransferencia,
       incluiDistribuicao: proposta.incluiDistribuicao,
       condicoes: (proposta.condicoes.length ? proposta.condicoes : CONDICOES_FRETE_PADRAO).map((item) => ({ ...item })),
+      condicoesTransferencia: separarCondicoesProposta(
+        proposta.condicoes,
+        'frete',
+        [],
+        Boolean(proposta.incluiTransferencia),
+      ),
+      condicoesDistribuicao: separarCondicoesProposta(
+        proposta.condicoes,
+        'distribuicao',
+        [],
+        Boolean(proposta.incluiDistribuicao && !proposta.incluiTransferencia),
+      ),
+      tabelaArmazenagem: cloneTabelaArmazenagem(proposta.tabelaArmazenagem),
       linhas: proposta.linhas.length
         ? proposta.linhas.map((linha) => ({
             origem: linha.origem,
@@ -451,6 +572,8 @@ const ComercialPropostas: React.FC = () => {
       return next;
     });
     if (checked) {
+      if (campo === 'incluiTransferencia') catalogoTransferenciaRef.current = '';
+      if (campo === 'incluiDistribuicao') catalogoDistribuicaoRef.current = '';
       setAbaOperacao(campo === 'incluiTransferencia' ? 'transferencia' : 'distribuicao');
       return;
     }
@@ -468,6 +591,14 @@ const ComercialPropostas: React.FC = () => {
       return;
     }
     const isRodoviario = form.tipo === 'transporte_rodoviario';
+    if (isRodoviario && form.incluiDistribuicao && !podeMarcarDistribuicao) {
+      alert('Vincule uma tabela de frete para incluir operação de distribuição.');
+      return;
+    }
+    if (!destinosProntosParaSalvar(form)) {
+      alert(MENSAGEM_DESTINOS_OBRIGATORIOS);
+      return;
+    }
     const titulo = form.titulo.trim()
       || `${PROPOSTA_COMERCIAL_TIPO_LABEL[form.tipo]}${form.clienteNome.trim() ? ` — ${form.clienteNome.trim()}` : ''}`;
     const payload: PropostaComercialPayload = {
@@ -493,9 +624,10 @@ const ComercialPropostas: React.FC = () => {
       observacoes: form.observacoes.trim(),
       incluiTransferencia: isRodoviario && form.incluiTransferencia,
       incluiDistribuicao: isRodoviario && form.incluiDistribuicao,
-      condicoes: form.condicoes,
+      condicoes: condicoesDoFormulario(form),
+      tabelaArmazenagem: isRodoviario ? undefined : cloneTabelaArmazenagem(form.tabelaArmazenagem),
       linhas: isRodoviario && form.incluiTransferencia
-        ? form.linhas.map((linha, ordem) => ({
+        ? form.linhas.filter((linha) => !linhaDestinoVazia(linha)).map((linha, ordem) => ({
             ordem,
             origem: linha.origem.trim(),
             entrega: linha.entrega.trim(),
@@ -551,7 +683,8 @@ const ComercialPropostas: React.FC = () => {
     observacoes: form.observacoes,
     incluiTransferencia: form.incluiTransferencia,
     incluiDistribuicao: form.incluiDistribuicao,
-    condicoes: form.condicoes,
+    condicoes: condicoesDoFormulario(form),
+    tabelaArmazenagem: cloneTabelaArmazenagem(form.tabelaArmazenagem),
     linhas: form.linhas.map((linha, ordem) => ({
       ordem,
       origem: linha.origem,
@@ -622,7 +755,8 @@ const ComercialPropostas: React.FC = () => {
   };
 
   const isPending = createProposta.isPending || updateProposta.isPending;
-  const canSave = canManage && Boolean(form.clienteId) && !isPending;
+  const destinosOk = destinosProntosParaSalvar(form);
+  const canSave = canManage && Boolean(form.clienteId) && destinosOk && !isPending;
 
   return (
     <div className="fat-list-compact" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '0 4px 4px' }}>
@@ -873,7 +1007,12 @@ const ComercialPropostas: React.FC = () => {
                   <span>Imprimir</span>
                 </button>
                 {canManage && (
-                  <button type="submit" className="proposta-include-save" disabled={!canSave}>
+                  <button
+                    type="submit"
+                    className="proposta-include-save"
+                    disabled={!canSave}
+                    title={!destinosOk ? MENSAGEM_DESTINOS_OBRIGATORIOS : undefined}
+                  >
                     <i className="bi bi-check2" />
                     <span>{isPending ? 'Salvando...' : 'Salvar'}</span>
                   </button>
@@ -905,7 +1044,14 @@ const ComercialPropostas: React.FC = () => {
                           clienteId,
                           clienteNome: cliente?.razaoSocial ?? '',
                           att: (cliente?.responsavel || '').trim(),
+                          incluiTransferencia: clienteId ? form.incluiTransferencia : false,
+                          incluiDistribuicao: false,
+                          condicoesTransferencia: [],
+                          condicoesDistribuicao: [],
                         });
+                        catalogoTransferenciaRef.current = '';
+                        catalogoDistribuicaoRef.current = '';
+                        setAbaOperacao((atual) => (atual === 'distribuicao' ? 'transferencia' : atual));
                       }}
                     >
                       <option value="">Nenhum cliente selecionado</option>
@@ -925,6 +1071,9 @@ const ComercialPropostas: React.FC = () => {
                         tipo,
                         incluiTransferencia: tipo === 'transporte_rodoviario' ? form.incluiTransferencia : false,
                         incluiDistribuicao: tipo === 'transporte_rodoviario' ? form.incluiDistribuicao : false,
+                        tabelaArmazenagem: tipo === 'armazenagem'
+                          ? cloneTabelaArmazenagem(form.tabelaArmazenagem)
+                          : form.tabelaArmazenagem,
                         linhas: tipo === 'transporte_rodoviario' && form.linhas.length === 0
                           ? [emptyLinha()]
                           : form.linhas,
@@ -933,7 +1082,7 @@ const ComercialPropostas: React.FC = () => {
                   </div>
                 </div>
 
-                {form.tipo === 'transporte_rodoviario' ? (
+                {form.tipo === 'transporte_rodoviario' && form.clienteId ? (
                   <div className="proposta-modalidades">
                     <span className="proposta-include-label">Tipo de operação</span>
                     <div className="proposta-modalidades-options">
@@ -946,16 +1095,29 @@ const ComercialPropostas: React.FC = () => {
                         />
                         Transferência
                       </label>
-                      <label>
+                      <label className={!canManage || (!form.incluiDistribuicao && !podeMarcarDistribuicao) ? 'is-disabled' : undefined}>
                         <input
                           type="checkbox"
                           checked={form.incluiDistribuicao}
-                          disabled={!canManage}
-                          onChange={(e) => toggleModalidade('incluiDistribuicao', e.target.checked)}
+                          disabled={!canManage || (!form.incluiDistribuicao && !podeMarcarDistribuicao)}
+                          title={
+                            podeMarcarDistribuicao
+                              ? undefined
+                              : 'Vincule uma tabela de frete para incluir operação de distribuição.'
+                          }
+                          onChange={(e) => {
+                            if (e.target.checked && !podeMarcarDistribuicao) return;
+                            toggleModalidade('incluiDistribuicao', e.target.checked);
+                          }}
                         />
                         Distribuição
                       </label>
                     </div>
+                    {!podeMarcarDistribuicao ? (
+                      <p className="proposta-modalidades-hint">
+                        Vincule uma tabela de frete para incluir operação de distribuição.
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -1033,6 +1195,27 @@ const ComercialPropostas: React.FC = () => {
                   </IncludeField>
                 </div>
 
+                {form.tipo === 'armazenagem' ? (
+                  <>
+                  <PropostaTabelaArmazenagem
+                    tabela={form.tabelaArmazenagem}
+                    canEdit={canManage}
+                    onChange={(tabela) => setForm((current) => ({ ...current, tabelaArmazenagem: tabela }))}
+                  />
+                  <PropostaGeneralidadesRevisao
+                    titulo="Generalidades — Armazenagem"
+                    items={form.condicoes}
+                    canEdit={canManage}
+                    emptyHint={
+                      form.clienteId
+                        ? 'Nenhuma generalidade de armazenagem para revisar.'
+                        : 'Selecione o cliente para revisar as generalidades de armazenagem.'
+                    }
+                    onChange={(items) => setForm((current) => ({ ...current, condicoes: items }))}
+                  />
+                  </>
+                ) : null}
+
                 {form.tipo === 'transporte_rodoviario' && (form.incluiTransferencia || form.incluiDistribuicao) && (
                   <section className="proposta-destinos">
                     <div className="reports-tabs-bar proposta-operacao-tabs">
@@ -1058,32 +1241,34 @@ const ComercialPropostas: React.FC = () => {
 
                     {form.incluiTransferencia && abaOperacao === 'transferencia' ? (
                       <>
+                    <section className="proposta-destinos-card">
                     <div className="proposta-destinos-head">
                       <h4>Destinos</h4>
                       {canManage && (
                         <button
                           type="button"
-                          className="reports-action-btn primary"
+                          className="proposta-secao-add"
                           onClick={() => setForm({ ...form, linhas: [...form.linhas, emptyLinha()] })}
                         >
+                          <i className="bi bi-plus-lg" aria-hidden="true" />
                           Adicionar
                         </button>
                       )}
                     </div>
-                    <div className="proposta-destinos-wrap">
-                      <table className="data-table proposta-destinos-table">
+                    <div className="table-container proposta-destinos-wrap">
+                      <table className="data-table comercial-browse-table proposta-destinos-table">
                         <thead>
                           <tr>
-                            <th>Origem</th>
-                            <th>Destino</th>
-                            <th>Veículo</th>
-                            <th>Frete</th>
-                            <th>Pedágio</th>
-                            <th>GRIS</th>
-                            <th>Ad-VL</th>
-                            <th>ICMS</th>
-                            <th>Prazo entrega</th>
-                            {canManage ? <th /> : null}
+                            <th className="col-trecho">Origem</th>
+                            <th className="col-trecho">Destino</th>
+                            <th className="col-veiculo">Veículo</th>
+                            <th className="col-money">Frete</th>
+                            <th className="col-money">Pedágio</th>
+                            <th className="col-pct">GRIS</th>
+                            <th className="col-pct">Ad-VL</th>
+                            <th className="col-icms">ICMS</th>
+                            <th className="col-prazo">Prazo entrega</th>
+                            {canManage ? <th className="col-actions" /> : null}
                           </tr>
                         </thead>
                         <tbody>
@@ -1117,7 +1302,7 @@ const ComercialPropostas: React.FC = () => {
                                 <input className="proposta-destinos-input" value={linha.prazoDias} disabled={!canManage} placeholder="3 dias úteis" onChange={(e) => updateLinha(index, { prazoDias: e.target.value })} />
                               </td>
                               {canManage ? (
-                                <td>
+                                <td className="col-actions">
                                   <button
                                     type="button"
                                     className="btn-icon"
@@ -1134,11 +1319,36 @@ const ComercialPropostas: React.FC = () => {
                         </tbody>
                       </table>
                     </div>
+                    </section>
+                    <PropostaGeneralidadesRevisao
+                      titulo="Generalidades — Transferência"
+                      items={form.condicoesTransferencia}
+                      canEdit={canManage}
+                      emptyHint={
+                        form.clienteId
+                          ? 'Nenhuma generalidade de transferência para revisar.'
+                          : 'Selecione o cliente para revisar as generalidades de transferência.'
+                      }
+                      onChange={(items) => setForm((current) => ({ ...current, condicoesTransferencia: items }))}
+                    />
                       </>
                     ) : null}
 
                     {form.incluiDistribuicao && abaOperacao === 'distribuicao' ? (
-                      <PropostaTabelaDistribuicao clienteId={form.clienteId || null} />
+                      <>
+                        <PropostaTabelaDistribuicao clienteId={form.clienteId || null} />
+                        <PropostaGeneralidadesRevisao
+                          titulo="Generalidades — Distribuição"
+                          items={form.condicoesDistribuicao}
+                          canEdit={canManage}
+                          emptyHint={
+                            form.clienteId
+                              ? 'Nenhuma generalidade de distribuição para revisar.'
+                              : 'Selecione o cliente para revisar as generalidades de distribuição.'
+                          }
+                          onChange={(items) => setForm((current) => ({ ...current, condicoesDistribuicao: items }))}
+                        />
+                      </>
                     ) : null}
                   </section>
                 )}

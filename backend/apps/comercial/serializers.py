@@ -16,10 +16,12 @@ from .models import (
     SITUACAO_CHOICES,
     SITUACAO_POTENCIAL,
     STATUS_PROPOSTA_CHOICES,
+    TIPO_PROPOSTA_ARMAZENAGEM,
     TIPO_PROPOSTA_CHOICES,
     TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO,
     TIPO_TABELA_DISTRIBUICAO,
     TIPO_TABELA_FRETE_CHOICES,
+    TIPOS_GENERALIDADE,
     STATUS_TABELA_ARQUIVADA,
     STATUS_TABELA_FRETE_CHOICES,
     STATUS_TABELA_RASCUNHO,
@@ -32,9 +34,12 @@ from .models import (
     PropostaFreteLinha,
     TabelaFrete,
     TabelaFreteLinha,
+    cliente_tem_tabela_distribuicao_vigente,
     default_condicoes,
+    gravar_catalogo_generalidades,
     nome_base_tabela_frete,
     normalizar_homologacao,
+    tabela_armazenagem_padrao,
     tipos_servico_generalidade,
 )
 from .tabela_distribuicao import merge_config
@@ -778,6 +783,42 @@ class MatrizIcmsUfSerializer(serializers.Serializer):
     atualizadoEm = serializers.DateTimeField(source='atualizado_em', read_only=True)
 
 
+def _linha_campo(linha, *nomes):
+    if isinstance(linha, dict):
+        for nome in nomes:
+            valor = linha.get(nome)
+            if valor not in (None, ''):
+                return str(valor).strip()
+        return ''
+    for nome in nomes:
+        valor = getattr(linha, nome, None)
+        if valor not in (None, ''):
+            return str(valor).strip()
+    return ''
+
+
+def _linha_destino_vazia(linha) -> bool:
+    return not any((
+        _linha_campo(linha, 'origem'),
+        _linha_campo(linha, 'entrega'),
+        _linha_campo(linha, 'veiculo'),
+        _linha_campo(linha, 'tarifa_frete', 'tarifaFrete'),
+        _linha_campo(linha, 'pedagio'),
+        _linha_campo(linha, 'ad_valorem', 'adValorem'),
+        _linha_campo(linha, 'prazo_dias', 'prazoDias'),
+    ))
+
+
+def _linha_destino_preenchida(linha) -> bool:
+    return bool(
+        _linha_campo(linha, 'origem')
+        and _linha_campo(linha, 'entrega')
+        and _linha_campo(linha, 'veiculo')
+        and _linha_campo(linha, 'tarifa_frete', 'tarifaFrete')
+        and _linha_campo(linha, 'prazo_dias', 'prazoDias')
+    )
+
+
 class PropostaComercialSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='pk', read_only=True)
     tipo = serializers.ChoiceField(choices=[c[0] for c in TIPO_PROPOSTA_CHOICES] + ['frete', 'transporte_container'])
@@ -817,6 +858,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
     incluiTransferencia = serializers.BooleanField(source='inclui_transferencia', required=False)
     incluiDistribuicao = serializers.BooleanField(source='inclui_distribuicao', required=False)
     condicoes = serializers.JSONField(required=False)
+    tabelaArmazenagem = serializers.JSONField(source='tabela_armazenagem', required=False)
     linhas = PropostaFreteLinhaSerializer(many=True, required=False)
     dataCriacao = serializers.DateTimeField(source='data_criacao', read_only=True)
     dataAtualizacao = serializers.DateTimeField(source='data_atualizacao', read_only=True)
@@ -851,6 +893,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             'incluiTransferencia',
             'incluiDistribuicao',
             'condicoes',
+            'tabelaArmazenagem',
             'linhas',
             'dataCriacao',
             'dataAtualizacao',
@@ -874,8 +917,45 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             valor = str(item.get('valor') or '').strip()
             if not rotulo and not valor:
                 continue
-            cleaned.append({'rotulo': rotulo, 'valor': valor})
+            tipo = str(item.get('tipo') or '').strip()
+            entry = {'rotulo': rotulo, 'valor': valor}
+            if tipo in TIPOS_GENERALIDADE:
+                entry['tipo'] = tipo
+            cleaned.append(entry)
         return cleaned
+
+    def validate_tabelaArmazenagem(self, value):
+        if value in (None, ''):
+            return {}
+        if not isinstance(value, dict):
+            raise serializers.ValidationError('Informe a tabela de armazenagem.')
+        padrao = tabela_armazenagem_padrao()
+
+        def _linhas(fonte, chave_rotulo, chave_valor):
+            linhas = []
+            for item in fonte or []:
+                if not isinstance(item, dict):
+                    continue
+                rotulo = str(item.get(chave_rotulo) or '').strip()[:240]
+                valor = str(item.get(chave_valor) or '').strip()[:120]
+                if not rotulo and not valor:
+                    continue
+                linhas.append({chave_rotulo: rotulo, chave_valor: valor})
+            return linhas
+
+        return {
+            'codigo': str(value.get('codigo') or padrao.get('codigo') or 'AG').strip()[:20],
+            'local': str(value.get('local') or padrao.get('local') or '').strip()[:80],
+            'periodoInicio': str(value.get('periodoInicio') or value.get('periodo_inicio') or '').strip()[:10],
+            'periodoFim': str(value.get('periodoFim') or value.get('periodo_fim') or '').strip()[:10],
+            'unidade': str(value.get('unidade') or padrao['unidade']).strip()[:20] or 'MT',
+            'itens': _linhas(value.get('itens'), 'rotulo', 'valor'),
+            'horaExtraTitulo': str(
+                value.get('horaExtraTitulo') or value.get('hora_extra_titulo') or padrao['horaExtraTitulo']
+            ).strip()[:80],
+            'horaExtra': _linhas(value.get('horaExtra') or value.get('hora_extra'), 'periodo', 'valor'),
+            'expediente': str(value.get('expediente') or '').strip()[:240],
+        }
 
     def validate_tipo(self, value):
         if value in {'frete', 'transporte_container'}:
@@ -897,6 +977,44 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             attrs['att'] = (cliente.responsavel or '').strip() if cliente else ''
         elif self.instance and getattr(self.instance, 'cliente', None):
             attrs['att'] = (self.instance.cliente.responsavel or '').strip()
+
+        if tipo == TIPO_PROPOSTA_ARMAZENAGEM:
+            atual = attrs.get('tabela_armazenagem')
+            if not atual:
+                atual = getattr(self.instance, 'tabela_armazenagem', None) if self.instance else None
+            if not atual:
+                attrs['tabela_armazenagem'] = tabela_armazenagem_padrao()
+        elif 'tabela_armazenagem' not in attrs and not self.instance:
+            attrs['tabela_armazenagem'] = {}
+
+        erros = {}
+        inclui_distribuicao = attrs.get(
+            'inclui_distribuicao',
+            getattr(self.instance, 'inclui_distribuicao', False) if self.instance else False,
+        )
+        inclui_transferencia = attrs.get(
+            'inclui_transferencia',
+            getattr(self.instance, 'inclui_transferencia', False) if self.instance else False,
+        )
+        if tipo in SERVICOS_TRANSPORTE and inclui_distribuicao:
+            cliente = attrs['cliente'] if 'cliente' in attrs else getattr(self.instance, 'cliente', None)
+            if not cliente_tem_tabela_distribuicao_vigente(getattr(cliente, 'pk', None)):
+                erros['incluiDistribuicao'] = (
+                    'Vincule uma tabela de distribuição vigente a este cliente '
+                    'para incluir Distribuição na proposta.'
+                )
+        if tipo in SERVICOS_TRANSPORTE and inclui_transferencia:
+            if 'linhas' in attrs:
+                linhas = attrs.get('linhas') or []
+            elif self.instance is not None:
+                linhas = list(self.instance.linhas.all())
+            else:
+                linhas = []
+            relevantes = [linha for linha in linhas if not _linha_destino_vazia(linha)]
+            if not relevantes or any(not _linha_destino_preenchida(linha) for linha in relevantes):
+                erros['linhas'] = 'Preencha a tabela de destinos para salvar a proposta com Transferência.'
+        if erros:
+            raise serializers.ValidationError(erros)
         return attrs
 
     def _save_linhas(self, proposta, linhas_data):
@@ -965,10 +1083,12 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
         if linhas_data is not None:
             self._save_linhas(proposta, linhas_data)
         self._sync_valor_estimado(proposta, valor_informado=valor, linhas_aplicadas=linhas_data is not None)
+        self._sync_catalogo_generalidades(proposta)
         return proposta
 
     def update(self, instance, validated_data):
         linhas_data = validated_data.pop('linhas', None)
+        condicoes_enviadas = 'condicoes' in validated_data
         validated_data = self._aplicar_modalidades(validated_data, instance)
         valor = validated_data.get('valor_estimado', instance.valor_estimado)
         for attr, value in validated_data.items():
@@ -977,7 +1097,25 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
         if linhas_data is not None:
             self._save_linhas(instance, linhas_data)
         self._sync_valor_estimado(instance, valor_informado=valor, linhas_aplicadas=linhas_data is not None)
+        if condicoes_enviadas:
+            self._sync_catalogo_generalidades(instance)
         return instance
+
+    def _sync_catalogo_generalidades(self, proposta):
+        cliente = proposta.cliente
+        if not cliente:
+            return
+        tipos = tipos_servico_generalidade(
+            proposta.tipo,
+            proposta.inclui_transferencia,
+            proposta.inclui_distribuicao,
+        )
+        condicoes = proposta.condicoes or []
+        for tipo in tipos:
+            items = [item for item in condicoes if isinstance(item, dict) and item.get('tipo') == tipo]
+            if not items and len(tipos) == 1:
+                items = [item for item in condicoes if isinstance(item, dict)]
+            gravar_catalogo_generalidades(cliente, tipo, items)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

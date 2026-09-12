@@ -13664,17 +13664,17 @@ textarea.form-input {
   margin-top: 2px;
 }
 
-.proposta-include-backdrop {
-  display: flex;
+.proposta-include-backdrop.search-backdrop {
   align-items: stretch;
   justify-content: center;
-  padding: 16px;
+  padding: 12px 16px;
 }
 
 .proposta-include-modal {
-  width: min(1080px, 94vw);
+  width: min(1200px, 100%);
   height: 100%;
   max-height: none;
+  align-self: stretch;
   background: #fff;
   border-radius: 8px;
   box-shadow: 0 16px 48px rgba(15, 23, 42, 0.22);
@@ -13772,7 +13772,7 @@ textarea.form-input {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 40px 32px;
+  padding: 8px 40px 48px;
   display: flex;
   flex-direction: column;
 }
@@ -13837,8 +13837,45 @@ textarea.form-input {
   accent-color: #118CC4;
 }
 
+.proposta-modalidades label.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.proposta-modalidades-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
 .proposta-operacao-tabs {
   margin: 18px 0 4px;
+}
+
+.proposta-secao-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: #1976d2;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.proposta-secao-add i {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.proposta-secao-add:hover {
+  background: #e3f2fd;
 }
 
 .proposta-distribuicao-empty {
@@ -13852,17 +13889,102 @@ textarea.form-input {
   border-radius: 8px;
 }
 
-.proposta-distribuicao-wrap {
+.proposta-distribuicao-card {
   margin-top: 12px;
+}
+
+.proposta-distribuicao-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.proposta-distribuicao-card.is-open .proposta-distribuicao-toggle {
+  border-bottom: 1px solid #eef0f2;
+}
+
+.proposta-distribuicao-toggle:hover {
+  background: #f8fafc;
+}
+
+.proposta-distribuicao-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.proposta-distribuicao-toggle-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.proposta-distribuicao-toggle .bi {
+  color: #118CC4;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.proposta-distribuicao-wrap {
+  margin-top: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.proposta-distribuicao-hscroll {
+  flex: 0 0 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-height: 14px;
+  border-bottom: 1px solid #eef0f2;
+}
+
+.proposta-distribuicao-hscroll-spacer {
+  height: 1px;
+  pointer-events: none;
+}
+
+.proposta-distribuicao-body {
   overflow: auto;
   max-height: min(52vh, 520px);
+  min-width: 0;
+}
+
+.proposta-distribuicao-body .table-container {
+  overflow: visible;
+}
+
+.proposta-distribuicao-body::-webkit-scrollbar {
+  width: 8px;
+  height: 0;
+}
+
+.proposta-distribuicao-hscroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.proposta-distribuicao-hscroll::-webkit-scrollbar-thumb,
+.proposta-distribuicao-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
 }
 
 .proposta-distribuicao-nome {
-  margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
 }
 
 .proposta-distribuicao-grade {
@@ -14883,10 +15005,18 @@ textarea.form-input {
 
 .proposta-destinos {
   margin: 28px 0 8px;
-  flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 180px;
+  flex: 0 0 auto;
+}
+
+.proposta-destinos-card {
+  margin-top: 8px;
+  border: 1px solid #dbe3ec;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .proposta-destinos-head {
@@ -14894,63 +15024,186 @@ textarea.form-input {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  flex-shrink: 0;
+  background: #fff;
+  border-bottom: 1px solid #eef0f2;
 }
 
 .proposta-destinos-head h4 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  color: #212121;
+  color: #1f2937;
 }
 
 .proposta-destinos-wrap {
-  overflow-x: auto;
-  margin: 0 -4px;
-  padding: 0 4px;
+  overflow-x: hidden;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
 }
 
 .proposta-destinos-table {
-  min-width: 920px;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.proposta-destinos-table .col-trecho { width: 13%; }
+.proposta-destinos-table .col-veiculo { width: 11%; }
+.proposta-destinos-table .col-money { width: 8%; }
+.proposta-destinos-table .col-pct { width: 7%; }
+.proposta-destinos-table .col-icms { width: 16%; }
+.proposta-destinos-table .col-prazo { width: 12%; }
+.proposta-destinos-table .col-actions {
+  width: 40px;
+  text-align: center;
 }
 
 .proposta-destinos-table th,
 .proposta-destinos-table td {
-  padding: 8px 10px;
+  padding: 3px 6px;
   vertical-align: middle;
-  white-space: nowrap;
+  line-height: 1.2;
 }
 
-.proposta-destinos-table th:last-child,
-.proposta-destinos-table td:last-child {
-  width: 40px;
-  padding-right: 6px;
+.proposta-destinos-table tbody td {
+  background: #fff;
+  border-bottom: 1px solid #eef0f2;
+}
+
+.proposta-destinos-table tbody tr:hover td {
+  background: #f7fafc;
 }
 
 .proposta-destinos-input {
+  display: block;
   width: 100%;
-  min-width: 72px;
-  border: 0;
-  border-bottom: 1px solid #bdbdbd;
-  border-radius: 0;
-  background: transparent;
-  padding: 4px 0 6px;
-  font-size: 13px;
-  color: #212121;
+  min-width: 0;
+  height: 28px;
+  box-sizing: border-box;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  padding: 0 8px;
+  font-size: 12px;
+  color: #1f2937;
 }
 
 .proposta-destinos-input:focus {
   outline: 0;
-  border-bottom-color: #1976d2;
-  box-shadow: 0 1px 0 0 #1976d2;
+  border-color: #118CC4;
+  box-shadow: 0 0 0 3px rgba(17, 140, 196, 0.12);
 }
 
 .proposta-destinos-input:disabled {
-  color: #616161;
+  color: #6b7280;
+  background: #f8fafc;
 }
 
 .proposta-destinos-input::placeholder {
-  color: #bdbdbd;
+  color: #9ca3af;
+}
+
+.proposta-armazenagem-card {
+  margin-top: 16px;
+}
+
+.proposta-armazenagem-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 10px 12px 8px;
+}
+
+.proposta-armazenagem-meta label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.proposta-armazenagem-meta span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.proposta-armazenagem-table .col-valor {
+  width: 28%;
+}
+
+.proposta-armazenagem-table .col-actions {
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+}
+
+.proposta-armazenagem-unidade {
+  font-weight: 600;
+  text-align: center;
+}
+
+.proposta-armazenagem-subhead {
+  border-top: 1px solid #eef0f2;
+}
+
+.proposta-armazenagem-titulo {
+  max-width: 280px;
+  font-weight: 600;
+}
+
+.proposta-armazenagem-expediente {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px 12px;
+}
+
+.proposta-armazenagem-expediente span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.proposta-generalidades-revisao {
+  margin-top: 16px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.proposta-generalidades-revisao .proposta-destinos-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.proposta-generalidades-revisao .col-item { width: 32%; }
+.proposta-generalidades-revisao .col-condicao { width: auto; }
+.proposta-generalidades-revisao .col-actions {
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+  padding-left: 2px;
+  padding-right: 8px;
+  text-align: center;
+}
+
+.proposta-generalidades-revisao .comercial-generalidades-table .proposta-destinos-input {
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proposta-generalidades-wrap {
+  overflow: visible;
+  max-height: none;
+  min-height: 0;
 }
 
 .comercial-generalidades-tipos {

@@ -55,6 +55,25 @@ class ClienteComercialTests(TestCase):
     def _auth(self, user):
         self.api.force_authenticate(user=user)
 
+    def _publicar_tabela_distribuicao(self, cliente_id, nome='Tabela Dist'):
+        created = self.api.post(
+            '/api/comercial/tabela-frete/',
+            {
+                'nome': nome,
+                'tipo': 'distribuicao',
+                'clienteIds': [cliente_id],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        published = self.api.post(
+            f'/api/comercial/tabela-frete/{created.json()["id"]}/publicar/',
+            **HEADERS,
+        )
+        self.assertEqual(published.status_code, 200, published.content)
+        return created.json()['id']
+
     def test_list_requires_auth(self):
         response = self.api.get('/api/comercial/clientes/')
         self.assertIn(response.status_code, (401, 403))
@@ -266,7 +285,7 @@ class ClienteComercialTests(TestCase):
 
     def test_proposta_modalidades_transporte(self):
         self._auth(self.admin)
-        created = self.api.post(
+        sem_cliente = self.api.post(
             '/api/comercial/propostas/',
             {
                 'tipo': 'transporte_rodoviario',
@@ -274,6 +293,49 @@ class ClienteComercialTests(TestCase):
                 'incluiTransferencia': True,
                 'incluiDistribuicao': True,
                 'status': 'rascunho',
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(sem_cliente.status_code, 400, sem_cliente.content)
+
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(cliente.status_code, 201, cliente.content)
+        cliente_id = cliente.json()['id']
+        sem_tabela = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'incluiTransferencia': True,
+                'incluiDistribuicao': True,
+                'status': 'rascunho',
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(sem_tabela.status_code, 400, sem_tabela.content)
+        self.assertIn('tabela', str(sem_tabela.json()).lower())
+
+        self._publicar_tabela_distribuicao(cliente_id)
+        created = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'titulo': 'Com modalidades',
+                'incluiTransferencia': True,
+                'incluiDistribuicao': True,
+                'status': 'rascunho',
+                'linhas': [
+                    {
+                        'origem': 'Maringá - PR',
+                        'entrega': 'São Paulo - SP',
+                        'veiculo': 'Carreta',
+                        'tarifaFrete': '1000.00',
+                        'prazoDias': '3 dias úteis',
+                    }
+                ],
             },
             format='json',
             **HEADERS,
@@ -297,6 +359,164 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(armazenagem.status_code, 201, armazenagem.content)
         self.assertFalse(armazenagem.json()['incluiTransferencia'])
         self.assertFalse(armazenagem.json()['incluiDistribuicao'])
+
+    def test_recusa_transferencia_sem_destinos_preenchidos(self):
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(cliente.status_code, 201, cliente.content)
+        vazia = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente.json()['id'],
+                'incluiTransferencia': True,
+                'status': 'rascunho',
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(vazia.status_code, 400, vazia.content)
+        self.assertIn('destinos', str(vazia.json()).lower())
+
+        incompleta = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente.json()['id'],
+                'incluiTransferencia': True,
+                'status': 'rascunho',
+                'linhas': [{'origem': 'Maringá - PR', 'entrega': '', 'veiculo': 'Carreta'}],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(incompleta.status_code, 400, incompleta.content)
+
+        preenchida = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente.json()['id'],
+                'incluiTransferencia': True,
+                'status': 'rascunho',
+                'linhas': [
+                    {
+                        'origem': 'Maringá - PR',
+                        'entrega': 'Curitiba - PR',
+                        'veiculo': 'Carreta',
+                        'tarifaFrete': '1500.00',
+                        'prazoDias': '2 dias úteis',
+                    }
+                ],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(preenchida.status_code, 201, preenchida.content)
+        self.assertEqual(len(preenchida.json()['linhas']), 1)
+
+    def test_proposta_armazenagem_grava_tabela(self):
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(cliente.status_code, 201, cliente.content)
+        created = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'armazenagem',
+                'clienteId': cliente.json()['id'],
+                'status': 'rascunho',
+                'tabelaArmazenagem': {
+                    'unidade': 'MT',
+                    'itens': [
+                        {'rotulo': 'FATURAMENTO MÍNIMO (1)', 'valor': 'R$ 10.000,00'},
+                    ],
+                    'horaExtraTitulo': 'Hora-extra (7)',
+                    'horaExtra': [
+                        {'periodo': 'De segunda a sábado', 'valor': 'R$ 20,81/ton'},
+                    ],
+                    'expediente': 'Expediente do CD: de seg a sex das 08:00 às 17:00h',
+                },
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        tabela = created.json()['tabelaArmazenagem']
+        self.assertEqual(tabela['unidade'], 'MT')
+        self.assertEqual(tabela['itens'][0]['valor'], 'R$ 10.000,00')
+        self.assertEqual(tabela['horaExtra'][0]['periodo'], 'De segunda a sábado')
+
+        padrao = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'armazenagem',
+                'clienteId': cliente.json()['id'],
+                'titulo': 'Padrão',
+                'status': 'rascunho',
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(padrao.status_code, 201, padrao.content)
+        self.assertEqual(padrao.json()['tabelaArmazenagem']['itens'][0]['rotulo'], 'FATURAMENTO MÍNIMO (1)')
+
+    def test_salvar_proposta_atualiza_catalogo_generalidades(self):
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(cliente.status_code, 201, cliente.content)
+        cliente_id = cliente.json()['id']
+        created = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'incluiTransferencia': True,
+                'status': 'rascunho',
+                'linhas': [
+                    {
+                        'origem': 'Maringá - PR',
+                        'entrega': 'Curitiba - PR',
+                        'veiculo': 'Carreta',
+                        'tarifaFrete': '1500.00',
+                        'prazoDias': '2 dias úteis',
+                    }
+                ],
+                'condicoes': [
+                    {'rotulo': 'Pedágios', 'valor': 'Incluso no frete', 'tipo': 'frete'},
+                    {'rotulo': 'Cubagem', 'valor': 'Alterada na proposta', 'tipo': 'frete'},
+                ],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        catalogo = self.api.get(
+            f'/api/comercial/generalidades/?cliente={cliente_id}&tipo=frete',
+            **HEADERS,
+        )
+        self.assertEqual(catalogo.status_code, 200)
+        self.assertEqual(catalogo.json()['origem'], 'cliente')
+        rotulos = [item['rotulo'] for item in catalogo.json()['items']]
+        self.assertEqual(rotulos, ['Pedágios', 'Cubagem'])
+        self.assertEqual(catalogo.json()['items'][0]['valor'], 'Incluso no frete')
+
+        atualizada = self.api.patch(
+            f'/api/comercial/propostas/{created.json()["id"]}/',
+            {
+                'condicoes': [
+                    {'rotulo': 'Pedágios', 'valor': 'Por trecho', 'tipo': 'frete'},
+                ],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(atualizada.status_code, 200, atualizada.content)
+        catalogo = self.api.get(
+            f'/api/comercial/generalidades/?cliente={cliente_id}&tipo=frete',
+            **HEADERS,
+        )
+        self.assertEqual(catalogo.json()['items'][0]['valor'], 'Por trecho')
+        self.assertEqual(len(catalogo.json()['items']), 1)
 
     def test_lista_propostas_ordena_por_data_e_vencimento(self):
         self._auth(self.admin)
@@ -711,20 +931,6 @@ class ClienteComercialTests(TestCase):
         )
         self.assertEqual(outro_cliente.json()['origem'], 'padrao')
 
-        proposta = self.api.post(
-            '/api/comercial/propostas/',
-            {
-                'tipo': 'transporte_rodoviario',
-                'clienteId': cliente_id,
-                'incluiDistribuicao': True,
-                'status': 'rascunho',
-            },
-            format='json',
-            **HEADERS,
-        )
-        self.assertEqual(proposta.status_code, 201, proposta.content)
-        self.assertEqual(proposta.json()['condicoes'], [{'rotulo': 'Pedágios', 'valor': 'Conforme Legislação'}])
-
         created = self.api.post(
             '/api/comercial/tabela-frete/',
             {
@@ -845,6 +1051,27 @@ class ClienteComercialTests(TestCase):
         )
         self.assertEqual(ocupado.status_code, 400, ocupado.content)
         self.assertIn('vinculado', str(ocupado.json()).lower())
+
+        published = self.api.post(
+            f'/api/comercial/tabela-frete/{vinculada.json()["id"]}/publicar/',
+            **HEADERS,
+        )
+        self.assertEqual(published.status_code, 200, published.content)
+        proposta = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'incluiDistribuicao': True,
+                'status': 'rascunho',
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(proposta.status_code, 201, proposta.content)
+        self.assertEqual(proposta.json()['condicoes'], [
+            {'rotulo': 'Pedágios', 'valor': 'Conforme Legislação', 'tipo': 'distribuicao'},
+        ])
 
         self._auth(self.leitura)
         denied = self.api.post(

@@ -1,3 +1,4 @@
+import { type ReactNode, useLayoutEffect, useId, useRef, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import { useTabelaFreteDistribuicaoCliente } from '../../hooks/useComercialClientes';
@@ -7,10 +8,77 @@ type Props = {
   clienteId: string | null;
 };
 
+function PropostaDistribuicaoGradeScroll({ children }: { children: ReactNode }) {
+  const topRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const syncing = useRef<'top' | 'body' | null>(null);
+  const [contentWidth, setContentWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const table = body?.querySelector('table');
+    if (!body || !table) return undefined;
+    const measure = () => setContentWidth(table.scrollWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(table);
+    observer.observe(body);
+    const onWheel = (event: WheelEvent) => {
+      const horizontal = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+      if (!horizontal) return;
+      const delta = event.shiftKey ? event.deltaY : event.deltaX;
+      if (!delta) return;
+      event.preventDefault();
+      body.scrollLeft += delta;
+      if (topRef.current) topRef.current.scrollLeft = body.scrollLeft;
+    };
+    body.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      observer.disconnect();
+      body.removeEventListener('wheel', onWheel);
+    };
+  }, []);
+
+  return (
+    <>
+      <div
+        className="proposta-distribuicao-hscroll"
+        ref={topRef}
+        onScroll={() => {
+          if (syncing.current === 'body') return;
+          syncing.current = 'top';
+          if (bodyRef.current && topRef.current) {
+            bodyRef.current.scrollLeft = topRef.current.scrollLeft;
+          }
+          syncing.current = null;
+        }}
+      >
+        <div className="proposta-distribuicao-hscroll-spacer" style={{ width: contentWidth }} />
+      </div>
+      <div
+        className="proposta-distribuicao-body"
+        ref={bodyRef}
+        onScroll={() => {
+          if (syncing.current === 'top') return;
+          syncing.current = 'body';
+          if (bodyRef.current && topRef.current) {
+            topRef.current.scrollLeft = bodyRef.current.scrollLeft;
+          }
+          syncing.current = null;
+        }}
+      >
+        {children}
+      </div>
+    </>
+  );
+}
+
 export default function PropostaTabelaDistribuicao({ clienteId }: Props) {
   const { listQuery, detalheQuery, tabela } = useTabelaFreteDistribuicaoCliente(clienteId, Boolean(clienteId));
   const listState = useAsyncQueryState(listQuery);
   const detalheState = useAsyncQueryState(detalheQuery);
+  const [aberta, setAberta] = useState(false);
+  const painelId = useId();
   const faixas = tabela?.faixas ?? [];
   const bandas = faixas[0]?.tarifas ?? [];
   const extras = faixas[0]?.extras ?? [];
@@ -37,6 +105,24 @@ export default function PropostaTabelaDistribuicao({ clienteId }: Props) {
           <p>Nenhuma tabela de distribuição vinculada a este cliente.</p>
         </div>
       ) : (
+            <div className={`proposta-destinos-card proposta-distribuicao-card${aberta ? ' is-open' : ''}`}>
+              <button
+                type="button"
+                className="proposta-distribuicao-toggle"
+                aria-expanded={aberta}
+                aria-controls={painelId}
+                onClick={() => setAberta((atual) => !atual)}
+              >
+                <span className="proposta-distribuicao-toggle-copy">
+                  <span className="proposta-distribuicao-toggle-title">Tabela de distribuição</span>
+                  {(tabela?.nome || listQuery.data?.results[0]?.nome) ? (
+                    <span className="proposta-distribuicao-nome">{tabela?.nome || listQuery.data?.results[0]?.nome}</span>
+                  ) : null}
+                </span>
+                <i className={`bi ${aberta ? 'bi-chevron-up' : 'bi-chevron-down'}`} aria-hidden="true" />
+              </button>
+              {aberta ? (
+              <div id={painelId} className="proposta-distribuicao-wrap">
         <QueryDataPanel
           query={detalheQuery}
           variant="compact"
@@ -49,8 +135,7 @@ export default function PropostaTabelaDistribuicao({ clienteId }: Props) {
               <p>A tabela “{tabela?.nome || 'distribuição'}” ainda não tem faixas. Recalcule no cadastro de tabela frete.</p>
             </div>
           ) : (
-            <div className="proposta-distribuicao-wrap">
-              <p className="proposta-distribuicao-nome">{tabela?.nome}</p>
+              <PropostaDistribuicaoGradeScroll>
               <div className="table-container">
                 <table className="data-table tabela-frete-grade proposta-distribuicao-grade">
                   <thead>
@@ -115,9 +200,12 @@ export default function PropostaTabelaDistribuicao({ clienteId }: Props) {
                   </tbody>
                 </table>
               </div>
-            </div>
+              </PropostaDistribuicaoGradeScroll>
           )}
         </QueryDataPanel>
+              </div>
+              ) : null}
+            </div>
       )}
     </QueryDataPanel>
   );

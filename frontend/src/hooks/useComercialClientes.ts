@@ -124,6 +124,7 @@ export function useCreatePropostaComercial() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: COMERCIAL_PROPOSTAS_KEY });
       queryClient.invalidateQueries({ queryKey: COMERCIAL_CLIENTES_KEY });
+      queryClient.invalidateQueries({ queryKey: COMERCIAL_GENERALIDADES_KEY });
     },
   });
 }
@@ -136,6 +137,7 @@ export function useUpdatePropostaComercial() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: COMERCIAL_PROPOSTAS_KEY });
       queryClient.invalidateQueries({ queryKey: COMERCIAL_CLIENTES_KEY });
+      queryClient.invalidateQueries({ queryKey: COMERCIAL_GENERALIDADES_KEY });
     },
   });
 }

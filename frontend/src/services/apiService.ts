@@ -53,6 +53,7 @@ import type {
   ProdutoComercial, ProdutoComercialPayload, ProdutoComercialLotePayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
 } from '../types/domain';
 import {
+  cloneTabelaArmazenagem,
   parseClienteComercialClasseRisco,
   parseClienteComercialCompatibilidade,
   parseClienteComercialFispq,
@@ -253,6 +254,9 @@ function normalizePropostaComercial(raw: any): PropostaComercial {
     ? raw.condicoes.map((item: any) => ({
         rotulo: String(item?.rotulo ?? ''),
         valor: String(item?.valor ?? ''),
+        ...(item?.tipo === 'frete' || item?.tipo === 'distribuicao' || item?.tipo === 'armazenagem'
+          ? { tipo: item.tipo }
+          : {}),
       }))
     : [];
   return {
@@ -282,6 +286,7 @@ function normalizePropostaComercial(raw: any): PropostaComercial {
     incluiTransferencia: Boolean(raw.incluiTransferencia),
     incluiDistribuicao: Boolean(raw.incluiDistribuicao),
     condicoes,
+    tabelaArmazenagem: cloneTabelaArmazenagem(raw.tabelaArmazenagem),
     linhas: Array.isArray(raw.linhas) ? raw.linhas.map(normalizePropostaFreteLinha) : [],
     dataCriacao: raw.dataCriacao,
     dataAtualizacao: raw.dataAtualizacao,

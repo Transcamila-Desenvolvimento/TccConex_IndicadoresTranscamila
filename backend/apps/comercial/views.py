@@ -37,6 +37,7 @@ from .models import (
     TabelaFreteLinha,
     ensure_generalidades,
     ensure_matriz_icms,
+    gravar_catalogo_generalidades,
     normalizar_homologacao,
     sugestoes_produtos_atividade,
 )
@@ -932,17 +933,7 @@ class GeneralidadesCatalogoView(ModuleScopedViewMixin, APIView):
         serializer.is_valid(raise_exception=True)
         cliente = escopo['cliente']
         tipo = escopo['tipo']
-        GeneralidadeComercial.objects.filter(cliente=cliente, tipo_servico=tipo).delete()
-        GeneralidadeComercial.objects.bulk_create([
-            GeneralidadeComercial(
-                cliente=cliente,
-                tipo_servico=tipo,
-                ordem=index,
-                rotulo=item['rotulo'],
-                valor=item.get('valor') or '',
-            )
-            for index, item in enumerate(serializer.validated_data)
-        ])
+        gravar_catalogo_generalidades(cliente, tipo, serializer.validated_data)
         items = GeneralidadeComercial.objects.filter(cliente=cliente, tipo_servico=tipo).order_by('ordem', 'pk')
         record_audit(
             request.user,

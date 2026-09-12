@@ -3,7 +3,7 @@ import re
 
 from django.conf import settings
 from django.db import models, transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.db.models.functions import Lower
 from django.utils import timezone
 
@@ -591,6 +591,31 @@ OBSERVACOES_ARMAZENAGEM_PADRAO = [
 ]
 
 
+def tabela_armazenagem_padrao():
+    return {
+        'codigo': 'AG',
+        'local': 'RONDONÓPOLIS-MT',
+        'periodoInicio': '',
+        'periodoFim': '',
+        'unidade': 'MT',
+        'itens': [
+            {'rotulo': 'FATURAMENTO MÍNIMO (1)', 'valor': 'R$ 17.650,00'},
+            {'rotulo': 'VALOR POR POSIÇÃO PALLET ATÉ A CAPACIDADE MÁXIMA ACORDADA (2)', 'valor': 'R$ 35,30'},
+            {'rotulo': 'MOVIMENTAÇÃO (R$/TON) (3)', 'valor': 'R$ 13,87'},
+            {'rotulo': 'SEGURO (4)', 'valor': '0,02%'},
+            {'rotulo': 'SEGURO "AG" (5)', 'valor': '0,10%'},
+            {'rotulo': 'COLABORADOR DEDICADO (6)', 'valor': 'R$ 1.500,00'},
+            {'rotulo': 'CAPACIDADE MÁXIMA ACORDADA (POSIÇÕES PALETE)', 'valor': '1.000'},
+        ],
+        'horaExtraTitulo': 'Hora-extra (7)',
+        'horaExtra': [
+            {'periodo': 'De segunda a sábado', 'valor': 'R$ 20,81/ton'},
+            {'periodo': 'Domingos e feriados', 'valor': 'R$ 27,74/ton'},
+        ],
+        'expediente': 'Expediente do CD: de seg a sex das 08:00 às 17:00h',
+    }
+
+
 def catalogo_generalidades_padrao(tipo_servico):
     if tipo_servico == TIPO_GENERALIDADE_DISTRIBUICAO:
         return CONSIDERACOES_DISTRIBUICAO_PADRAO
@@ -639,6 +664,11 @@ class PropostaComercial(models.Model):
     inclui_transferencia = models.BooleanField(default=False, verbose_name='Transferência')
     inclui_distribuicao = models.BooleanField(default=False, verbose_name='Distribuição')
     condicoes = models.JSONField(default=list, blank=True, verbose_name='Generalidades e condições')
+    tabela_armazenagem = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Tabela de armazenagem',
+    )
     ano = models.PositiveIntegerField(null=True, blank=True, db_index=True, verbose_name='Ano da numeração')
     numero = models.PositiveIntegerField(null=True, blank=True, verbose_name='Número da proposta')
     data_criacao = models.DateTimeField(auto_now_add=True)
@@ -946,6 +976,21 @@ class TabelaFrete(models.Model):
         self.faixas = gerar_faixas_distribuicao(self.config)
 
 
+def cliente_tem_tabela_distribuicao_vigente(cliente_id) -> bool:
+    if not cliente_id:
+        return False
+    hoje = timezone.localdate()
+    return TabelaFrete.objects.filter(
+        tipo=TIPO_TABELA_DISTRIBUICAO,
+        clientes__pk=cliente_id,
+        status=STATUS_TABELA_PUBLICADA,
+    ).filter(
+        Q(vigencia_inicio__isnull=True) | Q(vigencia_inicio__lte=hoje),
+    ).filter(
+        Q(vigencia_fim__isnull=True) | Q(vigencia_fim__gte=hoje),
+    ).exists()
+
+
 class TabelaFreteLinha(models.Model):
     tabela = models.ForeignKey(
         TabelaFrete,
@@ -1015,6 +1060,29 @@ class GeneralidadeComercial(models.Model):
         return f'{escopo} / {self.get_tipo_servico_display()} — {self.rotulo}'
 
 
+def gravar_catalogo_generalidades(cliente, tipo_servico, items):
+    if cliente is None or tipo_servico not in TIPOS_GENERALIDADE:
+        return
+    cleaned = []
+    for item in items or []:
+        rotulo = str((item.get('rotulo') if isinstance(item, dict) else '') or '').strip()
+        valor = str((item.get('valor') if isinstance(item, dict) else '') or '').strip()
+        if not rotulo and not valor:
+            continue
+        cleaned.append((rotulo, valor))
+    GeneralidadeComercial.objects.filter(cliente=cliente, tipo_servico=tipo_servico).delete()
+    GeneralidadeComercial.objects.bulk_create([
+        GeneralidadeComercial(
+            cliente=cliente,
+            tipo_servico=tipo_servico,
+            ordem=index,
+            rotulo=rotulo,
+            valor=valor,
+        )
+        for index, (rotulo, valor) in enumerate(cleaned)
+    ])
+
+
 class MatrizIcmsUf(models.Model):
     matriz = models.JSONField(default=dict, blank=True, verbose_name='Matriz ICMS por UF')
     atualizado_em = models.DateTimeField(auto_now=True)
@@ -1064,7 +1132,7 @@ def default_condicoes(cliente=None, tipos_servico=None):
             if key in seen:
                 continue
             seen.add(key)
-            merged.append({'rotulo': item['rotulo'], 'valor': item.get('valor') or ''})
+            merged.append({'rotulo': item['rotulo'], 'valor': item.get('valor') or '', 'tipo': tipo})
 
     for tipo in tipos:
         itens_cliente = _itens_generalidade(cliente=cliente, tipo_servico=tipo) if cliente is not None else []
@@ -1074,7 +1142,11 @@ def default_condicoes(cliente=None, tipos_servico=None):
             _acrescentar(_itens_generalidade(cliente=None, tipo_servico=tipo))
     if merged:
         return merged
-    return [dict(item) for item in catalogo_generalidades_padrao(tipos[0] if tipos else TIPO_GENERALIDADE_FRETE)]
+    tipo_padrao = tipos[0] if tipos else TIPO_GENERALIDADE_FRETE
+    return [
+        {**dict(item), 'tipo': tipo_padrao}
+        for item in catalogo_generalidades_padrao(tipo_padrao)
+    ]
 
 
 def ensure_generalidades():
