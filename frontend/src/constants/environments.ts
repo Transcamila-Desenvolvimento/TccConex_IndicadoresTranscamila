@@ -68,10 +68,3 @@ export function sortByEnvironmentCode<T extends ActiveEnvironment>(environments:
 export function isAdminEnvironment(env: string | null | undefined): boolean {
   return normalizeEnvironment(env ?? '') === ADMIN_ENVIRONMENT;
 }
-
-/** Ambientes ainda em homologação — aviso visível no cabeçalho. */
-export const TEST_PHASE_ENVIRONMENTS: readonly string[] = ['Comercial'];
-
-export function environmentInTestPhase(env: string | null | undefined): boolean {
-  return TEST_PHASE_ENVIRONMENTS.includes(normalizeEnvironment(env ?? ''));
-}

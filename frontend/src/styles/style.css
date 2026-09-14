@@ -333,33 +333,6 @@ body {
   justify-content: space-between; /* Align breadcrumb left and user right */
   padding: 0 40px;
   flex-shrink: 0;
-  gap: 16px;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.header-test-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border-radius: 6px;
-  background: #fff7ed;
-  color: #9a3412;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-
-.header-test-badge .bi {
-  font-size: 12px;
-  color: #ea580c;
 }
 
 .header-breadcrumb {
@@ -14875,6 +14848,15 @@ textarea.form-input {
   box-shadow: inset 0 1px 0 #fff !important;
   border-radius: 0 !important;
   white-space: nowrap;
+  vertical-align: middle;
+}
+
+.comercial-browse-card .comercial-browse-table thead th,
+.comercial-propostas-card .comercial-browse-table thead th {
+  height: 42px;
+  min-height: 42px;
+  padding: 10px 12px !important;
+  box-sizing: border-box;
 }
 
 .comercial-browse-table thead th:last-child {
@@ -16438,8 +16420,6 @@ textarea.form-input {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
-  padding-left: 12px !important;
-  padding-right: 12px !important;
 }
 
 .tabela-frete-list-col-nome {

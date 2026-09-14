@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from '../components/UserAvatar';
-import { environmentInTestPhase, environmentRequiresFilial, isAdminEnvironment } from '../constants/environments';
+import { environmentRequiresFilial, isAdminEnvironment } from '../constants/environments';
 import { getAllowedIndicadores } from '../constants/indicadores';
 import { userCanSeeAba } from '../constants/abas';
 import logoExpanded from '../assets/Logo_TccConex.png';
@@ -41,7 +41,6 @@ const DashboardLayout: React.FC = () => {
   const allowedIndicadores = getAllowedIndicadores(user);
   const canAba = (module: string, aba: string) => userCanSeeAba(user, module, aba);
   const showSessionFilial = environmentRequiresFilial(selectedEnvironment) && !!selectedFilial;
-  const showTestPhaseNotice = environmentInTestPhase(selectedEnvironment);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -1448,20 +1447,12 @@ const DashboardLayout: React.FC = () => {
       {/* Main Wrapper */}
       <div className="main-wrapper">
         <header className="app-header">
-          <div className="header-left">
-            <div className="header-breadcrumb" id="header-breadcrumb" style={{ cursor: 'pointer' }} onClick={() => { setPaletteQuery(''); setIsPaletteOpen(true); }}>
-              <span id="breadcrumb-text">{getBreadcrumbText()}</span>
-              <svg className="breadcrumb-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '2px' }}>
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-            </div>
-            {showTestPhaseNotice ? (
-              <span className="header-test-badge" title="Funcionalidades deste ambiente ainda estão em homologação">
-                <i className="bi bi-exclamation-triangle-fill" aria-hidden="true" />
-                Ambiente em fase de testes
-              </span>
-            ) : null}
+          <div className="header-breadcrumb" id="header-breadcrumb" style={{ cursor: 'pointer' }} onClick={() => { setPaletteQuery(''); setIsPaletteOpen(true); }}>
+            <span id="breadcrumb-text">{getBreadcrumbText()}</span>
+            <svg className="breadcrumb-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '2px' }}>
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
           </div>
           <div className="header-right">
             {showSessionFilial && (

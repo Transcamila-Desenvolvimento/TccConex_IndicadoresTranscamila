@@ -27,7 +27,7 @@ const ComercialHome: React.FC = () => {
     >
       <div className="welcome-banner">
         <h2>Olá, {firstName}!</h2>
-        <p>Bem-vindo ao ambiente Comercial da Transcamila. Este ambiente está em fase de testes.</p>
+        <p>Bem-vindo ao ambiente Comercial da Transcamila.</p>
       </div>
 
       {canPropostas ? <ComercialPropostasDashboard /> : null}
