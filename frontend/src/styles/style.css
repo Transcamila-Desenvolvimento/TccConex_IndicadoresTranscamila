@@ -13772,24 +13772,30 @@ textarea.form-input {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 0;
-  background: transparent;
+  flex-shrink: 0;
+  height: 36px;
+  margin-top: 2px;
+  border: 1px solid #bbdefb;
+  background: #fff;
   color: #1976d2;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 8px 12px;
-  border-radius: 4px;
+  padding: 0 12px;
+  border-radius: 8px;
+  white-space: nowrap;
 }
 
 .proposta-include-save:disabled {
-  color: #bdbdbd;
+  color: #cbd5e1;
+  border-color: #eef2f6;
   cursor: default;
 }
 
 .proposta-include-save:not(:disabled):hover {
   background: #e3f2fd;
+  border-color: #90caf9;
 }
 
 .proposta-include-print {
@@ -13815,25 +13821,34 @@ textarea.form-input {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  border: 0;
-  background: transparent;
-  color: #78909c;
+  height: 36px;
+  margin-top: 2px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
   font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 8px 10px;
-  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 0 12px;
+  border-radius: 8px;
   white-space: nowrap;
 }
 
+.proposta-include-discard i {
+  font-size: 14px;
+}
+
 .proposta-include-discard:hover:not(:disabled) {
-  color: #c62828;
-  background: #ffebee;
+  color: #1976d2;
+  border-color: #90caf9;
+  background: #e3f2fd;
+  text-decoration: none;
 }
 
 .proposta-include-discard:disabled {
-  color: #bdbdbd;
+  color: #cbd5e1;
+  border-color: #eef2f6;
   cursor: default;
 }
 

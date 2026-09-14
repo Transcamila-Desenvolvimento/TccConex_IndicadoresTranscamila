@@ -484,15 +484,22 @@ const chunk = <T,>(items: T[], size: number) => {
 
 type PrintSecao = 'geral' | 'transferencia' | 'distribuicao';
 
+const condicoesDaSecao = (proposta: PropostaComercial, secao: PrintSecao): PropostaCondicaoComercial[] => {
+  const todas = proposta.condicoes.length ? proposta.condicoes : CONDICOES_FRETE_PADRAO;
+  const tipo = secao === 'distribuicao' ? 'distribuicao' : secao === 'transferencia' ? 'frete' : undefined;
+  const tipadas = tipo ? todas.filter((item) => item.tipo === tipo) : [];
+  if (tipadas.length) return tipadas;
+  const semTipo = todas.filter((item) => !item.tipo);
+  return semTipo.length ? semTipo : todas;
+};
+
 const buildCondicoesTable = (
   proposta: PropostaComercial,
   secao: PrintSecao,
   columns = 3,
+  items?: PropostaCondicaoComercial[],
 ) => {
-  const todas = proposta.condicoes.length ? proposta.condicoes : CONDICOES_FRETE_PADRAO;
-  const tipo = secao === 'distribuicao' ? 'distribuicao' : secao === 'transferencia' ? 'frete' : undefined;
-  const tipadas = tipo ? todas.filter((item) => item.tipo === tipo) : [];
-  const lista = tipadas.length ? tipadas : todas.filter((item) => !item.tipo).length ? todas.filter((item) => !item.tipo) : todas;
+  const lista = items ?? condicoesDaSecao(proposta, secao);
   const colIdx = Array.from({ length: columns }, (_, index) => index);
   const rows = chunk(lista, columns).map((grupo) => `
     <tr>
@@ -519,6 +526,7 @@ type HtmlOpcoes = {
   includeCondicoes: boolean;
   includeAssinatura: boolean;
   faixasPagina?: TabelaFreteFaixa[];
+  condicoesPagina?: PropostaCondicaoComercial[];
 };
 
 const secoesDaProposta = (proposta: PropostaComercial): PrintSecao[] => {
@@ -558,7 +566,7 @@ const buildHtml = (
       ? 'Transferência'
       : '';
   const closingHtml = `
-  ${opcoes.includeCondicoes ? buildCondicoesTable(proposta, secao) : ''}
+  ${opcoes.includeCondicoes ? buildCondicoesTable(proposta, secao, 3, opcoes.condicoesPagina) : ''}
   ${opcoes.includeAssinatura && proposta.observacoes.trim()
     ? `<section class="block"><h2>Observações</h2><div class="obs">${escapeHtml(proposta.observacoes.trim())}</div></section>`
     : ''}
@@ -873,11 +881,14 @@ type RunningFooter = { left: string; right: string };
 
 const footerDaProposta = (
   proposta: PropostaComercial,
-  cliente?: ClienteComercial | null,
-): RunningFooter => ({
-  left: (proposta.numeroIdentificacao || '').trim() || '—',
-  right: (cliente?.razaoSocial || proposta.clienteNome || '').trim() || '—',
-});
+  _cliente?: ClienteComercial | null,
+): RunningFooter => {
+  const numero = (proposta.numeroIdentificacao || '').trim() || '—';
+  return {
+    left: 'COMERCIAL',
+    right: `PROPOSTA - ${numero}`,
+  };
+};
 
 const drawRunningFooter = (pdf: jsPDF, footer: RunningFooter, pageIndex: number, pageCount: number) => {
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -938,6 +949,28 @@ const stampCanvas = (
 const pageMetrics = (_secao?: PrintSecao) => (
   { orientation: 'landscape' as const, widthPx: A4_LANDSCAPE_PX, heightPx: A4_LANDSCAPE_HEIGHT_PX }
 );
+
+const maiorQuantidadeQueCabe = async (
+  caberNaFolha: (height: number) => boolean,
+  montar: (quantidade: number, comAssinatura: boolean) => Promise<{ contentHeight: number }>,
+  max: number,
+  comAssinatura: boolean,
+) => {
+  let lo = 0;
+  let hi = max;
+  let melhor = 0;
+  while (lo <= hi) {
+    const meio = Math.ceil((lo + hi) / 2);
+    const pagina = await montar(meio, comAssinatura);
+    if (caberNaFolha(pagina.contentHeight)) {
+      melhor = meio;
+      lo = meio + 1;
+    } else {
+      hi = meio - 1;
+    }
+  }
+  return melhor;
+};
 
 const captureHtml = async (html: string, pageWidthPx: number) => {
   const { iframe, frameDocument, contentHeight } = await renderHtmlFrame(html, pageWidthPx);
@@ -1040,14 +1073,82 @@ const appendDistribuicaoPaginada = async (
       if (caberNaFolha(comFechamento.contentHeight)) {
         pdf = stampToPdf(pdf, comFechamento.canvas, page, true);
       } else {
-        pdf = stampToPdf(pdf, pagina.canvas, page, true);
-        const rodape = await render({
-          includeMeta: false,
-          includeTabela: false,
-          includeCondicoes: true,
-          includeAssinatura,
+        const lista = condicoesDaSecao(proposta, 'distribuicao');
+        const cabem = await maiorQuantidadeQueCabe(
+          caberNaFolha,
+          (quantidade, comAssinatura) => render({
+            includeMeta: primeira,
+            includeTabela: true,
+            includeCondicoes: quantidade > 0,
+            includeAssinatura: comAssinatura && includeAssinatura,
+            faixasPagina: restantes.slice(0, pagina.take),
+            condicoesPagina: lista.slice(0, quantidade),
+          }),
+          lista.length,
+          false,
+        );
+        const ultima = await render({
+          includeMeta: primeira,
+          includeTabela: true,
+          includeCondicoes: cabem > 0,
+          includeAssinatura: false,
+          faixasPagina: restantes.slice(0, pagina.take),
+          condicoesPagina: lista.slice(0, cabem),
         });
-        pdf = stampToPdf(pdf, rodape.canvas, page, true);
+        pdf = stampToPdf(pdf, ultima.canvas, page, true);
+        let resto = cabem;
+        while (resto < lista.length) {
+          const restantesCond = lista.slice(resto);
+          const take = Math.max(1, await maiorQuantidadeQueCabe(
+            caberNaFolha,
+            (quantidade, comAssinatura) => render({
+              includeMeta: false,
+              includeTabela: false,
+              includeCondicoes: quantidade > 0,
+              includeAssinatura: comAssinatura && includeAssinatura,
+              condicoesPagina: restantesCond.slice(0, quantidade),
+            }),
+            restantesCond.length,
+            includeAssinatura && restantesCond.length > 0,
+          ));
+          const bloco = await render({
+            includeMeta: false,
+            includeTabela: false,
+            includeCondicoes: true,
+            includeAssinatura: includeAssinatura && take >= restantesCond.length,
+            condicoesPagina: restantesCond.slice(0, take),
+          });
+          if (!caberNaFolha(bloco.contentHeight) && includeAssinatura && take >= restantesCond.length) {
+            const soCondicoes = await render({
+              includeMeta: false,
+              includeTabela: false,
+              includeCondicoes: true,
+              includeAssinatura: false,
+              condicoesPagina: restantesCond.slice(0, take),
+            });
+            pdf = stampToPdf(pdf, soCondicoes.canvas, page, true);
+            resto += take;
+            const fechamento = await render({
+              includeMeta: false,
+              includeTabela: false,
+              includeCondicoes: false,
+              includeAssinatura: true,
+            });
+            pdf = stampToPdf(pdf, fechamento.canvas, page, true);
+            break;
+          }
+          pdf = stampToPdf(pdf, bloco.canvas, page, true);
+          resto += take;
+        }
+        if (resto >= lista.length && includeAssinatura && cabem >= lista.length) {
+          const fechamento = await render({
+            includeMeta: false,
+            includeTabela: false,
+            includeCondicoes: false,
+            includeAssinatura: true,
+          });
+          pdf = stampToPdf(pdf, fechamento.canvas, page, true);
+        }
       }
     } else {
       pdf = stampToPdf(pdf, pagina.canvas, page, true);
@@ -1073,36 +1174,90 @@ const appendSecaoPdf = async (
   }
 
   const page = pageMetrics(secao);
-  const htmlCompleto = buildHtml(proposta, cliente, secao, tabela, {
+  const caberNaFolha = (height: number) => height <= page.heightPx + 24;
+  const render = (opcoes: HtmlOpcoes) => (
+    captureHtml(buildHtml(proposta, cliente, secao, tabela, opcoes), page.widthPx)
+  );
+
+  const completo = await render({
     includeMeta: true,
     includeTabela: true,
     includeCondicoes: true,
     includeAssinatura,
   });
-  const completo = await captureHtml(htmlCompleto, page.widthPx);
-  const cabeEmUmaFolha = completo.contentHeight <= page.heightPx + 24;
-
-  if (cabeEmUmaFolha) {
+  if (caberNaFolha(completo.contentHeight)) {
     return stampToPdf(pdf, completo.canvas, page, true);
   }
 
-  const htmlTabela = buildHtml(proposta, cliente, secao, tabela, {
+  const lista = condicoesDaSecao(proposta, secao);
+  const cabemNaPrimeira = await maiorQuantidadeQueCabe(
+    caberNaFolha,
+    (quantidade, comAssinatura) => render({
+      includeMeta: true,
+      includeTabela: true,
+      includeCondicoes: quantidade > 0,
+      includeAssinatura: comAssinatura && includeAssinatura,
+      condicoesPagina: lista.slice(0, quantidade),
+    }),
+    lista.length,
+    false,
+  );
+  const primeira = await render({
     includeMeta: true,
     includeTabela: true,
-    includeCondicoes: false,
+    includeCondicoes: cabemNaPrimeira > 0,
     includeAssinatura: false,
+    condicoesPagina: lista.slice(0, cabemNaPrimeira),
   });
-  const tabelaCanvas = await captureHtml(htmlTabela, page.widthPx);
-  pdf = stampToPdf(pdf, tabelaCanvas.canvas, page, false);
+  pdf = stampToPdf(pdf, primeira.canvas, page, true);
+  let offset = cabemNaPrimeira;
 
-  const htmlRodape = buildHtml(proposta, cliente, secao, tabela, {
-    includeMeta: false,
-    includeTabela: false,
-    includeCondicoes: true,
-    includeAssinatura,
-  });
-  const rodape = await captureHtml(htmlRodape, page.widthPx);
-  return stampToPdf(pdf, rodape.canvas, page, true);
+  if (offset >= lista.length) {
+    if (!includeAssinatura) return pdf;
+    const fechamento = await render({
+      includeMeta: false,
+      includeTabela: false,
+      includeCondicoes: false,
+      includeAssinatura: true,
+    });
+    return stampToPdf(pdf, fechamento.canvas, page, true);
+  }
+
+  while (offset < lista.length) {
+    const restantes = lista.slice(offset);
+    const montar = (quantidade: number, comAssinatura: boolean) => render({
+      includeMeta: false,
+      includeTabela: false,
+      includeCondicoes: quantidade > 0,
+      includeAssinatura: comAssinatura && includeAssinatura,
+      condicoesPagina: restantes.slice(0, quantidade),
+    });
+    const take = Math.max(1, await maiorQuantidadeQueCabe(
+      caberNaFolha,
+      montar,
+      restantes.length,
+      false,
+    ));
+    const ultima = take >= restantes.length;
+    let pagina = await montar(take, ultima && includeAssinatura);
+    if (!caberNaFolha(pagina.contentHeight) && ultima && includeAssinatura) {
+      pagina = await montar(take, false);
+      pdf = stampToPdf(pdf, pagina.canvas, page, true);
+      offset += take;
+      const fechamento = await render({
+        includeMeta: false,
+        includeTabela: false,
+        includeCondicoes: false,
+        includeAssinatura: true,
+      });
+      pdf = stampToPdf(pdf, fechamento.canvas, page, true);
+      break;
+    }
+    pdf = stampToPdf(pdf, pagina.canvas, page, true);
+    offset += take;
+  }
+
+  return pdf;
 };
 
 const renderHtmlFrame = async (html: string, pageWidthPx: number) => {
@@ -1182,16 +1337,30 @@ const generateArmazenagemPdfBlob = async (
     return stampToPdf(null, completo.canvas, page, true).output('blob');
   }
 
-  const tarifas = await render({
+  const obs = observacoesArmazenagem(proposta);
+  const cabemNaPrimeira = await maiorQuantidadeQueCabe(
+    caberNaFolha,
+    (quantidade, comAssinatura) => render({
+      includeMeta: true,
+      includeTabela: true,
+      includeCondicoes: quantidade > 0,
+      includeAssinatura: comAssinatura,
+      obsPagina: obs.slice(0, quantidade),
+    }),
+    obs.length,
+    false,
+  );
+  const primeira = await render({
     includeMeta: true,
     includeTabela: true,
-    includeCondicoes: false,
+    includeCondicoes: cabemNaPrimeira > 0,
     includeAssinatura: false,
+    obsPagina: obs.slice(0, cabemNaPrimeira),
   });
-  let pdf = stampToPdf(null, tarifas.canvas, page, caberNaFolha(tarifas.contentHeight));
+  let pdf = stampToPdf(null, primeira.canvas, page, true);
+  let offset = cabemNaPrimeira;
 
-  const obs = observacoesArmazenagem(proposta);
-  if (!obs.length) {
+  if (offset >= obs.length) {
     const fechamento = await render({
       includeMeta: false,
       includeTabela: false,
@@ -1201,7 +1370,6 @@ const generateArmazenagemPdfBlob = async (
     return stampToPdf(pdf, fechamento.canvas, page, true).output('blob');
   }
 
-  let offset = 0;
   while (offset < obs.length) {
     const restantes = obs.slice(offset);
     let take = restantes.length;

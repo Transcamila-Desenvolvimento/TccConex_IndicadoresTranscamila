@@ -1268,7 +1268,7 @@ const ComercialPropostas: React.FC = () => {
                     disabled={isPending}
                     title="Apaga o rascunho da sua conta"
                   >
-                    <i className="bi bi-journal-x" aria-hidden="true" />
+                    <i className="bi bi-trash3" aria-hidden="true" />
                     <span>{deleteDraft.isPending ? 'Descartando...' : 'Descartar rascunho'}</span>
                   </button>
                 ) : null}
