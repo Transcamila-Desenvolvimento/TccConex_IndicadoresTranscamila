@@ -10,10 +10,13 @@ export type EnderecoSelecionado = {
 };
 
 type Props = {
-  label: string;
+  label?: string;
   value: string;
   disabled?: boolean;
   placeholder?: string;
+  variant?: 'endereco' | 'cidade';
+  compact?: boolean;
+  inputClassName?: string;
   onChange: (value: string, coords?: { lat: number; lon: number }) => void;
 };
 
@@ -22,13 +25,16 @@ export default function ComercialEnderecoAutocomplete({
   value,
   disabled,
   placeholder,
+  variant = 'endereco',
+  compact = false,
+  inputClassName,
   onChange,
 }: Props) {
   const listId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const { data: sugestoes = [], isFetching } = useBuscarEnderecosComercial(value, open);
+  const { data: sugestoes = [], isFetching } = useBuscarEnderecosComercial(value, open, variant);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -62,51 +68,61 @@ export default function ComercialEnderecoAutocomplete({
     }
   };
 
+  const emptyLabel = variant === 'cidade' ? 'Nenhuma cidade encontrada.' : 'Nenhum endereço encontrado.';
+  const field = (
+    <div className={`tabela-frete-endereco-autocomplete${compact ? ' is-compact' : ''}`} ref={wrapperRef}>
+      <input
+        type="text"
+        className={inputClassName}
+        disabled={disabled}
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        aria-autocomplete="list"
+        aria-controls={listId}
+        aria-expanded={open}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+          setActiveIndex(-1);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={handleKeyDown}
+      />
+      {open && value.trim().length >= 3 ? (
+        <div id={listId} className="tabela-frete-endereco-autocomplete-list" role="listbox">
+          {isFetching ? (
+            <div className="tabela-frete-endereco-autocomplete-empty">Buscando...</div>
+          ) : sugestoes.length === 0 ? (
+            <div className="tabela-frete-endereco-autocomplete-empty">{emptyLabel}</div>
+          ) : (
+            sugestoes.map((item, index) => (
+              <button
+                key={`${item.label}-${index}`}
+                type="button"
+                role="option"
+                aria-selected={index === activeIndex}
+                className={`tabela-frete-endereco-autocomplete-item${index === activeIndex ? ' is-active' : ''}`}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => handleSelect(item)}
+              >
+                {item.label}
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  if (compact || !label) {
+    return field;
+  }
+
   return (
     <label className="tabela-frete-filter tabela-frete-filter-endereco">
       <span>{label}</span>
-      <div className="tabela-frete-endereco-autocomplete" ref={wrapperRef}>
-        <input
-          type="text"
-          disabled={disabled}
-          value={value}
-          placeholder={placeholder}
-          autoComplete="off"
-          aria-autocomplete="list"
-          aria-controls={listId}
-          aria-expanded={open}
-          onChange={(e) => {
-            onChange(e.target.value);
-            setOpen(true);
-            setActiveIndex(-1);
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={handleKeyDown}
-        />
-        {open && value.trim().length >= 3 ? (
-          <div id={listId} className="tabela-frete-endereco-autocomplete-list" role="listbox">
-            {isFetching ? (
-              <div className="tabela-frete-endereco-autocomplete-empty">Buscando...</div>
-            ) : sugestoes.length === 0 ? (
-              <div className="tabela-frete-endereco-autocomplete-empty">Nenhum endereço encontrado.</div>
-            ) : (
-              sugestoes.map((item, index) => (
-                <button
-                  key={`${item.label}-${index}`}
-                  type="button"
-                  role="option"
-                  aria-selected={index === activeIndex}
-                  className={`tabela-frete-endereco-autocomplete-item${index === activeIndex ? ' is-active' : ''}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => handleSelect(item)}
-                >
-                  {item.label}
-                </button>
-              ))
-            )}
-          </div>
-        ) : null}
-      </div>
+      {field}
     </label>
   );
 }

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { userCanSeeAba } from '../../constants/abas';
 import ComercialCotarFretePanel from './ComercialCotarFretePanel';
+import ComercialPropostasDashboard from './ComercialPropostasDashboard';
 
 const ComercialHome: React.FC = () => {
   const navigate = useNavigate();
@@ -15,6 +16,9 @@ const ComercialHome: React.FC = () => {
   const canPropostas = userCanSeeAba(user, 'Comercial', 'propostas-comerciais');
   const canValidacaoClientes = userCanSeeAba(user, 'Comercial', 'validacao-clientes');
   const [cotarAberto, setCotarAberto] = useState(false);
+  const [acessoAberto, setAcessoAberto] = useState(false);
+  const [ferramentasAberto, setFerramentasAberto] = useState(false);
+  const temAcessoRapido = canCadastro || canTabelaFrete || canGeneralidades || canProdutos || canPropostas || canValidacaoClientes;
 
   return (
     <section
@@ -26,11 +30,24 @@ const ComercialHome: React.FC = () => {
         <p>Bem-vindo ao ambiente Comercial da Transcamila. Este ambiente está em fase de testes.</p>
       </div>
 
-      {(canCadastro || canTabelaFrete || canGeneralidades || canProdutos || canPropostas || canValidacaoClientes) && (
+      {canPropostas ? <ComercialPropostasDashboard /> : null}
+
+      {temAcessoRapido ? (
         <>
-          <div className="quick-access-bar" style={{ marginTop: '24px' }}>
-            <h3 className="quick-access-title">Acesso rápido</h3>
-          </div>
+          <button
+            type="button"
+            className="quick-access-bar comercial-home-section-toggle"
+            aria-expanded={acessoAberto}
+            onClick={() => setAcessoAberto((atual) => !atual)}
+          >
+            <span className="comercial-home-section-toggle-main">
+              <span className={`comercial-home-chevron${acessoAberto ? ' is-open' : ''}`} aria-hidden="true">
+                <i className="bi bi-chevron-right" />
+              </span>
+              <h3 className="quick-access-title">Acesso rápido</h3>
+            </span>
+          </button>
+          {acessoAberto ? (
           <div className="quick-access-grid">
             {canCadastro && (
             <button
@@ -147,12 +164,24 @@ const ComercialHome: React.FC = () => {
             </button>
             )}
           </div>
+          ) : null}
         </>
-      )}
+      ) : null}
 
-      <div className="quick-access-bar" style={{ marginTop: '24px' }}>
-        <h3 className="quick-access-title">Ferramentas</h3>
-      </div>
+      <button
+        type="button"
+        className="quick-access-bar comercial-home-section-toggle"
+        aria-expanded={ferramentasAberto}
+        onClick={() => setFerramentasAberto((atual) => !atual)}
+      >
+        <span className="comercial-home-section-toggle-main">
+          <span className={`comercial-home-chevron${ferramentasAberto ? ' is-open' : ''}`} aria-hidden="true">
+            <i className="bi bi-chevron-right" />
+          </span>
+          <h3 className="quick-access-title">Ferramentas</h3>
+        </span>
+      </button>
+      {ferramentasAberto ? (
       <div className="quick-access-grid">
         <button
           type="button"
@@ -172,6 +201,7 @@ const ComercialHome: React.FC = () => {
           <p>Simule valores por tabela ou pelo cliente, com km, peso e ICMS.</p>
         </button>
       </div>
+      ) : null}
 
       {cotarAberto ? <ComercialCotarFretePanel onClose={() => setCotarAberto(false)} /> : null}
     </section>

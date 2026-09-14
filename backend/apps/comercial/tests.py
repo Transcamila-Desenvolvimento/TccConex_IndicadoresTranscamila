@@ -1,11 +1,12 @@
 import base64
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from rest_framework.test import APIClient
 from unittest.mock import patch
 
-from .models import ClienteComercial
+from .models import ClienteComercial, PropostaComercialDraft
 
 User = get_user_model()
 
@@ -283,6 +284,57 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(listed.json()['count'], 1)
         self.assertEqual(listed.json()['results'][0]['tipo'], 'transporte_rodoviario')
 
+    def test_dashboard_propostas(self):
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(cliente.status_code, 201, cliente.content)
+        self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'titulo': 'Frete',
+                'clienteId': cliente.json()['id'],
+                'status': 'rascunho',
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'armazenagem',
+                'titulo': 'CD',
+                'clienteId': cliente.json()['id'],
+                'status': 'enviada',
+            },
+            format='json',
+            **HEADERS,
+        )
+        response = self.api.get('/api/comercial/propostas/dashboard/', **HEADERS)
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body['total'], 2)
+        self.assertEqual(body['porStatus']['rascunho'], 1)
+        self.assertEqual(body['porStatus']['enviada'], 1)
+        self.assertEqual(body['porTipo']['transporte_rodoviario'], 1)
+        self.assertEqual(body['porTipo']['armazenagem'], 1)
+        self.assertEqual(len(body['recentes']), 2)
+        self.assertEqual(body['recentes'][0]['clienteNome'], 'EMPRESA TESTE LTDA')
+        self.assertEqual(len(body['porMes']), 6)
+        self.assertIn('criadas', body['porMes'][-1])
+        filtrado = self.api.get(
+            f'/api/comercial/propostas/dashboard/?cliente={cliente.json()["id"]}',
+            **HEADERS,
+        )
+        self.assertEqual(filtrado.status_code, 200, filtrado.content)
+        self.assertEqual(filtrado.json()['total'], 2)
+        vazio = self.api.get(
+            '/api/comercial/propostas/dashboard/?cliente=999999',
+            **HEADERS,
+        )
+        self.assertEqual(vazio.status_code, 200, vazio.content)
+        self.assertEqual(vazio.json()['total'], 0)
+
     def test_proposta_modalidades_transporte(self):
         self._auth(self.admin)
         sem_cliente = self.api.post(
@@ -444,7 +496,9 @@ class ClienteComercialTests(TestCase):
         tabela = created.json()['tabelaArmazenagem']
         self.assertEqual(tabela['unidade'], 'MT')
         self.assertEqual(tabela['itens'][0]['valor'], 'R$ 10.000,00')
+        self.assertEqual(tabela['itens'][0]['formato'], 'moeda')
         self.assertEqual(tabela['horaExtra'][0]['periodo'], 'De segunda a sábado')
+        self.assertEqual(tabela['horaExtra'][0]['formato'], 'tonelada')
 
         padrao = self.api.post(
             '/api/comercial/propostas/',
@@ -458,7 +512,34 @@ class ClienteComercialTests(TestCase):
             **HEADERS,
         )
         self.assertEqual(padrao.status_code, 201, padrao.content)
-        self.assertEqual(padrao.json()['tabelaArmazenagem']['itens'][0]['rotulo'], 'FATURAMENTO MÍNIMO (1)')
+        tabela_padrao = padrao.json()['tabelaArmazenagem']
+        self.assertEqual(tabela_padrao['itens'][0]['rotulo'], 'FATURAMENTO MÍNIMO (1)')
+        self.assertEqual(tabela_padrao['itens'][0]['valor'], '-')
+        self.assertEqual(tabela_padrao['itens'][3]['formato'], 'percentual')
+
+    def test_proposta_armazenagem_rejeita_tarifa_vazia(self):
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        response = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'armazenagem',
+                'clienteId': cliente.json()['id'],
+                'status': 'rascunho',
+                'tabelaArmazenagem': {
+                    'itens': [
+                        {'rotulo': 'FATURAMENTO MÍNIMO (1)', 'valor': ''},
+                    ],
+                    'horaExtra': [
+                        {'periodo': 'De segunda a sábado', 'valor': '-'},
+                    ],
+                },
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn('tabelaArmazenagem', response.json())
 
     def test_salvar_proposta_atualiza_catalogo_generalidades(self):
         self._auth(self.admin)
@@ -744,6 +825,98 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(atualizada.json()['status'], 'enviada')
         self.assertEqual(atualizada.json()['clienteEmail'], 'compras@empresa.com')
 
+    def _pdf_upload(self, name='proposta.pdf'):
+        return SimpleUploadedFile(name, base64.b64decode(PDF_BASE64), content_type='application/pdf')
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+    def test_enviar_email_lote_frete_e_armazenagem_mesmo_cliente(self, mock_send):
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        self._auth(self.admin)
+        cliente = self.api.post(
+            '/api/comercial/clientes/',
+            {**PAYLOAD, 'email': 'compras@empresa.com'},
+            format='json',
+            **HEADERS,
+        )
+        cliente_id = cliente.json()['id']
+        frete = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'status': 'rascunho',
+                'linhas': [{'origem': 'Ibiporã-PR', 'entrega': 'Rondonópolis', 'veiculo': 'Carreta'}],
+            },
+            format='json',
+            **HEADERS,
+        )
+        armazem = self.api.post(
+            '/api/comercial/propostas/',
+            {'tipo': 'armazenagem', 'clienteId': cliente_id, 'status': 'rascunho'},
+            format='json',
+            **HEADERS,
+        )
+        response = self.api.post(
+            '/api/comercial/propostas/enviar-email-lote/',
+            {
+                'ids': [frete.json()['id'], armazem.json()['id']],
+                'pdf': [self._pdf_upload('frete.pdf'), self._pdf_upload('armazem.pdf')],
+            },
+            format='multipart',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        mock_send.assert_called_once()
+        _user, email_obj = mock_send.call_args.args
+        pdfs = [item[0] for item in email_obj.attachments if isinstance(item, tuple) and str(item[0]).endswith('.pdf')]
+        self.assertEqual(len(pdfs), 2)
+        self.assertIn('Propostas comerciais nº', email_obj.subject)
+        self.assertEqual(self.api.get(f'/api/comercial/propostas/{frete.json()["id"]}/', **HEADERS).json()['status'], 'enviada')
+        self.assertEqual(self.api.get(f'/api/comercial/propostas/{armazem.json()["id"]}/', **HEADERS).json()['status'], 'enviada')
+
+    def test_enviar_email_lote_rejeita_clientes_diferentes(self):
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        self._auth(self.admin)
+        cliente_a = self.api.post(
+            '/api/comercial/clientes/',
+            {**PAYLOAD, 'email': 'a@empresa.com'},
+            format='json',
+            **HEADERS,
+        )
+        cliente_b = self.api.post(
+            '/api/comercial/clientes/',
+            {**PAYLOAD, 'cnpj': '00.000.000/0002-72', 'razaoSocial': 'Outra Empresa', 'email': 'b@empresa.com'},
+            format='json',
+            **HEADERS,
+        )
+        frete = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_a.json()['id'],
+                'status': 'rascunho',
+                'linhas': [{'origem': 'Ibiporã-PR', 'entrega': 'Rondonópolis', 'veiculo': 'Carreta'}],
+            },
+            format='json',
+            **HEADERS,
+        )
+        armazem = self.api.post(
+            '/api/comercial/propostas/',
+            {'tipo': 'armazenagem', 'clienteId': cliente_b.json()['id'], 'status': 'rascunho'},
+            format='json',
+            **HEADERS,
+        )
+        response = self.api.post(
+            '/api/comercial/propostas/enviar-email-lote/',
+            {'ids': [frete.json()['id'], armazem.json()['id']]},
+            format='multipart',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn('mesmo cliente', response.json()['detail'])
+
     def test_enviar_email_exige_destinatario(self):
         self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
         self.admin.save(update_fields=['google_email'])
@@ -860,6 +1033,12 @@ class ClienteComercialTests(TestCase):
         missing = self.api.get('/api/comercial/generalidades/', **HEADERS)
         self.assertEqual(missing.status_code, 400)
 
+        padrao_geral = self.api.get('/api/comercial/generalidades/?tipo=frete', **HEADERS)
+        self.assertEqual(padrao_geral.status_code, 200, padrao_geral.content)
+        self.assertEqual(padrao_geral.json()['origem'], 'padrao')
+        self.assertIsNone(padrao_geral.json()['clienteId'])
+        self.assertEqual(padrao_geral.json()['items'][0]['rotulo'], 'Capacidade dos veículos - Carreta')
+
         seeded = self.api.get(
             f'/api/comercial/generalidades/?cliente={cliente_id}&tipo=distribuicao',
             **HEADERS,
@@ -930,6 +1109,45 @@ class ClienteComercialTests(TestCase):
             **HEADERS,
         )
         self.assertEqual(outro_cliente.json()['origem'], 'padrao')
+
+        padrao_editado = self.api.put(
+            '/api/comercial/generalidades/',
+            {
+                'tipo': 'armazenagem',
+                'aplicar': 'todos',
+                'items': [{'rotulo': '(1)', 'valor': 'Padrão geral atualizado'}],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(padrao_editado.status_code, 200, padrao_editado.content)
+        self.assertEqual(padrao_editado.json()['origem'], 'padrao')
+        self.assertEqual(padrao_editado.json()['items'][0]['valor'], 'Padrão geral atualizado')
+        herdado = self.api.get(
+            f'/api/comercial/generalidades/?cliente={outro_id}&tipo=armazenagem',
+            **HEADERS,
+        )
+        self.assertEqual(herdado.json()['origem'], 'padrao')
+        self.assertEqual(herdado.json()['items'][0]['valor'], 'Padrão geral atualizado')
+
+        somente_novos = self.api.put(
+            '/api/comercial/generalidades/',
+            {
+                'tipo': 'armazenagem',
+                'aplicar': 'novos',
+                'items': [{'rotulo': '(1)', 'valor': 'Só para clientes novos'}],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(somente_novos.status_code, 200, somente_novos.content)
+        self.assertEqual(somente_novos.json()['items'][0]['valor'], 'Só para clientes novos')
+        cliente_atual = self.api.get(
+            f'/api/comercial/generalidades/?cliente={outro_id}&tipo=armazenagem',
+            **HEADERS,
+        )
+        self.assertEqual(cliente_atual.json()['origem'], 'cliente')
+        self.assertEqual(cliente_atual.json()['items'][0]['valor'], 'Padrão geral atualizado')
 
         created = self.api.post(
             '/api/comercial/tabela-frete/',
@@ -1072,6 +1290,13 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(proposta.json()['condicoes'], [
             {'rotulo': 'Pedágios', 'valor': 'Conforme Legislação', 'tipo': 'distribuicao'},
         ])
+
+        restaurado = self.api.delete(
+            f'/api/comercial/generalidades/?cliente={cliente_id}&tipo=distribuicao',
+            **HEADERS,
+        )
+        self.assertEqual(restaurado.status_code, 200, restaurado.content)
+        self.assertEqual(restaurado.json()['origem'], 'padrao')
 
         self._auth(self.leitura)
         denied = self.api.post(
@@ -1661,6 +1886,30 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(len(body['results']), 1)
         self.assertIn('CCAB Agro', body['results'][0]['label'])
 
+    def test_buscar_cidades_formata_cidade_uf(self):
+        from apps.comercial import distancia_rota as rota_mod
+
+        def fake_get_json(url, timeout=12):
+            if 'place/autocomplete' in url:
+                return {
+                    'status': 'OK',
+                    'predictions': [{
+                        'description': 'Ibiporã, PR, Brazil',
+                        'structured_formatting': {
+                            'main_text': 'Ibiporã',
+                            'secondary_text': 'PR, Brazil',
+                        },
+                    }],
+                }
+            return {'status': 'ZERO_RESULTS', 'results': []}
+
+        with patch.object(rota_mod, 'usa_google_maps', return_value=True), patch.object(rota_mod, '_get_json', side_effect=fake_get_json):
+            self._auth(self.admin)
+            resp = self.api.get('/api/comercial/enderecos/buscar/?q=Ibipora&tipo=cidade', **HEADERS)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        body = resp.json()
+        self.assertEqual(body['results'][0]['label'], 'Ibiporã-PR')
+
     def test_endereco_reverso(self):
         from apps.comercial import distancia_rota as rota_mod
 
@@ -1727,6 +1976,116 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(body['km'], 409)
         self.assertEqual(body['provedor'], 'google')
         self.assertIn('São Paulo', body['cidadeOrigem'])
+
+
+class PropostaComercialDraftTests(TestCase):
+    def setUp(self):
+        self.api = APIClient()
+        self.admin = User.objects.create_user(
+            username='comercial.draft.admin',
+            password='test123',
+            name='Admin Draft',
+            role_id='1',
+            status='ativo',
+            environments=['Comercial'],
+        )
+        self.outro = User.objects.create_user(
+            username='comercial.draft.outro',
+            password='test123',
+            name='Outro Draft',
+            role_id='1',
+            status='ativo',
+            environments=['Comercial'],
+        )
+        self.leitura = User.objects.create_user(
+            username='comercial.draft.view',
+            password='test123',
+            name='Leitura Draft',
+            role_id='2',
+            status='ativo',
+            environments=['Comercial'],
+        )
+
+    def _auth(self, user):
+        self.api.force_authenticate(user=user)
+
+    def test_put_salva_e_get_retorna_rascunho(self):
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(cliente.status_code, 201, cliente.content)
+        response = self.api.put(
+            '/api/comercial/propostas/draft/',
+            {
+                'abaOperacao': 'transferencia',
+                'form': {
+                    'tipo': 'transporte_rodoviario',
+                    'clienteId': cliente.json()['id'],
+                    'clienteNome': 'Empresa Teste Ltda',
+                    'incluiTransferencia': True,
+                    'linhas': [{'origem': 'Ibiporã-PR', 'entrega': 'Curitiba-PR', 'veiculo': 'Carreta'}],
+                },
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()['hasDraft'])
+        self.assertEqual(response.json()['form']['linhas'][0]['origem'], 'Ibiporã-PR')
+        got = self.api.get('/api/comercial/propostas/draft/', **HEADERS)
+        self.assertEqual(got.status_code, 200)
+        self.assertTrue(got.json()['hasDraft'])
+        self.assertEqual(got.json()['form']['clienteId'], cliente.json()['id'])
+
+    def test_draft_isolado_por_usuario(self):
+        self._auth(self.admin)
+        self.api.put(
+            '/api/comercial/propostas/draft/',
+            {'form': {'clienteId': '99', 'titulo': 'Meu rascunho'}},
+            format='json',
+            **HEADERS,
+        )
+        self._auth(self.outro)
+        response = self.api.get('/api/comercial/propostas/draft/', **HEADERS)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()['hasDraft'])
+
+    def test_delete_descarta_rascunho(self):
+        self._auth(self.admin)
+        self.api.put(
+            '/api/comercial/propostas/draft/',
+            {'form': {'titulo': 'Rascunho'}},
+            format='json',
+            **HEADERS,
+        )
+        deleted = self.api.delete('/api/comercial/propostas/draft/', **HEADERS)
+        self.assertEqual(deleted.status_code, 204)
+        self.assertFalse(PropostaComercialDraft.objects.filter(usuario=self.admin).exists())
+
+    def test_put_vazio_remove_rascunho(self):
+        self._auth(self.admin)
+        PropostaComercialDraft.objects.create(
+            usuario=self.admin,
+            payload={'form': {'clienteId': '1', 'titulo': 'X'}},
+        )
+        response = self.api.put(
+            '/api/comercial/propostas/draft/',
+            {'form': {'tipo': 'transporte_rodoviario', 'clienteId': '', 'titulo': ''}},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()['hasDraft'])
+        self.assertFalse(PropostaComercialDraft.objects.filter(usuario=self.admin).exists())
+
+    def test_operador_sem_funcao_nao_pode_salvar(self):
+        self._auth(self.leitura)
+        response = self.api.put(
+            '/api/comercial/propostas/draft/',
+            {'form': {'titulo': 'Bloqueado'}},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 class HomologacaoProdutosComercialTests(TestCase):

@@ -1,10 +1,11 @@
 import re
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.db import transaction
+from django.utils import timezone
 from django.db.models import Case, CharField, Count, DateField, DurationField, ExpressionWrapper, F, IntegerField, Q, Value, When, Window
-from django.db.models.functions import Cast, Coalesce, Concat, Lower, NullIf, Replace, RowNumber, TruncDate
+from django.db.models.functions import Cast, Coalesce, Concat, Lower, NullIf, Replace, RowNumber, TruncDate, TruncMonth
 from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -23,31 +24,45 @@ from .models import (
     MatrizIcmsUf,
     ProdutoComercial,
     PropostaComercial,
+    PropostaComercialDraft,
     SITUACAO_CLIENTE,
     SITUACAO_POTENCIAL,
     STATUS_PROPOSTA_APROVADA,
+    STATUS_PROPOSTA_ENVIADA,
+    STATUS_PROPOSTA_RASCUNHO,
     STATUS_PROPOSTA_RECUSADA,
     STATUS_TABELA_ARQUIVADA,
     STATUS_TABELA_PUBLICADA,
     TIPOS_GENERALIDADE,
     TIPO_PROPOSTA_CHOICES,
+    TIPO_PROPOSTA_ARMAZENAGEM,
     TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO,
     TIPO_TABELA_DISTRIBUICAO,
     TabelaFrete,
     TabelaFreteLinha,
     ensure_generalidades,
     ensure_matriz_icms,
+    aplicar_padrao_generalidades,
     gravar_catalogo_generalidades,
     normalizar_homologacao,
     sugestoes_produtos_atividade,
 )
 from .simulacao_icms import anexar_icms_simulacao, montar_icms_simulacao
 from .tabela_frete_export import build_tabela_frete_xlsx
-from .distancia_rota import RotaDistanciaError, buscar_enderecos, calcular_distancia_enderecos, calcular_distancia_km, reverso_geocodificar
+from .distancia_rota import RotaDistanciaError, buscar_cidades, buscar_enderecos, calcular_distancia_enderecos, calcular_distancia_km, reverso_geocodificar
 from .homologacao import q_produto_com_impeditivo
 from .icms_uf import REGIOES_BR, UFS_BRASIL, aliquotas_por_uf_padrao, normalizar_aliquotas
 from .pagination import ClienteComercialPagination
-from .proposta_email_service import read_proposta_pdf, request_email_list, send_proposta_comercial_email
+from .proposta_draft import draft_payload, has_meaningful_draft, sanitize_draft_payload
+from .proposta_email_service import (
+    read_proposta_pdf,
+    read_proposta_pdfs,
+    request_email_list,
+    request_proposta_ids,
+    send_proposta_comercial_email,
+    send_propostas_comerciais_email,
+    validar_envio_conjunto,
+)
 from .tabela_distribuicao import gerar_faixas_distribuicao, merge_config, preset_config_albaugh, preset_config_ccab, simular_cotacao_distribuicao
 from .serializers import (
     ClienteComercialSerializer,
@@ -83,6 +98,55 @@ def _annotate_proposta_vencimento(qs):
     base = Coalesce('data_proposta', TruncDate('data_criacao'))
     offset = ExpressionWrapper(dias * Value(timedelta(days=1)), output_field=DurationField())
     return qs.annotate(_vencimento=ExpressionWrapper(base + offset, output_field=DateField()))
+
+
+_MESES_PT = ('Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez')
+
+
+def _avancar_mes(inicio, quantidade=1):
+    mes = inicio.month - 1 + quantidade
+    ano = inicio.year + mes // 12
+    return date(ano, mes % 12 + 1, 1)
+
+
+def _serie_mensal_propostas(qs, meses=6):
+    hoje = timezone.localdate().replace(day=1)
+    inicio = _avancar_mes(hoje, 1 - meses)
+    eixo = []
+    cursor = inicio
+    for _ in range(meses):
+        eixo.append(cursor)
+        cursor = _avancar_mes(cursor, 1)
+    agrupado = (
+        qs.annotate(ref=Coalesce('data_proposta', TruncDate('data_criacao')))
+        .filter(ref__gte=inicio)
+        .annotate(mes=TruncMonth('ref'))
+        .values('mes', 'status')
+        .annotate(total=Count('id'))
+    )
+    por_mes = {}
+    for row in agrupado:
+        chave = row['mes'].date() if hasattr(row['mes'], 'date') else row['mes']
+        if chave is None:
+            continue
+        chave = chave.replace(day=1)
+        bucket = por_mes.setdefault(chave, {'criadas': 0, 'aceitas': 0, 'recusadas': 0})
+        total = row['total']
+        bucket['criadas'] += total
+        if row['status'] == STATUS_PROPOSTA_APROVADA:
+            bucket['aceitas'] += total
+        elif row['status'] == STATUS_PROPOSTA_RECUSADA:
+            bucket['recusadas'] += total
+    return [
+        {
+            'mes': item.isoformat(),
+            'label': _MESES_PT[item.month - 1],
+            'criadas': por_mes.get(item, {}).get('criadas', 0),
+            'aceitas': por_mes.get(item, {}).get('aceitas', 0),
+            'recusadas': por_mes.get(item, {}).get('recusadas', 0),
+        }
+        for item in eixo
+    ]
 
 
 _GERENCIAR_CLIENTES_DETAIL = (
@@ -577,6 +641,81 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         super().perform_destroy(instance)
         record_audit(self.request.user, 'comercial.proposta.excluida', f'Proposta "{titulo}" excluída.')
 
+    @action(detail=False, methods=['get'], url_path='dashboard')
+    def dashboard(self, request):
+        qs = super().get_queryset()
+        cliente = (request.query_params.get('cliente') or '').strip()
+        if cliente:
+            qs = qs.filter(cliente_id=cliente)
+        por_status = {
+            row['status']: row['total']
+            for row in qs.values('status').annotate(total=Count('id'))
+        }
+        por_tipo = {
+            row['tipo']: row['total']
+            for row in qs.values('tipo').annotate(total=Count('id'))
+        }
+        recentes = qs.order_by('-data_criacao', '-pk')[:6]
+        return Response({
+            'total': qs.count(),
+            'porStatus': {
+                'rascunho': por_status.get(STATUS_PROPOSTA_RASCUNHO, 0),
+                'enviada': por_status.get(STATUS_PROPOSTA_ENVIADA, 0),
+                'aprovada': por_status.get(STATUS_PROPOSTA_APROVADA, 0),
+                'recusada': por_status.get(STATUS_PROPOSTA_RECUSADA, 0),
+            },
+            'porTipo': {
+                'transporte_rodoviario': por_tipo.get(TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO, 0),
+                'armazenagem': por_tipo.get(TIPO_PROPOSTA_ARMAZENAGEM, 0),
+            },
+            'porMes': _serie_mensal_propostas(qs),
+            'recentes': [
+                {
+                    'id': str(item.pk),
+                    'numeroIdentificacao': item.numero_identificacao,
+                    'clienteNome': item.cliente_nome or (item.cliente.razao_social if item.cliente_id else '') or '',
+                    'tipo': item.tipo,
+                    'status': item.status,
+                    'dataProposta': item.data_proposta.isoformat() if item.data_proposta else None,
+                }
+                for item in recentes
+            ],
+        })
+
+    @action(detail=False, methods=['get', 'put', 'delete'], url_path='draft')
+    def draft(self, request):
+        draft = PropostaComercialDraft.objects.filter(usuario=request.user).first()
+        if request.method == 'GET':
+            return Response(draft_payload(draft))
+        denied = _funcao_required_response(request, 'gerenciar-propostas', _GERENCIAR_PROPOSTAS_DETAIL)
+        if denied:
+            return denied
+        if request.method == 'DELETE':
+            if draft:
+                draft.delete()
+                record_audit(
+                    request.user,
+                    'comercial.proposta.draft_descartado',
+                    'Rascunho de nova proposta descartado.',
+                )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        payload = sanitize_draft_payload(request.data)
+        if not has_meaningful_draft(payload):
+            if draft:
+                draft.delete()
+                record_audit(
+                    request.user,
+                    'comercial.proposta.draft_descartado',
+                    'Rascunho de nova proposta limpo.',
+                )
+            return Response(draft_payload(None))
+        draft, _created = PropostaComercialDraft.objects.update_or_create(
+            usuario=request.user,
+            defaults={'version': 1, 'payload': payload},
+        )
+        record_audit(request.user, 'comercial.proposta.draft_salvo', 'Rascunho de nova proposta salvo.')
+        return Response(draft_payload(draft))
+
     @action(detail=True, methods=['post'], url_path='enviar-email')
     def enviar_email(self, request, pk=None):
         proposta = self.get_object()
@@ -587,6 +726,50 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 to_emails=request_email_list(request.data, 'to', 'email'),
                 cc_emails=request_email_list(request.data, 'cc', 'emailCopia'),
                 pdf_bytes=read_proposta_pdf(request),
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response(
+                {'detail': f'Falha ao enviar e-mail: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        record_audit(
+            request.user,
+            'comercial.proposta.email_enviado',
+            f'Proposta {resultado["numero"]} enviada para {", ".join(resultado["to"])}.',
+        )
+        return Response({
+            'success': True,
+            'message': f'Proposta {resultado["numero"]} enviada para {", ".join(resultado["to"])}.',
+            'to': resultado['to'],
+            'cc': resultado['cc'],
+        })
+
+    @action(detail=False, methods=['post'], url_path='enviar-email-lote')
+    def enviar_email_lote(self, request):
+        ids = request_proposta_ids(request.data)
+        if not ids:
+            return Response({'detail': 'Selecione ao menos uma proposta para enviar.'}, status=status.HTTP_400_BAD_REQUEST)
+        queryset = self.filter_queryset(self.get_queryset())
+        encontradas = {str(item.pk): item for item in queryset.filter(pk__in=ids).select_related('cliente')}
+        propostas = []
+        for item_id in ids:
+            proposta = encontradas.get(item_id)
+            if not proposta:
+                return Response({'detail': 'Uma das propostas selecionadas não foi encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+            propostas.append(proposta)
+        try:
+            validar_envio_conjunto(propostas)
+            pdfs = read_proposta_pdfs(request)
+            if len(pdfs) != len(propostas):
+                raise ValueError('Não foi possível receber o PDF da proposta gerado na tela. Tente novamente.')
+            resultado = send_propostas_comerciais_email(
+                request.user,
+                list(zip(propostas, pdfs)),
+                to_emails=request_email_list(request.data, 'to', 'email'),
+                cc_emails=request_email_list(request.data, 'cc', 'emailCopia'),
             )
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -877,22 +1060,21 @@ class GeneralidadesCatalogoView(ModuleScopedViewMixin, APIView):
     permission_requires_filial = False
 
     def _resolver_escopo(self, request, require_items=False):
-        data = request.data if request.method != 'GET' else {}
-        cliente_id = request.query_params.get('cliente') or data.get('clienteId') or data.get('cliente')
+        data = request.data if request.method not in {'GET', 'DELETE'} else {}
+        cliente_raw = request.query_params.get('cliente') or data.get('clienteId') or data.get('cliente')
         tipo = (request.query_params.get('tipo') or data.get('tipo') or '').strip()
-        if not cliente_id:
-            return None, Response(
-                {'detail': 'Informe o cliente das generalidades.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         if tipo not in TIPOS_GENERALIDADE:
             return None, Response(
                 {'detail': 'Informe o tipo de serviço (frete, distribuicao ou armazenagem).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        cliente = ClienteComercial.objects.filter(pk=cliente_id).first()
-        if not cliente:
-            return None, Response({'detail': 'Cliente não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        cliente_id = str(cliente_raw or '').strip()
+        if cliente_id in {'', 'padrao', 'null', 'undefined'}:
+            cliente = None
+        else:
+            cliente = ClienteComercial.objects.filter(pk=cliente_id).first()
+            if not cliente:
+                return None, Response({'detail': 'Cliente não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         if require_items:
             raw = data.get('items', data if isinstance(data, list) else None)
             if not isinstance(raw, list):
@@ -900,12 +1082,28 @@ class GeneralidadesCatalogoView(ModuleScopedViewMixin, APIView):
             return {'cliente': cliente, 'tipo': tipo, 'items': raw}, None
         return {'cliente': cliente, 'tipo': tipo}, None
 
+    def _clientes_com_catalogo(self, tipo):
+        rows = (
+            GeneralidadeComercial.objects.filter(cliente__isnull=False, tipo_servico=tipo)
+            .values('cliente_id', 'cliente__razao_social', 'cliente__nome_fantasia')
+            .distinct()
+            .order_by('cliente__razao_social')
+        )
+        return [
+            {
+                'id': str(row['cliente_id']),
+                'nome': (row['cliente__nome_fantasia'] or row['cliente__razao_social'] or '').strip(),
+            }
+            for row in rows
+        ]
+
     def _payload(self, cliente, tipo, items, origem):
         return {
-            'clienteId': str(cliente.pk),
+            'clienteId': str(cliente.pk) if cliente else None,
             'tipo': tipo,
             'origem': origem,
             'items': GeneralidadeComercialSerializer(items, many=True).data,
+            'clientesComCatalogo': self._clientes_com_catalogo(tipo),
         }
 
     def get(self, request):
@@ -915,6 +1113,9 @@ class GeneralidadesCatalogoView(ModuleScopedViewMixin, APIView):
         ensure_generalidades()
         cliente = escopo['cliente']
         tipo = escopo['tipo']
+        if cliente is None:
+            qs = GeneralidadeComercial.objects.filter(cliente__isnull=True, tipo_servico=tipo).order_by('ordem', 'pk')
+            return Response(self._payload(None, tipo, qs, 'padrao'))
         qs = GeneralidadeComercial.objects.filter(cliente=cliente, tipo_servico=tipo).order_by('ordem', 'pk')
         origem = 'cliente'
         if not qs.exists():
@@ -933,6 +1134,16 @@ class GeneralidadesCatalogoView(ModuleScopedViewMixin, APIView):
         serializer.is_valid(raise_exception=True)
         cliente = escopo['cliente']
         tipo = escopo['tipo']
+        if cliente is None:
+            aplicar = request.data.get('aplicar') or request.data.get('aplicarClientes') or 'novos'
+            modo = aplicar_padrao_generalidades(tipo, serializer.validated_data, aplicar)
+            items = GeneralidadeComercial.objects.filter(cliente__isnull=True, tipo_servico=tipo).order_by('ordem', 'pk')
+            record_audit(
+                request.user,
+                'comercial.generalidades.atualizadas',
+                f'Generalidades padrão ({tipo}) atualizadas ({modo}).',
+            )
+            return Response(self._payload(None, tipo, items, 'padrao'))
         gravar_catalogo_generalidades(cliente, tipo, serializer.validated_data)
         items = GeneralidadeComercial.objects.filter(cliente=cliente, tipo_servico=tipo).order_by('ordem', 'pk')
         record_audit(
@@ -941,6 +1152,30 @@ class GeneralidadesCatalogoView(ModuleScopedViewMixin, APIView):
             f'Generalidades de {cliente.razao_social} ({tipo}) atualizadas.',
         )
         return Response(self._payload(cliente, tipo, items, 'cliente'))
+
+    def delete(self, request):
+        denied = _funcao_required_response(request, 'gerenciar-generalidades', _GERENCIAR_GENERALIDADES_DETAIL)
+        if denied:
+            return denied
+        escopo, error = self._resolver_escopo(request)
+        if error:
+            return error
+        cliente = escopo['cliente']
+        tipo = escopo['tipo']
+        if cliente is None:
+            return Response(
+                {'detail': 'O catálogo padrão não pode ser excluído. Edite os itens ou restaure o conteúdo de fábrica.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        GeneralidadeComercial.objects.filter(cliente=cliente, tipo_servico=tipo).delete()
+        record_audit(
+            request.user,
+            'comercial.generalidades.restauradas',
+            f'Generalidades de {cliente.razao_social} ({tipo}) voltaram ao padrão.',
+        )
+        ensure_generalidades()
+        items = GeneralidadeComercial.objects.filter(cliente__isnull=True, tipo_servico=tipo).order_by('ordem', 'pk')
+        return Response(self._payload(cliente, tipo, items, 'padrao'))
 
 
 class MatrizIcmsUfView(ModuleScopedViewMixin, APIView):
@@ -1025,10 +1260,11 @@ class EnderecoBuscaView(ModuleScopedViewMixin, APIView):
 
     def get(self, request):
         texto = (request.query_params.get('q') or '').strip()
+        tipo = (request.query_params.get('tipo') or '').strip().lower()
         if len(texto) < 3:
             return Response({'results': []})
         try:
-            resultados = buscar_enderecos(texto)
+            resultados = buscar_cidades(texto) if tipo == 'cidade' else buscar_enderecos(texto)
         except RotaDistanciaError as exc:
             return Response({'detail': str(exc)}, status=exc.status)
         return Response({'results': resultados})

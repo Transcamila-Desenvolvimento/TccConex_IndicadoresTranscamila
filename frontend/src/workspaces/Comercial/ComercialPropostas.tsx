@@ -9,12 +9,16 @@ import {
   useComercialGeneralidades,
   useCreatePropostaComercial,
   useDeletePropostaComercial,
+  useDeletePropostaComercialDraft,
+  usePropostaComercialDraft,
   usePropostasComerciais,
+  useSavePropostaComercialDraft,
   useTabelaFreteDistribuicaoCliente,
   useUpdatePropostaComercial,
 } from '../../hooks/useComercialClientes';
 import type {
   PropostaComercial,
+  PropostaComercialFormDraft,
   PropostaComercialOrdering,
   PropostaComercialPayload,
   PropostaComercialStatus,
@@ -28,9 +32,12 @@ import {
   PROPOSTA_COMERCIAL_STATUS_LABEL,
   PROPOSTA_COMERCIAL_TIPO_LABEL,
   marcarCondicoesTipo,
+  propostasEnviaveisPorEmail,
   separarCondicoesProposta,
+  tabelaArmazenagemProntaParaSalvar,
 } from '../../types/domain';
 import { printPropostaComercial } from './printPropostaComercial';
+import ComercialEnderecoAutocomplete from './ComercialEnderecoAutocomplete';
 import ComercialPropostaEmailModal from './ComercialPropostaEmailModal';
 import PropostaGeneralidadesRevisao from './PropostaGeneralidadesRevisao';
 import PropostaTabelaArmazenagem from './PropostaTabelaArmazenagem';
@@ -132,6 +139,7 @@ type PropostaForm = {
 };
 
 const MENSAGEM_DESTINOS_OBRIGATORIOS = 'Preencha a tabela de destinos para salvar a proposta com Transferência.';
+const MENSAGEM_TARIFAS_ARMAZENAGEM = 'Informe o valor de cada tarifa de armazenagem ou coloque um traço (-).';
 
 const linhaDestinoVazia = (linha: LinhaForm) =>
   ![linha.origem, linha.entrega, linha.veiculo, linha.tarifaFrete, linha.pedagio, linha.adValorem, linha.prazoDias]
@@ -162,8 +170,8 @@ const emptyLinha = (): LinhaForm => ({
   tarifaFrete: '',
   pedagio: '',
   adValorem: '',
-  gris: '0,07%',
-  icms: 'Conforme legislação',
+  gris: '',
+  icms: '',
   prazoDias: '',
 });
 
@@ -194,6 +202,67 @@ const emptyForm = (condicoes?: PropostaCondicaoComercial[]): PropostaForm => ({
   tabelaArmazenagem: cloneTabelaArmazenagem(),
   linhas: [emptyLinha()],
 });
+
+const formatDraftTime = (iso: string | null) => {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const formFromDraft = (
+  draftForm: PropostaComercialFormDraft['form'],
+  fallback: PropostaForm,
+): PropostaForm => {
+  const linhasFonte = draftForm.linhas?.length ? draftForm.linhas : fallback.linhas;
+  const linhas = linhasFonte.map((linha) => ({
+    origem: linha.origem ?? '',
+    entrega: linha.entrega ?? '',
+    veiculo: linha.veiculo ?? '',
+    devolucaoContainer: linha.devolucaoContainer ?? '',
+    observacoes: linha.observacoes ?? '',
+    peso: linha.peso ?? '',
+    tarifaFrete: linha.tarifaFrete ?? '',
+    pedagio: linha.pedagio ?? '',
+    adValorem: linha.adValorem ?? '',
+    gris: linha.gris ?? '',
+    icms: linha.icms ?? '',
+    prazoDias: linha.prazoDias ?? '',
+  }));
+  return {
+    ...fallback,
+    tipo: draftForm.tipo === 'armazenagem' ? 'armazenagem' : 'transporte_rodoviario',
+    status: draftForm.status || fallback.status,
+    clienteId: draftForm.clienteId || '',
+    clienteNome: draftForm.clienteNome || '',
+    titulo: draftForm.titulo || '',
+    subtitulo: draftForm.subtitulo || '',
+    revisao: draftForm.revisao || fallback.revisao,
+    dataProposta: draftForm.dataProposta || fallback.dataProposta,
+    propostaReferente: draftForm.propostaReferente || '',
+    responsavel: draftForm.responsavel || fallback.responsavel,
+    reajuste: draftForm.reajuste || fallback.reajuste,
+    att: draftForm.att || '',
+    validade: draftForm.validade || fallback.validade,
+    vigencia: draftForm.vigencia || fallback.vigencia,
+    faturamento: draftForm.faturamento || fallback.faturamento,
+    localEmissao: draftForm.localEmissao || fallback.localEmissao,
+    valorEstimado: draftForm.valorEstimado || '',
+    observacoes: draftForm.observacoes || '',
+    incluiTransferencia: Boolean(draftForm.incluiTransferencia),
+    incluiDistribuicao: Boolean(draftForm.incluiDistribuicao),
+    condicoes: (draftForm.condicoes?.length ? draftForm.condicoes : fallback.condicoes).map((item) => ({ ...item })),
+    condicoesTransferencia: (draftForm.condicoesTransferencia ?? []).map((item) => ({ ...item })),
+    condicoesDistribuicao: (draftForm.condicoesDistribuicao ?? []).map((item) => ({ ...item })),
+    tabelaArmazenagem: cloneTabelaArmazenagem(draftForm.tabelaArmazenagem),
+    linhas: linhas.length ? linhas : [emptyLinha()],
+  };
+};
 
 const condicoesDoFormulario = (form: PropostaForm): PropostaCondicaoComercial[] => {
   if (form.tipo === 'armazenagem') {
@@ -346,8 +415,13 @@ const ComercialPropostas: React.FC = () => {
   const [form, setForm] = useState<PropostaForm>(emptyForm);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
-  const [emailProposta, setEmailProposta] = useState<PropostaComercial | null>(null);
+  const [emailPropostas, setEmailPropostas] = useState<PropostaComercial[]>([]);
   const [abaOperacao, setAbaOperacao] = useState<'transferencia' | 'distribuicao'>('transferencia');
+  const [draftHydrated, setDraftHydrated] = useState(true);
+  const [draftUpdatedAt, setDraftUpdatedAt] = useState<string | null>(null);
+  const [restoredDraft, setRestoredDraft] = useState(false);
+  const [draftUnavailable, setDraftUnavailable] = useState(false);
+  const skipNextDraftSave = useRef(true);
 
   const propostasQuery = usePropostasComerciais({
     page,
@@ -380,6 +454,10 @@ const ComercialPropostas: React.FC = () => {
   const createProposta = useCreatePropostaComercial();
   const updateProposta = useUpdatePropostaComercial();
   const deleteProposta = useDeletePropostaComercial();
+  const draftQuery = usePropostaComercialDraft(canManage);
+  const saveDraft = useSavePropostaComercialDraft();
+  const deleteDraft = useDeletePropostaComercialDraft();
+  const hasFormDraft = Boolean(draftQuery.data?.hasDraft);
 
   const propostas = propostasQuery.data?.results ?? [];
   const totalCount = propostasQuery.data?.count ?? 0;
@@ -397,6 +475,9 @@ const ComercialPropostas: React.FC = () => {
   const catalogoTransferenciaRef = useRef('');
   const catalogoDistribuicaoRef = useRef('');
   const catalogoArmazenagemRef = useRef('');
+  const nomeUsuarioLogado = (user?.name || user?.username || '').trim();
+  const responsavelDoCliente = (clienteId: string) =>
+    (clientes.find((item) => item.id === clienteId)?.responsavel || '').trim();
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
@@ -466,6 +547,60 @@ const ComercialPropostas: React.FC = () => {
     isModalOpen,
   ]);
 
+  useEffect(() => {
+    if (!isModalOpen || editingId || draftHydrated || draftQuery.isLoading) return;
+    if (draftQuery.isError) {
+      setDraftUnavailable(true);
+      setDraftHydrated(true);
+      skipNextDraftSave.current = true;
+      return;
+    }
+    const draft = draftQuery.data;
+    if (draft?.hasDraft) {
+      const restaurado = formFromDraft(draft.form, { ...emptyForm(), responsavel: nomeUsuarioLogado });
+      setForm(restaurado);
+      setAbaOperacao(draft.abaOperacao === 'distribuicao' ? 'distribuicao' : 'transferencia');
+      setDraftUpdatedAt(draft.updatedAt);
+      setRestoredDraft(true);
+      setDraftUnavailable(false);
+      if (restaurado.clienteId) {
+        if (restaurado.condicoes.length) {
+          catalogoArmazenagemRef.current = `${restaurado.clienteId}:armazenagem`;
+        }
+        if (restaurado.condicoesTransferencia.length) {
+          catalogoTransferenciaRef.current = `novo:${restaurado.clienteId}:frete`;
+        }
+        if (restaurado.condicoesDistribuicao.length) {
+          catalogoDistribuicaoRef.current = `novo:${restaurado.clienteId}:distribuicao`;
+        }
+      }
+    }
+    setDraftHydrated(true);
+    skipNextDraftSave.current = true;
+  }, [draftHydrated, draftQuery.data, draftQuery.isError, draftQuery.isLoading, editingId, isModalOpen, nomeUsuarioLogado]);
+
+  useEffect(() => {
+    if (!isModalOpen || editingId || !draftHydrated || draftUnavailable || !canManage) return;
+    if (skipNextDraftSave.current) {
+      skipNextDraftSave.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      saveDraft.mutate(
+        { abaOperacao, form },
+        {
+          onSuccess: (result) => {
+            setDraftUpdatedAt(result.hasDraft ? result.updatedAt : null);
+            if (!result.hasDraft) setRestoredDraft(false);
+            setDraftUnavailable(false);
+          },
+          onError: () => setDraftUnavailable(true),
+        },
+      );
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [abaOperacao, canManage, draftHydrated, draftUnavailable, editingId, form, isModalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const goToPage = (nextPage: number) => {
     setPage(nextPage);
     setSelectedIds([]);
@@ -478,14 +613,15 @@ const ComercialPropostas: React.FC = () => {
 
   const subtotalGeral = form.linhas.reduce((acc, linha) => acc + (linhaTotal(linha) ?? 0), 0);
 
-  const nomeUsuarioLogado = (user?.name || user?.username || '').trim();
-  const responsavelDoCliente = (clienteId: string) =>
-    (clientes.find((item) => item.id === clienteId)?.responsavel || '').trim();
-
   const openNew = () => {
     setEditingId(null);
     setAbaOperacao('transferencia');
     setForm({ ...emptyForm(), responsavel: nomeUsuarioLogado });
+    setDraftHydrated(false);
+    setRestoredDraft(false);
+    setDraftUpdatedAt(null);
+    setDraftUnavailable(false);
+    skipNextDraftSave.current = true;
     setIsModalOpen(true);
   };
 
@@ -538,12 +674,17 @@ const ComercialPropostas: React.FC = () => {
             pedagio: linha.pedagio ?? '',
             adValorem: linha.adValorem,
             gris: linha.gris,
-            icms: linha.icms || 'Conforme legislação',
+            icms: linha.icms,
             prazoDias: linha.prazoDias,
           }))
         : [emptyLinha()],
     });
     setAbaOperacao(proposta.incluiTransferencia || !proposta.incluiDistribuicao ? 'transferencia' : 'distribuicao');
+    setDraftHydrated(true);
+    setRestoredDraft(false);
+    setDraftUpdatedAt(null);
+    setDraftUnavailable(false);
+    skipNextDraftSave.current = true;
     setIsModalOpen(true);
   };
 
@@ -551,6 +692,10 @@ const ComercialPropostas: React.FC = () => {
     setIsModalOpen(false);
     setEditingId(null);
     setForm(emptyForm());
+    setDraftHydrated(true);
+    setRestoredDraft(false);
+    setDraftUpdatedAt(null);
+    setDraftUnavailable(false);
   };
 
   const updateLinha = (index: number, patch: Partial<LinhaForm>) => {
@@ -599,6 +744,10 @@ const ComercialPropostas: React.FC = () => {
       alert(MENSAGEM_DESTINOS_OBRIGATORIOS);
       return;
     }
+    if (form.tipo === 'armazenagem' && !tabelaArmazenagemProntaParaSalvar(form.tabelaArmazenagem)) {
+      alert(MENSAGEM_TARIFAS_ARMAZENAGEM);
+      return;
+    }
     const titulo = form.titulo.trim()
       || `${PROPOSTA_COMERCIAL_TIPO_LABEL[form.tipo]}${form.clienteNome.trim() ? ` — ${form.clienteNome.trim()}` : ''}`;
     const payload: PropostaComercialPayload = {
@@ -639,13 +788,20 @@ const ComercialPropostas: React.FC = () => {
             pedagio: moneyOrEmpty(linha.pedagio),
             adValorem: linha.adValorem.trim(),
             gris: linha.gris.trim(),
-            icms: linha.icms.trim() || 'Conforme legislação',
+            icms: linha.icms.trim(),
             prazoDias: linha.prazoDias.trim(),
           }))
         : [],
     };
     const callbacks = {
-      onSuccess: () => closeModal(),
+      onSuccess: () => {
+        if (editingId) {
+          closeModal();
+          return;
+        }
+        skipNextDraftSave.current = true;
+        deleteDraft.mutate(undefined, { onSettled: () => closeModal() });
+      },
       onError: (err: unknown) => alert(getComercialErrorMessage(err)),
     };
     editingId
@@ -732,10 +888,22 @@ const ComercialPropostas: React.FC = () => {
   };
 
   const handleEmailSelected = () => {
-    const proposta = selectedPropostas[0];
-    if (!proposta) return;
+    const envio = propostasEnviaveisPorEmail(selectedPropostas);
     setIsActionsMenuOpen(false);
-    setEmailProposta(proposta);
+    if (!envio.ok) {
+      alert(envio.motivo);
+      return;
+    }
+    setEmailPropostas(selectedPropostas);
+  };
+
+  const discardDraft = () => {
+    if (!window.confirm('Descartar o rascunho desta proposta? Os dados salvos na sua conta serão apagados.')) return;
+    skipNextDraftSave.current = true;
+    deleteDraft.mutate(undefined, {
+      onSuccess: () => closeModal(),
+      onError: (err) => alert(getComercialErrorMessage(err) || 'Não foi possível descartar o rascunho.'),
+    });
   };
 
   const handleDeleteSelected = async () => {
@@ -754,9 +922,10 @@ const ComercialPropostas: React.FC = () => {
     }
   };
 
-  const isPending = createProposta.isPending || updateProposta.isPending;
+  const isPending = createProposta.isPending || updateProposta.isPending || deleteDraft.isPending;
   const destinosOk = destinosProntosParaSalvar(form);
-  const canSave = canManage && Boolean(form.clienteId) && destinosOk && !isPending;
+  const armazenagemOk = form.tipo !== 'armazenagem' || tabelaArmazenagemProntaParaSalvar(form.tabelaArmazenagem);
+  const canSave = canManage && Boolean(form.clienteId) && destinosOk && armazenagemOk && !isPending;
 
   return (
     <div className="fat-list-compact" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '0 4px 4px' }}>
@@ -770,7 +939,7 @@ const ComercialPropostas: React.FC = () => {
             <button
               type="button"
               className="reports-action-btn secondary"
-              disabled={selectedIds.length === 0 || (selectedIds.length > 1 && !canManage)}
+              disabled={selectedIds.length === 0}
               onClick={() => setIsActionsMenuOpen((open) => !open)}
             >
               <span>Ações{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}</span>
@@ -779,24 +948,28 @@ const ComercialPropostas: React.FC = () => {
               </svg>
             </button>
             <div className={`reports-dropdown-menu ${isActionsMenuOpen ? 'show' : ''}`}>
-              {selectedPropostas.length === 1 && (
+              {selectedPropostas.length <= 2 && (
                 <>
+                  {selectedPropostas.length === 1 && (
+                    <>
                   <span className="reports-dropdown-item" onClick={handlePrintSelected}>
                     <span className="reports-dropdown-item-left">
                       <i className="bi bi-printer" />
                       Imprimir
                     </span>
                   </span>
-                  <span className="reports-dropdown-item" onClick={handleEmailSelected}>
-                    <span className="reports-dropdown-item-left">
-                      <i className="bi bi-envelope" />
-                      Enviar e-mail
-                    </span>
-                  </span>
                   <span className="reports-dropdown-item" onClick={handleEditSelected}>
                     <span className="reports-dropdown-item-left">
                       <i className="bi bi-pencil" />
                       Editar
+                    </span>
+                  </span>
+                    </>
+                  )}
+                  <span className="reports-dropdown-item" onClick={handleEmailSelected}>
+                    <span className="reports-dropdown-item-left">
+                      <i className="bi bi-envelope" />
+                      Enviar e-mail
                     </span>
                   </span>
                 </>
@@ -812,17 +985,30 @@ const ComercialPropostas: React.FC = () => {
             </div>
           </div>
           {canManage && (
-            <button
-              type="button"
-              className="reports-action-btn primary"
-              style={{ backgroundColor: '#118CC4', borderColor: '#118CC4', display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
-              onClick={openNew}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              <span>Nova proposta</span>
-            </button>
+            hasFormDraft ? (
+              <button
+                type="button"
+                className="reports-action-btn primary"
+                style={{ backgroundColor: '#118CC4', borderColor: '#118CC4', display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+                onClick={openNew}
+                title="Continuar rascunho da proposta"
+              >
+                <i className="bi bi-journal-text" aria-hidden="true" />
+                <span>Rascunho</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="reports-action-btn primary"
+                style={{ backgroundColor: '#118CC4', borderColor: '#118CC4', display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+                onClick={openNew}
+              >
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <span>Nova proposta</span>
+              </button>
+            )
           )}
         </div>
       </header>
@@ -973,7 +1159,15 @@ const ComercialPropostas: React.FC = () => {
         </div>
       </QueryDataPanel>
 
-      {isModalOpen && (
+      {isModalOpen && !editingId && !draftHydrated ? (
+        <div className="search-backdrop proposta-include-backdrop">
+          <div className="proposta-include-modal" role="status" aria-live="polite" style={{ minHeight: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <p style={{ margin: 0, color: '#64748b', fontSize: 14 }}>Carregando rascunho...</p>
+          </div>
+        </div>
+      ) : null}
+
+      {isModalOpen && (editingId || draftHydrated) && (
         <div
           className="search-backdrop proposta-include-backdrop"
           onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
@@ -984,37 +1178,71 @@ const ComercialPropostas: React.FC = () => {
                 <button type="button" className="proposta-include-close" onClick={closeModal} aria-label="Fechar">
                   <i className="bi bi-x-lg" />
                 </button>
-                <h3 id="proposta-include-title">
-                  {editingId ? 'Editar proposta' : 'Nova proposta'}
-                </h3>
-                <button
-                  type="button"
-                  className="proposta-include-print"
-                  title="Imprimir proposta"
-                  onClick={() => {
-                    const salvo = editingId ? propostas.find((item) => item.id === editingId) : null;
-                    const snapshot = snapshotDoFormulario();
-                    handlePrint({
-                      ...snapshot,
-                      numeroIdentificacao: snapshot.numeroIdentificacao || salvo?.numeroIdentificacao || '',
-                      titulo: snapshot.titulo || salvo?.titulo || '',
-                      dataCriacao: salvo?.dataCriacao ?? snapshot.dataCriacao,
-                      dataVencimento: salvo?.dataVencimento ?? snapshot.dataVencimento,
-                    });
-                  }}
-                >
-                  <i className="bi bi-printer" />
-                  <span>Imprimir</span>
-                </button>
+                <div className="proposta-include-header-copy">
+                  <h3 id="proposta-include-title">
+                    {editingId ? 'Editar proposta' : 'Nova proposta'}
+                  </h3>
+                  {!editingId && draftUnavailable ? (
+                    <p className="proposta-include-draft-hint is-warn">
+                      Rascunho indisponível no servidor — você pode preencher normalmente, mas nada será salvo automaticamente.
+                    </p>
+                  ) : null}
+                  {!editingId && !draftUnavailable && (restoredDraft || draftUpdatedAt) ? (
+                    <p className="proposta-include-draft-hint">
+                      Rascunho na sua conta
+                      {draftUpdatedAt ? ` · ${formatDraftTime(draftUpdatedAt)}` : ''}
+                      {saveDraft.isPending ? ' · salvando…' : ''}
+                    </p>
+                  ) : null}
+                </div>
+                {editingId ? (
+                  <button
+                    type="button"
+                    className="proposta-include-print"
+                    title="Imprimir proposta"
+                    onClick={() => {
+                      const salvo = propostas.find((item) => item.id === editingId);
+                      const snapshot = snapshotDoFormulario();
+                      handlePrint({
+                        ...snapshot,
+                        numeroIdentificacao: snapshot.numeroIdentificacao || salvo?.numeroIdentificacao || '',
+                        titulo: snapshot.titulo || salvo?.titulo || '',
+                        dataCriacao: salvo?.dataCriacao ?? snapshot.dataCriacao,
+                        dataVencimento: salvo?.dataVencimento ?? snapshot.dataVencimento,
+                      });
+                    }}
+                  >
+                    <i className="bi bi-printer" />
+                    <span>Imprimir</span>
+                  </button>
+                ) : null}
+                {!editingId && (restoredDraft || draftUpdatedAt) ? (
+                  <button
+                    type="button"
+                    className="proposta-include-discard"
+                    onClick={discardDraft}
+                    disabled={isPending}
+                    title="Apaga o rascunho da sua conta"
+                  >
+                    <i className="bi bi-journal-x" aria-hidden="true" />
+                    <span>{deleteDraft.isPending ? 'Descartando...' : 'Descartar rascunho'}</span>
+                  </button>
+                ) : null}
                 {canManage && (
                   <button
                     type="submit"
                     className="proposta-include-save"
                     disabled={!canSave}
-                    title={!destinosOk ? MENSAGEM_DESTINOS_OBRIGATORIOS : undefined}
+                    title={
+                      !destinosOk
+                        ? MENSAGEM_DESTINOS_OBRIGATORIOS
+                        : !armazenagemOk
+                          ? MENSAGEM_TARIFAS_ARMAZENAGEM
+                          : undefined
+                    }
                   >
                     <i className="bi bi-check2" />
-                    <span>{isPending ? 'Salvando...' : 'Salvar'}</span>
+                    <span>{isPending && !deleteDraft.isPending ? 'Salvando...' : 'Salvar'}</span>
                   </button>
                 )}
               </header>
@@ -1275,10 +1503,26 @@ const ComercialPropostas: React.FC = () => {
                           {form.linhas.map((linha, index) => (
                             <tr key={index}>
                               <td>
-                                <input className="proposta-destinos-input" value={linha.origem} disabled={!canManage} placeholder="Cidade - UF" onChange={(e) => updateLinha(index, { origem: e.target.value })} />
+                                <ComercialEnderecoAutocomplete
+                                  compact
+                                  variant="cidade"
+                                  value={linha.origem}
+                                  disabled={!canManage}
+                                  placeholder="Ibiporã-PR"
+                                  inputClassName="proposta-destinos-input"
+                                  onChange={(origem) => updateLinha(index, { origem })}
+                                />
                               </td>
                               <td>
-                                <input className="proposta-destinos-input" value={linha.entrega} disabled={!canManage} placeholder="Cidade - UF" onChange={(e) => updateLinha(index, { entrega: e.target.value })} />
+                                <ComercialEnderecoAutocomplete
+                                  compact
+                                  variant="cidade"
+                                  value={linha.entrega}
+                                  disabled={!canManage}
+                                  placeholder="Ibiporã-PR"
+                                  inputClassName="proposta-destinos-input"
+                                  onChange={(entrega) => updateLinha(index, { entrega })}
+                                />
                               </td>
                               <td>
                                 <input className="proposta-destinos-input" value={linha.veiculo} disabled={!canManage} placeholder="Carreta" onChange={(e) => updateLinha(index, { veiculo: e.target.value })} />
@@ -1358,12 +1602,11 @@ const ComercialPropostas: React.FC = () => {
         </div>
       )}
 
-      {emailProposta ? (
+      {emailPropostas.length > 0 ? (
         <ComercialPropostaEmailModal
-          proposta={emailProposta}
-          cliente={clienteDaProposta(emailProposta)}
-          clienteEmail={clienteDaProposta(emailProposta)?.email || emailProposta.clienteEmail}
-          onClose={() => setEmailProposta(null)}
+          propostas={emailPropostas}
+          clienteFor={clienteDaProposta}
+          onClose={() => setEmailPropostas([])}
         />
       ) : null}
     </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
@@ -9,7 +9,7 @@ import {
   useSaveComercialGeneralidades,
 } from '../../hooks/useComercialClientes';
 import type { PropostaCondicaoComercial, TipoGeneralidadeComercial } from '../../types/domain';
-import { catalogoGeneralidadesPadrao, TIPOS_GENERALIDADE_COMERCIAL } from '../../types/domain';
+import { TIPOS_GENERALIDADE_COMERCIAL } from '../../types/domain';
 
 const ComercialCadastroGeneralidades: React.FC = () => {
   const { user } = useAuth();
@@ -19,19 +19,19 @@ const ComercialCadastroGeneralidades: React.FC = () => {
   const [clienteFiltro, setClienteFiltro] = useState('');
   const [items, setItems] = useState<PropostaCondicaoComercial[]>([]);
 
-  const clientesQuery = useClientesComercial({ page: 1, pageSize: 100 });
-  const catalogQuery = useComercialGeneralidades(clienteId || null, tipo);
+  const [confirmPadrao, setConfirmPadrao] = useState(false);
+
+  const clientesQuery = useClientesComercial({
+    page: 1,
+    pageSize: 100,
+    search: clienteFiltro.trim() || undefined,
+  });
+  const catalogQuery = useComercialGeneralidades(clienteId || null, tipo, { permitirPadrao: true });
   const saveCatalog = useSaveComercialGeneralidades();
   const clientes = clientesQuery.data?.results ?? [];
-
-  const clientesFiltrados = useMemo(() => {
-    const query = clienteFiltro.trim().toLowerCase();
-    if (!query) return clientes;
-    return clientes.filter((cliente) => {
-      const nome = `${cliente.razaoSocial} ${cliente.nomeFantasia}`.toLowerCase();
-      return nome.includes(query) || (cliente.cnpj || '').toLowerCase().includes(query);
-    });
-  }, [clientes, clienteFiltro]);
+  const isPadraoGeral = !clienteId;
+  const origemCliente = catalogQuery.data?.origem === 'cliente';
+  const tipoLabel = TIPOS_GENERALIDADE_COMERCIAL.find((item) => item.key === tipo)?.label ?? tipo;
 
   useEffect(() => {
     if (catalogQuery.data) {
@@ -47,22 +47,28 @@ const ComercialCadastroGeneralidades: React.FC = () => {
     setItems((current) => [...current, { rotulo: '', valor: '' }]);
   };
 
-  const handleSave = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!clienteId) {
-      alert('Selecione o cliente.');
-      return;
-    }
-    const cleaned = items
-      .map((item) => ({ rotulo: item.rotulo.trim(), valor: item.valor.trim() }))
-      .filter((item) => item.rotulo || item.valor);
+  const cleanedItems = () => items
+    .map((item) => ({ rotulo: item.rotulo.trim(), valor: item.valor.trim() }))
+    .filter((item) => item.rotulo || item.valor);
+
+  const persistCatalog = (aplicar?: 'todos' | 'novos') => {
     saveCatalog.mutate(
-      { clienteId, tipo, items: cleaned },
-      { onError: (err) => alert(getComercialErrorMessage(err)) },
+      { clienteId: clienteId || null, tipo, items: cleanedItems(), aplicar },
+      {
+        onSuccess: () => setConfirmPadrao(false),
+        onError: (err) => alert(getComercialErrorMessage(err)),
+      },
     );
   };
 
-  const tipoLabel = TIPOS_GENERALIDADE_COMERCIAL.find((item) => item.key === tipo)?.label ?? tipo;
+  const handleSave = (event?: React.FormEvent) => {
+    event?.preventDefault();
+    if (isPadraoGeral) {
+      setConfirmPadrao(true);
+      return;
+    }
+    persistCatalog();
+  };
 
   return (
     <div className="fat-list-compact" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '0 4px 4px' }}>
@@ -71,13 +77,9 @@ const ComercialCadastroGeneralidades: React.FC = () => {
           <div style={{ width: '6px', height: '22px', backgroundColor: '#118CC4' }} />
           <h1 className="view-page-title">Generalidades</h1>
         </div>
-        {canManage && clienteId ? (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              className="reports-action-btn secondary"
-              onClick={addItem}
-            >
+        {canManage ? (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="reports-action-btn secondary" onClick={addItem}>
               Adicionar item
             </button>
             <button
@@ -85,7 +87,7 @@ const ComercialCadastroGeneralidades: React.FC = () => {
               className="reports-action-btn primary"
               style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
               disabled={saveCatalog.isPending}
-              onClick={handleSave}
+              onClick={() => handleSave()}
             >
               {saveCatalog.isPending ? 'Salvando...' : 'Salvar'}
             </button>
@@ -106,10 +108,10 @@ const ComercialCadastroGeneralidades: React.FC = () => {
               onChange={(e) => setClienteFiltro(e.target.value)}
             />
           </div>
-          <div className="reports-select-wrapper" style={{ minWidth: '260px' }}>
+          <div className="reports-select-wrapper" style={{ minWidth: '280px' }}>
             <select value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
-              <option value="">Selecione o cliente</option>
-              {clientesFiltrados.map((cliente) => (
+              <option value="">Padrão geral</option>
+              {clientes.map((cliente) => (
                 <option key={cliente.id} value={cliente.id}>
                   {cliente.nomeFantasia || cliente.razaoSocial}
                 </option>
@@ -135,104 +137,117 @@ const ComercialCadastroGeneralidades: React.FC = () => {
         </div>
       </div>
 
-      {!clienteId ? (
-        <div className="erp-card" style={{ padding: 24, color: 'var(--text-muted)' }}>
-          Selecione o cliente e o tipo de serviço para cadastrar as generalidades.
-        </div>
-      ) : (
-        <QueryDataPanel
-          query={catalogQuery}
-          loadingMessage="Carregando generalidades..."
-          refreshingMessage="Atualizando generalidades..."
-          errorMessage="Não foi possível carregar as generalidades."
-        >
-          <form className="erp-card reports-table-card comercial-browse-card" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onSubmit={handleSave}>
-            {catalogQuery.data?.origem === 'padrao' ? (
-              <p style={{ margin: '8px 12px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-                Ainda não há itens salvos para este cliente em {tipoLabel.toLowerCase()}.
-                {' '}
-                {tipo === 'frete'
-                  ? 'O padrão segue as Generalidades da proposta de transferência.'
-                  : tipo === 'distribuicao'
-                    ? 'O padrão segue as Considerações da proposta de distribuição.'
-                    : 'O padrão segue as Observações da tabela de armazenagem.'}
-                {' '}
-                Salve para gravar neste cliente.
-              </p>
-            ) : null}
-            <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
-              <table className="data-table comercial-browse-table comercial-generalidades-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '32%' }}>Item</th>
-                    <th>Condição</th>
-                    {canManage ? <th style={{ width: 48 }} /> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.length === 0 ? (
-                    <tr>
-                      <td colSpan={canManage ? 3 : 2} className="comercial-browse-empty">
-                        Não há registros a serem exibidos.
-                      </td>
-                    </tr>
-                  ) : (
-                    items.map((item, index) => (
-                      <tr key={index}>
-                        <td>
-                          <input
-                            className="proposta-destinos-input"
-                            value={item.rotulo}
-                            disabled={!canManage}
-                            onChange={(e) => updateItem(index, { rotulo: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="proposta-destinos-input"
-                            value={item.valor}
-                            disabled={!canManage}
-                            maxLength={800}
-                            onChange={(e) => updateItem(index, { valor: e.target.value })}
-                          />
-                        </td>
-                        {canManage ? (
-                          <td>
-                            <button
-                              type="button"
-                              className="btn-icon"
-                              title="Remover"
-                              onClick={() => setItems((current) => current.filter((_, i) => i !== index))}
-                            >
-                              <i className="bi bi-trash" />
-                            </button>
-                          </td>
-                        ) : null}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {canManage ? (
-              <div style={{ padding: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" className="reports-action-btn secondary" onClick={addItem}>
-                  Adicionar item
-                </button>
+      <QueryDataPanel
+        query={catalogQuery}
+        loadingMessage="Carregando generalidades..."
+        refreshingMessage="Atualizando generalidades..."
+        errorMessage="Não foi possível carregar as generalidades."
+      >
+        <form className="erp-card reports-table-card comercial-browse-card" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onSubmit={handleSave}>
+          <p className="comercial-generalidades-hint">
+            {isPadraoGeral
+              ? `Catálogo padrão de ${tipoLabel.toLowerCase()}. Ao salvar, você escolhe se a alteração vale para todos os clientes ou somente para os novos.`
+              : origemCliente
+                ? `Catálogo próprio deste cliente em ${tipoLabel.toLowerCase()}.`
+                : `Este cliente ainda usa o padrão geral de ${tipoLabel.toLowerCase()}. Salve para gravar um catálogo próprio.`}
+          </p>
+          <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
+            <table className="data-table comercial-browse-table comercial-generalidades-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '32%' }}>Item</th>
+                  <th>Condição</th>
+                  {canManage ? <th style={{ width: 48 }} /> : null}
+                </tr>
+              </thead>
+              <tbody>
                 {items.length === 0 ? (
-                  <button
-                    type="button"
-                    className="reports-action-btn secondary"
-                    onClick={() => setItems(catalogoGeneralidadesPadrao(tipo).map((item) => ({ ...item })))}
-                  >
-                    Restaurar padrão
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </form>
-        </QueryDataPanel>
-      )}
+                  <tr>
+                    <td colSpan={canManage ? 3 : 2} className="comercial-browse-empty">
+                      Não há registros a serem exibidos.
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((item, index) => (
+                    <tr key={index}>
+                      <td>
+                        <input
+                          className="proposta-destinos-input"
+                          value={item.rotulo}
+                          disabled={!canManage}
+                          onChange={(e) => updateItem(index, { rotulo: e.target.value })}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="proposta-destinos-input"
+                          value={item.valor}
+                          disabled={!canManage}
+                          maxLength={800}
+                          onChange={(e) => updateItem(index, { valor: e.target.value })}
+                        />
+                      </td>
+                      {canManage ? (
+                        <td>
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            title="Remover"
+                            onClick={() => setItems((current) => current.filter((_, i) => i !== index))}
+                          >
+                            <i className="bi bi-trash" />
+                          </button>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </form>
+      </QueryDataPanel>
+      {confirmPadrao ? (
+        <div
+          className="search-backdrop"
+          style={{ display: 'flex', zIndex: 3100 }}
+          onClick={(e) => { if (e.target === e.currentTarget && !saveCatalog.isPending) setConfirmPadrao(false); }}
+        >
+          <div className="search-modal-card" style={{ width: 480 }}>
+            <div className="search-input-wrapper" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#1e293b' }}>Aplicar padrão geral</h3>
+              <span className="search-close-key" style={{ cursor: 'pointer', fontSize: 12 }} onClick={() => !saveCatalog.isPending && setConfirmPadrao(false)}>Fechar (X)</span>
+            </div>
+            <div style={{ padding: '16px 4px 8px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <p style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.5 }}>
+                Deseja alterar as generalidades de {tipoLabel.toLowerCase()} para todos os clientes, ou considerar somente os novos?
+              </p>
+              <p style={{ margin: 0, fontSize: 12.5, color: '#64748b', lineHeight: 1.45 }}>
+                <strong>Todos os clientes</strong> substitui o catálogo atual de todos.
+                {' '}
+                <strong>Somente novos</strong> mantém o que os clientes atuais já usam e vale o novo padrão só para cadastros futuros.
+              </p>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', padding: '12px 0 4px' }}>
+              <button type="button" className="reports-action-btn secondary" disabled={saveCatalog.isPending} onClick={() => setConfirmPadrao(false)}>
+                Cancelar
+              </button>
+              <button type="button" className="reports-action-btn secondary" disabled={saveCatalog.isPending} onClick={() => persistCatalog('novos')}>
+                {saveCatalog.isPending ? 'Salvando...' : 'Somente novos'}
+              </button>
+              <button
+                type="button"
+                className="reports-action-btn primary"
+                style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
+                disabled={saveCatalog.isPending}
+                onClick={() => persistCatalog('todos')}
+              >
+                {saveCatalog.isPending ? 'Salvando...' : 'Alterar para todos'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

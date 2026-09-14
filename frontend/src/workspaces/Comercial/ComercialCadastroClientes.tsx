@@ -679,11 +679,10 @@ const ComercialCadastroClientes: React.FC = () => {
                       value={form.email}
                       contacts={contacts}
                       disabled={!canManage}
-                      onChange={(email, contact) => {
+                      onChange={(email) => {
                         setForm((prev) => ({
                           ...prev,
                           email,
-                          ...(contact?.name ? { responsavel: contact.name } : {}),
                         }));
                       }}
                     />

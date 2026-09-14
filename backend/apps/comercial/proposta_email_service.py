@@ -16,7 +16,9 @@ from apps.accounts.google_gmail_service import send_gmail_as_user
 from .models import (
     STATUS_PROPOSTA_ENVIADA,
     STATUS_PROPOSTA_RASCUNHO,
+    TIPO_PROPOSTA_ARMAZENAGEM,
     TIPO_PROPOSTA_CHOICES,
+    TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO,
 )
 
 PDF_MAX_BYTES = 8 * 1024 * 1024
@@ -78,6 +80,29 @@ def request_email_list(data, *keys) -> list[str]:
 
 
 def read_proposta_pdf(request) -> bytes | None:
+    pdfs = read_proposta_pdfs(request)
+    return pdfs[0] if pdfs else None
+
+
+def read_proposta_pdfs(request) -> list[bytes]:
+    arquivos = []
+    if hasattr(request, 'FILES'):
+        arquivos = list(request.FILES.getlist('pdf'))
+    if arquivos:
+        resultados = []
+        for uploaded in arquivos:
+            data = uploaded.read()
+            if len(data) > PDF_MAX_BYTES:
+                raise ValueError('O PDF da proposta excede o tamanho permitido.')
+            if len(data) < 5 or not data.startswith(b'%PDF'):
+                raise ValueError('Um dos PDFs da proposta é inválido.')
+            resultados.append(data)
+        return resultados
+    single = _read_pdf_base64(request)
+    return [single] if single else []
+
+
+def _read_pdf_base64(request) -> bytes | None:
     uploaded = request.FILES.get('pdf') if hasattr(request, 'FILES') else None
     if uploaded:
         data = uploaded.read()
@@ -94,6 +119,48 @@ def read_proposta_pdf(request) -> bytes | None:
     if len(data) < 5 or not data.startswith(b'%PDF'):
         return None
     return data
+
+
+def request_proposta_ids(data) -> list[str]:
+    parts: list[str] = []
+    if hasattr(data, 'getlist'):
+        listed = data.getlist('ids') or data.getlist('id')
+        for item in listed:
+            parts.extend(str(item).split(','))
+    else:
+        value = data.get('ids') if hasattr(data, 'get') else None
+        if value is None and hasattr(data, 'get'):
+            value = data.get('id')
+        if isinstance(value, list):
+            for item in value:
+                parts.extend(str(item).split(','))
+        elif value:
+            parts.extend(str(value).split(','))
+    seen: set[str] = set()
+    result: list[str] = []
+    for part in parts:
+        item_id = str(part).strip()
+        if item_id and item_id not in seen:
+            seen.add(item_id)
+            result.append(item_id)
+    return result
+
+
+def validar_envio_conjunto(propostas) -> None:
+    if not propostas:
+        raise ValueError('Selecione ao menos uma proposta para enviar.')
+    if len(propostas) == 1:
+        return
+    if len(propostas) != 2:
+        raise ValueError('Selecione no máximo duas propostas (frete e armazenagem) do mesmo cliente.')
+    primeira, segunda = propostas
+    cliente_a = getattr(primeira, 'cliente_id', None)
+    cliente_b = getattr(segunda, 'cliente_id', None)
+    if not cliente_a or cliente_a != cliente_b:
+        raise ValueError('Só é possível enviar duas propostas juntas quando forem do mesmo cliente.')
+    tipos = {primeira.tipo, segunda.tipo}
+    if tipos != {TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO, TIPO_PROPOSTA_ARMAZENAGEM}:
+        raise ValueError('O envio conjunto deve ser uma proposta de frete e uma de armazenagem.')
 
 
 def _usuario_display(user) -> str:
@@ -174,10 +241,34 @@ def send_proposta_comercial_email(
     cc_emails: list[str] | None = None,
     pdf_bytes: bytes | None = None,
 ) -> dict:
+    return send_propostas_comerciais_email(
+        user,
+        [(proposta, pdf_bytes)],
+        to_emails=to_emails,
+        cc_emails=cc_emails,
+    )
+
+
+def send_propostas_comerciais_email(
+    user,
+    anexos: list[tuple],
+    *,
+    to_emails: list[str] | None = None,
+    cc_emails: list[str] | None = None,
+) -> dict:
     google_from = _google_email(user)
     if not google_from:
         raise ValueError('Vincule sua conta Google no perfil para enviar a proposta pelo seu e-mail.')
+    if not anexos:
+        raise ValueError('Selecione ao menos uma proposta para enviar.')
 
+    propostas = [item[0] for item in anexos]
+    pdfs = [item[1] for item in anexos]
+    validar_envio_conjunto(propostas)
+    if any(not pdf for pdf in pdfs) or len(pdfs) != len(propostas):
+        raise ValueError('Não foi possível receber o PDF da proposta gerado na tela. Tente novamente.')
+
+    proposta = propostas[0]
     cliente_email = (getattr(proposta.cliente, 'email', None) or '').strip().lower()
     destinarios = parse_emails(to_emails)
     if not destinarios and cliente_email:
@@ -186,19 +277,27 @@ def send_proposta_comercial_email(
         destinarios.insert(0, cliente_email)
     if not destinarios:
         raise ValueError('Cadastre o e-mail do cliente ou informe um destinatário para enviar a proposta.')
-    if not pdf_bytes:
-        raise ValueError('Não foi possível receber o PDF da proposta gerado na tela. Tente novamente.')
 
     cc = [email for email in parse_emails(cc_emails) if email != google_from]
 
-    context = _build_context(proposta, user)
+    contextos = [_build_context(item, user) for item in propostas]
+    context = dict(contextos[0])
+    numeros = [item['numero'] for item in contextos]
+    servicos = [item['servico'] for item in contextos]
+    context['numero'] = ' e '.join(numeros)
+    context['servico'] = ' e '.join(servicos)
+    context['plural'] = len(propostas) > 1
     html_body = render_to_string('comercial/emails/proposta.html', context)
-    numero = context['numero']
     cliente_nome = context['cliente_nome']
     remetente = f'{_usuario_display(user)} <{google_from}>'
+    assunto = (
+        f'Propostas comerciais nº {context["numero"]} — Transcamila Cargas e Armazéns Gerais Ltda.'
+        if context['plural']
+        else f'Proposta comercial nº {context["numero"]} — Transcamila Cargas e Armazéns Gerais Ltda.'
+    )
 
     email_obj = EmailMessage(
-        subject=f'Proposta comercial nº {numero} — Transcamila Cargas e Armazéns Gerais Ltda.',
+        subject=assunto,
         body=html_body,
         from_email=remetente,
         to=destinarios,
@@ -211,16 +310,17 @@ def send_proposta_comercial_email(
         logo.add_header('Content-ID', f'<{LOGO_CID}>')
         logo.add_header('Content-Disposition', 'inline', filename='logo-transcamila-30-anos.png')
         email_obj.attach(logo)
-    email_obj.attach(proposta_pdf_filename(numero, cliente_nome), pdf_bytes, 'application/pdf')
-    send_gmail_as_user(user, email_obj)
+    for item, pdf, ctx in zip(propostas, pdfs, contextos):
+        email_obj.attach(proposta_pdf_filename(ctx['numero'], cliente_nome), pdf, 'application/pdf')
+        if item.status == STATUS_PROPOSTA_RASCUNHO:
+            item.status = STATUS_PROPOSTA_ENVIADA
+            item.save(update_fields=['status', 'data_atualizacao'])
 
-    if proposta.status == STATUS_PROPOSTA_RASCUNHO:
-        proposta.status = STATUS_PROPOSTA_ENVIADA
-        proposta.save(update_fields=['status', 'data_atualizacao'])
+    send_gmail_as_user(user, email_obj)
 
     return {
         'to': destinarios,
         'cc': cc,
-        'numero': numero,
+        'numero': context['numero'],
         'cliente': cliente_nome,
     }

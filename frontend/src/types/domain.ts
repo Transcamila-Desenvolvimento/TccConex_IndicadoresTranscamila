@@ -2300,6 +2300,37 @@ export const PROPOSTA_COMERCIAL_TIPO_LABEL: Record<PropostaComercialTipo, string
   armazenagem: 'Armazenagem',
 };
 
+export function clientePropostaKey(proposta: { clienteId?: string | null; clienteNome?: string | null }) {
+  return (proposta.clienteId || '').trim() || (proposta.clienteNome || '').trim().toLowerCase();
+}
+
+export function propostasEnviaveisPorEmail(propostas: { clienteId?: string | null; clienteNome?: string | null; tipo: PropostaComercialTipo }[]) {
+  if (propostas.length === 1) return { ok: true as const };
+  if (propostas.length !== 2) {
+    return {
+      ok: false as const,
+      motivo: 'Selecione no máximo duas propostas (frete e armazenagem) do mesmo cliente.',
+    };
+  }
+  const [primeira, segunda] = propostas;
+  const clienteA = clientePropostaKey(primeira);
+  const clienteB = clientePropostaKey(segunda);
+  if (!clienteA || clienteA !== clienteB) {
+    return {
+      ok: false as const,
+      motivo: 'Só é possível enviar duas propostas juntas quando forem do mesmo cliente.',
+    };
+  }
+  const tipos = new Set([primeira.tipo, segunda.tipo]);
+  if (!(tipos.has('transporte_rodoviario') && tipos.has('armazenagem'))) {
+    return {
+      ok: false as const,
+      motivo: 'O envio conjunto deve ser uma proposta de frete e uma de armazenagem.',
+    };
+  }
+  return { ok: true as const };
+}
+
 export const PROPOSTA_COMERCIAL_STATUS_LABEL: Record<PropostaComercialStatus, string> = {
   rascunho: 'Rascunho',
   enviada: 'Enviada',
@@ -2357,10 +2388,11 @@ export interface PropostaCondicaoComercial {
 }
 
 export interface CatalogoGeneralidadesComercial {
-  clienteId: string;
+  clienteId: string | null;
   tipo: TipoGeneralidadeComercial;
   origem: 'cliente' | 'padrao';
   items: PropostaCondicaoComercial[];
+  clientesComCatalogo: { id: string; nome: string }[];
 }
 
 export interface PropostaFreteLinha {
@@ -2440,14 +2472,25 @@ export const OBSERVACOES_ARMAZENAGEM_PADRAO: PropostaCondicaoComercial[] = [
   { rotulo: 'h)', valor: 'O reajuste nas tarifas é aplicado anualmente através de nova negociação entre as partes.' },
 ];
 
+export type FormatoTarifaArmazenagem = 'moeda' | 'percentual' | 'tonelada' | 'quantidade';
+
+export const FORMATOS_TARIFA_ARMAZENAGEM: { key: FormatoTarifaArmazenagem; label: string }[] = [
+  { key: 'moeda', label: 'Valor (R$)' },
+  { key: 'percentual', label: 'Percentual (%)' },
+  { key: 'tonelada', label: 'Por tonelada (R$/ton)' },
+  { key: 'quantidade', label: 'Quantidade' },
+];
+
 export interface TabelaArmazenagemItem {
   rotulo: string;
   valor: string;
+  formato: FormatoTarifaArmazenagem;
 }
 
 export interface TabelaArmazenagemHoraExtra {
   periodo: string;
   valor: string;
+  formato: FormatoTarifaArmazenagem;
 }
 
 export interface TabelaArmazenagem {
@@ -2469,33 +2512,93 @@ export const TABELA_ARMAZENAGEM_PADRAO: TabelaArmazenagem = {
   periodoFim: '',
   unidade: 'MT',
   itens: [
-    { rotulo: 'FATURAMENTO MÍNIMO (1)', valor: 'R$ 17.650,00' },
-    { rotulo: 'VALOR POR POSIÇÃO PALLET ATÉ A CAPACIDADE MÁXIMA ACORDADA (2)', valor: 'R$ 35,30' },
-    { rotulo: 'MOVIMENTAÇÃO (R$/TON) (3)', valor: 'R$ 13,87' },
-    { rotulo: 'SEGURO (4)', valor: '0,02%' },
-    { rotulo: 'SEGURO "AG" (5)', valor: '0,10%' },
-    { rotulo: 'COLABORADOR DEDICADO (6)', valor: 'R$ 1.500,00' },
-    { rotulo: 'CAPACIDADE MÁXIMA ACORDADA (POSIÇÕES PALETE)', valor: '1.000' },
+    { rotulo: 'FATURAMENTO MÍNIMO (1)', valor: '', formato: 'moeda' },
+    { rotulo: 'VALOR POR POSIÇÃO PALLET ATÉ A CAPACIDADE MÁXIMA ACORDADA (2)', valor: '', formato: 'moeda' },
+    { rotulo: 'MOVIMENTAÇÃO (R$/TON) (3)', valor: '', formato: 'tonelada' },
+    { rotulo: 'SEGURO (4)', valor: '', formato: 'percentual' },
+    { rotulo: 'SEGURO "AG" (5)', valor: '', formato: 'percentual' },
+    { rotulo: 'COLABORADOR DEDICADO (6)', valor: '', formato: 'moeda' },
+    { rotulo: 'CAPACIDADE MÁXIMA ACORDADA (POSIÇÕES PALETE)', valor: '', formato: 'quantidade' },
   ],
   horaExtraTitulo: 'Hora-extra (7)',
   horaExtra: [
-    { periodo: 'De segunda a sábado', valor: 'R$ 20,81/ton' },
-    { periodo: 'Domingos e feriados', valor: 'R$ 27,74/ton' },
+    { periodo: 'De segunda a sábado', valor: '', formato: 'tonelada' },
+    { periodo: 'Domingos e feriados', valor: '', formato: 'tonelada' },
   ],
   expediente: 'Expediente do CD: de seg a sex das 08:00 às 17:00h',
 };
 
+export function inferirFormatoTarifaArmazenagem(
+  valor: string,
+  padrao: FormatoTarifaArmazenagem = 'moeda',
+): FormatoTarifaArmazenagem {
+  const texto = (valor || '').toLowerCase();
+  if (texto.includes('%')) return 'percentual';
+  if (texto.includes('ton')) return 'tonelada';
+  if (texto.includes('r$')) return 'moeda';
+  return padrao;
+}
+
+export function placeholderTarifaArmazenagem(formato: FormatoTarifaArmazenagem) {
+  if (formato === 'percentual') return '0,00% ou -';
+  if (formato === 'tonelada') return 'R$ 0,00/ton ou -';
+  if (formato === 'quantidade') return '0 ou -';
+  return 'R$ 0,00 ou -';
+}
+
+export function normalizarTracoTarifaArmazenagem(valor: string) {
+  const texto = (valor || '').trim();
+  return texto === '-' || texto === '–' || texto === '—' ? '-' : texto;
+}
+
+export function tabelaArmazenagemProntaParaSalvar(tabela?: TabelaArmazenagem | null) {
+  const dados = cloneTabelaArmazenagem(tabela);
+  const itensVisiveis = dados.itens.filter((item) => item.rotulo.trim() || item.valor.trim());
+  if (!itensVisiveis.length) return false;
+  const itensOk = itensVisiveis.every((item) => item.rotulo.trim() && item.valor.trim());
+  const horaOk = dados.horaExtra.every((item) => item.periodo.trim() && item.valor.trim());
+  return itensOk && horaOk;
+}
+
+export function formatarValorTarifaArmazenagem(valor: string, formato: FormatoTarifaArmazenagem) {
+  const texto = normalizarTracoTarifaArmazenagem(valor);
+  if (!texto || texto === '-') return texto;
+  const cleaned = texto.replace(/R\$\s?/gi, '').replace(/%/g, '').replace(/\/ton/gi, '').trim();
+  const normalized = cleaned.includes(',')
+    ? cleaned.replace(/\./g, '').replace(',', '.')
+    : cleaned.replace(/\s/g, '');
+  const amount = Number(normalized);
+  if (Number.isNaN(amount)) return texto;
+  if (formato === 'percentual') {
+    return `${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+  }
+  if (formato === 'quantidade') {
+    return amount.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+  }
+  const money = amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formato === 'tonelada' ? `R$ ${money}/ton` : `R$ ${money}`;
+}
+
 export function cloneTabelaArmazenagem(tabela?: TabelaArmazenagem | null): TabelaArmazenagem {
   const fonte = tabela && Array.isArray(tabela.itens) ? tabela : TABELA_ARMAZENAGEM_PADRAO;
   return {
-    codigo: fonte.codigo || TABELA_ARMAZENAGEM_PADRAO.codigo,
-    local: fonte.local || TABELA_ARMAZENAGEM_PADRAO.local,
-    periodoInicio: fonte.periodoInicio || '',
-    periodoFim: fonte.periodoFim || '',
-    unidade: fonte.unidade || 'MT',
-    itens: fonte.itens.map((item) => ({ rotulo: item.rotulo, valor: item.valor })),
-    horaExtraTitulo: fonte.horaExtraTitulo || TABELA_ARMAZENAGEM_PADRAO.horaExtraTitulo,
-    horaExtra: (fonte.horaExtra ?? []).map((item) => ({ periodo: item.periodo, valor: item.valor })),
+    codigo: TABELA_ARMAZENAGEM_PADRAO.codigo,
+    local: TABELA_ARMAZENAGEM_PADRAO.local,
+    periodoInicio: '',
+    periodoFim: '',
+    unidade: TABELA_ARMAZENAGEM_PADRAO.unidade,
+    itens: fonte.itens.map((item) => ({
+      rotulo: item.rotulo,
+      valor: item.valor,
+      formato: item.formato || inferirFormatoTarifaArmazenagem(item.valor, 'moeda'),
+    })),
+    horaExtraTitulo: TABELA_ARMAZENAGEM_PADRAO.horaExtraTitulo,
+    horaExtra: (fonte.horaExtra?.length ? fonte.horaExtra : TABELA_ARMAZENAGEM_PADRAO.horaExtra)
+      .map((item) => ({
+        periodo: item.periodo,
+        valor: item.valor,
+        formato: item.formato || inferirFormatoTarifaArmazenagem(item.valor, 'tonelada'),
+      })),
     expediente: fonte.expediente ?? '',
   };
 }
@@ -2610,6 +2713,78 @@ export interface PropostaComercialQueryParams extends ListQueryParams {
   tipo?: PropostaComercialTipo;
   status?: PropostaComercialStatus;
   ordering?: PropostaComercialOrdering;
+}
+
+export interface PropostaComercialDashboardRecente {
+  id: string;
+  numeroIdentificacao: string;
+  clienteNome: string;
+  tipo: PropostaComercialTipo;
+  status: PropostaComercialStatus;
+  dataProposta: string | null;
+}
+
+export interface PropostaComercialDashboardMes {
+  mes: string;
+  label: string;
+  criadas: number;
+  aceitas: number;
+  recusadas: number;
+}
+
+export interface PropostaComercialDashboard {
+  total: number;
+  porStatus: Record<PropostaComercialStatus, number>;
+  porTipo: Record<PropostaComercialTipo, number>;
+  porMes: PropostaComercialDashboardMes[];
+  recentes: PropostaComercialDashboardRecente[];
+}
+
+export interface PropostaComercialFormDraft {
+  version: number;
+  updatedAt: string | null;
+  hasDraft: boolean;
+  abaOperacao: 'transferencia' | 'distribuicao';
+  form: {
+    tipo: PropostaComercialTipo;
+    status: PropostaComercialStatus;
+    clienteId: string;
+    clienteNome: string;
+    titulo: string;
+    subtitulo: string;
+    revisao: string;
+    dataProposta: string;
+    propostaReferente: string;
+    responsavel: string;
+    reajuste: string;
+    att: string;
+    validade: string;
+    vigencia: string;
+    faturamento: string;
+    localEmissao: string;
+    valorEstimado: string;
+    observacoes: string;
+    incluiTransferencia: boolean;
+    incluiDistribuicao: boolean;
+    condicoes: PropostaCondicaoComercial[];
+    condicoesTransferencia: PropostaCondicaoComercial[];
+    condicoesDistribuicao: PropostaCondicaoComercial[];
+    tabelaArmazenagem: TabelaArmazenagem;
+    linhas: Array<{
+      origem: string;
+      entrega: string;
+      veiculo: string;
+      devolucaoContainer: string;
+      observacoes: string;
+      peso: string;
+      tarifaFrete: string;
+      pedagio: string;
+      adValorem: string;
+      gris: string;
+      icms: string;
+      prazoDias: string;
+    }>;
+  };
 }
 
 export type TabelaFreteStatus = 'rascunho' | 'publicada' | 'expirada' | 'arquivada';

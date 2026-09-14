@@ -599,21 +599,47 @@ def tabela_armazenagem_padrao():
         'periodoFim': '',
         'unidade': 'MT',
         'itens': [
-            {'rotulo': 'FATURAMENTO MÍNIMO (1)', 'valor': 'R$ 17.650,00'},
-            {'rotulo': 'VALOR POR POSIÇÃO PALLET ATÉ A CAPACIDADE MÁXIMA ACORDADA (2)', 'valor': 'R$ 35,30'},
-            {'rotulo': 'MOVIMENTAÇÃO (R$/TON) (3)', 'valor': 'R$ 13,87'},
-            {'rotulo': 'SEGURO (4)', 'valor': '0,02%'},
-            {'rotulo': 'SEGURO "AG" (5)', 'valor': '0,10%'},
-            {'rotulo': 'COLABORADOR DEDICADO (6)', 'valor': 'R$ 1.500,00'},
-            {'rotulo': 'CAPACIDADE MÁXIMA ACORDADA (POSIÇÕES PALETE)', 'valor': '1.000'},
+            {'rotulo': 'FATURAMENTO MÍNIMO (1)', 'valor': '-', 'formato': 'moeda'},
+            {'rotulo': 'VALOR POR POSIÇÃO PALLET ATÉ A CAPACIDADE MÁXIMA ACORDADA (2)', 'valor': '-', 'formato': 'moeda'},
+            {'rotulo': 'MOVIMENTAÇÃO (R$/TON) (3)', 'valor': '-', 'formato': 'tonelada'},
+            {'rotulo': 'SEGURO (4)', 'valor': '-', 'formato': 'percentual'},
+            {'rotulo': 'SEGURO "AG" (5)', 'valor': '-', 'formato': 'percentual'},
+            {'rotulo': 'COLABORADOR DEDICADO (6)', 'valor': '-', 'formato': 'moeda'},
+            {'rotulo': 'CAPACIDADE MÁXIMA ACORDADA (POSIÇÕES PALETE)', 'valor': '-', 'formato': 'quantidade'},
         ],
         'horaExtraTitulo': 'Hora-extra (7)',
         'horaExtra': [
-            {'periodo': 'De segunda a sábado', 'valor': 'R$ 20,81/ton'},
-            {'periodo': 'Domingos e feriados', 'valor': 'R$ 27,74/ton'},
+            {'periodo': 'De segunda a sábado', 'valor': '-', 'formato': 'tonelada'},
+            {'periodo': 'Domingos e feriados', 'valor': '-', 'formato': 'tonelada'},
         ],
         'expediente': 'Expediente do CD: de seg a sex das 08:00 às 17:00h',
     }
+
+
+def erro_valores_tabela_armazenagem(tabela):
+    """Exige valor em cada tarifa; o traço (-) vale como sem cotação."""
+    if not isinstance(tabela, dict):
+        return 'Informe a tabela de armazenagem.'
+
+    def _linhas_ok(linhas, chave_rotulo, chave_valor):
+        visiveis = []
+        for item in linhas or []:
+            if not isinstance(item, dict):
+                continue
+            rotulo = str(item.get(chave_rotulo) or '').strip()
+            valor = str(item.get(chave_valor) or '').strip()
+            if not rotulo and not valor:
+                continue
+            visiveis.append((rotulo, valor))
+        if not visiveis:
+            return False
+        return all(rotulo and valor for rotulo, valor in visiveis)
+
+    if not _linhas_ok(tabela.get('itens'), 'rotulo', 'valor'):
+        return 'Informe o valor de cada tarifa de armazenagem ou coloque um traço (-).'
+    if not _linhas_ok(tabela.get('horaExtra') or tabela.get('hora_extra'), 'periodo', 'valor'):
+        return 'Informe o valor de cada hora-extra ou coloque um traço (-).'
+    return ''
 
 
 def catalogo_generalidades_padrao(tipo_servico):
@@ -776,6 +802,27 @@ class PropostaComercial(models.Model):
         if not base or dias is None:
             return None
         return base + timedelta(days=dias)
+
+
+class PropostaComercialDraft(models.Model):
+    """Rascunho de nova proposta — um por usuário autenticado."""
+
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='proposta_comercial_draft',
+        verbose_name='Usuário',
+    )
+    version = models.PositiveSmallIntegerField(default=1)
+    payload = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Rascunho de proposta comercial'
+        verbose_name_plural = 'Rascunhos de proposta comercial'
+
+    def __str__(self):
+        return f'Rascunho de proposta de {self.usuario}'
 
 
 class PropostaFreteLinha(models.Model):
@@ -1061,7 +1108,7 @@ class GeneralidadeComercial(models.Model):
 
 
 def gravar_catalogo_generalidades(cliente, tipo_servico, items):
-    if cliente is None or tipo_servico not in TIPOS_GENERALIDADE:
+    if tipo_servico not in TIPOS_GENERALIDADE:
         return
     cleaned = []
     for item in items or []:
@@ -1070,7 +1117,9 @@ def gravar_catalogo_generalidades(cliente, tipo_servico, items):
         if not rotulo and not valor:
             continue
         cleaned.append((rotulo, valor))
-    GeneralidadeComercial.objects.filter(cliente=cliente, tipo_servico=tipo_servico).delete()
+    qs = GeneralidadeComercial.objects.filter(tipo_servico=tipo_servico)
+    qs = qs.filter(cliente__isnull=True) if cliente is None else qs.filter(cliente=cliente)
+    qs.delete()
     GeneralidadeComercial.objects.bulk_create([
         GeneralidadeComercial(
             cliente=cliente,
@@ -1081,6 +1130,36 @@ def gravar_catalogo_generalidades(cliente, tipo_servico, items):
         )
         for index, (rotulo, valor) in enumerate(cleaned)
     ])
+
+
+def aplicar_padrao_generalidades(tipo_servico, items, modo='novos'):
+    """Atualiza o catálogo padrão.
+
+    novos: clientes atuais sem catálogo próprio ficam com o padrão anterior;
+           o novo padrão vale só para clientes cadastrados depois.
+    todos: o novo padrão substitui o de todos os clientes deste tipo.
+    """
+    modo = 'todos' if str(modo or '').strip().lower() == 'todos' else 'novos'
+    if tipo_servico not in TIPOS_GENERALIDADE:
+        return modo
+    if modo == 'novos':
+        atual = list(
+            GeneralidadeComercial.objects.filter(cliente__isnull=True, tipo_servico=tipo_servico)
+            .order_by('ordem', 'pk')
+            .values('rotulo', 'valor')
+        )
+        if atual:
+            com_catalogo = set(
+                GeneralidadeComercial.objects.filter(cliente__isnull=False, tipo_servico=tipo_servico)
+                .values_list('cliente_id', flat=True)
+                .distinct()
+            )
+            for cliente in ClienteComercial.objects.exclude(pk__in=com_catalogo).iterator():
+                gravar_catalogo_generalidades(cliente, tipo_servico, atual)
+    else:
+        GeneralidadeComercial.objects.filter(cliente__isnull=False, tipo_servico=tipo_servico).delete()
+    gravar_catalogo_generalidades(None, tipo_servico, items)
+    return modo
 
 
 class MatrizIcmsUf(models.Model):

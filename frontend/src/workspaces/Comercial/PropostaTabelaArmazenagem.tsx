@@ -1,11 +1,62 @@
-import type { TabelaArmazenagem } from '../../types/domain';
-import { cloneTabelaArmazenagem } from '../../types/domain';
+import type { FormatoTarifaArmazenagem, TabelaArmazenagem } from '../../types/domain';
+import {
+  cloneTabelaArmazenagem,
+  FORMATOS_TARIFA_ARMAZENAGEM,
+  formatarValorTarifaArmazenagem,
+  placeholderTarifaArmazenagem,
+  TABELA_ARMAZENAGEM_PADRAO,
+} from '../../types/domain';
 
 type Props = {
   tabela: TabelaArmazenagem;
   canEdit: boolean;
   onChange: (tabela: TabelaArmazenagem) => void;
 };
+
+function CampoValor({
+  valor,
+  formato,
+  canEdit,
+  onChangeValor,
+  onChangeFormato,
+}: {
+  valor: string;
+  formato: FormatoTarifaArmazenagem;
+  canEdit: boolean;
+  onChangeValor: (valor: string) => void;
+  onChangeFormato: (formato: FormatoTarifaArmazenagem) => void;
+}) {
+  return (
+    <div className="proposta-armazenagem-valor">
+      <select
+        className="proposta-destinos-input proposta-armazenagem-formato"
+        value={formato}
+        disabled={!canEdit}
+        aria-label="Tipo do valor"
+        onChange={(e) => {
+          const proximo = e.target.value as FormatoTarifaArmazenagem;
+          onChangeFormato(proximo);
+          if (valor.trim()) onChangeValor(formatarValorTarifaArmazenagem(valor, proximo));
+        }}
+      >
+        {FORMATOS_TARIFA_ARMAZENAGEM.map((opcao) => (
+          <option key={opcao.key} value={opcao.key}>{opcao.label}</option>
+        ))}
+      </select>
+      <input
+        className="proposta-destinos-input"
+        value={valor}
+        disabled={!canEdit}
+        placeholder={placeholderTarifaArmazenagem(formato)}
+        aria-invalid={!valor.trim()}
+        onChange={(e) => onChangeValor(e.target.value)}
+        onBlur={() => {
+          if (valor.trim()) onChangeValor(formatarValorTarifaArmazenagem(valor, formato));
+        }}
+      />
+    </div>
+  );
+}
 
 export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }: Props) {
   const dados = cloneTabelaArmazenagem(tabela);
@@ -22,7 +73,7 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
           <button
             type="button"
             className="proposta-secao-add"
-            onClick={() => update({ itens: [...dados.itens, { rotulo: '', valor: '' }] })}
+            onClick={() => update({ itens: [...dados.itens, { rotulo: '', valor: '', formato: 'moeda' }] })}
           >
             <i className="bi bi-plus-lg" aria-hidden="true" />
             Adicionar
@@ -30,37 +81,21 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
         ) : null}
       </div>
       <div className="proposta-armazenagem-meta">
-        <label>
+        <div>
           <span>Código</span>
-          <input className="proposta-destinos-input" value={dados.codigo} disabled={!canEdit} onChange={(e) => update({ codigo: e.target.value })} />
-        </label>
-        <label>
+          <strong>{TABELA_ARMAZENAGEM_PADRAO.codigo}</strong>
+        </div>
+        <div>
           <span>Unidade</span>
-          <input className="proposta-destinos-input" value={dados.local} disabled={!canEdit} onChange={(e) => update({ local: e.target.value })} placeholder="RONDONÓPOLIS-MT" />
-        </label>
-        <label>
-          <span>Período inicial</span>
-          <input className="proposta-destinos-input" type="date" value={dados.periodoInicio} disabled={!canEdit} onChange={(e) => update({ periodoInicio: e.target.value })} />
-        </label>
-        <label>
-          <span>Período final</span>
-          <input className="proposta-destinos-input" type="date" value={dados.periodoFim} disabled={!canEdit} onChange={(e) => update({ periodoFim: e.target.value })} />
-        </label>
+          <strong>{TABELA_ARMAZENAGEM_PADRAO.local}</strong>
+        </div>
       </div>
       <div className="table-container proposta-destinos-wrap">
         <table className="data-table comercial-browse-table proposta-destinos-table proposta-armazenagem-table">
           <thead>
             <tr>
               <th>Armazém</th>
-              <th className="col-valor">
-                <input
-                  className="proposta-destinos-input proposta-armazenagem-unidade"
-                  value={dados.unidade}
-                  disabled={!canEdit}
-                  onChange={(e) => update({ unidade: e.target.value })}
-                  aria-label="Unidade da tabela"
-                />
-              </th>
+              <th className="col-valor">Valor</th>
               {canEdit ? <th className="col-actions" /> : null}
             </tr>
           </thead>
@@ -78,12 +113,15 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
                   />
                 </td>
                 <td>
-                  <input
-                    className="proposta-destinos-input"
-                    value={item.valor}
-                    disabled={!canEdit}
-                    onChange={(e) => update({
-                      itens: dados.itens.map((linha, i) => (i === index ? { ...linha, valor: e.target.value } : linha)),
+                  <CampoValor
+                    valor={item.valor}
+                    formato={item.formato}
+                    canEdit={canEdit}
+                    onChangeValor={(valor) => update({
+                      itens: dados.itens.map((linha, i) => (i === index ? { ...linha, valor } : linha)),
+                    })}
+                    onChangeFormato={(formato) => update({
+                      itens: dados.itens.map((linha, i) => (i === index ? { ...linha, formato } : linha)),
                     })}
                   />
                 </td>
@@ -107,24 +145,7 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
       </div>
 
       <div className="proposta-destinos-head proposta-armazenagem-subhead">
-        <h4>
-          <input
-            className="proposta-destinos-input proposta-armazenagem-titulo"
-            value={dados.horaExtraTitulo}
-            disabled={!canEdit}
-            onChange={(e) => update({ horaExtraTitulo: e.target.value })}
-          />
-        </h4>
-        {canEdit ? (
-          <button
-            type="button"
-            className="proposta-secao-add"
-            onClick={() => update({ horaExtra: [...dados.horaExtra, { periodo: '', valor: '' }] })}
-          >
-            <i className="bi bi-plus-lg" aria-hidden="true" />
-            Adicionar
-          </button>
-        ) : null}
+        <h4>{TABELA_ARMAZENAGEM_PADRAO.horaExtraTitulo}</h4>
       </div>
       <div className="table-container proposta-destinos-wrap">
         <table className="data-table comercial-browse-table proposta-destinos-table proposta-armazenagem-table">
@@ -132,7 +153,6 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
             <tr>
               <th>Período</th>
               <th className="col-valor">Valor</th>
-              {canEdit ? <th className="col-actions" /> : null}
             </tr>
           </thead>
           <tbody>
@@ -149,28 +169,18 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
                   />
                 </td>
                 <td>
-                  <input
-                    className="proposta-destinos-input"
-                    value={item.valor}
-                    disabled={!canEdit}
-                    onChange={(e) => update({
-                      horaExtra: dados.horaExtra.map((linha, i) => (i === index ? { ...linha, valor: e.target.value } : linha)),
+                  <CampoValor
+                    valor={item.valor}
+                    formato={item.formato}
+                    canEdit={canEdit}
+                    onChangeValor={(valor) => update({
+                      horaExtra: dados.horaExtra.map((linha, i) => (i === index ? { ...linha, valor } : linha)),
+                    })}
+                    onChangeFormato={(formato) => update({
+                      horaExtra: dados.horaExtra.map((linha, i) => (i === index ? { ...linha, formato } : linha)),
                     })}
                   />
                 </td>
-                {canEdit ? (
-                  <td className="col-actions">
-                    <button
-                      type="button"
-                      className="btn-icon"
-                      title="Remover"
-                      disabled={dados.horaExtra.length <= 1}
-                      onClick={() => update({ horaExtra: dados.horaExtra.filter((_, i) => i !== index) })}
-                    >
-                      <i className="bi bi-trash" />
-                    </button>
-                  </td>
-                ) : null}
               </tr>
             ))}
           </tbody>

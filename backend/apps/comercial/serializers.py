@@ -36,6 +36,7 @@ from .models import (
     TabelaFreteLinha,
     cliente_tem_tabela_distribuicao_vigente,
     default_condicoes,
+    erro_valores_tabela_armazenagem,
     gravar_catalogo_generalidades,
     nome_base_tabela_frete,
     normalizar_homologacao,
@@ -931,7 +932,22 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Informe a tabela de armazenagem.')
         padrao = tabela_armazenagem_padrao()
 
-        def _linhas(fonte, chave_rotulo, chave_valor):
+        FORMATOS = {'moeda', 'percentual', 'tonelada', 'quantidade'}
+
+        def _formato(item, valor, padrao='moeda'):
+            atual = str(item.get('formato') or '').strip().lower()
+            if atual in FORMATOS:
+                return atual
+            texto = (valor or '').lower()
+            if '%' in texto:
+                return 'percentual'
+            if 'ton' in texto:
+                return 'tonelada'
+            if 'r$' in texto:
+                return 'moeda'
+            return padrao
+
+        def _linhas(fonte, chave_rotulo, chave_valor, formato_padrao='moeda'):
             linhas = []
             for item in fonte or []:
                 if not isinstance(item, dict):
@@ -940,22 +956,28 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
                 valor = str(item.get(chave_valor) or '').strip()[:120]
                 if not rotulo and not valor:
                     continue
-                linhas.append({chave_rotulo: rotulo, chave_valor: valor})
+                linhas.append({
+                    chave_rotulo: rotulo,
+                    chave_valor: valor,
+                    'formato': _formato(item, valor, formato_padrao),
+                })
             return linhas
 
-        return {
-            'codigo': str(value.get('codigo') or padrao.get('codigo') or 'AG').strip()[:20],
-            'local': str(value.get('local') or padrao.get('local') or '').strip()[:80],
-            'periodoInicio': str(value.get('periodoInicio') or value.get('periodo_inicio') or '').strip()[:10],
-            'periodoFim': str(value.get('periodoFim') or value.get('periodo_fim') or '').strip()[:10],
-            'unidade': str(value.get('unidade') or padrao['unidade']).strip()[:20] or 'MT',
-            'itens': _linhas(value.get('itens'), 'rotulo', 'valor'),
-            'horaExtraTitulo': str(
-                value.get('horaExtraTitulo') or value.get('hora_extra_titulo') or padrao['horaExtraTitulo']
-            ).strip()[:80],
-            'horaExtra': _linhas(value.get('horaExtra') or value.get('hora_extra'), 'periodo', 'valor'),
+        tabela = {
+            'codigo': padrao['codigo'],
+            'local': padrao['local'],
+            'periodoInicio': '',
+            'periodoFim': '',
+            'unidade': padrao['unidade'],
+            'itens': _linhas(value.get('itens'), 'rotulo', 'valor', 'moeda'),
+            'horaExtraTitulo': padrao['horaExtraTitulo'],
+            'horaExtra': _linhas(value.get('horaExtra') or value.get('hora_extra'), 'periodo', 'valor', 'tonelada') or padrao['horaExtra'],
             'expediente': str(value.get('expediente') or '').strip()[:240],
         }
+        erro = erro_valores_tabela_armazenagem(tabela)
+        if erro:
+            raise serializers.ValidationError(erro)
+        return tabela
 
     def validate_tipo(self, value):
         if value in {'frete', 'transporte_container'}:
@@ -978,16 +1000,20 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
         elif self.instance and getattr(self.instance, 'cliente', None):
             attrs['att'] = (self.instance.cliente.responsavel or '').strip()
 
+        erros = {}
         if tipo == TIPO_PROPOSTA_ARMAZENAGEM:
             atual = attrs.get('tabela_armazenagem')
             if not atual:
                 atual = getattr(self.instance, 'tabela_armazenagem', None) if self.instance else None
             if not atual:
-                attrs['tabela_armazenagem'] = tabela_armazenagem_padrao()
+                atual = tabela_armazenagem_padrao()
+                attrs['tabela_armazenagem'] = atual
+            erro_tabela = erro_valores_tabela_armazenagem(atual)
+            if erro_tabela:
+                erros['tabelaArmazenagem'] = erro_tabela
         elif 'tabela_armazenagem' not in attrs and not self.instance:
             attrs['tabela_armazenagem'] = {}
 
-        erros = {}
         inclui_distribuicao = attrs.get(
             'inclui_distribuicao',
             getattr(self.instance, 'inclui_distribuicao', False) if self.instance else False,
@@ -1038,7 +1064,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
                 pedagio=pedagio,
                 ad_valorem=item.get('ad_valorem') or '',
                 gris=item.get('gris') or '',
-                icms=item.get('icms') if item.get('icms') is not None else 'Conforme legislação',
+                icms=item.get('icms') or '',
                 prazo_dias=item.get('prazo_dias') or '',
                 total_estimado=total,
             )

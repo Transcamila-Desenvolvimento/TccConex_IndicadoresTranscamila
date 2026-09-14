@@ -15,7 +15,52 @@ OSRM_URL = 'https://router.project-osrm.org/route/v1/driving'
 GOOGLE_GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json'
 GOOGLE_DISTANCE_URL = 'https://maps.googleapis.com/maps/api/distancematrix/json'
 GOOGLE_PLACES_TEXT_URL = 'https://maps.googleapis.com/maps/api/place/textsearch/json'
+GOOGLE_PLACES_AUTOCOMPLETE_URL = 'https://maps.googleapis.com/maps/api/place/autocomplete/json'
 USER_AGENT = 'TccConex-ERP/1.0'
+UFS_BRASIL = {
+    'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+    'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+}
+ESTADOS_UF = {
+    'acre': 'AC',
+    'alagoas': 'AL',
+    'amapa': 'AP',
+    'amapá': 'AP',
+    'amazonas': 'AM',
+    'bahia': 'BA',
+    'ceara': 'CE',
+    'ceará': 'CE',
+    'distrito federal': 'DF',
+    'espirito santo': 'ES',
+    'espírito santo': 'ES',
+    'goias': 'GO',
+    'goiás': 'GO',
+    'maranhao': 'MA',
+    'maranhão': 'MA',
+    'mato grosso': 'MT',
+    'mato grosso do sul': 'MS',
+    'minas gerais': 'MG',
+    'para': 'PA',
+    'pará': 'PA',
+    'paraiba': 'PB',
+    'paraíba': 'PB',
+    'parana': 'PR',
+    'paraná': 'PR',
+    'pernambuco': 'PE',
+    'piaui': 'PI',
+    'piauí': 'PI',
+    'rio de janeiro': 'RJ',
+    'rio grande do norte': 'RN',
+    'rio grande do sul': 'RS',
+    'rondonia': 'RO',
+    'rondônia': 'RO',
+    'roraima': 'RR',
+    'santa catarina': 'SC',
+    'sao paulo': 'SP',
+    'são paulo': 'SP',
+    'sergipe': 'SE',
+    'tocantins': 'TO',
+}
 
 
 class RotaDistanciaError(Exception):
@@ -204,6 +249,180 @@ def _uf_de_componentes_google(components) -> str:
         if 'administrative_area_level_1' in tipos:
             return str(item.get('short_name') or '').strip().upper()[:2]
     return ''
+
+
+def _cidade_de_componentes_google(components) -> str:
+    if not isinstance(components, list):
+        return ''
+    cidade = ''
+    municipio = ''
+    for item in components:
+        if not isinstance(item, dict):
+            continue
+        tipos = item.get('types') or []
+        nome = str(item.get('long_name') or '').strip()
+        if 'locality' in tipos and nome:
+            cidade = nome
+        elif 'administrative_area_level_2' in tipos and nome:
+            municipio = nome
+    return cidade or municipio
+
+
+def _uf_de_texto(texto: str) -> str:
+    texto = (texto or '').strip()
+    if not texto:
+        return ''
+    for parte in texto.replace('.', ' ').replace('-', ' ').replace(',', ' ').split():
+        uf = parte.strip().upper()
+        if uf in UFS_BRASIL:
+            return uf
+    normalizado = texto.lower().replace('state of ', '')
+    for nome, uf in sorted(ESTADOS_UF.items(), key=lambda item: len(item[0]), reverse=True):
+        if nome in normalizado:
+            return uf
+    return ''
+
+
+def _rotulo_cidade_uf(cidade: str, uf: str) -> str:
+    cidade = (cidade or '').strip()
+    uf = (uf or '').strip().upper()[:2]
+    if cidade and uf:
+        return f'{cidade}-{uf}'
+    return cidade
+
+
+def _cidade_de_nominatim(address: dict) -> str:
+    for chave in ('city', 'town', 'municipality', 'village', 'hamlet', 'county'):
+        valor = str(address.get(chave) or '').strip()
+        if valor:
+            return valor
+    return ''
+
+
+def _uf_de_nominatim(address: dict) -> str:
+    uf = str(address.get('ISO3166-2-lvl4') or address.get('state_code') or '').replace('BR-', '').strip().upper()[:2]
+    if uf in UFS_BRASIL:
+        return uf
+    return _uf_de_texto(str(address.get('state') or ''))
+
+
+def _cidades_google_autocomplete(query: str, limit: int) -> list[dict] | None:
+    params = urllib.parse.urlencode({
+        'input': query,
+        'types': '(cities)',
+        'components': 'country:br',
+        'language': 'pt-BR',
+        'key': google_maps_key(),
+    })
+    data = _get_json(f'{GOOGLE_PLACES_AUTOCOMPLETE_URL}?{params}')
+    if not isinstance(data, dict):
+        return None
+    status = data.get('status')
+    if status == 'REQUEST_DENIED':
+        return None
+    if status not in {'OK', 'ZERO_RESULTS'}:
+        return []
+    resultados: list[dict] = []
+    vistos: set[str] = set()
+    for item in (data.get('predictions') or [])[:limit]:
+        if not isinstance(item, dict):
+            continue
+        estrutura = item.get('structured_formatting') if isinstance(item.get('structured_formatting'), dict) else {}
+        cidade = str(estrutura.get('main_text') or '').strip()
+        uf = _uf_de_texto(str(estrutura.get('secondary_text') or '')) or _uf_de_texto(str(item.get('description') or ''))
+        rotulo = _rotulo_cidade_uf(cidade, uf)
+        if not rotulo or rotulo.lower() in vistos:
+            continue
+        vistos.add(rotulo.lower())
+        resultados.append({'label': rotulo, 'lat': None, 'lon': None, 'uf': uf or None})
+    return resultados
+
+
+def _cidades_google_geocode(query: str, limit: int) -> list[dict]:
+    params = urllib.parse.urlencode({
+        'address': query,
+        'components': 'country:BR',
+        'language': 'pt-BR',
+        'region': 'br',
+        'key': google_maps_key(),
+    })
+    data = _get_json(f'{GOOGLE_GEOCODE_URL}?{params}')
+    if not isinstance(data, dict):
+        return []
+    status = data.get('status')
+    if status not in {'OK', 'ZERO_RESULTS'}:
+        return []
+    resultados: list[dict] = []
+    vistos: set[str] = set()
+    for item in (data.get('results') or [])[:limit]:
+        if not isinstance(item, dict):
+            continue
+        tipos = item.get('types') or []
+        if not any(tipo in tipos for tipo in ('locality', 'administrative_area_level_2', 'political')):
+            continue
+        componentes = item.get('address_components')
+        cidade = _cidade_de_componentes_google(componentes)
+        uf = _uf_de_componentes_google(componentes)
+        rotulo = _rotulo_cidade_uf(cidade, uf)
+        if not rotulo or rotulo.lower() in vistos:
+            continue
+        vistos.add(rotulo.lower())
+        location = ((item.get('geometry') or {}).get('location') or {})
+        try:
+            lat = float(location['lat'])
+            lon = float(location['lng'])
+        except (KeyError, TypeError, ValueError):
+            lat = lon = None
+        resultados.append({'label': rotulo, 'lat': lat, 'lon': lon, 'uf': uf or None})
+    return resultados
+
+
+def buscar_cidades(texto: str, limit: int = 6) -> list[dict]:
+    texto = (texto or '').strip()
+    if len(texto) < 3:
+        return []
+
+    limit = max(1, min(int(limit or 6), 10))
+    if usa_google_maps():
+        locais = _cidades_google_autocomplete(texto, limit)
+        if locais:
+            return locais
+        return _cidades_google_geocode(texto, limit)
+
+    params = urllib.parse.urlencode({
+        'q': _montar_query_cidade(texto),
+        'format': 'json',
+        'limit': limit,
+        'countrycodes': 'br',
+        'addressdetails': 1,
+    })
+    data = _get_json(f'{NOMINATIM_URL}?{params}')
+    if not isinstance(data, list):
+        return []
+
+    resultados: list[dict] = []
+    vistos: set[str] = set()
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        address = item.get('address') if isinstance(item.get('address'), dict) else {}
+        cidade = _cidade_de_nominatim(address) or str(item.get('name') or '').split(',')[0].strip()
+        uf = _uf_de_nominatim(address)
+        rotulo = _rotulo_cidade_uf(cidade, uf)
+        if not rotulo or rotulo.lower() in vistos:
+            continue
+        vistos.add(rotulo.lower())
+        try:
+            local = _item_para_local(item)
+        except RotaDistanciaError:
+            local = {'lat': None, 'lon': None}
+        resultados.append({
+            'label': rotulo,
+            'lat': local.get('lat'),
+            'lon': local.get('lon'),
+            'uf': uf or None,
+        })
+    return resultados
 
 
 def reverso_geocodificar(lat, lon) -> dict:

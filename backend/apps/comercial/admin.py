@@ -7,6 +7,7 @@ from .models import (
     HomologacaoProdutoEvento,
     ProdutoComercial,
     PropostaComercial,
+    PropostaComercialDraft,
     PropostaFreteLinha,
     TabelaFrete,
     TabelaFreteLinha,
@@ -37,6 +38,12 @@ class PropostaComercialAdmin(admin.ModelAdmin):
     list_filter = ('tipo', 'status', 'ano')
     search_fields = ('titulo', 'subtitulo', 'cliente_nome', 'observacoes', 'cliente__razao_social')
     inlines = [PropostaFreteLinhaInline]
+
+
+@admin.register(PropostaComercialDraft)
+class PropostaComercialDraftAdmin(admin.ModelAdmin):
+    list_display = ('usuario', 'updated_at')
+    search_fields = ('usuario__username', 'usuario__name')
 
 
 class TabelaFreteLinhaInline(admin.TabularInline):

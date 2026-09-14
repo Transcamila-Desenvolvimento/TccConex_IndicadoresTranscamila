@@ -44,7 +44,7 @@ import type {
   CustoManutencaoRow, CustoAbastecimentoRow,
   ClienteComercial, ClienteComercialPayload, ClienteComercialQueryParams,
   ClienteComercialHistorico, ClienteComercialProdutosSugestoes, ClienteComercialValidacaoResumo,
-  PropostaComercial, PropostaComercialPayload, PropostaComercialQueryParams, PropostaComercialTipo, PropostaFreteLinha,
+  PropostaComercial, PropostaComercialDashboard, PropostaComercialFormDraft, PropostaComercialPayload, PropostaComercialQueryParams, PropostaComercialStatus, PropostaComercialTipo, PropostaFreteLinha,
   PropostaCondicaoComercial, CatalogoGeneralidadesComercial, TipoGeneralidadeComercial,
   TabelaFrete, TabelaFreteLinha, TabelaFreteLinhaPayload, TabelaFretePayload,
   TabelaFreteQueryParams, TabelaFreteRevisaoHistorico, TabelaFreteSimulacaoResult, TabelaFreteSimulacaoIcms, TabelaFreteConfig, TabelaFreteFaixa,
@@ -931,6 +931,25 @@ function mapTipoGeneralidade(raw: unknown, fallback: TipoGeneralidadeComercial):
   if (raw === 'frete' || raw === 'distribuicao' || raw === 'armazenagem') return raw;
   if (raw === 'transferencia_armazenagem') return 'frete';
   return fallback;
+}
+
+function normalizeCatalogoGeneralidades(
+  data: any,
+  tipo: TipoGeneralidadeComercial,
+  clienteId?: string | null,
+): CatalogoGeneralidadesComercial {
+  return {
+    clienteId: data?.clienteId ? String(data.clienteId) : clienteId || null,
+    tipo: mapTipoGeneralidade(data?.tipo, tipo),
+    origem: data?.origem === 'cliente' ? 'cliente' : 'padrao',
+    items: Array.isArray(data?.items) ? data.items : [],
+    clientesComCatalogo: Array.isArray(data?.clientesComCatalogo)
+      ? data.clientesComCatalogo.map((item: { id?: string; nome?: string }) => ({
+        id: String(item.id ?? ''),
+        nome: String(item.nome ?? ''),
+      })).filter((item: { id: string; nome: string }) => item.id)
+      : [],
+  };
 }
 
 function mapTabelaFreteLinha(raw: any): TabelaFreteLinha {
@@ -2573,6 +2592,62 @@ export const apiService = {
     return paginatedFromResponse(data, normalizePropostaComercial);
   },
 
+  async getPropostaComercialDraft(): Promise<PropostaComercialFormDraft> {
+    const { data } = await api.get('/api/comercial/propostas/draft/');
+    return data as PropostaComercialFormDraft;
+  },
+
+  async savePropostaComercialDraft(
+    payload: Pick<PropostaComercialFormDraft, 'abaOperacao' | 'form'>,
+  ): Promise<PropostaComercialFormDraft> {
+    const { data } = await api.put('/api/comercial/propostas/draft/', payload);
+    return data as PropostaComercialFormDraft;
+  },
+
+  async deletePropostaComercialDraft(): Promise<void> {
+    await api.delete('/api/comercial/propostas/draft/');
+  },
+
+  async getPropostasComerciaisDashboard(clienteId?: string | null): Promise<PropostaComercialDashboard> {
+    const { data } = await api.get('/api/comercial/propostas/dashboard/', {
+      params: { cliente: clienteId || undefined },
+    });
+    const porStatus = data.porStatus || {};
+    const porTipo = data.porTipo || {};
+    return {
+      total: Number(data.total ?? 0),
+      porStatus: {
+        rascunho: Number(porStatus.rascunho ?? 0),
+        enviada: Number(porStatus.enviada ?? 0),
+        aprovada: Number(porStatus.aprovada ?? 0),
+        recusada: Number(porStatus.recusada ?? 0),
+      },
+      porTipo: {
+        transporte_rodoviario: Number(porTipo.transporte_rodoviario ?? 0),
+        armazenagem: Number(porTipo.armazenagem ?? 0),
+      },
+      porMes: Array.isArray(data.porMes)
+        ? data.porMes.map((item: Record<string, unknown>) => ({
+            mes: String(item.mes ?? ''),
+            label: String(item.label ?? ''),
+            criadas: Number(item.criadas ?? 0),
+            aceitas: Number(item.aceitas ?? 0),
+            recusadas: Number(item.recusadas ?? 0),
+          }))
+        : [],
+      recentes: Array.isArray(data.recentes)
+        ? data.recentes.map((item: Record<string, unknown>) => ({
+            id: String(item.id ?? ''),
+            numeroIdentificacao: String(item.numeroIdentificacao ?? ''),
+            clienteNome: String(item.clienteNome ?? ''),
+            tipo: (item.tipo === 'armazenagem' ? 'armazenagem' : 'transporte_rodoviario') as PropostaComercialTipo,
+            status: String(item.status ?? 'rascunho') as PropostaComercialStatus,
+            dataProposta: item.dataProposta ? String(item.dataProposta) : null,
+          }))
+        : [],
+    };
+  },
+
   async createPropostaComercial(payload: PropostaComercialPayload): Promise<PropostaComercial> {
     const { data } = await api.post('/api/comercial/propostas/', payload);
     return normalizePropostaComercial(data);
@@ -2591,11 +2666,19 @@ export const apiService = {
     id: string,
     payload: { to?: string[]; cc?: string[]; pdf: Blob },
   ): Promise<{ success: boolean; message: string; to: string[]; cc: string[] }> {
+    return this.enviarEmailPropostasComerciais([id], { to: payload.to, cc: payload.cc, pdfs: [payload.pdf] });
+  },
+
+  async enviarEmailPropostasComerciais(
+    ids: string[],
+    payload: { to?: string[]; cc?: string[]; pdfs: Blob[] },
+  ): Promise<{ success: boolean; message: string; to: string[]; cc: string[] }> {
     const form = new FormData();
+    ids.forEach((id) => form.append('ids', id));
     (payload.to ?? []).forEach((email) => form.append('to', email));
     (payload.cc ?? []).forEach((email) => form.append('cc', email));
-    form.append('pdf', payload.pdf, 'Proposta_comercial.pdf');
-    const { data } = await api.post(`/api/comercial/propostas/${id}/enviar-email/`, form);
+    payload.pdfs.forEach((pdf, index) => form.append('pdf', pdf, `Proposta_comercial_${index + 1}.pdf`));
+    const { data } = await api.post('/api/comercial/propostas/enviar-email-lote/', form);
     return data;
   },
 
@@ -2737,13 +2820,14 @@ export const apiService = {
     };
   },
 
-  async buscarEnderecosComercial(q: string): Promise<EnderecoSugestao[]> {
-    const { data } = await api.get('/api/comercial/enderecos/buscar/', { params: { q } });
+  async buscarEnderecosComercial(q: string, tipo: 'endereco' | 'cidade' = 'endereco'): Promise<EnderecoSugestao[]> {
+    const { data } = await api.get('/api/comercial/enderecos/buscar/', { params: { q, tipo } });
     const results = Array.isArray(data?.results) ? data.results : [];
-    return results.map((item: { label?: string; lat?: number; lon?: number }) => ({
+    return results.map((item: { label?: string; lat?: number; lon?: number; uf?: string }) => ({
       label: item.label ?? '',
       lat: Number(item.lat) || 0,
       lon: Number(item.lon) || 0,
+      uf: item.uf ? String(item.uf).toUpperCase().slice(0, 2) : undefined,
     })).filter((item: EnderecoSugestao) => item.label);
   },
 
@@ -2780,30 +2864,38 @@ export const apiService = {
   },
 
   async getGeneralidadesComercial(
-    clienteId: string,
+    clienteId: string | null,
     tipo: TipoGeneralidadeComercial,
   ): Promise<CatalogoGeneralidadesComercial> {
-    const { data } = await api.get('/api/comercial/generalidades/', { params: { cliente: clienteId, tipo } });
-    return {
-      clienteId: String(data?.clienteId ?? clienteId),
-      tipo: mapTipoGeneralidade(data?.tipo, tipo),
-      origem: data?.origem === 'cliente' ? 'cliente' : 'padrao',
-      items: Array.isArray(data?.items) ? data.items : [],
-    };
+    const { data } = await api.get('/api/comercial/generalidades/', {
+      params: { cliente: clienteId || 'padrao', tipo },
+    });
+    return normalizeCatalogoGeneralidades(data, tipo, clienteId);
   },
 
   async saveGeneralidadesComercial(
-    clienteId: string,
+    clienteId: string | null,
     tipo: TipoGeneralidadeComercial,
     items: PropostaCondicaoComercial[],
+    aplicar?: 'todos' | 'novos',
   ): Promise<CatalogoGeneralidadesComercial> {
-    const { data } = await api.put('/api/comercial/generalidades/', { clienteId, tipo, items });
-    return {
-      clienteId: String(data?.clienteId ?? clienteId),
-      tipo: mapTipoGeneralidade(data?.tipo, tipo),
-      origem: data?.origem === 'cliente' ? 'cliente' : 'padrao',
-      items: Array.isArray(data?.items) ? data.items : [],
-    };
+    const { data } = await api.put('/api/comercial/generalidades/', {
+      clienteId: clienteId || null,
+      tipo,
+      items,
+      aplicar: clienteId ? undefined : aplicar,
+    });
+    return normalizeCatalogoGeneralidades(data, tipo, clienteId);
+  },
+
+  async deleteGeneralidadesComercial(
+    clienteId: string,
+    tipo: TipoGeneralidadeComercial,
+  ): Promise<CatalogoGeneralidadesComercial> {
+    const { data } = await api.delete('/api/comercial/generalidades/', {
+      params: { cliente: clienteId, tipo },
+    });
+    return normalizeCatalogoGeneralidades(data, tipo, clienteId);
   },
 
   async getIcmsUfsComercial(): Promise<IcmsUfConfig> {

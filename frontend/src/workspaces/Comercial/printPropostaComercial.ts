@@ -123,6 +123,7 @@ const buildArmazenagemTable = (proposta: PropostaComercial) => {
   return `
     <section class="block">
       <h2>Armazém</h2>
+      <p class="armaz-id"><strong>${escapeHtml(tabela.codigo || 'AG')}</strong> · ${escapeHtml(tabela.local || 'RONDONÓPOLIS-MT')}</p>
       <table class="tarifas">
         <thead>
           <tr>
@@ -260,6 +261,11 @@ const buildArmazenagemDocumentoHtml = (
       padding-bottom: 5px;
     }
     .block { margin: 0 0 14px; }
+    .armaz-id {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: #333;
+    }
     h2 {
       margin: 0 0 8px;
       font-size: 12px;

@@ -10,18 +10,18 @@ import type { ClienteComercial, PropostaComercial } from '../../types/domain';
 import { generatePropostaComercialPdfBlob } from './printPropostaComercial';
 
 interface ComercialPropostaEmailModalProps {
-  proposta: PropostaComercial;
-  cliente?: ClienteComercial | null;
-  clienteEmail?: string;
+  propostas: PropostaComercial[];
+  clienteFor: (proposta: PropostaComercial) => ClienteComercial | null | undefined;
   onClose: () => void;
 }
 
 const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = ({
-  proposta,
-  cliente,
-  clienteEmail,
+  propostas,
+  clienteFor,
   onClose,
 }) => {
+  const proposta = propostas[0];
+  const cliente = proposta ? clienteFor(proposta) : null;
   const { user } = useAuth();
   const googleEmail = (user?.googleEmail || '').trim();
   const googleEmailNorm = googleEmail.toLowerCase();
@@ -30,7 +30,7 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
   const contacts = (contactsData?.contacts ?? []).filter(
     (contact) => contact.email.trim().toLowerCase() !== googleEmailNorm,
   );
-  const destinoInicial = (proposta.clienteEmail || clienteEmail || '').trim();
+  const destinoInicial = (proposta?.clienteEmail || cliente?.email || '').trim();
   const [toTags, setToTags] = useState<EmailTagValue[]>(
     destinoInicial ? [{ email: destinoInicial }] : [],
   );
@@ -39,10 +39,13 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const numeros = propostas.map((item) => item.numeroIdentificacao).filter(Boolean).join(' e ');
 
   useEffect(() => {
     setErrorMsg(null);
   }, [toTags, ccTags]);
+
+  if (!proposta) return null;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -56,10 +59,13 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
       setErrorMsg('Informe o e-mail do cliente ou outro destinatário.');
       return;
     }
-    let pdf: Blob;
+    let pdfs: Blob[];
     setGeneratingPdf(true);
     try {
-      pdf = await generatePropostaComercialPdfBlob(proposta, cliente);
+      pdfs = [];
+      for (const item of propostas) {
+        pdfs.push(await generatePropostaComercialPdfBlob(item, clienteFor(item)));
+      }
     } catch {
       setErrorMsg('Não foi possível gerar o PDF da proposta.');
       setGeneratingPdf(false);
@@ -67,7 +73,12 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
     }
     setGeneratingPdf(false);
     enviarEmail.mutate(
-      { id: proposta.id, to, cc: ccTags.map((tag) => tag.email).filter((email) => email.toLowerCase() !== googleEmailNorm), pdf },
+      {
+        ids: propostas.map((item) => item.id),
+        to,
+        cc: ccTags.map((tag) => tag.email).filter((email) => email.toLowerCase() !== googleEmailNorm),
+        pdfs,
+      },
       {
         onSuccess: (res) => setSuccess(res.message ?? 'Proposta enviada com sucesso.'),
         onError: (err) => setErrorMsg(getComercialErrorMessage(err)),
@@ -86,7 +97,7 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
       <div className="search-modal-card search-modal-card--allow-overflow" style={{ width: '520px' }}>
         <div className="search-input-wrapper" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#1e293b' }}>
-            Enviar proposta {proposta.numeroIdentificacao || ''}
+            {propostas.length > 1 ? `Enviar propostas ${numeros}` : `Enviar proposta ${proposta.numeroIdentificacao || ''}`}
           </h3>
           <span className="search-close-key" style={{ cursor: 'pointer', fontSize: '12px' }} onClick={onClose}>Fechar (X)</span>
         </div>
@@ -103,7 +114,9 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
         ) : (
           <form onSubmit={handleSubmit} style={{ padding: '16px 24px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
             <p style={{ margin: 0, fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
-              A proposta será enviada pelo seu Gmail vinculado
+              {propostas.length > 1
+                ? 'As propostas de frete e armazenagem serão enviadas no mesmo e-mail, pelo seu Gmail vinculado'
+                : 'A proposta será enviada pelo seu Gmail vinculado'}
               {googleEmail ? <> (<strong>{googleEmail}</strong>)</> : null},
               com o mesmo PDF da impressão em anexo. Os demais envios do sistema continuam pelo e-mail corporativo.
             </p>

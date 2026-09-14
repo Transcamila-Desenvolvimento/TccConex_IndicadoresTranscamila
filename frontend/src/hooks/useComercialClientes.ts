@@ -3,6 +3,7 @@ import { apiService } from '../services/apiService';
 import type {
   ClienteComercialPayload,
   ClienteComercialQueryParams,
+  PropostaComercialFormDraft,
   PropostaComercialPayload,
   PropostaComercialQueryParams,
   PropostaComercialTipo,
@@ -24,6 +25,7 @@ export const COMERCIAL_ENDERECOS_KEY = ['comercial', 'enderecos'] as const;
 
 export const COMERCIAL_CLIENTES_KEY = ['comercial', 'clientes'] as const;
 export const COMERCIAL_PROPOSTAS_KEY = ['comercial', 'propostas'] as const;
+export const COMERCIAL_PROPOSTA_DRAFT_KEY = ['comercial', 'propostas', 'draft'] as const;
 export const COMERCIAL_TABELA_FRETE_KEY = ['comercial', 'tabela-frete'] as const;
 export const COMERCIAL_GENERALIDADES_KEY = ['comercial', 'generalidades'] as const;
 export const COMERCIAL_ICMS_UFS_KEY = ['comercial', 'icms-ufs'] as const;
@@ -117,6 +119,78 @@ export function usePropostasComerciais(params: PropostaComercialQueryParams) {
   });
 }
 
+export function usePropostasComerciaisDashboard(clienteId?: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...COMERCIAL_PROPOSTAS_KEY, 'dashboard', clienteId || 'todos'],
+    queryFn: () => apiService.getPropostasComerciaisDashboard(clienteId),
+    enabled,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function usePropostaComercialDraft(enabled = true) {
+  return useQuery({
+    queryKey: COMERCIAL_PROPOSTA_DRAFT_KEY,
+    queryFn: () => apiService.getPropostaComercialDraft(),
+    enabled,
+    staleTime: 15_000,
+    retry: 0,
+  });
+}
+
+export function useSavePropostaComercialDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Pick<PropostaComercialFormDraft, 'abaOperacao' | 'form'>) =>
+      apiService.savePropostaComercialDraft(payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(COMERCIAL_PROPOSTA_DRAFT_KEY, data);
+    },
+  });
+}
+
+export function useDeletePropostaComercialDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiService.deletePropostaComercialDraft(),
+    onSuccess: () => {
+      queryClient.setQueryData(COMERCIAL_PROPOSTA_DRAFT_KEY, {
+        version: 1,
+        updatedAt: null,
+        hasDraft: false,
+        abaOperacao: 'transferencia',
+        form: {
+          tipo: 'transporte_rodoviario',
+          status: 'rascunho',
+          clienteId: '',
+          clienteNome: '',
+          titulo: '',
+          subtitulo: '',
+          revisao: '01',
+          dataProposta: '',
+          propostaReferente: '',
+          responsavel: '',
+          reajuste: '',
+          att: '',
+          validade: '',
+          vigencia: '',
+          faturamento: '',
+          localEmissao: '',
+          valorEstimado: '',
+          observacoes: '',
+          incluiTransferencia: false,
+          incluiDistribuicao: false,
+          condicoes: [],
+          condicoesTransferencia: [],
+          condicoesDistribuicao: [],
+          tabelaArmazenagem: { codigo: 'AG', local: 'RONDONÓPOLIS-MT', periodoInicio: '', periodoFim: '', unidade: 'MT', itens: [], horaExtraTitulo: '', horaExtra: [], expediente: '' },
+          linhas: [],
+        },
+      } satisfies PropostaComercialFormDraft);
+    },
+  });
+}
+
 export function useCreatePropostaComercial() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -156,8 +230,8 @@ export function useDeletePropostaComercial() {
 export function useEnviarEmailPropostaComercial() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, to, cc, pdf }: { id: string; to?: string[]; cc?: string[]; pdf: Blob }) =>
-      apiService.enviarEmailPropostaComercial(id, { to, cc, pdf }),
+    mutationFn: ({ ids, to, cc, pdfs }: { ids: string[]; to?: string[]; cc?: string[]; pdfs: Blob[] }) =>
+      apiService.enviarEmailPropostasComerciais(ids, { to, cc, pdfs }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: COMERCIAL_PROPOSTAS_KEY });
       queryClient.invalidateQueries({ queryKey: COMERCIAL_CLIENTES_KEY });
@@ -289,11 +363,11 @@ export function useCalcularRotaDistancia() {
   });
 }
 
-export function useBuscarEnderecosComercial(q: string, enabled = true) {
+export function useBuscarEnderecosComercial(q: string, enabled = true, tipo: 'endereco' | 'cidade' = 'endereco') {
   const termo = q.trim();
   return useQuery({
-    queryKey: [...COMERCIAL_ENDERECOS_KEY, termo],
-    queryFn: () => apiService.buscarEnderecosComercial(termo),
+    queryKey: [...COMERCIAL_ENDERECOS_KEY, tipo, termo],
+    queryFn: () => apiService.buscarEnderecosComercial(termo, tipo),
     enabled: enabled && termo.length >= 3,
     staleTime: 60_000,
   });
@@ -342,11 +416,13 @@ export function useDeleteTabelaFreteLinha() {
 export function useComercialGeneralidades(
   clienteId: string | null,
   tipo: TipoGeneralidadeComercial | null,
+  options?: { enabled?: boolean; permitirPadrao?: boolean },
 ) {
+  const permitirPadrao = options?.permitirPadrao ?? false;
   return useQuery({
-    queryKey: [...COMERCIAL_GENERALIDADES_KEY, clienteId, tipo],
-    queryFn: () => apiService.getGeneralidadesComercial(clienteId!, tipo!),
-    enabled: Boolean(clienteId && tipo),
+    queryKey: [...COMERCIAL_GENERALIDADES_KEY, clienteId ?? 'padrao', tipo],
+    queryFn: () => apiService.getGeneralidadesComercial(clienteId, tipo!),
+    enabled: Boolean(tipo) && (options?.enabled ?? true) && (Boolean(clienteId) || permitirPadrao),
   });
 }
 
@@ -401,11 +477,22 @@ export function useSaveComercialGeneralidades() {
       clienteId,
       tipo,
       items,
+      aplicar,
     }: {
-      clienteId: string;
+      clienteId: string | null;
       tipo: TipoGeneralidadeComercial;
       items: PropostaCondicaoComercial[];
-    }) => apiService.saveGeneralidadesComercial(clienteId, tipo, items),
+      aplicar?: 'todos' | 'novos';
+    }) => apiService.saveGeneralidadesComercial(clienteId, tipo, items, aplicar),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: COMERCIAL_GENERALIDADES_KEY }),
+  });
+}
+
+export function useDeleteComercialGeneralidades() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ clienteId, tipo }: { clienteId: string; tipo: TipoGeneralidadeComercial }) =>
+      apiService.deleteGeneralidadesComercial(clienteId, tipo),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: COMERCIAL_GENERALIDADES_KEY }),
   });
 }

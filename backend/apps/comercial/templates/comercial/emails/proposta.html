@@ -33,7 +33,7 @@
                 Área comercial
               </p>
               <h1 style="margin:8px 0 0;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:24px;line-height:1.25;font-weight:600;color:#0f2744;">
-                Proposta comercial
+                {% if plural %}Propostas comerciais{% else %}Proposta comercial{% endif %}
               </h1>
               <p style="margin:10px 0 0;font-size:14px;color:#4a5563;">
                 Nº {{ numero }}
@@ -44,10 +44,10 @@
             <td style="padding:28px 40px 8px;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:15px;line-height:1.7;color:#2a3340;">
               <p style="margin:0 0 18px;">{{ saudacao }}</p>
               <p style="margin:0 0 18px;">
-                Encaminhamos a proposta comercial nº&nbsp;<strong style="color:#0f2744;">{{ numero }}</strong>, referente a <strong style="color:#0f2744;">{{ servico }}</strong>, elaborada para <strong style="color:#0f2744;">{{ cliente_nome }}</strong>.
+                Encaminhamos {% if plural %}as propostas comerciais nº&nbsp;<strong style="color:#0f2744;">{{ numero }}</strong>, referentes a <strong style="color:#0f2744;">{{ servico }}</strong>, elaboradas{% else %}a proposta comercial nº&nbsp;<strong style="color:#0f2744;">{{ numero }}</strong>, referente a <strong style="color:#0f2744;">{{ servico }}</strong>, elaborada{% endif %} para <strong style="color:#0f2744;">{{ cliente_nome }}</strong>.
               </p>
               <p style="margin:0;">
-                O documento integral segue em anexo, em PDF, para análise e arquivo.
+                {% if plural %}Os documentos integrais seguem em anexo, em PDF, para análise e arquivo.{% else %}O documento integral segue em anexo, em PDF, para análise e arquivo.{% endif %}
               </p>
             </td>
           </tr>
@@ -112,7 +112,7 @@
                 <tr>
                   <td style="width:3px;background:#1179b9;font-size:0;line-height:0;">&nbsp;</td>
                   <td style="padding:12px 0 12px 16px;font-size:13px;line-height:1.5;color:#4a5563;">
-                    A proposta completa está anexada a esta mensagem em formato PDF.
+                    {% if plural %}As propostas completas estão anexadas a esta mensagem em formato PDF.{% else %}A proposta completa está anexada a esta mensagem em formato PDF.{% endif %}
                   </td>
                 </tr>
               </table>
