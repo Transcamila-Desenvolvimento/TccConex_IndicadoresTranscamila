@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
   getComercialErrorMessage,
+  bumpPropostaDraftGen,
   useClientesComercial,
   useComercialGeneralidades,
   useCreatePropostaComercial,
@@ -402,6 +404,7 @@ const IncludeField: React.FC<{
 );
 
 const ComercialPropostas: React.FC = () => {
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const canManage = userHasFuncao(user, 'Comercial', 'gerenciar-propostas');
   const [search, setSearch] = useState('');
@@ -422,6 +425,7 @@ const ComercialPropostas: React.FC = () => {
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [draftUnavailable, setDraftUnavailable] = useState(false);
   const skipNextDraftSave = useRef(true);
+  const suppressDraftSave = useRef(false);
 
   const propostasQuery = usePropostasComerciais({
     page,
@@ -581,25 +585,30 @@ const ComercialPropostas: React.FC = () => {
 
   useEffect(() => {
     if (!isModalOpen || editingId || !draftHydrated || draftUnavailable || !canManage) return;
+    if (suppressDraftSave.current || createProposta.isPending || deleteDraft.isPending) return;
     if (skipNextDraftSave.current) {
       skipNextDraftSave.current = false;
       return;
     }
     const timer = window.setTimeout(() => {
+      if (suppressDraftSave.current) return;
       saveDraft.mutate(
         { abaOperacao, form },
         {
           onSuccess: (result) => {
+            if (suppressDraftSave.current) return;
             setDraftUpdatedAt(result.hasDraft ? result.updatedAt : null);
             if (!result.hasDraft) setRestoredDraft(false);
             setDraftUnavailable(false);
           },
-          onError: () => setDraftUnavailable(true),
+          onError: () => {
+            if (!suppressDraftSave.current) setDraftUnavailable(true);
+          },
         },
       );
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [abaOperacao, canManage, draftHydrated, draftUnavailable, editingId, form, isModalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [abaOperacao, canManage, createProposta.isPending, deleteDraft.isPending, draftHydrated, draftUnavailable, editingId, form, isModalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const goToPage = (nextPage: number) => {
     setPage(nextPage);
@@ -622,6 +631,7 @@ const ComercialPropostas: React.FC = () => {
     setDraftUpdatedAt(null);
     setDraftUnavailable(false);
     skipNextDraftSave.current = true;
+    suppressDraftSave.current = false;
     setIsModalOpen(true);
   };
 
@@ -685,6 +695,7 @@ const ComercialPropostas: React.FC = () => {
     setDraftUpdatedAt(null);
     setDraftUnavailable(false);
     skipNextDraftSave.current = true;
+    suppressDraftSave.current = true;
     setIsModalOpen(true);
   };
 
@@ -793,16 +804,23 @@ const ComercialPropostas: React.FC = () => {
           }))
         : [],
     };
+    if (!editingId) {
+      suppressDraftSave.current = true;
+      skipNextDraftSave.current = true;
+      bumpPropostaDraftGen(queryClient);
+    }
     const callbacks = {
       onSuccess: () => {
         if (editingId) {
           closeModal();
           return;
         }
-        skipNextDraftSave.current = true;
         deleteDraft.mutate(undefined, { onSettled: () => closeModal() });
       },
-      onError: (err: unknown) => alert(getComercialErrorMessage(err)),
+      onError: (err: unknown) => {
+        if (!editingId) suppressDraftSave.current = false;
+        alert(getComercialErrorMessage(err));
+      },
     };
     editingId
       ? updateProposta.mutate({ id: editingId, payload }, callbacks)
@@ -899,10 +917,14 @@ const ComercialPropostas: React.FC = () => {
 
   const discardDraft = () => {
     if (!window.confirm('Descartar o rascunho desta proposta? Os dados salvos na sua conta serão apagados.')) return;
+    suppressDraftSave.current = true;
     skipNextDraftSave.current = true;
     deleteDraft.mutate(undefined, {
       onSuccess: () => closeModal(),
-      onError: (err) => alert(getComercialErrorMessage(err) || 'Não foi possível descartar o rascunho.'),
+      onError: (err) => {
+        suppressDraftSave.current = false;
+        alert(getComercialErrorMessage(err) || 'Não foi possível descartar o rascunho.');
+      },
     });
   };
 

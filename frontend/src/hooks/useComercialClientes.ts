@@ -26,6 +26,18 @@ export const COMERCIAL_ENDERECOS_KEY = ['comercial', 'enderecos'] as const;
 export const COMERCIAL_CLIENTES_KEY = ['comercial', 'clientes'] as const;
 export const COMERCIAL_PROPOSTAS_KEY = ['comercial', 'propostas'] as const;
 export const COMERCIAL_PROPOSTA_DRAFT_KEY = ['comercial', 'propostas', 'draft'] as const;
+const COMERCIAL_PROPOSTA_DRAFT_GEN_KEY = ['comercial', 'propostas', 'draft', 'gen'] as const;
+
+function propostaDraftGen(queryClient: ReturnType<typeof useQueryClient>) {
+  return queryClient.getQueryData<number>(COMERCIAL_PROPOSTA_DRAFT_GEN_KEY) ?? 0;
+}
+
+export function bumpPropostaDraftGen(queryClient: ReturnType<typeof useQueryClient>) {
+  const next = propostaDraftGen(queryClient) + 1;
+  queryClient.setQueryData(COMERCIAL_PROPOSTA_DRAFT_GEN_KEY, next);
+  return next;
+}
+
 export const COMERCIAL_TABELA_FRETE_KEY = ['comercial', 'tabela-frete'] as const;
 export const COMERCIAL_GENERALIDADES_KEY = ['comercial', 'generalidades'] as const;
 export const COMERCIAL_ICMS_UFS_KEY = ['comercial', 'icms-ufs'] as const;
@@ -143,7 +155,9 @@ export function useSavePropostaComercialDraft() {
   return useMutation({
     mutationFn: (payload: Pick<PropostaComercialFormDraft, 'abaOperacao' | 'form'>) =>
       apiService.savePropostaComercialDraft(payload),
-    onSuccess: (data) => {
+    onMutate: () => ({ gen: propostaDraftGen(queryClient) }),
+    onSuccess: (data, _vars, ctx) => {
+      if (ctx && propostaDraftGen(queryClient) !== ctx.gen) return;
       queryClient.setQueryData(COMERCIAL_PROPOSTA_DRAFT_KEY, data);
     },
   });
@@ -153,6 +167,9 @@ export function useDeletePropostaComercialDraft() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => apiService.deletePropostaComercialDraft(),
+    onMutate: () => {
+      bumpPropostaDraftGen(queryClient);
+    },
     onSuccess: () => {
       queryClient.setQueryData(COMERCIAL_PROPOSTA_DRAFT_KEY, {
         version: 1,
