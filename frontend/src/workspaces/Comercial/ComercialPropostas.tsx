@@ -945,6 +945,18 @@ const ComercialPropostas: React.FC = () => {
   };
 
   const isPending = createProposta.isPending || updateProposta.isPending || deleteDraft.isPending;
+  const formIsLoading = Boolean(
+    isModalOpen && (
+      (!editingId && (!draftHydrated || draftQuery.isFetching))
+      || saveDraft.isPending
+      || isPending
+      || generalidadesTransferencia.isFetching
+      || generalidadesDistribuicao.isFetching
+      || generalidadesArmazenagem.isFetching
+      || tabelaDistribuicaoCliente.listQuery.isFetching
+      || tabelaDistribuicaoCliente.detalheQuery.isFetching
+    ),
+  );
   const destinosOk = destinosProntosParaSalvar(form);
   const armazenagemOk = form.tipo !== 'armazenagem' || tabelaArmazenagemProntaParaSalvar(form.tabelaArmazenagem);
   const canSave = canManage && Boolean(form.clienteId) && destinosOk && armazenagemOk && !isPending;
@@ -1184,6 +1196,11 @@ const ComercialPropostas: React.FC = () => {
       {isModalOpen && !editingId && !draftHydrated ? (
         <div className="search-backdrop proposta-include-backdrop">
           <div className="proposta-include-modal" role="status" aria-live="polite" style={{ minHeight: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {formIsLoading ? (
+              <div className="proposta-include-progress" role="progressbar" aria-label="Carregando">
+                <span className="proposta-include-progress-bar" />
+              </div>
+            ) : null}
             <p style={{ margin: 0, color: '#64748b', fontSize: 14 }}>Carregando rascunho...</p>
           </div>
         </div>
@@ -1195,6 +1212,11 @@ const ComercialPropostas: React.FC = () => {
           onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
         >
           <div className="proposta-include-modal" role="dialog" aria-modal="true" aria-labelledby="proposta-include-title">
+            {formIsLoading ? (
+              <div className="proposta-include-progress" role="progressbar" aria-label="Carregando">
+                <span className="proposta-include-progress-bar" />
+              </div>
+            ) : null}
             <form className="proposta-include-form" onSubmit={handleSubmit}>
               <header className="proposta-include-header">
                 <button type="button" className="proposta-include-close" onClick={closeModal} aria-label="Fechar">
