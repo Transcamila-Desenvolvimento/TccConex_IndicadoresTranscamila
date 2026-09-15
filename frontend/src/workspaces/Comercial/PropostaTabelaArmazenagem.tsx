@@ -91,7 +91,7 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
         </div>
       </div>
       <div className="table-container proposta-destinos-wrap">
-        <table className="data-table comercial-browse-table proposta-destinos-table proposta-armazenagem-table">
+        <table className="erp-table reports-table comercial-browse-table proposta-destinos-table proposta-armazenagem-table">
           <thead>
             <tr>
               <th>Armazém</th>
@@ -148,7 +148,7 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
         <h4>{TABELA_ARMAZENAGEM_PADRAO.horaExtraTitulo}</h4>
       </div>
       <div className="table-container proposta-destinos-wrap">
-        <table className="data-table comercial-browse-table proposta-destinos-table proposta-armazenagem-table">
+        <table className="erp-table reports-table comercial-browse-table proposta-destinos-table proposta-armazenagem-table">
           <thead>
             <tr>
               <th>Período</th>

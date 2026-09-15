@@ -14796,17 +14796,19 @@ textarea.form-input {
 
 .comercial-browse-card,
 .comercial-propostas-card {
-  padding: 0 !important;
-  border: 1px solid #dbe3ec !important;
-  border-radius: 4px !important;
-  box-shadow: none !important;
-  background: #fff !important;
+  padding: 3px !important;
+  overflow: hidden;
+}
+
+.comercial-browse-card .reports-table,
+.comercial-propostas-card .reports-table {
+  border-spacing: 0 3px;
+  margin-top: -3px;
 }
 
 .comercial-browse-card .table-container,
 .comercial-propostas-card .table-container {
-  border-radius: 0;
-  background: #fff;
+  background: transparent;
 }
 
 .comercial-produtos-table .col-expand { width: 40px; }
@@ -14859,68 +14861,23 @@ textarea.form-input {
 
 .comercial-browse-card .erp-pagination-bar {
   margin-top: 0;
-  border-radius: 0;
-  background: #f3f6f9;
-  border-top: 1px solid #dbe3ec;
+  border-radius: 6px;
+  background: #f3f4f6;
+  border-top: none;
 }
 
 .comercial-browse-table {
   width: 100%;
   table-layout: fixed;
-  border-collapse: collapse;
-  border-spacing: 0;
 }
 
-.fat-list-compact .comercial-browse-table th,
 .fat-list-compact .comercial-browse-table td,
-.comercial-browse-table th,
 .comercial-browse-table td {
-  padding: 7px 10px;
+  padding: 11px 14px;
   vertical-align: middle;
   text-align: left;
   font-size: 13px;
-  color: #1f2937;
-}
-
-.comercial-browse-card .comercial-browse-table thead th,
-.comercial-propostas-card .comercial-browse-table thead th,
-.comercial-browse-table thead th {
-  background: linear-gradient(180deg, #fbfcfd 0%, #f3f6f9 100%) !important;
-  color: #3d4a5c !important;
-  font-size: 12px !important;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  text-transform: none;
-  padding: 8px 10px !important;
-  line-height: 1.2;
-  border: 0 !important;
-  border-bottom: 1px solid #dbe3ec !important;
-  border-right: 1px solid rgba(15, 23, 42, 0.06) !important;
-  box-shadow: inset 0 1px 0 #fff !important;
-  border-radius: 0 !important;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-.comercial-browse-card .comercial-browse-table thead th,
-.comercial-propostas-card .comercial-browse-table thead th {
-  height: 42px;
-  min-height: 42px;
-  padding: 10px 12px !important;
-  box-sizing: border-box;
-}
-
-.comercial-browse-table thead th:last-child {
-  border-right: 0 !important;
-}
-
-.comercial-browse-table tbody td {
-  background: #fff;
-  border-bottom: 1px solid #eef0f2;
-}
-
-.comercial-browse-table tbody tr:hover td {
-  background: #f7fafc !important;
+  color: #111827;
 }
 
 .comercial-browse-empty {
@@ -14944,8 +14901,6 @@ textarea.form-input {
   table-layout: fixed;
   width: 100%;
   min-width: 1080px;
-  border-collapse: separate;
-  border-spacing: 0;
 }
 
 .comercial-propostas-table .col-check { width: 44px; }
@@ -14958,9 +14913,8 @@ textarea.form-input {
 .comercial-propostas-table .col-status { width: 96px; }
 .comercial-propostas-table .col-venc { width: 112px; }
 
-.comercial-propostas-table th,
 .comercial-propostas-table td {
-  padding: 10px 12px;
+  padding: 11px 14px;
   vertical-align: middle;
   text-align: left;
 }
@@ -14969,11 +14923,6 @@ textarea.form-input {
 .comercial-propostas-table thead th {
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.comercial-propostas-table tbody td {
-  background: #fff;
-  border-bottom: 1px solid var(--border-color);
 }
 
 .comercial-propostas-table th.checkbox-cell,
@@ -15372,13 +15321,6 @@ textarea.form-input {
   height: 15px;
   margin: 0;
   accent-color: #118CC4;
-}
-
-.comercial-generalidades-hint {
-  margin: 8px 12px 0;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 1.45;
 }
 
 .comercial-generalidades-clientes {
@@ -15860,29 +15802,13 @@ textarea.form-input {
   margin: 0;
 }
 
-.comercial-historico-modal .data-table th,
-.comercial-historico-modal .data-table td {
+.comercial-historico-modal .reports-table td {
   white-space: nowrap;
-  padding: 7px 10px;
+  padding: 11px 14px;
   font-size: 13px;
 }
 
-.comercial-historico-modal .data-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: #f1f5f9;
-  font-size: 12px;
-  font-weight: 600;
-  color: #475569;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.comercial-historico-modal .data-table tbody td {
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.comercial-historico-modal .data-table tbody tr:last-child td {
+.comercial-historico-modal .reports-table tbody tr:last-child td {
   border-bottom: 0;
 }
 
@@ -17653,11 +17579,11 @@ textarea.form-input {
   position: sticky;
   top: 0;
   z-index: 2;
-  font-weight: 600;
+  font-weight: 500;
   text-align: right;
   vertical-align: bottom;
-  color: var(--text-secondary);
-  background: #f8fafc;
+  color: #374151;
+  background: #f3f4f6;
 }
 
 .tabela-frete-grade tbody td {
@@ -17691,7 +17617,7 @@ textarea.form-input {
 
 .tabela-frete-grade thead th.is-km {
   z-index: 4;
-  background: #f8fafc;
+  background: #f3f4f6;
 }
 
 .tabela-frete-grade tbody td.is-km:nth-child(1),
@@ -17804,9 +17730,10 @@ textarea.form-input {
 }
 
 .tabela-frete-mini thead th {
-  background: #f8fafc;
-  font-weight: 600;
-  color: var(--text-secondary);
+  background: #f3f4f6;
+  font-weight: 500;
+  color: #374151;
+  border-bottom: none;
 }
 
 .tabela-frete-mini td input {

@@ -976,9 +976,14 @@ class TabelaFrete(models.Model):
         from copy import deepcopy
 
         with transaction.atomic():
+            codigo = (self.codigo or '').strip()
+            if not codigo:
+                codigo = f'TAB-{self.pk}'
+                type(self).objects.filter(pk=self.pk).update(codigo=codigo)
+                self.codigo = codigo
             nova = TabelaFrete(
                 nome=self.nome_base(),
-                codigo=self.codigo,
+                codigo=codigo,
                 revisao=self.revisao + 1,
                 vigencia_inicio=None,
                 vigencia_fim=None,

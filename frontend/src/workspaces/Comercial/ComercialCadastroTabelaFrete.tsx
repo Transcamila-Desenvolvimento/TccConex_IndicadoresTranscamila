@@ -128,7 +128,7 @@ const ComercialCadastroTabelaFrete: React.FC = () => {
       >
         <div className="erp-card reports-table-card comercial-browse-card" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
-            <table className="data-table comercial-browse-table tabela-frete-list-table">
+            <table className="erp-table reports-table comercial-browse-table tabela-frete-list-table">
               <colgroup>
                 <col className="tabela-frete-list-col-nome" />
                 <col className="tabela-frete-list-col-cliente" />
@@ -163,10 +163,8 @@ const ComercialCadastroTabelaFrete: React.FC = () => {
                         <span className="tabela-frete-list-icon" aria-hidden><i className="bi bi-table" /></span>
                         <span className="tabela-frete-list-nome-copy">
                           <strong>{nomeBaseTabelaFrete(tabela.nome) || tabela.nome}</strong>
-                          {(tabela.codigo || tabela.revisao) ? (
-                            <span className="tabela-frete-list-meta">
-                              {[tabela.codigo, tabela.revisao ? `rev. ${tabela.revisao}` : ''].filter(Boolean).join(' · ')}
-                            </span>
+                          {tabela.codigo ? (
+                            <span className="tabela-frete-list-meta">{tabela.codigo}</span>
                           ) : null}
                         </span>
                       </td>

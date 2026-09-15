@@ -238,7 +238,7 @@ const ComercialCadastroProdutos: React.FC = () => {
       >
         <div className="erp-card reports-table-card comercial-browse-card" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
-            <table className="data-table comercial-browse-table comercial-produtos-table">
+            <table className="erp-table reports-table comercial-browse-table comercial-produtos-table">
               <colgroup>
                 <col className="col-expand" />
                 <col className="col-nome" />

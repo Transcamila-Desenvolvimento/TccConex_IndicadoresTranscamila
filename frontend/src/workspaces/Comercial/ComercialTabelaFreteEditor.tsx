@@ -790,7 +790,7 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
               </div>
               {gradeOpen && tabela.tipo === 'transferencia' ? (
                 <div className="table-container tabela-frete-scroll">
-                  <table className="data-table">
+                  <table className="erp-table reports-table">
                     <thead>
                       <tr>
                         <th>Origem</th>

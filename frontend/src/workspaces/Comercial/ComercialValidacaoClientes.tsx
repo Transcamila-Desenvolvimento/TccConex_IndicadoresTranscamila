@@ -185,7 +185,7 @@ const ComercialValidacaoClientes: React.FC = () => {
       >
         <div className="erp-card reports-table-card comercial-browse-card" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
-            <table className="data-table comercial-browse-table comercial-validacao-table">
+            <table className="erp-table reports-table comercial-browse-table comercial-validacao-table">
               <colgroup>
                 <col className="col-nome" />
                 <col className="col-cnpj" />
@@ -284,7 +284,7 @@ const ComercialValidacaoClientes: React.FC = () => {
                 <p className="muted" style={{ margin: 0 }}>Nenhum produto vinculado.</p>
               ) : (
                 <div className="table-container">
-                  <table className="data-table comercial-browse-table">
+                  <table className="erp-table reports-table comercial-browse-table">
                     <thead>
                       <tr>
                         <th>Produto</th>

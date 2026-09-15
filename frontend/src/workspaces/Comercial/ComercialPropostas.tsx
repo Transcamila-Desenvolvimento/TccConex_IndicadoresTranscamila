@@ -1090,7 +1090,7 @@ const ComercialPropostas: React.FC = () => {
       >
         <div className="erp-card reports-table-card comercial-propostas-card" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
-            <table className="data-table comercial-browse-table comercial-propostas-table">
+            <table className="erp-table reports-table comercial-browse-table comercial-propostas-table">
               <colgroup>
                 <col className="col-check" />
                 <col className="col-num" />
@@ -1528,7 +1528,7 @@ const ComercialPropostas: React.FC = () => {
                       )}
                     </div>
                     <div className="table-container proposta-destinos-wrap">
-                      <table className="data-table comercial-browse-table proposta-destinos-table">
+                      <table className="erp-table reports-table comercial-browse-table proposta-destinos-table">
                         <thead>
                           <tr>
                             <th className="col-trecho">Origem</th>

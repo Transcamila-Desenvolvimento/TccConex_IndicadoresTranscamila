@@ -30,7 +30,6 @@ const ComercialCadastroGeneralidades: React.FC = () => {
   const saveCatalog = useSaveComercialGeneralidades();
   const clientes = clientesQuery.data?.results ?? [];
   const isPadraoGeral = !clienteId;
-  const origemCliente = catalogQuery.data?.origem === 'cliente';
   const tipoLabel = TIPOS_GENERALIDADE_COMERCIAL.find((item) => item.key === tipo)?.label ?? tipo;
 
   useEffect(() => {
@@ -144,15 +143,8 @@ const ComercialCadastroGeneralidades: React.FC = () => {
         errorMessage="Não foi possível carregar as generalidades."
       >
         <form className="erp-card reports-table-card comercial-browse-card" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onSubmit={handleSave}>
-          <p className="comercial-generalidades-hint">
-            {isPadraoGeral
-              ? `Catálogo padrão de ${tipoLabel.toLowerCase()}. Ao salvar, você escolhe se a alteração vale para todos os clientes ou somente para os novos.`
-              : origemCliente
-                ? `Catálogo próprio deste cliente em ${tipoLabel.toLowerCase()}.`
-                : `Este cliente ainda usa o padrão geral de ${tipoLabel.toLowerCase()}. Salve para gravar um catálogo próprio.`}
-          </p>
           <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
-            <table className="data-table comercial-browse-table comercial-generalidades-table">
+            <table className="erp-table reports-table comercial-browse-table comercial-generalidades-table">
               <thead>
                 <tr>
                   <th style={{ width: '32%' }}>Item</th>

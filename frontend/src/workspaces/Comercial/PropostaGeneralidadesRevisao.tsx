@@ -38,7 +38,7 @@ export default function PropostaGeneralidadesRevisao({
         <p className="proposta-modalidades-hint">{emptyHint}</p>
       ) : (
         <div className="table-container proposta-destinos-wrap proposta-generalidades-wrap">
-          <table className="data-table comercial-browse-table proposta-destinos-table comercial-generalidades-table">
+          <table className="erp-table reports-table comercial-browse-table proposta-destinos-table comercial-generalidades-table">
             <colgroup>
               <col className="col-item" />
               <col className="col-condicao" />

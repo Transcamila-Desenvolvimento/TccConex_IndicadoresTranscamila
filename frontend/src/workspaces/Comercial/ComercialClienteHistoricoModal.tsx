@@ -111,7 +111,7 @@ const ComercialClienteHistoricoModal: React.FC<ComercialClienteHistoricoModalPro
               <p className="comercial-historico-empty">Nenhuma proposta aceita para este cliente.</p>
             ) : (
               <div className="table-container comercial-historico-table">
-                <table className="data-table">
+                <table className="erp-table reports-table">
                   <thead>
                     <tr>
                       <th>Nº</th>

@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from django.db import transaction
 from django.utils import timezone
 from django.db.models import Case, CharField, Count, DateField, DurationField, ExpressionWrapper, F, IntegerField, Q, Value, When, Window
-from django.db.models.functions import Cast, Coalesce, Concat, Lower, NullIf, Replace, RowNumber, TruncDate, TruncMonth
+from django.db.models.functions import Cast, Coalesce, Concat, Lower, NullIf, Replace, RowNumber, Trim, TruncDate, TruncMonth
 from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -203,22 +203,39 @@ def _resolver_usuario_tabela_frete(tabela):
 
 
 def _query_revisoes_tabela_frete(tabela):
-    qs = TabelaFrete.objects.select_related('criado_por')
+    qs = TabelaFrete.objects.select_related('criado_por').filter(tipo=tabela.tipo)
     codigo = (tabela.codigo or '').strip()
     if codigo:
-        qs = qs.filter(codigo=codigo, tipo=tabela.tipo)
-    else:
-        qs = qs.filter(pk=tabela.pk)
-    return qs.order_by('-revisao', '-data_criacao')
+        return qs.filter(codigo=codigo).order_by('-revisao', '-data_criacao')
+    base = tabela.nome_base()
+    candidatos = qs.filter(Q(codigo='') | Q(codigo__isnull=True), clientes_vinculo_key=tabela.clientes_vinculo_key)
+    ids = [item.pk for item in candidatos if item.nome_base() == base]
+    if tabela.pk not in ids:
+        ids.append(tabela.pk)
+    return TabelaFrete.objects.select_related('criado_por').filter(pk__in=ids).order_by('-revisao', '-data_criacao')
+
+
+def _grupo_revisao_tabela_frete():
+    codigo_grupo = Concat(Value('c:'), Trim('codigo'), Value('|'), F('tipo'), output_field=CharField())
+    nome_grupo = Concat(
+        Value('n:'),
+        F('tipo'),
+        Value('|'),
+        Lower(Trim('nome')),
+        Value('|'),
+        Coalesce(NullIf(Trim('clientes_vinculo_key'), Value('')), Value('-')),
+        output_field=CharField(),
+    )
+    return Case(
+        When(~Q(codigo='') & Q(codigo__isnull=False), then=codigo_grupo),
+        default=nome_grupo,
+        output_field=CharField(),
+    )
 
 
 def _queryset_ultima_revisao_listagem(qs):
     return qs.annotate(
-        _grupo_revisao=Case(
-            When(Q(codigo='') | Q(codigo__isnull=True), then=Cast('pk', CharField())),
-            default=Concat('codigo', Value('|'), 'tipo', output_field=CharField()),
-            output_field=CharField(),
-        ),
+        _grupo_revisao=_grupo_revisao_tabela_frete(),
     ).annotate(
         _revisao_ordem=Window(
             expression=RowNumber(),
@@ -801,7 +818,7 @@ class TabelaFreteViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        qs = super().get_queryset().annotate(linhas_count=Count('linhas')).order_by('-data_atualizacao', 'nome')
+        qs = super().get_queryset()
         search = (self.request.query_params.get('search') or '').strip()
         tipo = (self.request.query_params.get('tipo') or '').strip()
         cliente = (self.request.query_params.get('cliente') or '').strip()
@@ -831,6 +848,7 @@ class TabelaFreteViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             )
         if getattr(self, 'action', None) == 'list':
             qs = _queryset_ultima_revisao_listagem(qs)
+        qs = qs.annotate(linhas_count=Count('linhas', distinct=True)).order_by('-data_atualizacao', 'nome')
         if getattr(self, 'action', None) in ('retrieve', 'update', 'partial_update', 'exportar'):
             qs = qs.prefetch_related('linhas')
         return qs

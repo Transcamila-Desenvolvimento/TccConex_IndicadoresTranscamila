@@ -1640,6 +1640,32 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(linhas[0]['id'], nova_id)
         self.assertEqual(linhas[0]['revisao'], 71)
 
+    def test_listagem_esconde_revisoes_anteriores_sem_codigo(self):
+        self._auth(self.admin)
+        created = self.api.post(
+            '/api/comercial/tabela-frete/',
+            {'nome': 'Tabela teste', 'tipo': 'distribuicao'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        tabela_id = created.json()['id']
+        published = self.api.post(f'/api/comercial/tabela-frete/{tabela_id}/publicar/', **HEADERS)
+        self.assertEqual(published.status_code, 200, published.content)
+        revisao = self.api.post(f'/api/comercial/tabela-frete/{tabela_id}/nova-revisao/', **HEADERS)
+        self.assertEqual(revisao.status_code, 201, revisao.content)
+        nova_id = revisao.json()['id']
+
+        listed = self.api.get('/api/comercial/tabela-frete/?tipo=distribuicao&search=Tabela teste', **HEADERS)
+        self.assertEqual(listed.status_code, 200, listed.content)
+        linhas = [item for item in listed.json()['results'] if item.get('nome') == 'Tabela teste']
+        self.assertEqual(len(linhas), 1)
+        self.assertEqual(linhas[0]['id'], nova_id)
+
+        historico = self.api.get(f'/api/comercial/tabela-frete/{nova_id}/historico-revisoes/', **HEADERS)
+        self.assertEqual(historico.status_code, 200, historico.content)
+        self.assertEqual(len(historico.json()['revisoes']), 2)
+
     def test_excluir_tabela_frete_remove_todas_revisoes(self):
         self._auth(self.admin)
         created = self.api.post(
