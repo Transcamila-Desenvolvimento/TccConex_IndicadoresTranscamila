@@ -2639,7 +2639,7 @@ export const apiService = {
         ? data.clientesComProposta.map((item: Record<string, unknown>) => ({
             id: String(item.id ?? ''),
             nome: String(item.nome ?? '').trim(),
-          })).filter((item) => item.id && item.nome)
+          })).filter((row: { id: string; nome: string }) => Boolean(row.id && row.nome))
         : [],
       recentes: Array.isArray(data.recentes)
         ? data.recentes.map((item: Record<string, unknown>) => ({
