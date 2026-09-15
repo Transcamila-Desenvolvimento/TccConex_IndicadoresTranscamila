@@ -2737,6 +2737,7 @@ export interface PropostaComercialDashboard {
   porStatus: Record<PropostaComercialStatus, number>;
   porTipo: Record<PropostaComercialTipo, number>;
   porMes: PropostaComercialDashboardMes[];
+  clientesComProposta: Array<{ id: string; nome: string }>;
   recentes: PropostaComercialDashboardRecente[];
 }
 

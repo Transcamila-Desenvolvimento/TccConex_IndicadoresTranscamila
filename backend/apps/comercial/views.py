@@ -673,6 +673,16 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             for row in qs.values('tipo').annotate(total=Count('id'))
         }
         recentes = qs.order_by('-data_criacao', '-pk')[:6]
+        clientes_ids = list(
+            super().get_queryset().filter(cliente_id__isnull=False).values_list('cliente_id', flat=True).distinct()
+        )
+        clientes_com_proposta = [
+            {
+                'id': str(item.pk),
+                'nome': (item.nome_fantasia or item.razao_social or '').strip() or f'Cliente {item.pk}',
+            }
+            for item in ClienteComercial.objects.filter(pk__in=clientes_ids).order_by('razao_social', 'nome_fantasia')
+        ]
         return Response({
             'total': qs.count(),
             'porStatus': {
@@ -686,6 +696,7 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 'armazenagem': por_tipo.get(TIPO_PROPOSTA_ARMAZENAGEM, 0),
             },
             'porMes': _serie_mensal_propostas(qs),
+            'clientesComProposta': clientes_com_proposta,
             'recentes': [
                 {
                     'id': str(item.pk),

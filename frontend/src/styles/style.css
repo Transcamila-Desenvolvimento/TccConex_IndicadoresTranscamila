@@ -15479,6 +15479,10 @@ textarea.form-input {
   border-color: var(--primary-color);
 }
 
+.crm-dash-panel.async-query-content--overlay-host {
+  min-height: 0;
+}
+
 .crm-dash-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

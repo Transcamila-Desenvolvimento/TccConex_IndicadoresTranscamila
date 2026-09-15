@@ -322,12 +322,22 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(body['recentes'][0]['clienteNome'], 'EMPRESA TESTE LTDA')
         self.assertEqual(len(body['porMes']), 6)
         self.assertIn('criadas', body['porMes'][-1])
+        self.assertEqual(len(body['clientesComProposta']), 1)
+        self.assertEqual(body['clientesComProposta'][0]['id'], str(cliente.json()['id']))
+        sem_proposta = dict(PAYLOAD)
+        sem_proposta['cnpj'] = '00.000.000/0002-72'
+        sem_proposta['razaoSocial'] = 'Cliente Sem Proposta'
+        outro = self.api.post('/api/comercial/clientes/', sem_proposta, format='json', **HEADERS)
+        self.assertEqual(outro.status_code, 201, outro.content)
+        ainda = self.api.get('/api/comercial/propostas/dashboard/', **HEADERS)
+        self.assertEqual(len(ainda.json()['clientesComProposta']), 1)
         filtrado = self.api.get(
             f'/api/comercial/propostas/dashboard/?cliente={cliente.json()["id"]}',
             **HEADERS,
         )
         self.assertEqual(filtrado.status_code, 200, filtrado.content)
         self.assertEqual(filtrado.json()['total'], 2)
+        self.assertEqual(len(filtrado.json()['clientesComProposta']), 1)
         vazio = self.api.get(
             '/api/comercial/propostas/dashboard/?cliente=999999',
             **HEADERS,

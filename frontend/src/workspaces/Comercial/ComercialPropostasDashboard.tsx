@@ -7,7 +7,7 @@ import {
 } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import QueryDataPanel from '../../components/QueryDataPanel';
-import { useClientesComercial, usePropostasComerciaisDashboard } from '../../hooks/useComercialClientes';
+import { usePropostasComerciaisDashboard } from '../../hooks/useComercialClientes';
 import {
   PROPOSTA_COMERCIAL_STATUS_LABEL,
   PROPOSTA_COMERCIAL_TIPO_LABEL,
@@ -71,10 +71,9 @@ function MetricRows({
 
 const ComercialPropostasDashboard: React.FC = () => {
   const [clienteId, setClienteId] = useState('');
-  const clientesQuery = useClientesComercial({ page: 1, pageSize: 200 });
   const query = usePropostasComerciaisDashboard(clienteId || null);
-  const clientes = clientesQuery.data?.results ?? [];
   const data = query.data;
+  const clientes = data?.clientesComProposta ?? [];
   const total = data?.total ?? 0;
   const porStatus = data?.porStatus;
   const porTipo = data?.porTipo;
@@ -118,26 +117,30 @@ const ComercialPropostasDashboard: React.FC = () => {
           <h3 id="comercial-dashboard-title">Dashboard</h3>
           <p>Última atualização: {formatAtualizacao(query.dataUpdatedAt)}</p>
         </div>
-        <label className="crm-dash-visao">
-          <span>Visão</span>
-          <select
-            value={clienteId}
-            onChange={(e) => setClienteId(e.target.value)}
-            aria-label="Filtrar dashboard por cliente"
-          >
-            <option value="">Todos os clientes</option>
-            {clientes.map((cliente) => (
-              <option key={cliente.id} value={cliente.id}>
-                {cliente.nomeFantasia || cliente.razaoSocial}
-              </option>
-            ))}
-          </select>
-        </label>
+        {clientes.length > 0 ? (
+          <label className="crm-dash-visao">
+            <span>Visão</span>
+            <select
+              value={clienteId}
+              onChange={(e) => setClienteId(e.target.value)}
+              aria-label="Filtrar dashboard por cliente"
+            >
+              <option value="">Todos os clientes</option>
+              {clientes.map((cliente) => (
+                <option key={cliente.id} value={cliente.id}>
+                  {cliente.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </header>
 
       <QueryDataPanel
         query={query}
         variant="compact"
+        refreshVariant="overlay"
+        className="crm-dash-panel"
         loadingMessage="Carregando dashboard de propostas..."
         refreshingMessage="Atualizando dashboard..."
         errorMessage="Não foi possível carregar o dashboard de propostas."

@@ -2635,6 +2635,12 @@ export const apiService = {
             recusadas: Number(item.recusadas ?? 0),
           }))
         : [],
+      clientesComProposta: Array.isArray(data.clientesComProposta)
+        ? data.clientesComProposta.map((item: Record<string, unknown>) => ({
+            id: String(item.id ?? ''),
+            nome: String(item.nome ?? '').trim(),
+          })).filter((item) => item.id && item.nome)
+        : [],
       recentes: Array.isArray(data.recentes)
         ? data.recentes.map((item: Record<string, unknown>) => ({
             id: String(item.id ?? ''),
