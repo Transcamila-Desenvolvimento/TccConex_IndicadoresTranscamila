@@ -19,21 +19,54 @@ ChartJS.register(ArcElement, Tooltip);
 
 const STATUS_ORDER: PropostaComercialStatus[] = ['rascunho', 'enviada', 'aprovada', 'recusada'];
 const STATUS_COLORS: Record<PropostaComercialStatus, string> = {
-  rascunho: '#F5C26B',
-  enviada: '#5BA8E8',
-  aprovada: '#00BDA5',
-  recusada: '#FF7A59',
+  rascunho: '#F0C14A',
+  enviada: '#3AA0D9',
+  aprovada: '#2EC4B6',
+  recusada: '#E05A4F',
 };
 
 const TIPO_ORDER: PropostaComercialTipo[] = ['transporte_rodoviario', 'armazenagem'];
 const TIPO_COLORS: Record<PropostaComercialTipo, string> = {
-  transporte_rodoviario: '#5BA8E8',
-  armazenagem: '#7B8CDE',
+  transporte_rodoviario: STATUS_COLORS.enviada,
+  armazenagem: '#C5D0D6',
 };
 
 function pct(parte: number, total: number) {
   if (!total) return 0;
   return Math.round((parte / total) * 100);
+}
+
+function formatAtualizacao(ts: number) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function MetricRows({
+  items,
+}: {
+  items: Array<{ key: string; label: string; valor: number; total: number; cor: string }>;
+}) {
+  return (
+    <ul className="crm-dash-metrics">
+      {items.map((item) => (
+        <li key={item.key}>
+          <span className="crm-dash-swatch" style={{ background: item.cor }} />
+          <span className="crm-dash-metric-label">{item.label}</span>
+          <span className="crm-dash-meter" aria-hidden="true">
+            <span style={{ width: `${pct(item.valor, item.total)}%`, background: item.cor }} />
+          </span>
+          <b>{item.valor}</b>
+          <em>{pct(item.valor, item.total)}%</em>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 const ComercialPropostasDashboard: React.FC = () => {
@@ -53,30 +86,40 @@ const ComercialPropostasDashboard: React.FC = () => {
       data: TIPO_ORDER.map((key) => porTipo?.[key] ?? 0),
       backgroundColor: TIPO_ORDER.map((key) => TIPO_COLORS[key]),
       borderWidth: 0,
-      hoverOffset: 4,
+      hoverOffset: 0,
     }],
   }), [porTipo]);
 
   const doughnutOptions = useMemo((): ChartOptions<'doughnut'> => ({
     responsive: true,
     maintainAspectRatio: false,
-    cutout: '62%',
+    cutout: '70%',
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: '#33475b',
-        cornerRadius: 8,
-        padding: 10,
+        backgroundColor: '#2c3e50',
+        cornerRadius: 2,
+        padding: 8,
         displayColors: false,
+        callbacks: {
+          label: (item) => {
+            const valor = Number(item.raw ?? 0);
+            return `${valor} (${pct(valor, total)}%)`;
+          },
+        },
       },
     },
-  }), []);
+  }), [total]);
 
   return (
     <section className="crm-dash" aria-labelledby="comercial-dashboard-title">
       <header className="crm-dash-head">
-        <h3 id="comercial-dashboard-title">Dashboard</h3>
-        <label className="crm-dash-filter">
+        <div>
+          <h3 id="comercial-dashboard-title">Dashboard</h3>
+          <p>Última atualização: {formatAtualizacao(query.dataUpdatedAt)}</p>
+        </div>
+        <label className="crm-dash-visao">
+          <span>Visão</span>
           <select
             value={clienteId}
             onChange={(e) => setClienteId(e.target.value)}
@@ -102,57 +145,46 @@ const ComercialPropostasDashboard: React.FC = () => {
         {data ? (
           <div className="crm-dash-row">
             <article className="crm-dash-card">
-              <h4>Funil de propostas</h4>
-              <div className="crm-dash-hero">
-                <strong>{total}</strong>
-                <span>propostas ativas</span>
-              </div>
-              <div className="crm-dash-stack" aria-hidden="true">
-                {STATUS_ORDER.map((key) => (
-                  <span
-                    key={key}
-                    style={{
-                      width: `${pct(porStatus?.[key] ?? 0, total)}%`,
-                      background: STATUS_COLORS[key],
-                    }}
-                  />
-                ))}
-              </div>
+              <h4>Por status <em>{total} propostas</em></h4>
               {total === 0 ? (
                 <p className="crm-dash-empty">{emptyLabel}</p>
               ) : (
-                <ul className="crm-dash-funnel-list">
-                  {STATUS_ORDER.map((key) => (
-                    <li key={key}>
-                      <span className="crm-dash-swatch" style={{ background: STATUS_COLORS[key] }} />
-                      <span>{PROPOSTA_COMERCIAL_STATUS_LABEL[key]}</span>
-                      <b>{porStatus?.[key] ?? 0}</b>
-                      <em>{pct(porStatus?.[key] ?? 0, total)}%</em>
-                    </li>
-                  ))}
-                </ul>
+                <MetricRows
+                  items={STATUS_ORDER.map((key) => ({
+                    key,
+                    label: PROPOSTA_COMERCIAL_STATUS_LABEL[key],
+                    valor: porStatus?.[key] ?? 0,
+                    total,
+                    cor: STATUS_COLORS[key],
+                  }))}
+                />
               )}
             </article>
 
             <article className="crm-dash-card">
-              <h4>Origem por serviço</h4>
+              <h4>Por origem de serviço</h4>
               {total === 0 ? (
                 <p className="crm-dash-empty">{emptyLabel}</p>
               ) : (
                 <div className="crm-dash-sources">
-                  <div className="crm-dash-donut">
-                    <Doughnut data={doughnutData} options={doughnutOptions} />
+                  <div className="crm-dash-donut-wrap">
+                    <div className="crm-dash-donut">
+                      <Doughnut data={doughnutData} options={doughnutOptions} />
+                    </div>
+                    <div className="crm-dash-donut-center">
+                      <strong>{total}</strong>
+                      <span>total</span>
+                    </div>
                   </div>
-                  <ul className="crm-dash-source-list">
-                    {TIPO_ORDER.map((key) => (
-                      <li key={key}>
-                        <span className="crm-dash-swatch" style={{ background: TIPO_COLORS[key] }} />
-                        <span>{PROPOSTA_COMERCIAL_TIPO_LABEL[key]}</span>
-                        <b>{porTipo?.[key] ?? 0}</b>
-                        <em>{pct(porTipo?.[key] ?? 0, total)}%</em>
-                      </li>
-                    ))}
-                  </ul>
+                  <MetricRows
+                    items={TIPO_ORDER.map((key) => ({
+                      key,
+                      label: PROPOSTA_COMERCIAL_TIPO_LABEL[key],
+                      valor: porTipo?.[key] ?? 0,
+                      total,
+                      cor: TIPO_COLORS[key],
+                    }))}
+                  />
                 </div>
               )}
             </article>
