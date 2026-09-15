@@ -386,7 +386,7 @@ export function useBuscarEnderecosComercial(q: string, enabled = true, tipo: 'en
     queryKey: [...COMERCIAL_ENDERECOS_KEY, tipo, termo],
     queryFn: () => apiService.buscarEnderecosComercial(termo, tipo),
     enabled: enabled && termo.length >= 3,
-    staleTime: 60_000,
+        staleTime: 5 * 60_000,
   });
 }
 

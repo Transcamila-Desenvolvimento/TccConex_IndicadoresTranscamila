@@ -63,10 +63,35 @@ ESTADOS_UF = {
 }
 
 
+CACHE_CIDADE_TTL = 60 * 60 * 24 * 7
+CACHE_ENDERECO_TTL = 60 * 60 * 24
+CACHE_VAZIO_TTL = 120
+
+
 class RotaDistanciaError(Exception):
     def __init__(self, message: str, status: int = 400):
         super().__init__(message)
         self.status = status
+
+
+def _geo_cache_key(kind: str, texto: str, limit: int) -> str:
+    normalizado = ' '.join((texto or '').casefold().split())
+    return f'comercial:geo:{kind}:{limit}:{normalizado}'
+
+
+def _geo_cache_get(kind: str, texto: str, limit: int):
+    from django.core.cache import cache
+
+    return cache.get(_geo_cache_key(kind, texto, limit))
+
+
+def _geo_cache_set(kind: str, texto: str, limit: int, resultados: list[dict]) -> None:
+    from django.core.cache import cache
+
+    ttl = CACHE_VAZIO_TTL if not resultados else (
+        CACHE_CIDADE_TTL if kind == 'cidade' else CACHE_ENDERECO_TTL
+    )
+    cache.set(_geo_cache_key(kind, texto, limit), resultados, ttl)
 
 
 def _get_json(url: str, timeout: int = 12) -> object:
@@ -383,11 +408,15 @@ def buscar_cidades(texto: str, limit: int = 6) -> list[dict]:
         return []
 
     limit = max(1, min(int(limit or 6), 10))
+    cached = _geo_cache_get('cidade', texto, limit)
+    if cached is not None:
+        return cached
+
     if usa_google_maps():
         locais = _cidades_google_autocomplete(texto, limit)
-        if locais:
-            return locais
-        return _cidades_google_geocode(texto, limit)
+        resultados = locais if locais else _cidades_google_geocode(texto, limit)
+        _geo_cache_set('cidade', texto, limit, resultados)
+        return resultados
 
     params = urllib.parse.urlencode({
         'q': _montar_query_cidade(texto),
@@ -398,6 +427,7 @@ def buscar_cidades(texto: str, limit: int = 6) -> list[dict]:
     })
     data = _get_json(f'{NOMINATIM_URL}?{params}')
     if not isinstance(data, list):
+        _geo_cache_set('cidade', texto, limit, [])
         return []
 
     resultados: list[dict] = []
@@ -422,6 +452,7 @@ def buscar_cidades(texto: str, limit: int = 6) -> list[dict]:
             'lon': local.get('lon'),
             'uf': uf or None,
         })
+    _geo_cache_set('cidade', texto, limit, resultados)
     return resultados
 
 
@@ -494,9 +525,15 @@ def buscar_enderecos(texto: str, limit: int = 6) -> list[dict]:
         return []
 
     limit = max(1, min(int(limit or 6), 10))
+    cached = _geo_cache_get('endereco', texto, limit)
+    if cached is not None:
+        return cached
+
     if usa_google_maps():
         locais = _locais_google(texto, limit=limit)
-        return [{'label': item['nome'], 'lat': item['lat'], 'lon': item['lon']} for item in locais]
+        resultados = [{'label': item['nome'], 'lat': item['lat'], 'lon': item['lon']} for item in locais]
+        _geo_cache_set('endereco', texto, limit, resultados)
+        return resultados
 
     params = urllib.parse.urlencode({
         'q': _montar_query_endereco(texto),
@@ -507,6 +544,7 @@ def buscar_enderecos(texto: str, limit: int = 6) -> list[dict]:
     })
     data = _get_json(f'{NOMINATIM_URL}?{params}')
     if not isinstance(data, list):
+        _geo_cache_set('endereco', texto, limit, [])
         return []
 
     resultados: list[dict] = []
@@ -522,6 +560,7 @@ def buscar_enderecos(texto: str, limit: int = 6) -> list[dict]:
             'lat': local['lat'],
             'lon': local['lon'],
         })
+    _geo_cache_set('endereco', texto, limit, resultados)
     return resultados
 
 

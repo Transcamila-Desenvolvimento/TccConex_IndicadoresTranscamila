@@ -280,6 +280,29 @@ else:
         },
     }
 
+# Cache de buscas (cidades/endereços). Redis na Azure quando Celery/Redis está ativo.
+_cache_redis = os.environ.get('CACHE_REDIS_URL') or (
+    os.environ.get('CELERY_BROKER_URL', '') if USE_CELERY else ''
+)
+if _cache_redis:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': _cache_redis,
+            'KEY_PREFIX': 'tccconex',
+            'TIMEOUT': 86400,
+        },
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'tccconex-local',
+            'OPTIONS': {'MAX_ENTRIES': 4000},
+            'TIMEOUT': 86400,
+        },
+    }
+
 # E-mail (dev: console; produção: SMTP via .env)
 EMAIL_BACKEND = os.environ.get(
     'EMAIL_BACKEND',

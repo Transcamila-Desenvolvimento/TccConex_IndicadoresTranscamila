@@ -4,7 +4,7 @@ from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from rest_framework.test import APIClient
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from .models import ClienteComercial, PropostaComercialDraft
 
@@ -1945,6 +1945,37 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         body = resp.json()
         self.assertEqual(body['results'][0]['label'], 'Ibiporã-PR')
+
+    def test_buscar_cidades_reaproveita_cache(self):
+        from django.core.cache import cache
+        from apps.comercial import distancia_rota as rota_mod
+
+        cache.clear()
+
+        def fake_get_json(url, timeout=12):
+            if 'place/autocomplete' in url:
+                return {
+                    'status': 'OK',
+                    'predictions': [{
+                        'description': 'Londrina, PR, Brazil',
+                        'structured_formatting': {
+                            'main_text': 'Londrina',
+                            'secondary_text': 'PR, Brazil',
+                        },
+                    }],
+                }
+            return {'status': 'ZERO_RESULTS', 'results': []}
+
+        mock_get = MagicMock(side_effect=fake_get_json)
+        with patch.object(rota_mod, 'usa_google_maps', return_value=True), patch.object(rota_mod, '_get_json', mock_get):
+            self._auth(self.admin)
+            primeira = self.api.get('/api/comercial/enderecos/buscar/?q=Londrina&tipo=cidade', **HEADERS)
+            segunda = self.api.get('/api/comercial/enderecos/buscar/?q=londrina&tipo=cidade', **HEADERS)
+        self.assertEqual(primeira.status_code, 200, primeira.content)
+        self.assertEqual(segunda.status_code, 200, segunda.content)
+        self.assertEqual(primeira.json()['results'][0]['label'], 'Londrina-PR')
+        self.assertEqual(segunda.json()['results'], primeira.json()['results'])
+        self.assertEqual(mock_get.call_count, 1)
 
     def test_endereco_reverso(self):
         from apps.comercial import distancia_rota as rota_mod
