@@ -11058,6 +11058,10 @@ button.mkt-drive-browser-row:hover {
   min-height: 220px;
 }
 
+.async-query-content--page.async-query-content--overlay-host {
+  min-height: 0;
+}
+
 .async-query-content--refreshing-overlay {
   opacity: 1;
   pointer-events: auto;

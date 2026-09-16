@@ -180,6 +180,7 @@ const ComercialCadastroIcmsUfs: React.FC = () => {
 
       <QueryDataPanel
         query={icmsQuery}
+        refreshVariant="overlay"
         loadingMessage="Carregando alíquotas ICMS..."
         refreshingMessage="Atualizando alíquotas ICMS..."
         errorMessage="Não foi possível carregar as alíquotas ICMS."

@@ -656,6 +656,7 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
       <QueryDataPanel
         className="tabela-frete-query"
         query={detalheQuery}
+        refreshVariant="overlay"
         loadingMessage="Carregando tabela de frete..."
         refreshingMessage="Atualizando tabela de frete..."
         errorMessage="Não foi possível carregar a tabela de frete."

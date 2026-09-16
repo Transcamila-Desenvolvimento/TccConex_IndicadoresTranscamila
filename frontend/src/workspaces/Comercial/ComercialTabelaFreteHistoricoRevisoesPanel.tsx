@@ -63,6 +63,7 @@ export default function ComercialTabelaFreteHistoricoRevisoesPanel({
           className="tabela-frete-historico-panel-query"
           query={historicoQuery}
           variant="compact"
+          refreshVariant="overlay"
           loadingMessage="Carregando revisões..."
           errorMessage="Não foi possível carregar o histórico."
         >

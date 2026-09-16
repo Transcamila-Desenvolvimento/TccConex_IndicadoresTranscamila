@@ -1084,6 +1084,7 @@ const ComercialPropostas: React.FC = () => {
 
       <QueryDataPanel
         query={propostasQuery}
+        refreshVariant="overlay"
         loadingMessage="Carregando propostas..."
         refreshingMessage="Atualizando propostas..."
         errorMessage="Não foi possível carregar as propostas. Tente novamente."

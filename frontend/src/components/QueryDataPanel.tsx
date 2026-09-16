@@ -68,6 +68,7 @@ const QueryDataPanel: React.FC<QueryDataPanelProps> = ({
   const { showInitialLoader, showRefreshing, showError } = useAsyncQueryState(query);
 
   const isFullLoader = fullPageLoader ?? variant !== 'compact';
+  const overlayLoading = refreshVariant === 'overlay' && (showInitialLoader || showRefreshing);
   const loadingClass = [
     'async-query-loading',
     isFullLoader ? 'async-query-loading--page' : 'async-query-loading--compact',
@@ -75,7 +76,7 @@ const QueryDataPanel: React.FC<QueryDataPanelProps> = ({
   const errorClass =
     variant === 'compact' ? 'async-query-error async-query-error--compact' : 'async-query-error';
 
-  if (showInitialLoader) {
+  if (showInitialLoader && !overlayLoading) {
     return (
       <div className={loadingClass} role="status" aria-live="polite">
         <AsyncQuerySpinner />
@@ -111,18 +112,18 @@ const QueryDataPanel: React.FC<QueryDataPanelProps> = ({
         className,
         variant === 'page' ? 'async-query-content--page' : '',
         refreshVariant === 'overlay' ? 'async-query-content--overlay-host' : '',
-        showRefreshing && refreshVariant === 'overlay'
+        overlayLoading
           ? 'async-query-content async-query-content--refreshing-overlay'
           : showRefreshing
             ? 'async-query-content async-query-content--refreshing'
             : 'async-query-content',
       ].filter(Boolean).join(' ')}
     >
-      {showRefreshing && refreshVariant === 'overlay' && (
+      {overlayLoading && (
         <div className="async-query-refresh-overlay" role="status" aria-live="polite" aria-busy="true">
           <div className="async-query-refresh-card">
             <AsyncQuerySpinner />
-            <span>{refreshingMessage}</span>
+            <span>{showInitialLoader ? loadingMessage : refreshingMessage}</span>
           </div>
         </div>
       )}
@@ -135,7 +136,7 @@ const QueryDataPanel: React.FC<QueryDataPanelProps> = ({
       <div
         className={[
           variant === 'page' ? 'async-query-content-body--page' : undefined,
-          showRefreshing && refreshVariant === 'overlay' ? 'async-query-content-body--dimmed' : undefined,
+          overlayLoading ? 'async-query-content-body--dimmed' : undefined,
         ].filter(Boolean).join(' ') || undefined}
       >
         {children}

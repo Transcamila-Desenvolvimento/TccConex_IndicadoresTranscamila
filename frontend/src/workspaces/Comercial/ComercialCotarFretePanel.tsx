@@ -120,6 +120,7 @@ const ComercialCotarFretePanel: React.FC<Props> = ({ onClose }) => {
           <QueryDataPanel
             query={tabelaCliente.listQuery}
             variant="compact"
+            refreshVariant="overlay"
             loadingMessage="Carregando tabela do cliente..."
             refreshingMessage="Atualizando tabela do cliente..."
             errorMessage="Não foi possível carregar a tabela do cliente."
@@ -133,6 +134,7 @@ const ComercialCotarFretePanel: React.FC<Props> = ({ onClose }) => {
               <QueryDataPanel
                 query={tabelaCliente.detalheQuery}
                 variant="compact"
+                refreshVariant="overlay"
                 loadingMessage="Carregando simulação..."
                 refreshingMessage="Atualizando simulação..."
                 errorMessage="Não foi possível carregar a tabela para simular."
@@ -151,6 +153,7 @@ const ComercialCotarFretePanel: React.FC<Props> = ({ onClose }) => {
           <QueryDataPanel
             query={tabelasQuery}
             variant="compact"
+            refreshVariant="overlay"
             loadingMessage="Carregando tabelas..."
             refreshingMessage="Atualizando tabelas..."
             errorMessage="Não foi possível carregar as tabelas de frete."

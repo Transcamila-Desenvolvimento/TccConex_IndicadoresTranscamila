@@ -451,6 +451,7 @@ const ComercialCadastroClientes: React.FC = () => {
 
       <QueryDataPanel
         query={clientesQuery}
+        refreshVariant="overlay"
         loadingMessage="Carregando clientes..."
         refreshingMessage="Atualizando clientes..."
         errorMessage="Não foi possível carregar os clientes. Tente novamente."

@@ -122,6 +122,7 @@ const ComercialCadastroTabelaFrete: React.FC = () => {
 
       <QueryDataPanel
         query={listQuery}
+        refreshVariant="overlay"
         loadingMessage="Carregando tabelas de frete..."
         refreshingMessage="Atualizando tabelas de frete..."
         errorMessage="Não foi possível carregar as tabelas de frete."

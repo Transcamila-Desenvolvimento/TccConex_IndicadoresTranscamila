@@ -139,6 +139,7 @@ const ComercialCadastroGeneralidades: React.FC = () => {
 
       <QueryDataPanel
         query={catalogQuery}
+        refreshVariant="overlay"
         loadingMessage="Carregando generalidades..."
         refreshingMessage="Atualizando generalidades..."
         errorMessage="Não foi possível carregar as generalidades."

@@ -76,6 +76,7 @@ const ComercialClienteHistoricoModal: React.FC<ComercialClienteHistoricoModalPro
             className="comercial-historico-content"
             query={historicoQuery}
             variant="compact"
+            refreshVariant="overlay"
             loadingMessage="Carregando histórico..."
             errorMessage="Não foi possível carregar o histórico."
           >

@@ -290,6 +290,7 @@ const ComercialValidacaoClientes: React.FC = () => {
 
       <QueryDataPanel
         query={clientesQuery}
+        refreshVariant="overlay"
         loadingMessage="Carregando validação de clientes..."
         refreshingMessage="Atualizando..."
         errorMessage="Não foi possível carregar a validação de clientes."

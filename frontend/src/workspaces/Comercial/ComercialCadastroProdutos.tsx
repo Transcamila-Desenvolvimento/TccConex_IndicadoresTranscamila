@@ -232,6 +232,7 @@ const ComercialCadastroProdutos: React.FC = () => {
 
       <QueryDataPanel
         query={produtosQuery}
+        refreshVariant="overlay"
         loadingMessage="Carregando produtos..."
         refreshingMessage="Atualizando produtos..."
         errorMessage="Não foi possível carregar os produtos. Tente novamente."
