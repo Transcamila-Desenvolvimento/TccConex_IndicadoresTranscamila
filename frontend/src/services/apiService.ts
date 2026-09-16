@@ -58,6 +58,7 @@ import {
   parseClienteComercialCompatibilidade,
   parseClienteComercialFispq,
   parseClienteComercialGrupoEmbalagem,
+  parseClienteComercialSituacao,
 } from '../types/domain';
 import { filterActiveEnvironments, ACTIVE_ENVIRONMENTS } from '../constants/environments';
 
@@ -145,7 +146,7 @@ function normalizeClienteComercial(raw: any): ClienteComercial {
     inscricaoEstadual: raw.inscricaoEstadual ?? '',
     responsavel: raw.responsavel ?? '',
     observacoes: raw.observacoes ?? '',
-    situacao: raw.situacao === 'cliente' ? 'cliente' : 'potencial',
+    situacao: parseClienteComercialSituacao(raw.situacao),
     compatibilidade: parseClienteComercialCompatibilidade(raw.compatibilidade),
     homologadoPor: raw.homologadoPor ?? '',
     homologadoEm: raw.homologadoEm ?? null,
@@ -190,6 +191,15 @@ function normalizeClienteComercial(raw: any): ClienteComercial {
         aptoHomologar: Boolean(raw.homologacaoResumo.aptoHomologar),
         pendencias: Array.isArray(raw.homologacaoResumo.pendencias) ? raw.homologacaoResumo.pendencias : [],
         resumoPendencia: raw.homologacaoResumo.resumoPendencia ?? '',
+        revalidacao: Boolean(raw.homologacaoResumo.revalidacao),
+        alteracoes: Array.isArray(raw.homologacaoResumo.alteracoes)
+          ? raw.homologacaoResumo.alteracoes.map((item: { tipo?: string; id?: string; nome?: string; detalhe?: string }) => ({
+            tipo: item.tipo === 'incluido' || item.tipo === 'removido' || item.tipo === 'alterado' ? item.tipo : 'alterado',
+            id: item.id ? String(item.id) : '',
+            nome: item.nome ?? '',
+            detalhe: item.detalhe ?? '',
+          }))
+          : [],
       }
       : undefined,
     clienteDesde: raw.clienteDesde ?? null,
@@ -2440,6 +2450,7 @@ export const apiService = {
         fila: params.fila || undefined,
         com_produtos: params.comProdutos ? '1' : undefined,
         pendencia: params.pendencia || undefined,
+        ativos: params.ativos ? '1' : undefined,
       },
     });
     return paginatedFromResponse(data, normalizeClienteComercial);
@@ -2555,7 +2566,7 @@ export const apiService = {
     return {
       id: String(data.id),
       razaoSocial: data.razaoSocial ?? '',
-      situacao: data.situacao === 'cliente' ? 'cliente' : 'potencial',
+      situacao: parseClienteComercialSituacao(data.situacao),
       clienteDesde: data.clienteDesde ?? null,
       totalPropostas: Number(data.totalPropostas) || 0,
       propostasAceitasCount: Number(data.propostasAceitasCount) || 0,
@@ -2762,8 +2773,18 @@ export const apiService = {
     return mapTabelaFrete(data);
   },
 
+  async reativarTabelaFrete(id: string): Promise<TabelaFrete> {
+    const { data } = await api.post(`/api/comercial/tabela-frete/${id}/reativar/`);
+    return mapTabelaFrete(data);
+  },
+
   async novaRevisaoTabelaFrete(id: string): Promise<TabelaFrete> {
     const { data } = await api.post(`/api/comercial/tabela-frete/${id}/nova-revisao/`);
+    return mapTabelaFrete(data);
+  },
+
+  async descartarRevisaoTabelaFrete(id: string): Promise<TabelaFrete> {
+    const { data } = await api.post(`/api/comercial/tabela-frete/${id}/descartar-revisao/`);
     return mapTabelaFrete(data);
   },
 

@@ -28,14 +28,18 @@
                 ERP · Comercial
               </p>
               <h1 style="margin:8px 0 0;font-size:22px;line-height:1.25;font-weight:600;color:#0f2744;">
-                Homologação de produtos pendente
+                {% if revalidacao %}Composição de produtos alterada{% else %}Homologação de produtos pendente{% endif %}
               </h1>
             </td>
           </tr>
           <tr>
             <td style="padding:16px 32px 8px;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:15px;line-height:1.7;color:#2a3340;">
               <p style="margin:0;">
+                {% if revalidacao %}
+                A composição de produtos de <strong style="color:#0f2744;">{{ cliente_nome }}</strong> mudou após a última aprovação. Segue somente o que foi alterado.
+                {% else %}
                 O cliente <strong style="color:#0f2744;">{{ cliente_nome }}</strong> entrou na fila de validação.
+                {% endif %}
               </p>
             </td>
           </tr>
@@ -54,7 +58,26 @@
               </table>
             </td>
           </tr>
-          {% if produtos %}
+          {% if revalidacao and alteracoes %}
+          <tr>
+            <td style="padding:0 32px 24px;font-family:'Segoe UI',Calibri,Arial,sans-serif;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e6e8ec;">
+                <tr>
+                  <td style="background:#f0f3f7;padding:8px 10px;font-size:11px;font-weight:600;color:#4a5563;">Alteração</td>
+                  <td style="background:#f0f3f7;padding:8px 10px;font-size:11px;font-weight:600;color:#4a5563;">Produto</td>
+                  <td style="background:#f0f3f7;padding:8px 10px;font-size:11px;font-weight:600;color:#4a5563;">Detalhe</td>
+                </tr>
+                {% for item in alteracoes %}
+                <tr>
+                  <td style="padding:8px 10px;font-size:12px;color:#0f2744;border-top:1px solid #e6e8ec;">{% if item.tipo == 'incluido' %}Incluído{% elif item.tipo == 'removido' %}Removido{% else %}Alterado{% endif %}</td>
+                  <td style="padding:8px 10px;font-size:12px;color:#1a2330;border-top:1px solid #e6e8ec;">{{ item.nome }}</td>
+                  <td style="padding:8px 10px;font-size:12px;color:#1a2330;border-top:1px solid #e6e8ec;">{{ item.detalhe }}</td>
+                </tr>
+                {% endfor %}
+              </table>
+            </td>
+          </tr>
+          {% elif produtos %}
           <tr>
             <td style="padding:0 32px 24px;font-family:'Segoe UI',Calibri,Arial,sans-serif;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e6e8ec;">

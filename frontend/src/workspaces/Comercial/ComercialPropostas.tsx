@@ -436,7 +436,7 @@ const ComercialPropostas: React.FC = () => {
     ordering,
   });
   const { canShowEmpty } = useAsyncQueryState(propostasQuery);
-  const clientesQuery = useClientesComercial({ page: 1, pageSize: 100 });
+  const clientesQuery = useClientesComercial({ page: 1, pageSize: 100, ativos: true });
   const generalidadesTransferencia = useComercialGeneralidades(
     isModalOpen && form.clienteId && form.tipo === 'transporte_rodoviario' && form.incluiTransferencia
       ? form.clienteId

@@ -234,6 +234,36 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(listed.json()['count'], 1)
         self.assertEqual(listed.json()['results'][0]['situacao'], 'potencial')
 
+    def test_filtra_homologacao(self):
+        self._auth(self.admin)
+        self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        listed = self.api.get('/api/comercial/clientes/?homologacao=pendente', **HEADERS)
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()['count'], 1)
+        homologados = self.api.get('/api/comercial/clientes/?homologacao=homologado', **HEADERS)
+        self.assertEqual(homologados.status_code, 200)
+        self.assertEqual(homologados.json()['count'], 0)
+
+    def test_inativa_cliente(self):
+        self._auth(self.admin)
+        created = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(created.status_code, 201, created.content)
+        cliente_id = created.json()['id']
+        inactivated = self.api.patch(
+            f'/api/comercial/clientes/{cliente_id}/',
+            {'situacao': 'inativo'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(inactivated.status_code, 200, inactivated.content)
+        self.assertEqual(inactivated.json()['situacao'], 'inativo')
+        listed = self.api.get('/api/comercial/clientes/?situacao=inativo', **HEADERS)
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()['count'], 1)
+        ativos = self.api.get('/api/comercial/clientes/?ativos=1', **HEADERS)
+        self.assertEqual(ativos.status_code, 200)
+        self.assertEqual(ativos.json()['count'], 0)
+
     def test_consultar_cnpj_admin(self):
         self._auth(self.admin)
         with patch('apps.comercial.views.consultar_cnpj') as mock_cnpj:
@@ -1708,6 +1738,109 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(self.api.get(f'/api/comercial/tabela-frete/{tabela_id}/', **HEADERS).status_code, 404)
         self.assertEqual(self.api.get(f'/api/comercial/tabela-frete/{nova_id}/', **HEADERS).status_code, 404)
 
+    def test_descartar_revisao_restaura_publicada(self):
+        self._auth(self.admin)
+        created = self.api.post(
+            '/api/comercial/tabela-frete/',
+            {
+                'nome': 'CCAB Distribuição',
+                'codigo': 'CCAB-DESC-2024',
+                'revisao': 70,
+                'tipo': 'distribuicao',
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        tabela_id = created.json()['id']
+        published = self.api.post(f'/api/comercial/tabela-frete/{tabela_id}/publicar/', **HEADERS)
+        self.assertEqual(published.status_code, 200, published.content)
+        revisao = self.api.post(f'/api/comercial/tabela-frete/{tabela_id}/nova-revisao/', **HEADERS)
+        self.assertEqual(revisao.status_code, 201, revisao.content)
+        nova_id = revisao.json()['id']
+
+        discarded = self.api.post(f'/api/comercial/tabela-frete/{nova_id}/descartar-revisao/', **HEADERS)
+        self.assertEqual(discarded.status_code, 200, discarded.content)
+        self.assertEqual(discarded.json()['id'], tabela_id)
+        self.assertEqual(discarded.json()['revisao'], 70)
+        self.assertEqual(discarded.json()['status'], 'publicada')
+        self.assertEqual(self.api.get(f'/api/comercial/tabela-frete/{nova_id}/', **HEADERS).status_code, 404)
+
+        listed = self.api.get('/api/comercial/tabela-frete/?search=CCAB-DESC-2024', **HEADERS)
+        self.assertEqual(listed.status_code, 200, listed.content)
+        linhas = [item for item in listed.json()['results'] if item.get('codigo') == 'CCAB-DESC-2024']
+        self.assertEqual(len(linhas), 1)
+        self.assertEqual(linhas[0]['id'], tabela_id)
+        self.assertEqual(linhas[0]['status'], 'publicada')
+
+        first_draft = self.api.post(
+            '/api/comercial/tabela-frete/',
+            {'nome': 'Rascunho isolado', 'codigo': 'RASC-ISO-1', 'tipo': 'distribuicao'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(first_draft.status_code, 201, first_draft.content)
+        blocked = self.api.post(
+            f'/api/comercial/tabela-frete/{first_draft.json()["id"]}/descartar-revisao/',
+            **HEADERS,
+        )
+        self.assertEqual(blocked.status_code, 400)
+
+    def test_reativar_tabela_frete_arquivada(self):
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(cliente.status_code, 201, cliente.content)
+        cliente_id = cliente.json()['id']
+        created = self.api.post(
+            '/api/comercial/tabela-frete/',
+            {
+                'nome': 'CCAB Distribuição',
+                'codigo': 'CCAB-REAT-2024',
+                'revisao': 10,
+                'tipo': 'distribuicao',
+                'clienteIds': [cliente_id],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        tabela_id = created.json()['id']
+        published = self.api.post(f'/api/comercial/tabela-frete/{tabela_id}/publicar/', **HEADERS)
+        self.assertEqual(published.status_code, 200, published.content)
+        archived = self.api.post(f'/api/comercial/tabela-frete/{tabela_id}/arquivar/', **HEADERS)
+        self.assertEqual(archived.status_code, 200, archived.content)
+        self.assertEqual(archived.json()['status'], 'arquivada')
+
+        outra = self.api.post(
+            '/api/comercial/tabela-frete/',
+            {
+                'nome': 'Tabela nova do cliente',
+                'codigo': 'OUTRA-REAT-2024',
+                'tipo': 'distribuicao',
+                'clienteIds': [cliente_id],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(outra.status_code, 201, outra.content)
+
+        reactivated = self.api.post(f'/api/comercial/tabela-frete/{tabela_id}/reativar/', **HEADERS)
+        self.assertEqual(reactivated.status_code, 200, reactivated.content)
+        self.assertEqual(reactivated.json()['status'], 'rascunho')
+        self.assertEqual(reactivated.json()['clienteIds'], [])
+
+        ocupado = self.api.patch(
+            f'/api/comercial/tabela-frete/{tabela_id}/',
+            {'clienteIds': [cliente_id]},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(ocupado.status_code, 400, ocupado.content)
+        self.assertIn('vinculado', str(ocupado.json()).lower())
+
+        blocked = self.api.post(f'/api/comercial/tabela-frete/{tabela_id}/reativar/', **HEADERS)
+        self.assertEqual(blocked.status_code, 400)
+
     def test_exportar_tabela_frete(self):
         from io import BytesIO
 
@@ -2269,6 +2402,52 @@ class HomologacaoProdutosComercialTests(TestCase):
         )
         self.assertEqual(ok.status_code, 200, ok.content)
         self.assertEqual(ok.json()['compatibilidade'], 'homologado')
+
+    def test_revalidacao_mostra_somente_alteracao(self):
+        cliente_id = self._cliente()
+        self._auth(self.produtos)
+        primeiro = self.api.post(
+            '/api/comercial/produtos/',
+            {
+                'nome': 'Glifosato 480',
+                'numeroOnu': '3082',
+                'classeRisco': '9',
+                'grupoEmbalagem': 'III',
+                'clienteIds': [cliente_id],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(primeiro.status_code, 201, primeiro.content)
+        self._auth(self.validador)
+        aprovado = self.api.post(
+            f'/api/comercial/clientes/{cliente_id}/homologar/',
+            {'decisao': 'homologado', 'justificativa': 'Composição conferida.'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(aprovado.status_code, 200, aprovado.content)
+        self._auth(self.produtos)
+        extra = self.api.post(
+            '/api/comercial/produtos/',
+            {
+                'nome': 'Ureia agrícola',
+                'classeRisco': 'nao_classificado',
+                'clienteIds': [cliente_id],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(extra.status_code, 201, extra.content)
+        self._auth(self.admin)
+        cliente = self.api.get(f'/api/comercial/clientes/{cliente_id}/', **HEADERS)
+        self.assertEqual(cliente.status_code, 200, cliente.content)
+        self.assertEqual(cliente.json()['compatibilidade'], 'pendente_validacao')
+        resumo = cliente.json()['homologacaoResumo']
+        self.assertTrue(resumo['revalidacao'])
+        self.assertEqual(len(resumo['alteracoes']), 1)
+        self.assertEqual(resumo['alteracoes'][0]['tipo'], 'incluido')
+        self.assertIn('UREIA', resumo['alteracoes'][0]['nome'].upper())
 
     def test_reprovacao_exige_justificativa(self):
         cliente_id = self._cliente()

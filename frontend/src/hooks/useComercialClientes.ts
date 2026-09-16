@@ -344,10 +344,26 @@ export function useArquivarTabelaFrete() {
   });
 }
 
+export function useReativarTabelaFrete() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.reativarTabelaFrete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: COMERCIAL_TABELA_FRETE_KEY }),
+  });
+}
+
 export function useNovaRevisaoTabelaFrete() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiService.novaRevisaoTabelaFrete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: COMERCIAL_TABELA_FRETE_KEY }),
+  });
+}
+
+export function useDescartarRevisaoTabelaFrete() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.descartarRevisaoTabelaFrete(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: COMERCIAL_TABELA_FRETE_KEY }),
   });
 }

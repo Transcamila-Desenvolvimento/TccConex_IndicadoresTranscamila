@@ -11,10 +11,9 @@ import {
   useHomologacaoHistoricoCliente,
   useHomologarClienteComercial,
 } from '../../hooks/useComercialClientes';
-import type { ClienteComercial, ClienteComercialCompatibilidade } from '../../types/domain';
+import type { ClienteComercial, ClienteComercialCompatibilidade, ClienteComercialProduto, HomologacaoProdutoAlteracao } from '../../types/domain';
 import {
   CLIENTE_COMERCIAL_CLASSE_RISCO_OPTIONS,
-  CLIENTE_COMERCIAL_GRUPO_EMBALAGEM_OPTIONS,
 } from '../../types/domain';
 import ComercialHomologacaoBadge from './ComercialHomologacaoBadge';
 import { alteracoesDoEvento, HOMOLOGACAO_ALTERACAO_LABEL } from './diffHomologacaoProdutos';
@@ -44,19 +43,129 @@ const statusHistorico = (status: string): ClienteComercialCompatibilidade => {
 const labelClasse = (value: string) =>
   CLIENTE_COMERCIAL_CLASSE_RISCO_OPTIONS.find((item) => item.value === value)?.label || value || '—';
 
+const labelClasseCurto = (value: string) => {
+  if (!value || value === 'nao_classificado') return '—';
+  return value;
+};
+
 const hrefFispq = (value: string) => {
   const raw = (value || '').trim();
   if (!raw) return '';
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 };
 
-const labelGrupo = (value: string) =>
-  CLIENTE_COMERCIAL_GRUPO_EMBALAGEM_OPTIONS.find((item) => item.value === value)?.label || value || '—';
-
 const conformidadeLabel = (status?: string) => {
   if (status === 'bloqueado') return 'Bloqueado';
   if (status === 'carga_perigosa') return 'Carga perigosa';
   return 'Não perigoso';
+};
+
+const produtoDaAlteracao = (
+  produtos: ClienteComercialProduto[],
+  item: { tipo: string; id?: string; nome: string },
+): ClienteComercialProduto => {
+  const chave = (item.id || '').toLowerCase();
+  const nome = item.nome.toLowerCase();
+  return produtos.find((produto) => {
+    const id = (produto.produtoId || produto.id || '').toLowerCase();
+    return (chave && id === chave) || produto.nome.toLowerCase() === nome;
+  }) || {
+    id: item.id || item.nome,
+    nome: item.nome,
+    fispq: '',
+    numeroOnu: '',
+    classeRisco: 'nao_classificado',
+    grupoEmbalagem: 'nao_aplicavel',
+  };
+};
+
+const ProdutosHomologacaoTable: React.FC<{
+  produtos: ClienteComercialProduto[];
+  alteracoes?: HomologacaoProdutoAlteracao[];
+}> = ({ produtos, alteracoes }) => {
+  const linhas = alteracoes?.length
+    ? alteracoes.map((item) => ({ produto: produtoDaAlteracao(produtos, item), alteracao: item }))
+    : produtos.map((produto) => ({ produto, alteracao: undefined }));
+  const comAlteracao = Boolean(alteracoes?.length);
+
+  return (
+  <div className="table-container comercial-homologacao-produtos">
+    <table className={`erp-table reports-table comercial-homologacao-produtos-table${comAlteracao ? ' has-alteracao' : ''}`}>
+      <colgroup>
+        {comAlteracao ? <col className="col-alteracao" /> : null}
+        <col className="col-produto" />
+        <col className="col-classe" />
+        <col className="col-onu" />
+        <col className="col-grupo" />
+        <col className="col-fispq" />
+        <col className="col-conf" />
+      </colgroup>
+      <thead>
+        <tr>
+          {comAlteracao ? <th>Alteração</th> : null}
+          <th>Produto</th>
+          <th>Classe</th>
+          <th>ONU</th>
+          <th>Grupo</th>
+          <th>FISPQ</th>
+          <th>Conformidade</th>
+        </tr>
+      </thead>
+      <tbody>
+        {linhas.map(({ produto, alteracao }) => (
+          <tr key={`${alteracao?.tipo || 'item'}-${produto.id || produto.nome}`} className={alteracao?.tipo === 'removido' ? 'is-removido' : undefined}>
+            {comAlteracao ? (
+              <td className="col-alteracao">
+                {alteracao ? (
+                  <span className={`comercial-hist-tag is-${alteracao.tipo}`}>
+                    {HOMOLOGACAO_ALTERACAO_LABEL[alteracao.tipo]}
+                  </span>
+                ) : null}
+              </td>
+            ) : null}
+            <td className="col-produto" title={alteracao?.tipo === 'alterado' ? alteracao.detalhe : produto.nome}>
+              <strong>{produto.nome}</strong>
+              {alteracao?.tipo === 'alterado' && alteracao.detalhe ? (
+                <div className="muted comercial-homologacao-alerta">{alteracao.detalhe}</div>
+              ) : null}
+            </td>
+            <td className="col-classe" title={labelClasse(produto.classeRisco)}>{labelClasseCurto(produto.classeRisco)}</td>
+            <td className="col-onu">{produto.numeroOnu || '—'}</td>
+            <td className="col-grupo">{produto.grupoEmbalagem === 'nao_aplicavel' ? '—' : (produto.grupoEmbalagem || '—')}</td>
+            <td className="col-fispq">
+              {produto.fispq ? (
+                <a
+                  href={hrefFispq(produto.fispq)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="comercial-fispq-link"
+                  title="Abrir FISPQ/FDS"
+                  aria-label="Abrir FISPQ/FDS"
+                >
+                  <i className="bi bi-link-45deg" aria-hidden="true" />
+                </a>
+              ) : '—'}
+            </td>
+            <td className="col-conf">
+              {alteracao?.tipo === 'removido' ? (
+                <span className="muted">—</span>
+              ) : (
+                <>
+                  <span className={`comercial-pendencia-chip ${produto.conformidade?.status === 'bloqueado' ? 'is-bloqueado' : produto.conformidade?.cargaPerigosa ? 'is-alerta' : 'is-ok'}`}>
+                    {conformidadeLabel(produto.conformidade?.status)}
+                  </span>
+                  {produto.conformidade?.alertas?.length ? (
+                    <div className="muted comercial-homologacao-alerta">{produto.conformidade.alertas.join(' · ')}</div>
+                  ) : null}
+                </>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+  );
 };
 
 const resumoProdutos = (cliente: ClienteComercial) => {
@@ -103,6 +212,8 @@ const ComercialValidacaoClientes: React.FC = () => {
   const jaHomologado = selected?.compatibilidade === 'homologado';
   const jaReprovado = selected?.compatibilidade === 'reprovado';
   const podeHomologar = Boolean(canValidate && selected && analise?.aptoHomologar && !jaHomologado);
+  const alteracoes = analise?.alteracoes ?? [];
+  const revalidacao = Boolean(analise?.revalidacao && alteracoes.length);
 
   const abrir = (cliente: ClienteComercial) => {
     setSelected(cliente);
@@ -260,10 +371,10 @@ const ComercialValidacaoClientes: React.FC = () => {
 
       {selected && (
         <div className="search-backdrop" style={{ display: 'flex', alignItems: 'center', padding: '24px 16px' }} onClick={(e) => { if (e.target === e.currentTarget) fechar(); }}>
-          <div className="modal-card cliente-cadastro-modal comercial-homologacao-modal" style={{ width: 'min(980px, 96vw)' }} role="dialog" aria-modal="true">
+          <div className="modal-card cliente-cadastro-modal comercial-homologacao-modal" role="dialog" aria-modal="true">
             <div className="modal-header">
               <div className="comercial-homologacao-titulo">
-                <h2>Homologação de produtos</h2>
+                <h2>{revalidacao ? 'Revalidação da composição' : 'Homologação de produtos'}</h2>
                 <p>{selected.razaoSocial}</p>
               </div>
               <div className="comercial-homologacao-header-side">
@@ -279,56 +390,25 @@ const ComercialValidacaoClientes: React.FC = () => {
                 </div>
               ) : null}
 
-              <h5 className="admin-form-section-title">Produtos vinculados</h5>
-              {selected.produtos.length === 0 ? (
-                <p className="muted" style={{ margin: 0 }}>Nenhum produto vinculado.</p>
+              {revalidacao ? (
+                <>
+                  <h5 className="admin-form-section-title">
+                    Alterações
+                    <span className="muted" style={{ marginLeft: 8, fontWeight: 500 }}>
+                      {alteracoes.length}
+                    </span>
+                  </h5>
+                  <ProdutosHomologacaoTable produtos={selected.produtos} alteracoes={alteracoes} />
+                </>
               ) : (
-                <div className="table-container">
-                  <table className="erp-table reports-table comercial-browse-table">
-                    <thead>
-                      <tr>
-                        <th>Produto</th>
-                        <th>Classe</th>
-                        <th>ONU</th>
-                        <th>Grupo</th>
-                        <th>FISPQ/FDS</th>
-                        <th>Conformidade</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selected.produtos.map((produto) => (
-                        <tr key={produto.id || produto.nome}>
-                          <td><strong>{produto.nome}</strong></td>
-                          <td>{labelClasse(produto.classeRisco)}</td>
-                          <td>{produto.numeroOnu || '—'}</td>
-                          <td>{labelGrupo(produto.grupoEmbalagem)}</td>
-                          <td>
-                            {produto.fispq ? (
-                              <a
-                                href={hrefFispq(produto.fispq)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="comercial-fispq-link"
-                                title="Abrir FISPQ/FDS"
-                                aria-label="Abrir FISPQ/FDS"
-                              >
-                                <i className="bi bi-link-45deg" aria-hidden="true" />
-                              </a>
-                            ) : '—'}
-                          </td>
-                          <td>
-                            <span className={`comercial-pendencia-chip ${produto.conformidade?.status === 'bloqueado' ? 'is-bloqueado' : produto.conformidade?.cargaPerigosa ? 'is-alerta' : 'is-ok'}`}>
-                              {conformidadeLabel(produto.conformidade?.status)}
-                            </span>
-                            {produto.conformidade?.alertas?.length ? (
-                              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{produto.conformidade.alertas.join(' · ')}</div>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  <h5 className="admin-form-section-title">Composição de produtos</h5>
+                  {selected.produtos.length === 0 ? (
+                    <p className="muted" style={{ margin: 0 }}>Nenhum produto vinculado.</p>
+                  ) : (
+                    <ProdutosHomologacaoTable produtos={selected.produtos} />
+                  )}
+                </>
               )}
 
               {historicoQuery.data && historicoQuery.data.length > 0 ? (

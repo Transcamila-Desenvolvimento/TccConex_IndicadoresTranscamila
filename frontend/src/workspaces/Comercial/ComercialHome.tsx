@@ -121,7 +121,7 @@ const ComercialHome: React.FC = () => {
                   Cadastros
                 </span>
               </div>
-              <h4>Produtos</h4>
+              <h4>Composição de produtos</h4>
               <p>Cadastro de produtos comerciais (em desenvolvimento).</p>
             </button>
             )}

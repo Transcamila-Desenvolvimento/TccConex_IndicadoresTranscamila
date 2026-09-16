@@ -19,7 +19,7 @@ import type {
   ClienteComercialPayload,
   ClienteComercialSituacao,
 } from '../../types/domain';
-import { CLIENTE_COMERCIAL_COMPATIBILIDADE_LABEL, parseClienteComercialCompatibilidade } from '../../types/domain';
+import { CLIENTE_COMERCIAL_COMPATIBILIDADE_LABEL, CLIENTE_COMERCIAL_SITUACAO_LABEL, parseClienteComercialCompatibilidade, parseClienteComercialSituacao } from '../../types/domain';
 import ComercialClienteHistoricoModal from './ComercialClienteHistoricoModal';
 import ComercialClienteSituacaoBadge from './ComercialClienteSituacaoBadge';
 import ComercialHomologacaoBadge from './ComercialHomologacaoBadge';
@@ -121,6 +121,7 @@ const ComercialCadastroClientes: React.FC = () => {
   const contacts = contactsData?.contacts ?? [];
   const [search, setSearch] = useState('');
   const [filterSituacao, setFilterSituacao] = useState<'todos' | ClienteComercialSituacao>('todos');
+  const [filterHomologacao, setFilterHomologacao] = useState<'todos' | 'pendente' | 'homologado' | 'reprovado'>('todos');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -136,6 +137,7 @@ const ComercialCadastroClientes: React.FC = () => {
     pageSize,
     search: search.trim() || undefined,
     situacao: filterSituacao === 'todos' ? undefined : filterSituacao,
+    homologacao: filterHomologacao === 'todos' ? undefined : filterHomologacao,
   });
   const { canShowEmpty } = useAsyncQueryState(clientesQuery);
   const createCliente = useCreateClienteComercial();
@@ -191,7 +193,7 @@ const ComercialCadastroClientes: React.FC = () => {
       email: cliente.email || '',
       inscricaoEstadual: cliente.inscricaoEstadual || '',
       observacoes: cliente.observacoes || '',
-      situacao: cliente.situacao === 'cliente' ? 'cliente' : 'potencial',
+      situacao: parseClienteComercialSituacao(cliente.situacao),
       compatibilidade: parseClienteComercialCompatibilidade(cliente.compatibilidade),
       previsaoVolumes: cliente.previsaoVolumes || '',
       tiposEmbalagens: cliente.tiposEmbalagens || '',
@@ -385,39 +387,65 @@ const ComercialCadastroClientes: React.FC = () => {
         </div>
       </header>
 
-      <div className="reports-filters-bar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '16px', flexShrink: 0 }}>
-        <div className="reports-filter-left" style={{ display: 'flex', gap: '10px', flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div className="reports-search-wrapper" style={{ minWidth: '240px' }}>
-            <svg className="search-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.637 10.637z" />
-            </svg>
-            <input
-              id="comercial-clientes-busca"
-              name="comercial-clientes-busca"
-              type="search"
-              placeholder="Nome, CNPJ ou município..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            />
-          </div>
-          <div className="reports-select-wrapper" style={{ minWidth: '140px' }}>
-            <select
-              id="comercial-clientes-situacao"
-              name="comercial-clientes-situacao"
-              value={filterSituacao}
-              onChange={(e) => {
-                setFilterSituacao(e.target.value as 'todos' | ClienteComercialSituacao);
-                setPage(1);
-              }}
-            >
-              <option value="todos">Situação: Todas</option>
-              <option value="potencial">Potencial cliente</option>
-              <option value="cliente">Cliente</option>
-            </select>
-          </div>
+      <div className="reports-filters-bar comercial-clientes-filters-bar">
+        <div className="comercial-clientes-filters">
+          <label className="comercial-clientes-filter-field comercial-clientes-filter-field--search">
+            <span>Busca</span>
+            <div className="reports-search-wrapper">
+              <svg className="search-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.637 10.637z" />
+              </svg>
+              <input
+                id="comercial-clientes-busca"
+                name="comercial-clientes-busca"
+                type="search"
+                placeholder="Nome, CNPJ ou município"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              />
+            </div>
+          </label>
+          <label className="comercial-clientes-filter-field">
+            <span>Situação</span>
+            <div className="reports-select-wrapper">
+              <select
+                id="comercial-clientes-situacao"
+                name="comercial-clientes-situacao"
+                value={filterSituacao}
+                onChange={(e) => {
+                  setFilterSituacao(e.target.value as 'todos' | ClienteComercialSituacao);
+                  setPage(1);
+                }}
+              >
+                <option value="todos">Todas</option>
+                <option value="potencial">{CLIENTE_COMERCIAL_SITUACAO_LABEL.potencial}</option>
+                <option value="cliente">{CLIENTE_COMERCIAL_SITUACAO_LABEL.cliente}</option>
+                <option value="inativo">{CLIENTE_COMERCIAL_SITUACAO_LABEL.inativo}</option>
+              </select>
+            </div>
+          </label>
+          <label className="comercial-clientes-filter-field">
+            <span>Homologação</span>
+            <div className="reports-select-wrapper">
+              <select
+                id="comercial-clientes-homologacao"
+                name="comercial-clientes-homologacao"
+                value={filterHomologacao}
+                onChange={(e) => {
+                  setFilterHomologacao(e.target.value as 'todos' | 'pendente' | 'homologado' | 'reprovado');
+                  setPage(1);
+                }}
+              >
+                <option value="todos">Todas</option>
+                <option value="pendente">Pendente</option>
+                <option value="homologado">{CLIENTE_COMERCIAL_COMPATIBILIDADE_LABEL.homologado}</option>
+                <option value="reprovado">{CLIENTE_COMERCIAL_COMPATIBILIDADE_LABEL.reprovado}</option>
+              </select>
+            </div>
+          </label>
         </div>
         <div className="reports-filter-right">
-          <span className="reports-records-count"><strong>{totalCount}</strong> Clientes</span>
+          <span className="reports-records-count"><strong>{totalCount}</strong> Cliente{totalCount === 1 ? '' : 's'}</span>
         </div>
       </div>
 
@@ -701,10 +729,11 @@ const ComercialCadastroClientes: React.FC = () => {
                     className="form-input"
                     value={form.situacao}
                     disabled={!canManage}
-                    onChange={(e) => setForm({ ...form, situacao: e.target.value === 'cliente' ? 'cliente' : 'potencial' })}
+                    onChange={(e) => setForm({ ...form, situacao: parseClienteComercialSituacao(e.target.value) })}
                   >
-                    <option value="potencial">Potencial cliente</option>
-                    <option value="cliente">Cliente</option>
+                    <option value="potencial">{CLIENTE_COMERCIAL_SITUACAO_LABEL.potencial}</option>
+                    <option value="cliente">{CLIENTE_COMERCIAL_SITUACAO_LABEL.cliente}</option>
+                    <option value="inativo">{CLIENTE_COMERCIAL_SITUACAO_LABEL.inativo}</option>
                   </select>
                 </label>
                 <label>

@@ -2021,7 +2021,7 @@ export interface CustoAbastecimentoRow {
 }
 
 export type ClienteComercialTipoPessoa = 'J';
-export type ClienteComercialSituacao = 'potencial' | 'cliente';
+export type ClienteComercialSituacao = 'potencial' | 'cliente' | 'inativo';
 export type ClienteComercialCompatibilidade =
   | 'nao_analisado'
   | 'pendente_validacao'
@@ -2031,6 +2031,7 @@ export type ClienteComercialCompatibilidade =
 export const CLIENTE_COMERCIAL_SITUACAO_LABEL: Record<ClienteComercialSituacao, string> = {
   potencial: 'Potencial cliente',
   cliente: 'Cliente',
+  inativo: 'Inativo',
 };
 
 export const CLIENTE_COMERCIAL_COMPATIBILIDADE_LABEL: Record<ClienteComercialCompatibilidade, string> = {
@@ -2039,6 +2040,12 @@ export const CLIENTE_COMERCIAL_COMPATIBILIDADE_LABEL: Record<ClienteComercialCom
   homologado: 'Homologado',
   reprovado: 'Reprovado',
 };
+
+export function parseClienteComercialSituacao(value?: string | null): ClienteComercialSituacao {
+  const raw = (value || '').trim();
+  if (raw === 'cliente' || raw === 'inativo' || raw === 'potencial') return raw;
+  return 'potencial';
+}
 
 export function parseClienteComercialCompatibilidade(value?: string | null): ClienteComercialCompatibilidade {
   const raw = (value || '').trim();
@@ -2129,6 +2136,13 @@ export interface ClienteComercialProduto {
   conformidade?: ClienteComercialProdutoConformidade;
 }
 
+export interface HomologacaoProdutoAlteracao {
+  tipo: 'incluido' | 'removido' | 'alterado';
+  id?: string;
+  nome: string;
+  detalhe: string;
+}
+
 export interface ClienteComercialHomologacaoResumo {
   produtosVinculados: number;
   produtosPerigosos: number;
@@ -2142,6 +2156,8 @@ export interface ClienteComercialHomologacaoResumo {
   aptoHomologar: boolean;
   pendencias: string[];
   resumoPendencia: string;
+  revalidacao?: boolean;
+  alteracoes?: HomologacaoProdutoAlteracao[];
 }
 
 export interface ClienteComercialValidacaoResumo {
@@ -2235,7 +2251,8 @@ export interface ClienteComercialPayload {
 
 export interface ClienteComercialQueryParams extends ListQueryParams {
   situacao?: ClienteComercialSituacao;
-  homologacao?: ClienteComercialCompatibilidade;
+  homologacao?: ClienteComercialCompatibilidade | 'pendente';
+  ativos?: boolean;
   fila?: 'validacao';
   comProdutos?: boolean;
   pendencia?: 'impeditivo';

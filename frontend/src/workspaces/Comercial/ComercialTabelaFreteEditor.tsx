@@ -8,10 +8,12 @@ import {
   useClientesComercial,
   useCreateTabelaFreteLinha,
   useDeleteTabelaFreteLinha,
+  useDescartarRevisaoTabelaFrete,
   useExportarTabelaFrete,
   useNovaRevisaoTabelaFrete,
   usePreviewTabelaFrete,
   usePublicarTabelaFrete,
+  useReativarTabelaFrete,
   useTabelaFreteDetalhe,
   useUpdateTabelaFrete,
   useUpdateTabelaFreteLinha,
@@ -171,13 +173,15 @@ type Props = {
 export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack, onOpenTabela }: Props) {
   const detalheQuery = useTabelaFreteDetalhe(tabelaId);
   const { canShowEmpty } = useAsyncQueryState(detalheQuery);
-  const clientesQuery = useClientesComercial({ page: 1, pageSize: 200 });
+  const clientesQuery = useClientesComercial({ page: 1, pageSize: 200, ativos: true });
   const updateTabela = useUpdateTabelaFrete();
   const preview = usePreviewTabelaFrete();
   const publicar = usePublicarTabelaFrete();
   const arquivar = useArquivarTabelaFrete();
+  const reativar = useReativarTabelaFrete();
   const deleteTabela = useDeleteTabelaFrete();
   const novaRevisao = useNovaRevisaoTabelaFrete();
+  const descartarRevisao = useDescartarRevisaoTabelaFrete();
   const exportarTabela = useExportarTabelaFrete();
   const createLinha = useCreateTabelaFreteLinha();
   const updateLinha = useUpdateTabelaFreteLinha();
@@ -418,6 +422,18 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
     });
   };
 
+  const handleReativar = () => {
+    if (!window.confirm('Reativar esta tabela? Ela volta como rascunho, sem clientes vinculados, para você escolher os vínculos antes de publicar.')) return;
+    reativar.mutate(tabelaId, {
+      onSuccess: (data) => {
+        setStatus(data.status);
+        setClienteIds(data.clienteIds ?? []);
+        detalheQuery.refetch();
+      },
+      onError: (err) => alert(getComercialErrorMessage(err)),
+    });
+  };
+
   const handleExcluir = () => {
     const rotulo = nomeBaseTabelaFrete(nome) || nome || 'esta tabela';
     if (!window.confirm(`Excluir definitivamente a tabela "${rotulo}" e todas as revisões? Esta ação não pode ser desfeita.`)) return;
@@ -431,6 +447,17 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
     novaRevisao.mutate(tabelaId, {
       onSuccess: (data) => {
         if (onOpenTabela) onOpenTabela(data.id);
+      },
+      onError: (err) => alert(getComercialErrorMessage(err)),
+    });
+  };
+
+  const handleDescartarRevisao = () => {
+    if (!window.confirm('Descartar esta revisão em rascunho? A revisão anterior volta a valer e as alterações desta revisão serão perdidas.')) return;
+    descartarRevisao.mutate(tabelaId, {
+      onSuccess: (data) => {
+        if (onOpenTabela) onOpenTabela(data.id);
+        else onBack();
       },
       onError: (err) => alert(getComercialErrorMessage(err)),
     });
@@ -502,7 +529,7 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
     createLinha.mutate(linhaPayload(), { onSuccess, onError });
   };
 
-  const saving = updateTabela.isPending || preview.isPending || publicar.isPending || arquivar.isPending || novaRevisao.isPending || deleteTabela.isPending;
+  const saving = updateTabela.isPending || preview.isPending || publicar.isPending || arquivar.isPending || reativar.isPending || novaRevisao.isPending || descartarRevisao.isPending || deleteTabela.isPending;
   const linhaPending = createLinha.isPending || updateLinha.isPending;
 
   return (
@@ -565,39 +592,62 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
         </div>
         {tabela ? (
           <div className="tabela-frete-page-head-actions">
-            <ComercialTabelaFreteStatusBadge status={status} />
-            {canManage && isLocked ? (
-              <>
+            <div className="tabela-frete-head-status">
+              <ComercialTabelaFreteStatusBadge status={status} />
+              {canManage && isLocked ? (
                 <span className="tabela-frete-meta-readonly">Somente leitura</span>
+              ) : null}
+            </div>
+            {canManage && isLocked ? (
+              <div className="tabela-frete-head-toolbar">
                 {(status === 'publicada' || status === 'expirada') ? (
                   <>
-                    <button type="button" className="reports-action-btn secondary tabela-frete-meta-action-btn" disabled={saving} onClick={handleNovaRevisao}>
+                    <button type="button" className="reports-action-btn primary tabela-frete-head-btn" disabled={saving} onClick={handleNovaRevisao}>
+                      <i className="bi bi-plus-lg" aria-hidden />
                       {novaRevisao.isPending ? 'Criando...' : 'Nova revisão'}
                     </button>
-                    <button type="button" className="reports-action-btn secondary tabela-frete-meta-action-btn" disabled={saving} onClick={handleArquivar}>
+                    <button type="button" className="reports-action-btn secondary tabela-frete-head-btn" disabled={saving} onClick={handleArquivar}>
+                      <i className="bi bi-archive" aria-hidden />
                       Arquivar
                     </button>
                   </>
                 ) : null}
-                <button type="button" className="reports-action-btn secondary tabela-frete-meta-action-btn" disabled={saving} onClick={handleExcluir}>
+                {status === 'arquivada' ? (
+                  <button type="button" className="reports-action-btn primary tabela-frete-head-btn" disabled={saving} onClick={handleReativar}>
+                    <i className="bi bi-arrow-counterclockwise" aria-hidden />
+                    {reativar.isPending ? 'Reativando...' : 'Reativar'}
+                  </button>
+                ) : null}
+                <button type="button" className="reports-action-btn secondary tabela-frete-head-btn" disabled={saving} onClick={handleExcluir}>
+                  <i className="bi bi-trash" aria-hidden />
                   {deleteTabela.isPending ? 'Excluindo...' : 'Excluir'}
                 </button>
-              </>
+              </div>
             ) : null}
             {canManage && !isLocked ? (
-              <>
+              <div className="tabela-frete-head-toolbar">
                 {status === 'rascunho' && (
-                  <button type="button" className="reports-action-btn secondary" disabled={saving} onClick={handlePublicar}>
+                  <button type="button" className="reports-action-btn secondary tabela-frete-head-btn" disabled={saving} onClick={handlePublicar}>
+                    <i className="bi bi-send" aria-hidden />
                     {publicar.isPending ? 'Publicando...' : 'Publicar'}
                   </button>
                 )}
-                <button type="button" className="reports-action-btn primary" style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }} disabled={saving} onClick={handleSave}>
+                <button type="button" className="reports-action-btn primary tabela-frete-head-btn" disabled={saving} onClick={handleSave}>
+                  <i className="bi bi-check2" aria-hidden />
                   {updateTabela.isPending ? 'Salvando...' : 'Salvar'}
                 </button>
-                <button type="button" className="reports-action-btn secondary tabela-frete-meta-action-btn" disabled={saving} onClick={handleExcluir}>
-                  {deleteTabela.isPending ? 'Excluindo...' : 'Excluir'}
-                </button>
-              </>
+                {revisao > 1 ? (
+                  <button type="button" className="reports-action-btn secondary tabela-frete-head-btn" disabled={saving} onClick={handleDescartarRevisao}>
+                    <i className="bi bi-x-lg" aria-hidden />
+                    {descartarRevisao.isPending ? 'Descartando...' : 'Descartar revisão'}
+                  </button>
+                ) : (
+                  <button type="button" className="reports-action-btn secondary tabela-frete-head-btn" disabled={saving} onClick={handleExcluir}>
+                    <i className="bi bi-trash" aria-hidden />
+                    {deleteTabela.isPending ? 'Excluindo...' : 'Excluir'}
+                  </button>
+                )}
+              </div>
             ) : null}
           </div>
         ) : null}

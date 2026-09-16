@@ -26,6 +26,7 @@ from .models import (
     PropostaComercial,
     PropostaComercialDraft,
     SITUACAO_CLIENTE,
+    SITUACAO_INATIVO,
     SITUACAO_POTENCIAL,
     STATUS_PROPOSTA_APROVADA,
     STATUS_PROPOSTA_ENVIADA,
@@ -264,7 +265,10 @@ class ClienteComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        qs = super().get_queryset().select_related('homologado_por').prefetch_related('produtos__produto').annotate(
+        qs = super().get_queryset().select_related('homologado_por').prefetch_related(
+            'produtos__produto',
+            'homologacao_eventos',
+        ).annotate(
             produtos_count=Count('produtos', filter=Q(produtos__produto__isnull=False), distinct=True),
         ).order_by('razao_social', 'cnpj')
         search = (self.request.query_params.get('search') or '').strip()
@@ -281,12 +285,16 @@ class ClienteComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 query |= Q(cnpj_digits__icontains=digits)
             qs = qs.filter(query)
         situacao = (self.request.query_params.get('situacao') or '').strip().lower()
-        if situacao in {SITUACAO_POTENCIAL, SITUACAO_CLIENTE}:
+        if situacao in {SITUACAO_POTENCIAL, SITUACAO_CLIENTE, SITUACAO_INATIVO}:
             qs = qs.filter(situacao=situacao)
-        homologacao = normalizar_homologacao(self.request.query_params.get('homologacao') or '')
-        raw_homologacao = (self.request.query_params.get('homologacao') or '').strip()
-        if raw_homologacao:
-            qs = qs.filter(compatibilidade=homologacao)
+        ativos = (self.request.query_params.get('ativos') or '').strip().lower()
+        if ativos in {'1', 'true', 'sim'}:
+            qs = qs.exclude(situacao=SITUACAO_INATIVO)
+        raw_homologacao = (self.request.query_params.get('homologacao') or '').strip().lower()
+        if raw_homologacao in {'pendente', 'pendentes'}:
+            qs = qs.filter(compatibilidade__in=['nao_analisado', 'pendente_validacao'])
+        elif raw_homologacao:
+            qs = qs.filter(compatibilidade=normalizar_homologacao(raw_homologacao))
         fila = (self.request.query_params.get('fila') or '').strip().lower()
         if fila in {'validacao', 'pendente'}:
             qs = qs.filter(
@@ -959,6 +967,25 @@ class TabelaFreteViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         record_audit(request.user, 'comercial.tabela_frete.arquivada', f'Tabela de frete "{tabela}" arquivada.')
         return Response(self.get_serializer(tabela).data)
 
+    @action(detail=True, methods=['post'])
+    def reativar(self, request, pk=None):
+        denied = _funcao_required_response(request, 'gerenciar-tabela-frete', _GERENCIAR_TABELA_FRETE_DETAIL)
+        if denied:
+            return denied
+        tabela = self.get_object()
+        try:
+            tabela.reativar()
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        tabela.atualizado_por = request.user
+        tabela.save(update_fields=['atualizado_por'])
+        record_audit(
+            request.user,
+            'comercial.tabela_frete.reativada',
+            f'Tabela de frete "{tabela}" reativada como rascunho, sem clientes vinculados.',
+        )
+        return Response(self.get_serializer(tabela).data)
+
     @action(detail=True, methods=['post'], url_path='nova-revisao')
     def nova_revisao(self, request, pk=None):
         denied = _funcao_required_response(request, 'gerenciar-tabela-frete', _GERENCIAR_TABELA_FRETE_DETAIL)
@@ -975,6 +1002,24 @@ class TabelaFreteViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if tabela.status == STATUS_TABELA_ARQUIVADA:
             record_audit(request.user, 'comercial.tabela_frete.arquivada', f'Tabela de frete "{tabela}" arquivada.')
         return Response(self.get_serializer(nova).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='descartar-revisao')
+    def descartar_revisao(self, request, pk=None):
+        denied = _funcao_required_response(request, 'gerenciar-tabela-frete', _GERENCIAR_TABELA_FRETE_DETAIL)
+        if denied:
+            return denied
+        tabela = self.get_object()
+        rotulo = str(tabela)
+        try:
+            restaurada = tabela.descartar_revisao()
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        record_audit(
+            request.user,
+            'comercial.tabela_frete.revisao_descartada',
+            f'Revisão em rascunho "{rotulo}" descartada. Revisão {restaurada.revisao} restaurada.',
+        )
+        return Response(self.get_serializer(restaurada).data)
 
     @action(detail=True, methods=['get'], url_path='historico-revisoes')
     def historico_revisoes(self, request, pk=None):

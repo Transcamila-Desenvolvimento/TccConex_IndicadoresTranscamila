@@ -109,6 +109,18 @@ def analisar_homologacao_produtos(cliente):
     else:
         resumo = 'Somente carga não perigosa · apto a homologar'
 
+    snapshot_aprovado = snapshot_ultima_homologacao(cliente)
+    revalidacao = bool(
+        snapshot_aprovado is not None
+        and cliente.compatibilidade in {COMPATIBILIDADE_PENDENTE_VALIDACAO, COMPATIBILIDADE_NAO_ANALISADO}
+    )
+    alteracoes = diff_produtos_snapshot(snapshot_produtos(cliente), snapshot_aprovado) if revalidacao else []
+    if revalidacao and not alteracoes:
+        revalidacao = False
+    if revalidacao and alteracoes and not pendencias:
+        qtd = len(alteracoes)
+        resumo = f'{qtd} alteração{"ões" if qtd != 1 else ""} na composição · apto a homologar'
+
     return {
         'produtosVinculados': len(itens),
         'produtosPerigosos': perigosos,
@@ -123,6 +135,8 @@ def analisar_homologacao_produtos(cliente):
         'pendencias': pendencias,
         'resumoPendencia': resumo,
         'itens': itens,
+        'revalidacao': revalidacao,
+        'alteracoes': alteracoes,
     }
 
 
@@ -140,6 +154,92 @@ def snapshot_produtos(cliente):
             'fispq': (catalogo.fispq_consulta if catalogo else vinculo.fispq_consulta) or '',
         })
     return itens
+
+
+def _produto_chave(item):
+    ident = str((item or {}).get('id') or '').strip()
+    nome = str((item or {}).get('nome') or '').strip()
+    return (ident or nome).lower()
+
+
+def _produto_texto(value):
+    texto = str(value or '').strip()
+    return texto or '—'
+
+
+def diff_produtos_snapshot(atual, anterior):
+    novos = list(atual or [])
+    velhos = list(anterior or [])
+    if not velhos and not novos:
+        return []
+    if not velhos:
+        return [
+            {
+                'tipo': 'incluido',
+                'id': str(item.get('id') or ''),
+                'nome': (item.get('nome') or 'Produto').strip() or 'Produto',
+                'detalhe': 'Incluído',
+            }
+            for item in novos
+        ]
+
+    mapa_novo = {_produto_chave(item): item for item in novos}
+    mapa_velho = {_produto_chave(item): item for item in velhos}
+    resultado = []
+    campos = (
+        ('classeRisco', 'Classe'),
+        ('numeroOnu', 'ONU'),
+        ('grupoEmbalagem', 'Grupo'),
+        ('fispq', 'FISPQ'),
+    )
+
+    for item in novos:
+        chave = _produto_chave(item)
+        antes = mapa_velho.get(chave)
+        nome = (item.get('nome') or 'Produto').strip() or 'Produto'
+        ident = str(item.get('id') or '')
+        if antes is None:
+            resultado.append({'tipo': 'incluido', 'id': ident, 'nome': nome, 'detalhe': 'Incluído'})
+            continue
+        mudancas = []
+        nome_antes = (antes.get('nome') or '').strip()
+        if nome_antes and nome_antes != nome:
+            mudancas.append(f'Nome {nome_antes} → {nome}')
+        for campo, rotulo in campos:
+            valor_antes = _produto_texto(antes.get(campo))
+            valor_depois = _produto_texto(item.get(campo))
+            if valor_antes != valor_depois:
+                mudancas.append(f'{rotulo} {valor_antes} → {valor_depois}')
+        if mudancas:
+            resultado.append({
+                'tipo': 'alterado',
+                'id': ident,
+                'nome': nome,
+                'detalhe': ' · '.join(mudancas),
+            })
+
+    for item in velhos:
+        chave = _produto_chave(item)
+        if chave not in mapa_novo:
+            resultado.append({
+                'tipo': 'removido',
+                'id': str(item.get('id') or ''),
+                'nome': (item.get('nome') or 'Produto').strip() or 'Produto',
+                'detalhe': 'Removido',
+            })
+    return resultado
+
+
+def snapshot_ultima_homologacao(cliente):
+    evento = (
+        HomologacaoProdutoEvento.objects
+        .filter(cliente=cliente, status=COMPATIBILIDADE_HOMOLOGADO)
+        .order_by('-data_criacao', '-id')
+        .first()
+    )
+    if not evento:
+        return None
+    return evento.produtos_snapshot or []
 
 
 def _registrar_evento(cliente, status, usuario, justificativa=''):

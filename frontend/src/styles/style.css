@@ -14293,6 +14293,12 @@ textarea.form-input {
   color: #fff;
 }
 
+.comercial-cliente-situacao-badge.is-inativo {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #64748b;
+}
+
 .proposta-status-badge.is-aprovada,
 .comercial-homologacao-badge.is-homologado,
 .comercial-cliente-situacao-badge.is-publicada {
@@ -14315,28 +14321,42 @@ textarea.form-input {
 }
 
 .comercial-homologacao-modal.modal-card {
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+  width: min(920px, 96vw);
+  max-height: 90vh;
+  border-radius: 6px;
+  border: 1px solid #d0d7e0;
+  box-shadow: 0 12px 28px rgba(15, 39, 68, 0.16);
 }
 
 .comercial-homologacao-modal .modal-header {
-  align-items: flex-start;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: inset 4px 0 0 #118CC4;
 }
 
 .comercial-homologacao-titulo {
   min-width: 0;
+  flex: 1;
 }
 
 .comercial-homologacao-modal .modal-header h2 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  color: #0f2744;
 }
 
 .comercial-homologacao-titulo p {
-  margin: 4px 0 0;
+  margin: 3px 0 0;
   font-size: 13px;
   font-weight: 500;
-  color: #475569;
+  color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -14349,33 +14369,168 @@ textarea.form-input {
   flex-shrink: 0;
 }
 
+.comercial-homologacao-modal .comercial-homologacao-badge {
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.comercial-homologacao-modal .comercial-homologacao-badge.is-pendente {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
+
 .comercial-homologacao-modal .modal-body {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 16px 20px 12px;
+  overflow: auto;
+  padding: 16px 18px 12px;
+}
+
+.comercial-homologacao-modal .admin-form-section-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: #64748b;
+  text-transform: none;
 }
 
 .comercial-homologacao-modal .table-container {
-  max-height: 220px;
+  max-height: 280px;
   overflow: auto;
-  border: 1px solid #d8dde3;
+  border: 1px solid #d8dee6;
   border-radius: 4px;
   background: #fff;
+}
+
+.comercial-homologacao-produtos-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+
+.comercial-homologacao-produtos-table .col-alteracao { width: 108px; }
+.comercial-homologacao-produtos-table .col-produto { width: 36%; }
+.comercial-homologacao-produtos-table.has-alteracao .col-produto { width: 28%; }
+.comercial-homologacao-produtos-table .col-classe { width: 10%; }
+.comercial-homologacao-produtos-table .col-onu { width: 10%; }
+.comercial-homologacao-produtos-table .col-grupo { width: 10%; }
+.comercial-homologacao-produtos-table .col-fispq { width: 10%; }
+.comercial-homologacao-produtos-table .col-conf { width: 24%; }
+.comercial-homologacao-produtos-table.has-alteracao .col-conf { width: 20%; }
+
+.comercial-homologacao-produtos-table th,
+.comercial-homologacao-produtos-table td {
+  vertical-align: middle;
+  font-size: 13px;
+  padding: 9px 12px;
+}
+
+.comercial-homologacao-modal .comercial-homologacao-produtos-table thead th {
+  background: #f4f7fa !important;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  border-bottom: 1px solid #d8dee6;
+}
+
+.comercial-homologacao-modal .reports-table tbody tr:nth-child(odd) td,
+.comercial-homologacao-modal .reports-table tbody tr:nth-child(even) td {
+  background-color: #fff !important;
+}
+
+.comercial-homologacao-modal .reports-table tbody tr:hover td {
+  background-color: #f8fafc !important;
+}
+
+.comercial-homologacao-produtos-table td.col-produto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #0f2744;
+}
+
+.comercial-homologacao-produtos-table td.col-classe,
+.comercial-homologacao-produtos-table td.col-onu,
+.comercial-homologacao-produtos-table td.col-grupo,
+.comercial-homologacao-produtos-table td.col-fispq {
+  white-space: nowrap;
+  text-align: center;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+.comercial-homologacao-produtos-table th:nth-child(2),
+.comercial-homologacao-produtos-table th:nth-child(3),
+.comercial-homologacao-produtos-table th:nth-child(4),
+.comercial-homologacao-produtos-table th:nth-child(5) {
+  text-align: center;
+}
+
+.comercial-homologacao-alerta {
+  font-size: 11px;
+  margin-top: 4px;
+  white-space: normal;
+}
+
+.comercial-homologacao-produtos-table td.col-alteracao {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.comercial-homologacao-produtos-table tr.is-removido td {
+  color: #94a3b8;
+}
+
+.comercial-homologacao-produtos-table tr.is-removido .col-produto strong {
+  text-decoration: line-through;
+  font-weight: 600;
+}
+
+.comercial-homologacao-modal .comercial-pendencia-chip {
+  height: 24px;
+  max-width: none;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+}
+
+.comercial-homologacao-modal .comercial-pendencia-chip.is-ok {
+  background: #e6e8ed;
+  color: #4b5563;
+}
+
+.comercial-homologacao-modal .comercial-pendencia-chip.is-alerta {
+  background: #e8a54b;
+  color: #fff;
+}
+
+.comercial-homologacao-modal .comercial-pendencia-chip.is-bloqueado {
+  background: #e45b5b;
+  color: #fff;
 }
 
 .comercial-homologacao-timeline {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 280px;
-  overflow: auto;
-  padding-right: 2px;
+  margin-top: 8px;
 }
 
 .comercial-hist-item {
-  padding: 10px 12px;
-  border: 1px solid #e6eaf0;
-  border-radius: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d8dee6;
+  border-radius: 0;
   background: #fff;
 }
 
@@ -14405,6 +14560,13 @@ textarea.form-input {
   font-size: 13px;
   line-height: 1.4;
   color: #475569;
+}
+
+.comercial-homologacao-alteracoes {
+  margin-top: 0;
+  margin-bottom: 4px;
+  padding-top: 0;
+  border-top: none;
 }
 
 .comercial-hist-changes {
@@ -14437,11 +14599,13 @@ textarea.form-input {
 .comercial-hist-tag {
   display: inline-flex;
   align-items: center;
-  height: 20px;
-  padding: 0 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   line-height: 1;
 }
 
@@ -14462,12 +14626,13 @@ textarea.form-input {
 
 .comercial-homologacao-form {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   flex-shrink: 0;
-  padding: 12px 20px 16px;
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
+  padding: 12px 16px 14px;
+  border-top: 1px solid #d8dee6;
+  background: #fff;
 }
 
 .comercial-homologacao-justificativa {
@@ -14476,15 +14641,19 @@ textarea.form-input {
   min-width: 0;
   font-size: 12px;
   font-weight: 600;
-  color: #475569;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #64748b;
 }
 
 .comercial-homologacao-justificativa textarea.form-input {
   margin-top: 6px;
-  min-height: 44px;
+  min-height: 48px;
   max-height: 88px;
   resize: vertical;
   font-weight: 400;
+  font-size: 13px;
+  border-radius: 4px;
   background: #fff;
 }
 
@@ -14492,7 +14661,14 @@ textarea.form-input {
   display: flex;
   flex-shrink: 0;
   gap: 8px;
-  padding-bottom: 2px;
+  justify-content: flex-end;
+}
+
+.comercial-homologacao-modal .reports-action-btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 4px;
+  font-size: 13px;
 }
 
 @media (max-width: 720px) {
@@ -14844,19 +15020,45 @@ textarea.form-input {
   justify-content: flex-end;
 }
 
-.comercial-produto-lote-item {
+.comercial-produto-form {
   margin-top: 16px;
-  padding: 14px 14px 16px;
-  border: 1px solid var(--border-color, #e6e8ec);
-  border-radius: 10px;
-  background: #fbfcfd;
 }
 
-.comercial-produto-lote-item-head {
+.comercial-produto-form.is-extra {
+  padding-top: 16px;
+  border-top: 1px solid #e6e8ec;
+}
+
+.comercial-produto-form-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+}
+
+.comercial-produto-form-status {
+  display: flex;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.comercial-produto-add-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #118CC4;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.comercial-produto-add-link:hover {
+  text-decoration: underline;
 }
 
 .comercial-browse-card .erp-pagination-bar {
@@ -14878,6 +15080,51 @@ textarea.form-input {
   text-align: left;
   font-size: 13px;
   color: #111827;
+}
+
+.fat-list-compact > .reports-filters-bar.comercial-clientes-filters-bar {
+  align-items: flex-end;
+  gap: 12px !important;
+  margin-bottom: 12px !important;
+}
+
+.comercial-clientes-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.comercial-clientes-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.comercial-clientes-filter-field > span {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  line-height: 1;
+}
+
+.comercial-clientes-filter-field--search {
+  flex: 1 1 240px;
+  max-width: 360px;
+}
+
+.comercial-clientes-filter-field--search .reports-search-wrapper,
+.comercial-clientes-filter-field--search .reports-search-wrapper input {
+  width: 100%;
+}
+
+.comercial-clientes-filter-field .reports-select-wrapper select {
+  min-width: 168px;
 }
 
 .comercial-browse-empty {
@@ -15256,13 +15503,16 @@ textarea.form-input {
 
 .proposta-generalidades-revisao .col-item { width: 32%; }
 .proposta-generalidades-revisao .col-condicao { width: auto; }
-.proposta-generalidades-revisao .col-actions {
-  width: 48px;
-  min-width: 48px;
-  max-width: 48px;
-  padding-left: 2px;
-  padding-right: 8px;
-  text-align: center;
+
+.proposta-generalidades-revisao .comercial-generalidades-condicao-row {
+  gap: 6px;
+}
+
+.proposta-generalidades-revisao .comercial-generalidades-condicao-row .btn-icon {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
 }
 
 .proposta-generalidades-revisao .comercial-generalidades-table .proposta-destinos-input {
@@ -15735,6 +15985,27 @@ textarea.form-input {
   vertical-align: middle;
 }
 
+.comercial-generalidades-table tbody tr:nth-child(odd) td,
+.comercial-generalidades-table tbody tr:nth-child(even) td,
+.comercial-generalidades-table tbody tr:hover td {
+  background-color: #ffffff !important;
+}
+
+.comercial-generalidades-condicao-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comercial-generalidades-condicao-row .proposta-destinos-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.comercial-generalidades-condicao-row .btn-icon {
+  flex-shrink: 0;
+}
+
 .comercial-generalidades-table .proposta-destinos-input {
   font-family: inherit;
   font-size: 13px;
@@ -16084,24 +16355,54 @@ textarea.form-input {
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 12px;
   padding-top: 2px;
   flex-shrink: 0;
 }
 
+.tabela-frete-head-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .tabela-frete-page-head-actions .comercial-cliente-situacao-badge {
-  margin-right: 4px;
+  margin-right: 0;
 }
 
 .tabela-frete-meta-readonly {
   font-size: 12px;
   font-weight: 500;
-  color: #64748b;
+  color: #94a3b8;
   white-space: nowrap;
 }
 
+.tabela-frete-head-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  border-left: 1px solid #e2e8f0;
+}
+
+.tabela-frete-head-btn {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  height: 32px !important;
+  padding: 0 12px !important;
+  font-size: 13px !important;
+  border-radius: 4px !important;
+  white-space: nowrap;
+}
+
+.tabela-frete-head-btn i {
+  font-size: 13px;
+  line-height: 1;
+}
+
 .tabela-frete-meta-action-btn {
-  height: 34px !important;
+  height: 32px !important;
   padding: 0 12px !important;
   font-size: 13px !important;
   white-space: nowrap;

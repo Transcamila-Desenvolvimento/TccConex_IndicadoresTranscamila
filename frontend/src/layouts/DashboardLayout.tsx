@@ -497,8 +497,8 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-icms-ufs')
       },
       {
-        title: "Produtos",
-        path: "Comercial / Cadastros / Produtos",
+        title: "Composição de produtos",
+        path: "Comercial / Cadastros / Composição de produtos",
         icon: <i className="bi bi-box-seam search-item-icon" aria-hidden="true" />,
         action: () => navigate('/comercial/cadastros/produtos'),
         show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-produtos')
@@ -595,7 +595,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/comercial/cadastros/tabela-frete')) return `${env} / Cadastros / Tabela frete`;
     if (path.startsWith('/comercial/cadastros/generalidades')) return `${env} / Cadastros / Generalidades`;
     if (path.startsWith('/comercial/cadastros/icms-ufs')) return `${env} / Cadastros / ICMS por UF`;
-    if (path.startsWith('/comercial/cadastros/produtos')) return `${env} / Cadastros / Produtos`;
+    if (path.startsWith('/comercial/cadastros/produtos')) return `${env} / Cadastros / Composição de produtos`;
     if (path.startsWith('/comercial/propostas')) return `${env} / Propostas comerciais`;
     if (path.startsWith('/comercial/validacao-clientes')) return `${env} / Validação clientes`;
     if (path.startsWith('/comercial')) return env;
@@ -1416,11 +1416,11 @@ const DashboardLayout: React.FC = () => {
                     <Link
                       to="/comercial/cadastros/produtos"
                       className={`nav-btn sub-nav-btn ${isRouteActive('/comercial/cadastros/produtos') ? 'active' : ''}`}
-                      data-tooltip="Produtos"
+                      data-tooltip="Composição de produtos"
                     >
                       <div className="nav-btn-left">
                         <NavIcon name="box-seam" sub />
-                        <span className="nav-text">Produtos</span>
+                        <span className="nav-text">Composição de produtos</span>
                       </div>
                     </Link>
                     )}

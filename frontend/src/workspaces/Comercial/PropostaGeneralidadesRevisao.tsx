@@ -42,13 +42,11 @@ export default function PropostaGeneralidadesRevisao({
             <colgroup>
               <col className="col-item" />
               <col className="col-condicao" />
-              {canEdit ? <col className="col-actions" /> : null}
             </colgroup>
             <thead>
               <tr>
                 <th className="col-item">Item</th>
                 <th className="col-condicao">Condição</th>
-                {canEdit ? <th className="col-actions" /> : null}
               </tr>
             </thead>
             <tbody>
@@ -63,26 +61,26 @@ export default function PropostaGeneralidadesRevisao({
                     />
                   </td>
                   <td>
-                    <input
-                      className="proposta-destinos-input"
-                      value={item.valor}
-                      disabled={!canEdit}
-                      maxLength={800}
-                      onChange={(e) => updateItem(index, { valor: e.target.value })}
-                    />
+                    <div className="comercial-generalidades-condicao-row">
+                      <input
+                        className="proposta-destinos-input"
+                        value={item.valor}
+                        disabled={!canEdit}
+                        maxLength={800}
+                        onChange={(e) => updateItem(index, { valor: e.target.value })}
+                      />
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          title="Remover"
+                          onClick={() => onChange(items.filter((_, i) => i !== index))}
+                        >
+                          <i className="bi bi-trash" />
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
-                  {canEdit ? (
-                    <td className="col-actions">
-                      <button
-                        type="button"
-                        className="btn-icon"
-                        title="Remover"
-                        onClick={() => onChange(items.filter((_, i) => i !== index))}
-                      >
-                        <i className="bi bi-trash" />
-                      </button>
-                    </td>
-                  ) : null}
                 </tr>
               ))}
             </tbody>

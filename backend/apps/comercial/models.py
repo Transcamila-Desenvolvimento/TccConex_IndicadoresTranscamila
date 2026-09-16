@@ -16,10 +16,13 @@ from apps.faturamento.models import (
 
 SITUACAO_POTENCIAL = 'potencial'
 SITUACAO_CLIENTE = 'cliente'
+SITUACAO_INATIVO = 'inativo'
 SITUACAO_CHOICES = [
     (SITUACAO_POTENCIAL, 'Potencial cliente'),
     (SITUACAO_CLIENTE, 'Cliente'),
+    (SITUACAO_INATIVO, 'Inativo'),
 ]
+SITUACAO_VALORES = {choice[0] for choice in SITUACAO_CHOICES}
 
 COMPATIBILIDADE_NAO_ANALISADO = 'nao_analisado'
 COMPATIBILIDADE_PENDENTE_VALIDACAO = 'pendente_validacao'
@@ -265,7 +268,7 @@ class ClienteComercial(models.Model):
         self.tipos_embalagens = (self.tipos_embalagens or '').strip()
         self.quantidade_volumes = (self.quantidade_volumes or '').strip()
         self.posicoes_pallets = (self.posicoes_pallets or '').strip()
-        if self.situacao not in {SITUACAO_POTENCIAL, SITUACAO_CLIENTE}:
+        if self.situacao not in SITUACAO_VALORES:
             self.situacao = SITUACAO_POTENCIAL
         if self.compatibilidade not in {choice[0] for choice in COMPATIBILIDADE_CHOICES}:
             self.compatibilidade = normalizar_homologacao(self.compatibilidade)
@@ -972,6 +975,15 @@ class TabelaFrete(models.Model):
     def arquivar(self):
         self.status = STATUS_TABELA_ARQUIVADA
 
+    def reativar(self):
+        if self.status != STATUS_TABELA_ARQUIVADA:
+            raise ValueError('Somente tabelas arquivadas podem ser reativadas.')
+        with transaction.atomic():
+            self.status = STATUS_TABELA_RASCUNHO
+            self.clientes.clear()
+            self.clientes_vinculo_key = ''
+            self.save(update_fields=['status', 'clientes_vinculo_key', 'data_atualizacao'])
+
     def duplicar_revisao(self, criado_por=None):
         from copy import deepcopy
 
@@ -1017,6 +1029,32 @@ class TabelaFrete(models.Model):
                 self.arquivar()
                 self.save(update_fields=['status', 'data_atualizacao'])
             return nova
+
+    def descartar_revisao(self):
+        if self.status != STATUS_TABELA_RASCUNHO:
+            raise ValueError('Somente uma revisão em rascunho pode ser descartada.')
+        codigo = (self.codigo or '').strip()
+        with transaction.atomic():
+            if codigo:
+                anteriores = (
+                    TabelaFrete.objects
+                    .filter(tipo=self.tipo, codigo=codigo)
+                    .exclude(pk=self.pk)
+                    .order_by('-revisao', '-data_criacao')
+                )
+            else:
+                anteriores = TabelaFrete.objects.none()
+            anterior = anteriores.first()
+            if anterior is None:
+                raise ValueError('Não há revisão anterior para restaurar.')
+            anterior_id = anterior.pk
+            self.delete()
+            restaurada = TabelaFrete.objects.get(pk=anterior_id)
+            if restaurada.status == STATUS_TABELA_ARQUIVADA:
+                restaurada.status = STATUS_TABELA_PUBLICADA
+                restaurada.sincronizar_status_vigencia()
+                restaurada.save(update_fields=['status', 'data_atualizacao'])
+            return restaurada
 
     def regenerar_faixas(self):
         from .tabela_distribuicao import gerar_faixas_distribuicao, merge_config

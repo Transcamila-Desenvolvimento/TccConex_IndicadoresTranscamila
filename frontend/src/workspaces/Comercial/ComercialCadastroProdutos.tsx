@@ -60,7 +60,7 @@ const ComercialCadastroProdutos: React.FC = () => {
     search: search.trim() || undefined,
     clienteId: filterClienteId || undefined,
   });
-  const clientesQuery = useClientesComercial({ page: 1, pageSize: 100 });
+  const clientesQuery = useClientesComercial({ page: 1, pageSize: 100, ativos: true });
   const sugestoesQuery = useClienteProdutosSugestoesComercial(isModalOpen);
   const createLote = useCreateProdutosComercialLote();
   const updateProduto = useUpdateProdutoComercial();
@@ -191,11 +191,11 @@ const ComercialCadastroProdutos: React.FC = () => {
       <header className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '6px', height: '22px', backgroundColor: '#118CC4' }} />
-          <h1 className="view-page-title">Produtos</h1>
+          <h1 className="view-page-title">Composição de produtos</h1>
         </div>
         {canManage && (
           <button type="button" className="reports-action-btn primary" onClick={startCreate}>
-            Cadastrar produtos
+            Novo produto
           </button>
         )}
       </header>
@@ -359,68 +359,69 @@ const ComercialCadastroProdutos: React.FC = () => {
 
       {isModalOpen && (
         <div className="search-backdrop" style={{ display: 'flex', alignItems: 'center', padding: '24px 16px' }} onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className="modal-card cliente-cadastro-modal" style={{ width: 'min(860px, 96vw)', maxHeight: '90vh' }} role="dialog" aria-modal="true">
+          <div className="modal-card cliente-cadastro-modal" style={{ width: 'min(720px, 96vw)', maxHeight: '90vh' }} role="dialog" aria-modal="true">
             <div className="modal-header">
-              <h2>{editingId ? 'Editar produto' : 'Cadastrar produtos'}</h2>
+              <h3>{editingId ? 'Editar produto' : 'Novo produto'}</h3>
               <button type="button" className="btn-icon" onClick={closeModal} aria-label="Fechar"><i className="bi bi-x-lg" /></button>
             </div>
             <form className="modal-body" onSubmit={handleSubmit}>
-              <div className="admin-form-section">
-                <h5 className="admin-form-section-title">Cliente</h5>
-                <p className="muted" style={{ margin: '0 0 10px', fontSize: '13px' }}>
-                  {editingId
-                    ? 'Ao alterar o produto ou o cliente, a homologação volta para pendente de validação.'
-                    : 'Inclua quantos produtos forem necessários. A homologação fica pendente só depois de salvar todos.'}
-                </p>
-                <label>
-                  Cliente
-                  <select
-                    className="form-input"
-                    value={clienteId}
-                    disabled={!canManage}
-                    onChange={(e) => setClienteId(e.target.value)}
-                  >
-                    <option value="">Selecione o cliente</option>
-                    {clienteId && !clientes.some((item) => item.id === clienteId) ? (
-                      <option value={clienteId}>
-                        {produtos.find((item) => item.id === editingId)?.clientes[0]?.razaoSocial || 'Cliente atual'}
-                      </option>
-                    ) : null}
-                    {clientes.map((cliente) => (
-                      <option key={cliente.id} value={cliente.id}>
-                        {cliente.nomeFantasia || cliente.razaoSocial}
-                        {cliente.cnpj ? ` · ${cliente.cnpj}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {clienteSelecionado ? (
-                  <div style={{ marginTop: '10px' }}>
-                    <ComercialHomologacaoBadge status={clienteSelecionado.compatibilidade} />
-                  </div>
-                ) : null}
-              </div>
+              <label>
+                Cliente
+                <select
+                  className="form-input"
+                  value={clienteId}
+                  disabled={!canManage}
+                  onChange={(e) => setClienteId(e.target.value)}
+                  required
+                >
+                  <option value="">Selecione o cliente</option>
+                  {clienteId && !clientes.some((item) => item.id === clienteId) ? (
+                    <option value={clienteId}>
+                      {produtos.find((item) => item.id === editingId)?.clientes[0]?.razaoSocial || 'Cliente atual'}
+                    </option>
+                  ) : null}
+                  {clientes.map((cliente) => (
+                    <option key={cliente.id} value={cliente.id}>
+                      {cliente.nomeFantasia || cliente.razaoSocial}
+                      {cliente.cnpj ? ` · ${cliente.cnpj}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {clienteSelecionado ? (
+                <div className="comercial-produto-form-status">
+                  <ComercialHomologacaoBadge status={clienteSelecionado.compatibilidade} />
+                </div>
+              ) : null}
 
               {linhas.map((linha, index) => (
-                <div key={linha.key} className="comercial-produto-lote-item">
-                  <div className="comercial-produto-lote-item-head">
-                    <strong>Produto {index + 1}</strong>
-                    {!editingId && linhas.length > 1 && canManage ? (
-                      <button
-                        type="button"
-                        className="btn-icon"
-                        title="Remover produto"
-                        onClick={() => setLinhas((prev) => prev.filter((item) => item.key !== linha.key))}
-                      >
-                        <i className="bi bi-trash" />
-                      </button>
-                    ) : null}
-                  </div>
+                <div key={linha.key} className={`comercial-produto-form${index > 0 ? ' is-extra' : ''}`}>
+                  {linhas.length > 1 ? (
+                    <div className="comercial-produto-form-head">
+                      <strong>Produto {index + 1}</strong>
+                      {!editingId && canManage ? (
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          title="Remover produto"
+                          onClick={() => setLinhas((prev) => prev.filter((item) => item.key !== linha.key))}
+                        >
+                          <i className="bi bi-trash" />
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <label>
-                    Nome
-                    <input className="form-input" value={linha.nome} disabled={!canManage} onChange={(e) => patchLinha(linha.key, { nome: e.target.value })} />
+                    Nome do produto
+                    <input
+                      className="form-input"
+                      required
+                      value={linha.nome}
+                      disabled={!canManage}
+                      onChange={(e) => patchLinha(linha.key, { nome: e.target.value })}
+                    />
                   </label>
-                  <div className="form-grid two-cols" style={{ marginTop: '12px' }}>
+                  <div className="form-grid two-cols" style={{ marginTop: '14px' }}>
                     <label>
                       Classe de risco
                       <select
@@ -444,7 +445,7 @@ const ComercialCadastroProdutos: React.FC = () => {
                         className="form-input"
                         inputMode="numeric"
                         maxLength={4}
-                        placeholder="0000"
+                        placeholder="4 dígitos"
                         value={linha.numeroOnu}
                         disabled={!canManage}
                         onChange={(e) => {
@@ -475,7 +476,7 @@ const ComercialCadastroProdutos: React.FC = () => {
                       <input
                         className="form-input"
                         type="text"
-                        placeholder="https:// (opcional)"
+                        placeholder="Opcional"
                         value={linha.fispq}
                         disabled={!canManage}
                         onChange={(e) => patchLinha(linha.key, { fispq: e.target.value })}
@@ -488,12 +489,18 @@ const ComercialCadastroProdutos: React.FC = () => {
               {!editingId && canManage ? (
                 <button
                   type="button"
-                  className="reports-action-btn secondary"
-                  style={{ marginTop: '4px' }}
+                  className="comercial-produto-add-link"
                   onClick={() => setLinhas((prev) => [...prev, novaLinha()])}
                 >
-                  Adicionar outro produto
+                  <i className="bi bi-plus-lg" aria-hidden="true" />
+                  Incluir outro produto neste cadastro
                 </button>
+              ) : null}
+
+              {editingId ? (
+                <p className="muted" style={{ margin: '12px 0 0', fontSize: '12px' }}>
+                  Ao alterar o produto ou o cliente, a homologação volta para pendente.
+                </p>
               ) : null}
 
               <div className="modal-footer" style={{ marginTop: '20px' }}>

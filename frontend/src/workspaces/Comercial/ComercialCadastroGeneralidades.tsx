@@ -25,6 +25,7 @@ const ComercialCadastroGeneralidades: React.FC = () => {
     page: 1,
     pageSize: 100,
     search: clienteFiltro.trim() || undefined,
+    ativos: true,
   });
   const catalogQuery = useComercialGeneralidades(clienteId || null, tipo, { permitirPadrao: true });
   const saveCatalog = useSaveComercialGeneralidades();
@@ -149,13 +150,12 @@ const ComercialCadastroGeneralidades: React.FC = () => {
                 <tr>
                   <th style={{ width: '32%' }}>Item</th>
                   <th>Condição</th>
-                  {canManage ? <th style={{ width: 48 }} /> : null}
                 </tr>
               </thead>
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={canManage ? 3 : 2} className="comercial-browse-empty">
+                    <td colSpan={2} className="comercial-browse-empty">
                       Não há registros a serem exibidos.
                     </td>
                   </tr>
@@ -171,26 +171,26 @@ const ComercialCadastroGeneralidades: React.FC = () => {
                         />
                       </td>
                       <td>
-                        <input
-                          className="proposta-destinos-input"
-                          value={item.valor}
-                          disabled={!canManage}
-                          maxLength={800}
-                          onChange={(e) => updateItem(index, { valor: e.target.value })}
-                        />
+                        <div className="comercial-generalidades-condicao-row">
+                          <input
+                            className="proposta-destinos-input"
+                            value={item.valor}
+                            disabled={!canManage}
+                            maxLength={800}
+                            onChange={(e) => updateItem(index, { valor: e.target.value })}
+                          />
+                          {canManage ? (
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              title="Remover"
+                              onClick={() => setItems((current) => current.filter((_, i) => i !== index))}
+                            >
+                              <i className="bi bi-trash" />
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
-                      {canManage ? (
-                        <td>
-                          <button
-                            type="button"
-                            className="btn-icon"
-                            title="Remover"
-                            onClick={() => setItems((current) => current.filter((_, i) => i !== index))}
-                          >
-                            <i className="bi bi-trash" />
-                          </button>
-                        </td>
-                      ) : null}
                     </tr>
                   ))
                 )}

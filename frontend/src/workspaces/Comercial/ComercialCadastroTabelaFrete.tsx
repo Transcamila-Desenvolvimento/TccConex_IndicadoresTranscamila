@@ -42,7 +42,7 @@ const ComercialCadastroTabelaFrete: React.FC = () => {
   const [clienteIds, setClienteIds] = useState<string[]>([]);
 
   const listQuery = useTabelasFrete({ page, pageSize, search: search.trim() || undefined, tipo: 'distribuicao' });
-  const clientesQuery = useClientesComercial({ page: 1, pageSize: 200 });
+  const clientesQuery = useClientesComercial({ page: 1, pageSize: 200, ativos: true });
   const { canShowEmpty } = useAsyncQueryState(listQuery);
   const createTabela = useCreateTabelaFrete();
   const deleteTabela = useDeleteTabelaFrete();

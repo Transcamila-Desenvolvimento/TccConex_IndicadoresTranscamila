@@ -5,6 +5,7 @@ import { CLIENTE_COMERCIAL_SITUACAO_LABEL } from '../../types/domain';
 const SITUACAO_CLASS: Record<ClienteComercialSituacao, string> = {
   cliente: 'is-cliente',
   potencial: 'is-potencial',
+  inativo: 'is-inativo',
 };
 
 interface ComercialClienteSituacaoBadgeProps {

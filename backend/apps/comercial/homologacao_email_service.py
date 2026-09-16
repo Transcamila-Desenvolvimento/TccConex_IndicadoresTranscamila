@@ -121,6 +121,8 @@ def _enviar_homologacao_pendente(cliente_id, usuario_id=None) -> None:
     analise = analisar_homologacao_produtos(cliente)
     cliente_nome = (cliente.razao_social or cliente.nome_fantasia or '').strip() or f'Cliente {cliente.pk}'
     produtos, restante = _detalhe_produtos(cliente)
+    revalidacao = bool(analise.get('revalidacao'))
+    alteracoes = analise.get('alteracoes') or []
     frontend_base = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
     html_body = render_to_string('comercial/emails/homologacao_pendente.html', {
         'cliente_nome': cliente_nome,
@@ -129,14 +131,20 @@ def _enviar_homologacao_pendente(cliente_id, usuario_id=None) -> None:
         'resumo': analise.get('resumoPendencia') or 'Pendente de validação',
         'produtosVinculados': analise.get('produtosVinculados') or len(produtos),
         'produtosPerigosos': analise.get('produtosPerigosos') or 0,
-        'produtos': produtos,
-        'produtos_restantes': restante,
+        'produtos': [] if revalidacao else produtos,
+        'produtos_restantes': 0 if revalidacao else restante,
+        'revalidacao': revalidacao,
+        'alteracoes': alteracoes,
         'logo_cid': LOGO_CID if _logo_tccconex_bytes() else '',
         'validacao_url': f'{frontend_base}/comercial/validacao-clientes?cliente={cliente.pk}',
     })
 
     email_obj = EmailMessage(
-        subject=f'TccConex — Homologação pendente: {cliente_nome}',
+        subject=(
+            f'TccConex — Composição alterada: {cliente_nome}'
+            if revalidacao
+            else f'TccConex — Homologação pendente: {cliente_nome}'
+        ),
         body=html_body,
         from_email=_from_email_sistema(),
         to=to_emails,

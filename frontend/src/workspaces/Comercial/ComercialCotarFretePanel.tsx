@@ -19,7 +19,7 @@ const ComercialCotarFretePanel: React.FC<Props> = ({ onClose }) => {
   const [clienteId, setClienteId] = useState('');
   const [tabelaIdManual, setTabelaIdManual] = useState('');
 
-  const clientesQuery = useClientesComercial({ page: 1, pageSize: 100 });
+  const clientesQuery = useClientesComercial({ page: 1, pageSize: 100, ativos: true });
   const tabelasQuery = useTabelasFrete({
     page: 1,
     pageSize: 100,
