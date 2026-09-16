@@ -1,4 +1,5 @@
 import React from 'react';
+import PageLoader from './PageLoader';
 import {
   useAsyncQueryState,
   type QueryResultLike,
@@ -121,10 +122,10 @@ const QueryDataPanel: React.FC<QueryDataPanelProps> = ({
     >
       {overlayLoading && (
         <div className="async-query-refresh-overlay" role="status" aria-live="polite" aria-busy="true">
-          <div className="async-query-refresh-card">
-            <AsyncQuerySpinner />
-            <span>{showInitialLoader ? loadingMessage : refreshingMessage}</span>
-          </div>
+          <PageLoader
+            className="page-loader--in-place"
+            message={showInitialLoader ? loadingMessage : refreshingMessage}
+          />
         </div>
       )}
       {showRefreshing && refreshVariant === 'inline' && (
