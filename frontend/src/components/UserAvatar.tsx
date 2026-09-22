@@ -38,6 +38,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
           src={photo}
           alt=""
           className="user-avatar-chip__photo"
+          referrerPolicy="no-referrer"
           onError={() => setPhotoFailed(true)}
         />
       ) : (

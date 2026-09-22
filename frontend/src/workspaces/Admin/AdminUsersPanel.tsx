@@ -20,6 +20,7 @@ import { funcoesDaAba, funcoesDoModulo, isFuncaoOptIn, type FuncaoKey } from '..
 import { abasDoModulo, HOME_ABA_KEY, rotinasConfiguraveisDoModulo } from '../../constants/abas';
 import { branchesForModule } from '../../constants/filiais';
 import QueryDataPanel from '../../components/QueryDataPanel';
+import UserAvatar from '../../components/UserAvatar';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 
 const PAGE_SIZE = 10;
@@ -568,8 +569,6 @@ const AdminUsersPanel: React.FC = () => {
                 ) : (
                   usersList.map((u) => {
                     const roleName = roles.find(r => r.id === u.roleId)?.name || 'Operador';
-                    const initials = u.name.split(' ').length > 1 ? u.name.split(' ')[0][0] + u.name.split(' ')[u.name.split(' ').length - 1][0] : u.name.slice(0, 2);
-                    const formattedInitials = initials.toUpperCase();
 
                     const lastLoginStr = u.lastLogin
                       ? new Date(u.lastLogin).toLocaleDateString('pt-BR') + ' ' + new Date(u.lastLogin).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -588,9 +587,13 @@ const AdminUsersPanel: React.FC = () => {
                         </td>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#0076ce', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '12px', flexShrink: 0, boxShadow: '0 2px 4px rgba(0,0,0,0.08)' }}>
-                              {formattedInitials}
-                            </div>
+                            <UserAvatar
+                              name={u.name || u.username}
+                              photo={u.googlePicture}
+                              size="md"
+                              title={googleEmail ? `${u.name} · ${googleEmail}` : u.name}
+                              className="admin-users-avatar"
+                            />
                             <strong>{u.username}</strong>
                           </div>
                         </td>

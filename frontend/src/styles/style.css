@@ -5784,6 +5784,12 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   font-size: 11px;
 }
 
+.admin-users-avatar.user-avatar-chip--md {
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
+}
+
 .selection-profile-avatar-chip {
   width: 64px;
   height: 64px;

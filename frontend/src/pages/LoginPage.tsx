@@ -51,7 +51,7 @@ const LoginPage: React.FC = () => {
         <div className="login-header">
           <img src={logoImg} alt="TccConex Logo" className="login-logo" />
           <h2>Bem-vindo de volta</h2>
-          <p>Acesse seu ERP seguro e integrado</p>
+          <p>Acessar SGPI Transcamila. Sistema de Gestão de Processos e Indicadores</p>
         </div>
         <form id="login-form" onSubmit={handleSubmit}>
           <div className="login-group">
@@ -87,7 +87,7 @@ const LoginPage: React.FC = () => {
 
           <button type="submit" className="btn-login" id="btn-login" disabled={isSubmitting}>
             {!isSubmitting ? (
-              <span>Entrar no Sistema</span>
+              <span>Entrar SGPI</span>
             ) : (
               <>
                 <span>Processando...</span>
@@ -97,7 +97,7 @@ const LoginPage: React.FC = () => {
           </button>
         </form>
         <div className="login-footer">
-          &copy; 2026 TccConex ERP - Transcamila Cargas e Armazéns Gerais Ltda
+          &copy; 2026 TccConex ERP - Transcamila Cargas e Armazéns Gerais Ltda. SGPI - Sistema de Gestão de Processos e Indicadores
         </div>
       </div>
     </div>
