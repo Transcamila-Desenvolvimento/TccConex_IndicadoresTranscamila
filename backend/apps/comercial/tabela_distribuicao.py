@@ -77,6 +77,35 @@ CCAB_TARIFA_POR_KM = str(
     ((Decimal('7.69') * Decimal('1.13')) * Decimal('1.065') * Decimal('1.06')).quantize(Decimal('0.00000001'), rounding=ROUND_HALF_UP)
 )
 
+# Coeficientes CC/CCD da tabela oficial (consulta interna; não vão na proposta).
+ANTT_FONTE_PADRAO = 'Resolução ANTT nº 6.084/2026 — 17/07/2026'
+ANTT_FONTE_DATA_PADRAO = '2026-07-17'
+VEICULOS_TARIFA_MODELO_OFICIAL = [
+    {
+        'bandaKey': 'de9000',
+        'rotulo': 'Truck',
+        'anttFixo': '642.55',
+        'anttPorKm': '5.4821',
+        'margem': '0.33',
+    },
+    {
+        'bandaKey': 'de14001',
+        'rotulo': 'Carreta 6 eixos',
+        'anttFixo': '777.73',
+        'anttPorKm': '7.7758',
+        'margem': '0.25',
+        # Planilha oficial: vende com ANTT 6 eixos + margem; coluna ANTT de consulta = piso 7 eixos.
+        'anttConsultaBandaKey': 'acima26001',
+    },
+    {
+        'bandaKey': 'acima26001',
+        'rotulo': 'Carreta 7 eixos',
+        'anttFixo': '942.48',
+        'anttPorKm': '8.5321',
+        'margem': '0.25',
+    },
+]
+
 
 def default_config_distribuicao():
     return {
@@ -100,6 +129,9 @@ def default_config_distribuicao():
         'prazosFechado': deepcopy(DEFAULT_PRAZOS_FECHADO),
         'colunasExtras': [],
         'overrides': {},
+        'veiculosTarifa': [],
+        'anttFonte': '',
+        'anttFonteData': '',
     }
 
 
@@ -251,6 +283,35 @@ def normalizar_passos(passos):
     return passos
 
 
+def preset_veiculos_antt_oficial():
+    return {
+        'anttFonte': ANTT_FONTE_PADRAO,
+        'anttFonteData': ANTT_FONTE_DATA_PADRAO,
+        'veiculosTarifa': deepcopy(VEICULOS_TARIFA_MODELO_OFICIAL),
+    }
+
+
+def preset_config_oficial_distribuicao():
+    """Grade do arquivo TABELA FRETES MODELO OFICIAL.xlsm (abas OFICIAL + SIMULAÇÃO)."""
+    config = preset_config_ccab()
+    config.update(preset_veiculos_antt_oficial())
+    config.update({
+        'kmInicio': 0,
+        'kmFim': 3600,
+        'pedagioBase': '17',
+        'pedagioFator': '1.05',
+        'grisAdvPercent': '0.0015',
+        'grisPercent': '0.0015',
+        'advPercent': '0.0015',
+        'grisAdvUnificado': True,
+        'fatorFreteMinimo': str(FATOR_FRETE_MINIMO_PADRAO),
+        'prazosFracionado': deepcopy(DEFAULT_PRAZOS_FRACIONADO),
+        'prazosFechado': deepcopy(DEFAULT_PRAZOS_FECHADO),
+        'passos': deepcopy(DEFAULT_PASSOS),
+    })
+    return config
+
+
 def _slug_coluna(rotulo, index, usadas):
     nfkd = unicodedata.normalize('NFKD', rotulo or '')
     ascii_text = ''.join(char for char in nfkd if not unicodedata.combining(char))
@@ -319,6 +380,35 @@ def normalizar_bandas(bandas):
     return normalizadas or deepcopy(DEFAULT_BANDAS)
 
 
+def normalizar_veiculos_tarifa(items):
+    if not isinstance(items, list):
+        return []
+    normalizados = []
+    usadas = set()
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        banda_key = str(item.get('bandaKey') or item.get('banda_key') or '').strip()
+        if not banda_key or banda_key in usadas:
+            continue
+        usadas.add(banda_key)
+        margem = item.get('margem')
+        if margem in (None, ''):
+            margem = '0'
+        consulta_key = str(item.get('anttConsultaBandaKey') or item.get('antt_consulta_banda_key') or '').strip()
+        registro = {
+            'bandaKey': banda_key,
+            'rotulo': str(item.get('rotulo') or '').strip() or banda_key,
+            'anttFixo': str(item.get('anttFixo') if item.get('anttFixo') not in (None, '') else '0'),
+            'anttPorKm': str(item.get('anttPorKm') if item.get('anttPorKm') not in (None, '') else '0'),
+            'margem': str(margem),
+        }
+        if consulta_key and consulta_key != banda_key:
+            registro['anttConsultaBandaKey'] = consulta_key
+        normalizados.append(registro)
+    return normalizados
+
+
 def merge_config(raw):
     config = default_config_distribuicao()
     if not isinstance(raw, dict):
@@ -372,6 +462,12 @@ def merge_config(raw):
     config['colunasExtras'] = normalizar_colunas_extras(
         raw.get('colunasExtras') if isinstance(raw.get('colunasExtras'), list) else config.get('colunasExtras')
     )
+    if isinstance(raw.get('veiculosTarifa'), list):
+        config['veiculosTarifa'] = normalizar_veiculos_tarifa(raw.get('veiculosTarifa'))
+    if raw.get('anttFonte') not in (None,):
+        config['anttFonte'] = str(raw.get('anttFonte') or '')[:240]
+    if raw.get('anttFonteData') not in (None,):
+        config['anttFonteData'] = str(raw.get('anttFonteData') or '')[:40]
     return config
 
 
@@ -429,6 +525,86 @@ def chave_faixa(km_de, km_ate):
     return f'{km_de}-{km_ate}'
 
 
+def _indice_veiculos_tarifa(config):
+    indice = {}
+    for item in config.get('veiculosTarifa') or []:
+        if isinstance(item, dict) and item.get('bandaKey'):
+            indice[item['bandaKey']] = item
+    return indice
+
+
+def _coeficientes_com_margem(antt_fixo, antt_por_km, margem):
+    m = _dec(margem, '0')
+    if m < 0:
+        m = Decimal('0')
+    if m >= Decimal('1'):
+        m = Decimal('0.99')
+    denom = Decimal('1') - m
+    return antt_fixo / denom, antt_por_km / denom
+
+
+def _config_para_referencia_k(config, indice_veiculos, bandas):
+    if not indice_veiculos:
+        return config
+    referencia = None
+    primeiro_veiculo = None
+    for banda in bandas:
+        item = indice_veiculos.get(banda.get('key'))
+        if not item:
+            continue
+        if banda.get('calculo') == 'referencia' and referencia is None:
+            referencia = item
+        if primeiro_veiculo is None and (banda.get('unidade') == 'veiculo' or banda.get('calculo') == 'referencia'):
+            primeiro_veiculo = item
+    escolhido = referencia or primeiro_veiculo
+    if not escolhido:
+        return config
+    fixo, por_km = _coeficientes_com_margem(
+        _dec(escolhido.get('anttFixo')),
+        _dec(escolhido.get('anttPorKm')),
+        escolhido.get('margem'),
+    )
+    derivado = dict(config)
+    derivado['modoTarifa'] = MODO_TARIFA_LINEAR
+    derivado['tarifaFixa'] = str(fixo)
+    derivado['tarifaPorKm'] = str(por_km)
+    return derivado
+
+
+def _item_antt_consulta(item, indice):
+    chave = str(item.get('anttConsultaBandaKey') or '').strip()
+    if chave and chave in indice:
+        return indice[chave]
+    rotulo = (item.get('rotulo') or '').lower()
+    if '6' in rotulo:
+        for outro in indice.values():
+            if outro.get('bandaKey') == item.get('bandaKey'):
+                continue
+            if '7' in (outro.get('rotulo') or '').lower():
+                return outro
+    return item
+
+
+def _piso_antt(item, km_ate):
+    return Decimal(int(km_ate)) * _dec(item.get('anttPorKm')) + _dec(item.get('anttFixo'))
+
+
+def _tarifa_veiculo_antt(item, km_ate, item_antt=None):
+    consulta = item_antt or item
+    antt_fixo = _dec(item.get('anttFixo'))
+    antt_km = _dec(item.get('anttPorKm'))
+    margem = _dec(item.get('margem'), '0')
+    fixo, por_km = _coeficientes_com_margem(antt_fixo, antt_km, margem)
+    bruto = Decimal(int(km_ate)) * por_km + fixo
+    antt = _piso_antt(consulta, km_ate)
+    bruto_q = bruto.quantize(TWO, rounding=ROUND_HALF_UP)
+    antt_q = antt.quantize(TWO, rounding=ROUND_HALF_UP)
+    realizado = Decimal('0')
+    if bruto_q:
+        realizado = (bruto_q - antt_q) / bruto_q
+    return bruto, antt, realizado
+
+
 def _tarifa_referencia_k(km_ate, primeira_ate, config):
     modo = config.get('modoTarifa', MODO_TARIFA_INCREMENTO)
     if modo == MODO_TARIFA_LINEAR:
@@ -482,6 +658,8 @@ def gerar_faixas_distribuicao(raw_config):
     bandas = config['bandas']
     overrides = config.get('overrides') or {}
     fator_minimo = _dec(config.get('fatorFreteMinimo', str(FATOR_FRETE_MINIMO_PADRAO)), str(FATOR_FRETE_MINIMO_PADRAO))
+    indice_veiculos = _indice_veiculos_tarifa(config)
+    config_k = _config_para_referencia_k(config, indice_veiculos, bandas)
     faixas = []
     primeira_ate = None
 
@@ -491,8 +669,8 @@ def gerar_faixas_distribuicao(raw_config):
     ):
         if primeira_ate is None:
             primeira_ate = km_ate
-        referencia_k = _tarifa_referencia_k(km_ate, primeira_ate, config)
-        tarifa_principal = _tarifa_coluna_principal(km_ate, primeira_ate, config, bandas)
+        referencia_k = _tarifa_referencia_k(km_ate, primeira_ate, config_k)
+        tarifa_principal = _tarifa_coluna_principal(km_ate, primeira_ate, config_k, bandas)
         tarifa_e = tarifa_principal.quantize(TWO, rounding=ROUND_HALF_UP)
         if index:
             pedagio = (pedagio * pedagio_fator).quantize(TWO, rounding=ROUND_HALF_UP)
@@ -500,6 +678,23 @@ def gerar_faixas_distribuicao(raw_config):
         tarifas = []
         valor_anterior = None
         for banda in bandas:
+            item_veiculo = indice_veiculos.get(banda.get('key'))
+            if item_veiculo:
+                bruto, antt_valor, margem_real = _tarifa_veiculo_antt(
+                    item_veiculo,
+                    km_ate,
+                    _item_antt_consulta(item_veiculo, indice_veiculos),
+                )
+                valor_anterior = bruto
+                tarifas.append({
+                    'key': banda.get('key') or '',
+                    'rotulo': banda.get('rotulo') or '',
+                    'unidade': banda.get('unidade') or 'ton',
+                    'valor': _money(bruto),
+                    'antt': _money(antt_valor),
+                    'margem': str(margem_real.quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)),
+                })
+                continue
             bruto = _valor_banda(referencia_k, tarifa_principal, banda, valor_anterior)
             valor_anterior = bruto
             tarifas.append({

@@ -49,6 +49,7 @@ import type {
   TabelaFrete, TabelaFreteLinha, TabelaFreteLinhaPayload, TabelaFretePayload,
   TabelaFreteQueryParams, TabelaFreteRevisaoHistorico, TabelaFreteSimulacaoResult, TabelaFreteSimulacaoIcms, TabelaFreteConfig, TabelaFreteFaixa,
   IcmsUfConfig, IcmsUfAliquotas,
+  ParametrosComercial, ParametrosComercialPayload,
   RotaDistanciaPayload, RotaDistanciaResult, EnderecoSugestao, GoogleMapsConfigComercial,
   ProdutoComercial, ProdutoComercialPayload, ProdutoComercialLotePayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
 } from '../types/domain';
@@ -94,6 +95,7 @@ function normalizeUser(raw: any): User {
     id: String(raw.id),
     username: raw.username,
     name: raw.name,
+    cargo: typeof raw.cargo === 'string' ? raw.cargo : '',
     roleId: raw.roleId,
     status: raw.status,
     lastLogin: raw.lastLogin ?? null,
@@ -239,11 +241,16 @@ function normalizePropostaFreteLinha(raw: any): PropostaFreteLinha {
     origem: raw.origem ?? '',
     entrega: raw.entrega ?? '',
     veiculo: raw.veiculo ?? '',
+    veiculoKey: raw.veiculoKey ?? '',
+    modalidade: raw.modalidade ?? 'transferencia',
+    km: raw.km ?? '',
     devolucaoContainer: raw.devolucaoContainer ?? '',
     observacoes: raw.observacoes ?? '',
     peso: raw.peso ?? '',
     tarifaFrete: raw.tarifaFrete != null && raw.tarifaFrete !== '' ? String(raw.tarifaFrete) : null,
     pedagio: raw.pedagio != null && raw.pedagio !== '' ? String(raw.pedagio) : null,
+    retiradaCtnt: raw.retiradaCtnt != null && raw.retiradaCtnt !== '' ? String(raw.retiradaCtnt) : null,
+    desovaCtnt: raw.desovaCtnt != null && raw.desovaCtnt !== '' ? String(raw.desovaCtnt) : null,
     adValorem: raw.adValorem ?? '',
     gris: raw.gris ?? '',
     icms: raw.icms ?? '',
@@ -264,7 +271,7 @@ function normalizePropostaComercial(raw: any): PropostaComercial {
     ? raw.condicoes.map((item: any) => ({
         rotulo: String(item?.rotulo ?? ''),
         valor: String(item?.valor ?? ''),
-        ...(item?.tipo === 'frete' || item?.tipo === 'distribuicao' || item?.tipo === 'armazenagem'
+        ...(item?.tipo === 'frete' || item?.tipo === 'distribuicao' || item?.tipo === 'armazenagem' || item?.tipo === 'op_portuaria'
           ? { tipo: item.tipo }
           : {}),
       }))
@@ -295,6 +302,12 @@ function normalizePropostaComercial(raw: any): PropostaComercial {
     observacoes: raw.observacoes ?? '',
     incluiTransferencia: Boolean(raw.incluiTransferencia),
     incluiDistribuicao: Boolean(raw.incluiDistribuicao),
+    incluiArmazenagem: Boolean(raw.incluiArmazenagem) || tipo === 'armazenagem',
+    incluiOpPortuaria: Boolean(raw.incluiOpPortuaria),
+    margensVeiculo: Array.isArray(raw.margensVeiculo) ? raw.margensVeiculo : [],
+    tabelaDistribuicao: raw.tabelaDistribuicao && typeof raw.tabelaDistribuicao === 'object' ? raw.tabelaDistribuicao : null,
+    historicoRevisoes: Array.isArray(raw.historicoRevisoes) ? raw.historicoRevisoes : [],
+    modoEnvio: raw.modoEnvio ?? '',
     condicoes,
     tabelaArmazenagem: cloneTabelaArmazenagem(raw.tabelaArmazenagem),
     linhas: Array.isArray(raw.linhas) ? raw.linhas.map(normalizePropostaFreteLinha) : [],
@@ -938,7 +951,7 @@ function normalizeImportResult(raw: any, type: ReportImportType, fileName = ''):
 }
 
 function mapTipoGeneralidade(raw: unknown, fallback: TipoGeneralidadeComercial): TipoGeneralidadeComercial {
-  if (raw === 'frete' || raw === 'distribuicao' || raw === 'armazenagem') return raw;
+  if (raw === 'frete' || raw === 'distribuicao' || raw === 'armazenagem' || raw === 'op_portuaria') return raw;
   if (raw === 'transferencia_armazenagem') return 'frete';
   return fallback;
 }
@@ -959,6 +972,25 @@ function normalizeCatalogoGeneralidades(
         nome: String(item.nome ?? ''),
       })).filter((item: { id: string; nome: string }) => item.id)
       : [],
+  };
+}
+
+function normalizeParametrosComercial(data: any): ParametrosComercial {
+  const asList = (value: unknown): string[] => (
+    Array.isArray(value)
+      ? value.map((item) => String(item ?? '').trim()).filter(Boolean)
+      : []
+  );
+  return {
+    validades: asList(data?.validades),
+    validadePadrao: String(data?.validadePadrao ?? '').trim(),
+    vigencias: asList(data?.vigencias),
+    vigenciaPadrao: String(data?.vigenciaPadrao ?? '').trim(),
+    prazosFaturamento: asList(data?.prazosFaturamento),
+    faturamentoPadrao: String(data?.faturamentoPadrao ?? '').trim(),
+    logoPdfUrl: data?.logoPdfUrl ? String(data.logoPdfUrl) : null,
+    logoEmailUrl: data?.logoEmailUrl ? String(data.logoEmailUrl) : null,
+    atualizadoEm: data?.atualizadoEm ? String(data.atualizadoEm) : undefined,
   };
 }
 
@@ -2675,6 +2707,42 @@ export const apiService = {
     return normalizePropostaComercial(data);
   },
 
+  async novaRevisaoPropostaComercial(id: string): Promise<PropostaComercial> {
+    const { data } = await api.post(`/api/comercial/propostas/${id}/nova-revisao/`);
+    return normalizePropostaComercial(data);
+  },
+
+  async calcularTrechoProposta(payload: {
+    clienteId?: string | null;
+    origem: string;
+    destino: string;
+    veiculoKey: string;
+    km: string | number;
+    margensVeiculo?: Array<{ bandaKey: string; margem: string }>;
+  }) {
+    const { data } = await api.post('/api/comercial/propostas/calcular-trecho/', payload);
+    return data as {
+      veiculo: string;
+      veiculoKey: string;
+      km: number;
+      tarifaFrete: string;
+      pedagio: string;
+      gris: string;
+      adValorem: string;
+      grisAdvUnificado?: boolean;
+      icms: string;
+      prazoDias: string;
+    };
+  },
+
+  async previewDistribuicaoProposta(payload: {
+    clienteId?: string | null;
+    margensVeiculo?: Array<{ bandaKey: string; margem: string }>;
+  }) {
+    const { data } = await api.post('/api/comercial/propostas/preview-distribuicao/', payload);
+    return data;
+  },
+
   async deletePropostaComercial(id: string): Promise<void> {
     await api.delete(`/api/comercial/propostas/${id}/`);
   },
@@ -2953,6 +3021,21 @@ export const apiService = {
       aliquotas: data?.aliquotas ?? {},
       atualizadoEm: data?.atualizadoEm ?? undefined,
     };
+  },
+
+  async getParametrosComercial(): Promise<ParametrosComercial> {
+    const { data } = await api.get('/api/comercial/parametros/');
+    return normalizeParametrosComercial(data);
+  },
+
+  async saveParametrosComercial(payload: ParametrosComercialPayload): Promise<ParametrosComercial> {
+    const { data } = await api.put('/api/comercial/parametros/', payload);
+    return normalizeParametrosComercial(data);
+  },
+
+  async restaurarParametrosComercial(): Promise<ParametrosComercial> {
+    const { data } = await api.post('/api/comercial/parametros/', { acao: 'restaurar-padrao' });
+    return normalizeParametrosComercial(data);
   },
 
 };

@@ -4,6 +4,8 @@ export interface User {
   id: string;
   username: string;
   name: string;
+  /** Cargo operacional (opcional). */
+  cargo: string;
   roleId: string;
   status: string;
   lastLogin: string | null;
@@ -2378,25 +2380,56 @@ export interface ClienteComercialHistorico {
   propostasAceitas: ClienteComercialHistoricoProposta[];
 };
 
-export type TipoGeneralidadeComercial = 'frete' | 'distribuicao' | 'armazenagem';
+export type TipoGeneralidadeComercial = 'frete' | 'distribuicao' | 'armazenagem' | 'op_portuaria';
 
 export const TIPOS_GENERALIDADE_COMERCIAL: Array<{ key: TipoGeneralidadeComercial; label: string }> = [
   { key: 'frete', label: 'Transferência' },
   { key: 'distribuicao', label: 'Distribuição' },
   { key: 'armazenagem', label: 'Armazenagem' },
+  { key: 'op_portuaria', label: 'Logística Retroportuária' },
 ];
 
 export function tiposGeneralidadeDaProposta(
   tipo: PropostaComercialTipo,
   incluiTransferencia = false,
   incluiDistribuicao = false,
+  incluiArmazenagem = false,
+  incluiOpPortuaria = false,
 ): TipoGeneralidadeComercial[] {
-  if (tipo === 'armazenagem') return ['armazenagem'];
+  if (tipo === 'armazenagem' && !incluiTransferencia && !incluiDistribuicao && !incluiOpPortuaria) return ['armazenagem'];
   const tipos: TipoGeneralidadeComercial[] = [];
   if (incluiDistribuicao) tipos.push('distribuicao');
   if (incluiTransferencia) tipos.push('frete');
+  if (incluiOpPortuaria) tipos.push('op_portuaria');
+  if (incluiArmazenagem || tipo === 'armazenagem') tipos.push('armazenagem');
   return tipos;
 }
+
+export function propostaIncluiArmazenagem(proposta: {
+  tipo?: PropostaComercialTipo;
+  incluiArmazenagem?: boolean;
+}) {
+  return Boolean(proposta.incluiArmazenagem) || proposta.tipo === 'armazenagem';
+}
+
+export function tipoPropostaDasOperacoes(ops: {
+  incluiTransferencia: boolean;
+  incluiDistribuicao: boolean;
+  incluiArmazenagem: boolean;
+  incluiOpPortuaria?: boolean;
+}): PropostaComercialTipo {
+  if (
+    ops.incluiArmazenagem
+    && !ops.incluiTransferencia
+    && !ops.incluiDistribuicao
+    && !ops.incluiOpPortuaria
+  ) {
+    return 'armazenagem';
+  }
+  return 'transporte_rodoviario';
+}
+
+export type PropostaOperacaoAba = 'transferencia' | 'distribuicao' | 'armazenagem' | 'portuaria';
 
 export interface PropostaCondicaoComercial {
   rotulo: string;
@@ -2418,16 +2451,54 @@ export interface PropostaFreteLinha {
   origem: string;
   entrega: string;
   veiculo: string;
+  veiculoKey?: string;
+  modalidade?: 'transferencia' | 'op_portuaria' | string;
+  km?: string;
   devolucaoContainer: string;
   observacoes: string;
   peso: string;
   tarifaFrete: string | null;
   pedagio: string | null;
+  retiradaCtnt?: string | null;
+  desovaCtnt?: string | null;
   adValorem: string;
   gris: string;
   icms: string;
   prazoDias: string;
   totalEstimado: string | null;
+}
+
+export interface PropostaMargemVeiculo {
+  bandaKey: string;
+  rotulo?: string;
+  margem: string;
+}
+
+export interface PropostaHistoricoRevisao {
+  tipo: string;
+  revisao: string;
+  data: string;
+  usuario?: string;
+  resumo?: string;
+  enviado?: boolean;
+  dataEnvio?: string;
+  alteracoes?: Array<{ campo: string; de: string; para: string }>;
+}
+
+export function rotuloNumeroProposta(numero?: string | null, revisao?: string | null) {
+  const identificacao = (numero || '').trim() || '—';
+  const rev = (revisao || '').trim();
+  return rev ? `${identificacao} Rev. ${rev}` : identificacao;
+}
+
+export interface PropostaTabelaDistribuicaoSnapshot {
+  tabelaId?: string;
+  nome?: string;
+  codigo?: string;
+  revisaoTabela?: number;
+  veiculosTarifa?: PropostaMargemVeiculo[];
+  faixas?: TabelaFreteFaixa[];
+  grisAdvUnificado?: boolean;
 }
 
 export const CONDICOES_FRETE_PADRAO: PropostaCondicaoComercial[] = [
@@ -2686,6 +2757,12 @@ export interface PropostaComercial {
   observacoes: string;
   incluiTransferencia: boolean;
   incluiDistribuicao: boolean;
+  incluiArmazenagem: boolean;
+  incluiOpPortuaria?: boolean;
+  margensVeiculo?: PropostaMargemVeiculo[];
+  tabelaDistribuicao?: PropostaTabelaDistribuicaoSnapshot | null;
+  historicoRevisoes?: PropostaHistoricoRevisao[];
+  modoEnvio?: string;
   condicoes: PropostaCondicaoComercial[];
   tabelaArmazenagem?: TabelaArmazenagem;
   linhas: PropostaFreteLinha[];
@@ -2715,8 +2792,13 @@ export interface PropostaComercialPayload {
   observacoes?: string;
   incluiTransferencia?: boolean;
   incluiDistribuicao?: boolean;
+  incluiArmazenagem?: boolean;
+  incluiOpPortuaria?: boolean;
+  margensVeiculo?: PropostaMargemVeiculo[];
+  tabelaDistribuicao?: PropostaTabelaDistribuicaoSnapshot | null;
   condicoes?: PropostaCondicaoComercial[];
   tabelaArmazenagem?: TabelaArmazenagem;
+  modoEnvio?: string;
   linhas?: Array<Omit<PropostaFreteLinha, 'id' | 'totalEstimado'> & { totalEstimado?: string | null }>;
 }
 
@@ -2762,7 +2844,7 @@ export interface PropostaComercialFormDraft {
   version: number;
   updatedAt: string | null;
   hasDraft: boolean;
-  abaOperacao: 'transferencia' | 'distribuicao';
+  abaOperacao: PropostaOperacaoAba;
   form: {
     tipo: PropostaComercialTipo;
     status: PropostaComercialStatus;
@@ -2784,6 +2866,9 @@ export interface PropostaComercialFormDraft {
     observacoes: string;
     incluiTransferencia: boolean;
     incluiDistribuicao: boolean;
+    incluiArmazenagem: boolean;
+    incluiOpPortuaria?: boolean;
+    margensVeiculo?: PropostaMargemVeiculo[];
     condicoes: PropostaCondicaoComercial[];
     condicoesTransferencia: PropostaCondicaoComercial[];
     condicoesDistribuicao: PropostaCondicaoComercial[];
@@ -2792,11 +2877,16 @@ export interface PropostaComercialFormDraft {
       origem: string;
       entrega: string;
       veiculo: string;
+      veiculoKey?: string;
+      modalidade?: string;
+      km?: string;
       devolucaoContainer: string;
       observacoes: string;
       peso: string;
       tarifaFrete: string;
       pedagio: string;
+      retiradaCtnt?: string;
+      desovaCtnt?: string;
       adValorem: string;
       gris: string;
       icms: string;
@@ -2844,6 +2934,15 @@ export interface TabelaFreteBanda {
   valor?: string;
 }
 
+export interface TabelaFreteVeiculoTarifa {
+  bandaKey: string;
+  rotulo: string;
+  anttFixo: string;
+  anttPorKm: string;
+  margem: string;
+  anttConsultaBandaKey?: string;
+}
+
 export interface TabelaFretePrazoRegra {
   ateKm: number;
   dias: number;
@@ -2854,6 +2953,8 @@ export interface TabelaFreteFaixaTarifa {
   rotulo: string;
   unidade: string;
   valor: string;
+  antt?: string;
+  margem?: string;
 }
 
 export interface TabelaFreteFaixa {
@@ -2915,6 +3016,9 @@ export interface TabelaFreteConfig {
   prazosFechado: TabelaFretePrazoRegra[];
   colunasExtras?: TabelaFreteColunaExtra[];
   overrides?: Record<string, Record<string, unknown>>;
+  veiculosTarifa?: TabelaFreteVeiculoTarifa[];
+  anttFonte?: string;
+  anttFonteData?: string;
 }
 
 export interface TabelaFrete {
@@ -3030,6 +3134,30 @@ export interface IcmsUfConfig {
   aliquotas: IcmsUfAliquotas;
   atualizadoEm?: string;
 }
+
+export interface ParametrosComercial {
+  validades: string[];
+  validadePadrao: string;
+  vigencias: string[];
+  vigenciaPadrao: string;
+  prazosFaturamento: string[];
+  faturamentoPadrao: string;
+  logoPdfUrl?: string | null;
+  logoEmailUrl?: string | null;
+  atualizadoEm?: string;
+}
+
+export type ParametrosComercialPayload = {
+  validades?: string[];
+  validadePadrao?: string;
+  vigencias?: string[];
+  vigenciaPadrao?: string;
+  prazosFaturamento?: string[];
+  faturamentoPadrao?: string;
+  /** Data URL da imagem, ou null/'' para remover. Omitir para manter. */
+  logoPdfUrl?: string | null;
+  logoEmailUrl?: string | null;
+};
 
 export interface TabelaFretePayload {
   nome: string;

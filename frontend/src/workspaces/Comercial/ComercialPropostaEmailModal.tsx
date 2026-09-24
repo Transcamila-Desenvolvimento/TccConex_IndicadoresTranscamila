@@ -64,7 +64,7 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
     try {
       pdfs = [];
       for (const item of propostas) {
-        pdfs.push(await generatePropostaComercialPdfBlob(item, clienteFor(item)));
+        pdfs.push(await generatePropostaComercialPdfBlob(item, clienteFor(item), { cargo: user?.cargo }));
       }
     } catch {
       setErrorMsg('Não foi possível gerar o PDF da proposta.');
@@ -81,7 +81,19 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
       },
       {
         onSuccess: (res) => setSuccess(res.message ?? 'Proposta enviada com sucesso.'),
-        onError: (err) => setErrorMsg(getComercialErrorMessage(err)),
+        onError: (err) => {
+          const msg = getComercialErrorMessage(err);
+          const axiosErr = err as { code?: string; message?: string; response?: unknown };
+          const rede =
+            !axiosErr.response
+            || axiosErr.code === 'ERR_NETWORK'
+            || /ECONNRESET|timeout|Network Error|status code 50[245]/i.test(msg);
+          setErrorMsg(
+            rede
+              ? 'Falha de conexão ao enviar (PDF grande ou tempo esgotado). Tente de novo; se persistir, use Imprimir e anexe o PDF no Gmail.'
+              : msg,
+          );
+        },
       },
     );
   };

@@ -46,6 +46,7 @@ export const ABA_ITEMS = [
   { module: 'Comercial', key: 'cadastro-tabela-frete', label: 'Tabela frete', path: '/comercial/cadastros/tabela-frete' },
   { module: 'Comercial', key: 'cadastro-generalidades', label: 'Generalidades', path: '/comercial/cadastros/generalidades' },
   { module: 'Comercial', key: 'cadastro-icms-ufs', label: 'ICMS por UF', path: '/comercial/cadastros/icms-ufs' },
+  { module: 'Comercial', key: 'cadastro-parametros', label: 'Parâmetros', path: '/comercial/parametros' },
   { module: 'Comercial', key: 'cadastro-produtos', label: 'Composição de produtos', path: '/comercial/cadastros/produtos' },
   { module: 'Comercial', key: 'propostas-comerciais', label: 'Propostas comerciais', path: '/comercial/propostas' },
   { module: 'Comercial', key: 'validacao-clientes', label: 'Validação clientes', path: '/comercial/validacao-clientes' },

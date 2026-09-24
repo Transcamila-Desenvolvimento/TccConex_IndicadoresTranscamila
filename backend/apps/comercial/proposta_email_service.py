@@ -196,15 +196,22 @@ def _saudacao(proposta) -> str:
     return 'Prezados,'
 
 
-LOGO_CID = 'logo_transcamila'
+LOGO_CID = 'logo_tccconex'
 LOGO_PATH = os.path.abspath(os.path.join(
     os.path.dirname(__file__),
     '..', '..', '..',
-    'frontend', 'src', 'assets', 'logo-transcamila-30-anos.png',
+    'frontend', 'src', 'assets', 'Logo_Indicadores.png',
 ))
 
 
 def _logo_png_bytes() -> bytes | None:
+    from .models import ensure_parametros_comercial
+
+    registro = ensure_parametros_comercial()
+    if registro.logo_email:
+        return bytes(registro.logo_email)
+    if registro.logo_pdf:
+        return bytes(registro.logo_pdf)
     try:
         with open(LOGO_PATH, 'rb') as handle:
             data = handle.read()
@@ -213,12 +220,32 @@ def _logo_png_bytes() -> bytes | None:
     return data or None
 
 
+def _logo_mime_subtype() -> str:
+    from .models import ensure_parametros_comercial
+
+    registro = ensure_parametros_comercial()
+    tipo = ''
+    if registro.logo_email:
+        tipo = registro.logo_email_tipo or ''
+    elif registro.logo_pdf:
+        tipo = registro.logo_pdf_tipo or ''
+    if tipo.startswith('image/'):
+        tipo = tipo.split('/', 1)[1]
+    tipo = (tipo or 'png').lower().strip()
+    if tipo in ('jpg', 'jpeg'):
+        return 'jpeg'
+    if tipo in ('png', 'gif', 'webp'):
+        return tipo
+    return 'png'
+
+
 def _build_context(proposta, user) -> dict:
+    from .proposta_tarifas import rotulo_revisao
     cliente = proposta.cliente
     cliente_nome = (getattr(cliente, 'razao_social', None) or proposta.cliente_nome or '').strip() or '—'
     return {
         'proposta': proposta,
-        'numero': proposta.numero_identificacao or '—',
+        'numero': rotulo_revisao(proposta),
         'cliente_nome': cliente_nome,
         'cliente_cnpj': getattr(cliente, 'cnpj', '') or '—',
         'servico': _tipo_label(proposta.tipo),
@@ -228,6 +255,7 @@ def _build_context(proposta, user) -> dict:
         'vencimento': _fmt_date(proposta.data_vencimento()),
         'saudacao': _saudacao(proposta),
         'enviado_por': _usuario_display(user),
+        'enviado_por_cargo': (getattr(user, 'cargo', None) or '').strip(),
         'ref_date': timezone.localtime(),
         'logo_cid': LOGO_CID if _logo_png_bytes() else '',
     }
@@ -290,11 +318,8 @@ def send_propostas_comerciais_email(
     html_body = render_to_string('comercial/emails/proposta.html', context)
     cliente_nome = context['cliente_nome']
     remetente = f'{_usuario_display(user)} <{google_from}>'
-    assunto = (
-        f'Propostas comerciais nº {context["numero"]} — Transcamila Cargas e Armazéns Gerais Ltda.'
-        if context['plural']
-        else f'Proposta comercial nº {context["numero"]} — Transcamila Cargas e Armazéns Gerais Ltda.'
-    )
+    from .proposta_tarifas import assunto_envio_propostas, marcar_envio_historico
+    assunto = assunto_envio_propostas(propostas)
 
     email_obj = EmailMessage(
         subject=assunto,
@@ -306,15 +331,25 @@ def send_propostas_comerciais_email(
     email_obj.content_subtype = 'html'
     logo_bytes = _logo_png_bytes()
     if logo_bytes:
-        logo = MIMEImage(logo_bytes, _subtype='png')
+        subtype = _logo_mime_subtype()
+        logo = MIMEImage(logo_bytes, _subtype=subtype)
         logo.add_header('Content-ID', f'<{LOGO_CID}>')
-        logo.add_header('Content-Disposition', 'inline', filename='logo-transcamila-30-anos.png')
+        logo.add_header('Content-Disposition', 'inline', filename=f'logo-proposta.{subtype if subtype != "jpeg" else "jpg"}')
         email_obj.attach(logo)
     for item, pdf, ctx in zip(propostas, pdfs, contextos):
         email_obj.attach(proposta_pdf_filename(ctx['numero'], cliente_nome), pdf, 'application/pdf')
         if item.status == STATUS_PROPOSTA_RASCUNHO:
             item.status = STATUS_PROPOSTA_ENVIADA
-            item.save(update_fields=['status', 'data_atualizacao'])
+        modo = getattr(item, 'modo_envio', '') or ''
+        if modo:
+            marcar_envio_historico(
+                item,
+                modo,
+                user,
+                'Errata enviada ao cliente' if modo == 'errata' else 'Revisão enviada ao cliente',
+            )
+            item.modo_envio = ''
+        item.save(update_fields=['status', 'modo_envio', 'historico_revisoes', 'data_atualizacao'])
 
     send_gmail_as_user(user, email_obj)
 

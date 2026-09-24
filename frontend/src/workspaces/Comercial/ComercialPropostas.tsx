@@ -9,6 +9,7 @@ import {
   bumpPropostaDraftGen,
   useClientesComercial,
   useComercialGeneralidades,
+  useComercialParametros,
   useCreatePropostaComercial,
   useDeletePropostaComercial,
   useDeletePropostaComercialDraft,
@@ -16,6 +17,7 @@ import {
   usePropostasComerciais,
   useSavePropostaComercialDraft,
   useTabelaFreteDistribuicaoCliente,
+  usePreviewDistribuicaoProposta,
   useUpdatePropostaComercial,
 } from '../../hooks/useComercialClientes';
 import type {
@@ -26,6 +28,9 @@ import type {
   PropostaComercialStatus,
   PropostaComercialTipo,
   PropostaCondicaoComercial,
+  PropostaMargemVeiculo,
+  PropostaOperacaoAba,
+  PropostaTabelaDistribuicaoSnapshot,
   TabelaArmazenagem,
 } from '../../types/domain';
 import {
@@ -34,16 +39,21 @@ import {
   PROPOSTA_COMERCIAL_STATUS_LABEL,
   PROPOSTA_COMERCIAL_TIPO_LABEL,
   marcarCondicoesTipo,
+  propostaIncluiArmazenagem,
   propostasEnviaveisPorEmail,
+  rotuloNumeroProposta,
   separarCondicoesProposta,
   tabelaArmazenagemProntaParaSalvar,
+  tipoPropostaDasOperacoes,
 } from '../../types/domain';
 import { printPropostaComercial } from './printPropostaComercial';
-import ComercialEnderecoAutocomplete from './ComercialEnderecoAutocomplete';
+import { isGrisAdvUnificado } from './formatTabelaFrete';
 import ComercialPropostaEmailModal from './ComercialPropostaEmailModal';
+import PropostaCondicoesEspeciais from './PropostaCondicoesEspeciais';
 import PropostaGeneralidadesRevisao from './PropostaGeneralidadesRevisao';
 import PropostaTabelaArmazenagem from './PropostaTabelaArmazenagem';
 import PropostaTabelaDistribuicao from './PropostaTabelaDistribuicao';
+import PropostaTrechosOperacao, { formatMoneyInput } from './PropostaTrechosOperacao';
 
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
@@ -86,9 +96,15 @@ const formatDateBr = (value?: string | null) => {
 };
 
 const parseMoney = (value: string) => {
-  const trimmed = value.trim().replace(/\s/g, '').replace(',', '.');
-  if (!trimmed) return null;
-  const amount = Number(trimmed);
+  const raw = String(value || '').trim();
+  if (!raw || raw === '-' || raw === '—') return null;
+  const limpo = raw
+    .replace(/R\$\s?/gi, '')
+    .replace(/\s/g, '')
+    .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+    .replace(',', '.');
+  if (!limpo) return null;
+  const amount = Number(limpo);
   return Number.isNaN(amount) ? null : amount;
 };
 
@@ -101,11 +117,16 @@ type LinhaForm = {
   origem: string;
   entrega: string;
   veiculo: string;
+  veiculoKey?: string;
+  modalidade?: string;
+  km?: string;
   devolucaoContainer: string;
   observacoes: string;
   peso: string;
   tarifaFrete: string;
   pedagio: string;
+  retiradaCtnt: string;
+  desovaCtnt: string;
   adValorem: string;
   gris: string;
   icms: string;
@@ -133,6 +154,9 @@ type PropostaForm = {
   observacoes: string;
   incluiTransferencia: boolean;
   incluiDistribuicao: boolean;
+  incluiArmazenagem: boolean;
+  incluiOpPortuaria: boolean;
+  margensVeiculo: PropostaMargemVeiculo[];
   condicoes: PropostaCondicaoComercial[];
   condicoesTransferencia: PropostaCondicaoComercial[];
   condicoesDistribuicao: PropostaCondicaoComercial[];
@@ -140,11 +164,63 @@ type PropostaForm = {
   linhas: LinhaForm[];
 };
 
-const MENSAGEM_DESTINOS_OBRIGATORIOS = 'Preencha a tabela de destinos para salvar a proposta com Transferência.';
+const MENSAGEM_DESTINOS_OBRIGATORIOS = 'Preencha origem, destino, veículo, km e prazo para Transferência / Logística Retroportuária.';
 const MENSAGEM_TARIFAS_ARMAZENAGEM = 'Informe o valor de cada tarifa de armazenagem ou coloque um traço (-).';
+const MENSAGEM_OPERACAO_OBRIGATORIA = 'Selecione o tipo de operação (Transferência, Distribuição ou Logística Retroportuária).';
+const MENSAGEM_SERVICO_OBRIGATORIO = 'Selecione o tipo de serviço.';
+
+type OperacaoTransporte = 'transferencia' | 'distribuicao' | 'portuaria';
+
+type FlagsOperacao = Pick<
+  PropostaForm,
+  'incluiTransferencia' | 'incluiDistribuicao' | 'incluiArmazenagem' | 'incluiOpPortuaria'
+>;
+
+const flagsExclusivos = (
+  tipo: PropostaComercialTipo,
+  operacao: OperacaoTransporte | null,
+): FlagsOperacao => {
+  if (tipo === 'armazenagem') {
+    return {
+      incluiTransferencia: false,
+      incluiDistribuicao: false,
+      incluiOpPortuaria: false,
+      incluiArmazenagem: true,
+    };
+  }
+  return {
+    incluiTransferencia: operacao === 'transferencia',
+    incluiDistribuicao: operacao === 'distribuicao',
+    incluiOpPortuaria: operacao === 'portuaria',
+    incluiArmazenagem: false,
+  };
+};
+
+/** Prioridade para propostas antigas com mais de um flag. */
+const operacaoFromFlags = (flags: FlagsOperacao): OperacaoTransporte | null => {
+  if (flags.incluiTransferencia) return 'transferencia';
+  if (flags.incluiDistribuicao) return 'distribuicao';
+  if (flags.incluiOpPortuaria) return 'portuaria';
+  return null;
+};
+
+const normalizarFlagsExclusivos = (
+  tipo: PropostaComercialTipo,
+  flags: FlagsOperacao,
+): FlagsOperacao => {
+  if (tipo === 'armazenagem' || (
+    !flags.incluiTransferencia
+    && !flags.incluiDistribuicao
+    && !flags.incluiOpPortuaria
+    && flags.incluiArmazenagem
+  )) {
+    return flagsExclusivos('armazenagem', null);
+  }
+  return flagsExclusivos('transporte_rodoviario', operacaoFromFlags(flags));
+};
 
 const linhaDestinoVazia = (linha: LinhaForm) =>
-  ![linha.origem, linha.entrega, linha.veiculo, linha.tarifaFrete, linha.pedagio, linha.adValorem, linha.prazoDias]
+  ![linha.origem, linha.entrega, linha.veiculo, linha.km ?? '', linha.tarifaFrete, linha.pedagio, linha.adValorem, linha.prazoDias]
     .some((valor) => valor.trim());
 
 const linhaDestinoPreenchida = (linha: LinhaForm) =>
@@ -152,52 +228,64 @@ const linhaDestinoPreenchida = (linha: LinhaForm) =>
     linha.origem.trim()
     && linha.entrega.trim()
     && linha.veiculo.trim()
+    && (linha.km ?? '').trim()
     && linha.tarifaFrete.trim()
     && linha.prazoDias.trim(),
   );
 
 const destinosProntosParaSalvar = (form: PropostaForm) => {
-  if (form.tipo !== 'transporte_rodoviario' || !form.incluiTransferencia) return true;
+  if (!form.incluiTransferencia && !form.incluiOpPortuaria) return true;
   const relevantes = form.linhas.filter((linha) => !linhaDestinoVazia(linha));
   return relevantes.length > 0 && relevantes.every(linhaDestinoPreenchida);
 };
 
-const emptyLinha = (): LinhaForm => ({
+const emptyLinha = (modalidade = 'transferencia'): LinhaForm => ({
   origem: '',
   entrega: '',
-  veiculo: '',
+  veiculo: 'Truck',
+  veiculoKey: 'de9000',
+  modalidade,
+  km: '',
   devolucaoContainer: '',
   observacoes: '',
   peso: '',
   tarifaFrete: '',
   pedagio: '',
+  retiradaCtnt: '',
+  desovaCtnt: '',
   adValorem: '',
   gris: '',
   icms: '',
   prazoDias: '',
 });
 
-const emptyForm = (condicoes?: PropostaCondicaoComercial[]): PropostaForm => ({
+const emptyForm = (
+  condicoes?: PropostaCondicaoComercial[],
+  padroes?: { validade?: string; vigencia?: string; faturamento?: string },
+): PropostaForm => ({
   tipo: 'transporte_rodoviario',
   status: 'rascunho',
   clienteId: '',
   clienteNome: '',
   titulo: '',
   subtitulo: '',
-  revisao: '01',
+  revisao: '',
   dataProposta: todayISO(),
   propostaReferente: '',
   responsavel: '',
   reajuste: 'Anual com base no índice INCT',
   att: '',
-  validade: '30 dias',
-  vigencia: '12 meses',
-  faturamento: 'Semanal / 30 DDL',
+  validade: padroes?.validade || VALIDADE_PADRAO_FALLBACK,
+  vigencia: padroes?.vigencia || VIGENCIA_PADRAO_FALLBACK,
+  faturamento: padroes?.faturamento || FATURAMENTO_PADRAO_FALLBACK,
   localEmissao: 'Maringá',
   valorEstimado: '',
   observacoes: '',
   incluiTransferencia: false,
   incluiDistribuicao: false,
+  incluiArmazenagem: false,
+  incluiOpPortuaria: false,
+  margensVeiculo: [],
   condicoes: (condicoes?.length ? condicoes : CONDICOES_FRETE_PADRAO).map((item) => ({ ...item })),
   condicoesTransferencia: [],
   condicoesDistribuicao: [],
@@ -226,11 +314,16 @@ const formFromDraft = (
     origem: linha.origem ?? '',
     entrega: linha.entrega ?? '',
     veiculo: linha.veiculo ?? '',
+    veiculoKey: linha.veiculoKey ?? '',
+    modalidade: linha.modalidade ?? 'transferencia',
+    km: linha.km ?? '',
     devolucaoContainer: linha.devolucaoContainer ?? '',
     observacoes: linha.observacoes ?? '',
     peso: linha.peso ?? '',
-    tarifaFrete: linha.tarifaFrete ?? '',
-    pedagio: linha.pedagio ?? '',
+    tarifaFrete: linha.tarifaFrete?.trim() ? formatMoneyInput(linha.tarifaFrete) : '',
+    pedagio: linha.pedagio?.trim() ? formatMoneyInput(linha.pedagio) : '',
+    retiradaCtnt: linha.retiradaCtnt?.trim() ? formatMoneyInput(linha.retiradaCtnt) : '',
+    desovaCtnt: linha.desovaCtnt?.trim() ? formatMoneyInput(linha.desovaCtnt) : '',
     adValorem: linha.adValorem ?? '',
     gris: linha.gris ?? '',
     icms: linha.icms ?? '',
@@ -244,7 +337,7 @@ const formFromDraft = (
     clienteNome: draftForm.clienteNome || '',
     titulo: draftForm.titulo || '',
     subtitulo: draftForm.subtitulo || '',
-    revisao: draftForm.revisao || fallback.revisao,
+    revisao: (!draftForm.revisao || draftForm.revisao === '01') ? '' : draftForm.revisao,
     dataProposta: draftForm.dataProposta || fallback.dataProposta,
     propostaReferente: draftForm.propostaReferente || '',
     responsavel: draftForm.responsavel || fallback.responsavel,
@@ -256,8 +349,16 @@ const formFromDraft = (
     localEmissao: draftForm.localEmissao || fallback.localEmissao,
     valorEstimado: draftForm.valorEstimado || '',
     observacoes: draftForm.observacoes || '',
-    incluiTransferencia: Boolean(draftForm.incluiTransferencia),
-    incluiDistribuicao: Boolean(draftForm.incluiDistribuicao),
+    ...normalizarFlagsExclusivos(
+      draftForm.tipo === 'armazenagem' ? 'armazenagem' : 'transporte_rodoviario',
+      {
+        incluiTransferencia: Boolean(draftForm.incluiTransferencia),
+        incluiDistribuicao: Boolean(draftForm.incluiDistribuicao),
+        incluiArmazenagem: Boolean(draftForm.incluiArmazenagem) || draftForm.tipo === 'armazenagem',
+        incluiOpPortuaria: Boolean(draftForm.incluiOpPortuaria),
+      },
+    ),
+    margensVeiculo: Array.isArray(draftForm.margensVeiculo) ? draftForm.margensVeiculo : [],
     condicoes: (draftForm.condicoes?.length ? draftForm.condicoes : fallback.condicoes).map((item) => ({ ...item })),
     condicoesTransferencia: (draftForm.condicoesTransferencia ?? []).map((item) => ({ ...item })),
     condicoesDistribuicao: (draftForm.condicoesDistribuicao ?? []).map((item) => ({ ...item })),
@@ -267,12 +368,6 @@ const formFromDraft = (
 };
 
 const condicoesDoFormulario = (form: PropostaForm): PropostaCondicaoComercial[] => {
-  if (form.tipo === 'armazenagem') {
-    return marcarCondicoesTipo(
-      form.condicoes.filter((item) => item.rotulo.trim() || item.valor.trim()),
-      'armazenagem',
-    );
-  }
   const items: PropostaCondicaoComercial[] = [];
   if (form.incluiDistribuicao) {
     items.push(...marcarCondicoesTipo(
@@ -286,14 +381,40 @@ const condicoesDoFormulario = (form: PropostaForm): PropostaCondicaoComercial[] 
       'frete',
     ));
   }
+  if (form.incluiOpPortuaria) {
+    items.push(...marcarCondicoesTipo(
+      form.condicoesTransferencia.filter((item) => item.rotulo.trim() || item.valor.trim()),
+      'op_portuaria',
+    ));
+  }
+  if (form.incluiArmazenagem) {
+    items.push(...marcarCondicoesTipo(
+      form.condicoes.filter((item) => item.rotulo.trim() || item.valor.trim()),
+      'armazenagem',
+    ));
+  }
   return items;
 };
+
+const primeiraAbaOperacao = (form: Pick<PropostaForm, 'incluiTransferencia' | 'incluiDistribuicao' | 'incluiArmazenagem' | 'incluiOpPortuaria'>): PropostaOperacaoAba => {
+  if (form.incluiTransferencia) return 'transferencia';
+  if (form.incluiDistribuicao) return 'distribuicao';
+  if (form.incluiOpPortuaria) return 'portuaria';
+  if (form.incluiArmazenagem) return 'armazenagem';
+  return 'transferencia';
+};
+
+const abaDoDraft = (aba?: string): PropostaOperacaoAba => (
+  aba === 'distribuicao' || aba === 'armazenagem' || aba === 'portuaria' ? aba : 'transferencia'
+);
 
 const linhaTotal = (linha: LinhaForm) => {
   const tarifa = parseMoney(linha.tarifaFrete);
   const pedagio = parseMoney(linha.pedagio);
-  if (tarifa == null && pedagio == null) return null;
-  return (tarifa ?? 0) + (pedagio ?? 0);
+  const retirada = parseMoney(linha.retiradaCtnt);
+  const desova = parseMoney(linha.desovaCtnt);
+  if (tarifa == null && pedagio == null && retirada == null && desova == null) return null;
+  return (tarifa ?? 0) + (pedagio ?? 0) + (retirada ?? 0) + (desova ?? 0);
 };
 
 const SERVICO_OPTIONS: Array<{ value: PropostaComercialTipo; icon: string }> = [
@@ -308,18 +429,25 @@ const iconForServico = (tipo: PropostaComercialTipo) => (
 const ServicoSelect: React.FC<{
   value: PropostaComercialTipo;
   disabled?: boolean;
-  onChange: (value: PropostaComercialTipo) => void;
+  onChange: (tipo: PropostaComercialTipo) => void;
 }> = ({ value, disabled, onChange }) => {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open) return undefined;
-    const onPointerDown = (event: MouseEvent) => {
+    const onDoc = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
-    document.addEventListener('mousedown', onPointerDown);
-    return () => document.removeEventListener('mousedown', onPointerDown);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [open]);
 
   return (
@@ -328,23 +456,21 @@ const ServicoSelect: React.FC<{
         type="button"
         className="proposta-servico-trigger"
         disabled={disabled}
-        aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => { if (!disabled) setOpen((current) => !current); }}
+        aria-haspopup="listbox"
+        onClick={() => setOpen((atual) => !atual)}
       >
         <i className={`bi ${iconForServico(value)}`} aria-hidden="true" />
         <span>{PROPOSTA_COMERCIAL_TIPO_LABEL[value]}</span>
         <i className="bi bi-chevron-down" aria-hidden="true" />
       </button>
-      {open && (
+      {open ? (
         <ul className="proposta-servico-menu" role="listbox">
           {SERVICO_OPTIONS.map((option) => (
-            <li key={option.value}>
+            <li key={option.value} role="option" aria-selected={option.value === value}>
               <button
                 type="button"
-                role="option"
-                aria-selected={option.value === value}
-                className={option.value === value ? 'is-selected' : ''}
+                className={option.value === value ? 'is-selected' : undefined}
                 onClick={() => {
                   onChange(option.value);
                   setOpen(false);
@@ -356,14 +482,14 @@ const ServicoSelect: React.FC<{
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
     </div>
   );
 };
 
-const VALIDADE_OPTIONS = ['5 dias', '7 dias', '15 dias', '30 dias', '45 dias', '60 dias'];
-const VIGENCIA_OPTIONS = ['3 meses', '6 meses', '12 meses', '24 meses', '36 meses', 'Indeterminada'];
-const FATURAMENTO_OPTIONS = [
+const VALIDADE_OPTIONS_FALLBACK = ['5 dias', '7 dias', '15 dias', '30 dias', '45 dias', '60 dias'];
+const VIGENCIA_OPTIONS_FALLBACK = ['3 meses', '6 meses', '12 meses', '24 meses', '36 meses', 'Indeterminada'];
+const FATURAMENTO_OPTIONS_FALLBACK = [
   'Semanal',
   'Quinzenal',
   'Mensal',
@@ -375,6 +501,9 @@ const FATURAMENTO_OPTIONS = [
   '30 DDL',
   '45 DDL',
 ];
+const VALIDADE_PADRAO_FALLBACK = '30 dias';
+const VIGENCIA_PADRAO_FALLBACK = '12 meses';
+const FATURAMENTO_PADRAO_FALLBACK = 'Semanal / 30 DDL';
 
 const optionsWithCurrent = (options: string[], current: string) => (
   current && !options.includes(current) ? [current, ...options] : options
@@ -419,7 +548,8 @@ const ComercialPropostas: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const [emailPropostas, setEmailPropostas] = useState<PropostaComercial[]>([]);
-  const [abaOperacao, setAbaOperacao] = useState<'transferencia' | 'distribuicao'>('transferencia');
+  const [abaOperacao, setAbaOperacao] = useState<PropostaOperacaoAba>('transferencia');
+  const [snapshotDistribuicao, setSnapshotDistribuicao] = useState<PropostaTabelaDistribuicaoSnapshot | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(true);
   const [draftUpdatedAt, setDraftUpdatedAt] = useState<string | null>(null);
   const [restoredDraft, setRestoredDraft] = useState(false);
@@ -437,26 +567,47 @@ const ComercialPropostas: React.FC = () => {
   });
   const { canShowEmpty } = useAsyncQueryState(propostasQuery);
   const clientesQuery = useClientesComercial({ page: 1, pageSize: 100, ativos: true });
+  const parametrosQuery = useComercialParametros();
+  const validadeOptions = parametrosQuery.data?.validades?.length
+    ? parametrosQuery.data.validades
+    : VALIDADE_OPTIONS_FALLBACK;
+  const vigenciaOptions = parametrosQuery.data?.vigencias?.length
+    ? parametrosQuery.data.vigencias
+    : VIGENCIA_OPTIONS_FALLBACK;
+  const faturamentoOptions = parametrosQuery.data?.prazosFaturamento?.length
+    ? parametrosQuery.data.prazosFaturamento
+    : FATURAMENTO_OPTIONS_FALLBACK;
+  const validadePadrao = parametrosQuery.data?.validadePadrao || VALIDADE_PADRAO_FALLBACK;
+  const vigenciaPadrao = parametrosQuery.data?.vigenciaPadrao || VIGENCIA_PADRAO_FALLBACK;
+  const faturamentoPadrao = parametrosQuery.data?.faturamentoPadrao || FATURAMENTO_PADRAO_FALLBACK;
+  const formPadroes = { validade: validadePadrao, vigencia: vigenciaPadrao, faturamento: faturamentoPadrao };
   const generalidadesTransferencia = useComercialGeneralidades(
-    isModalOpen && form.clienteId && form.tipo === 'transporte_rodoviario' && form.incluiTransferencia
+    isModalOpen && form.clienteId && form.incluiTransferencia
       ? form.clienteId
       : null,
     'frete',
+  );
+  const generalidadesOpPortuaria = useComercialGeneralidades(
+    isModalOpen && form.clienteId && form.incluiOpPortuaria
+      ? form.clienteId
+      : null,
+    'op_portuaria',
   );
   const generalidadesDistribuicao = useComercialGeneralidades(
     isModalOpen && form.clienteId && form.incluiDistribuicao ? form.clienteId : null,
     'distribuicao',
   );
   const generalidadesArmazenagem = useComercialGeneralidades(
-    isModalOpen && !editingId && form.tipo === 'armazenagem' ? (form.clienteId || null) : null,
+    isModalOpen && !editingId && form.incluiArmazenagem ? (form.clienteId || null) : null,
     'armazenagem',
   );
   const tabelaDistribuicaoCliente = useTabelaFreteDistribuicaoCliente(
-    isModalOpen && form.tipo === 'transporte_rodoviario' ? (form.clienteId || null) : null,
-    isModalOpen && form.tipo === 'transporte_rodoviario' && Boolean(form.clienteId),
+    isModalOpen ? (form.clienteId || null) : null,
+    isModalOpen && Boolean(form.clienteId),
   );
   const createProposta = useCreatePropostaComercial();
   const updateProposta = useUpdatePropostaComercial();
+  const previewDistribuicao = usePreviewDistribuicaoProposta();
   const deleteProposta = useDeletePropostaComercial();
   const draftQuery = usePropostaComercialDraft(canManage);
   const saveDraft = useSavePropostaComercialDraft();
@@ -468,9 +619,12 @@ const ComercialPropostas: React.FC = () => {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const clampedPage = Math.min(page, totalPages);
   const clientes = clientesQuery.data?.results ?? [];
-  const temTabelaDistribuicao = (tabelaDistribuicaoCliente.listQuery.data?.results.length ?? 0) > 0;
-  const tabelaDistribuicaoPronta = !form.clienteId || tabelaDistribuicaoCliente.listQuery.isFetched;
-  const podeMarcarDistribuicao = Boolean(form.clienteId) && tabelaDistribuicaoPronta && temTabelaDistribuicao;
+  const temTabelaFrete = (tabelaDistribuicaoCliente.listQuery.data?.results.length ?? 0) > 0;
+  const tabelaFretePronta = !form.clienteId || tabelaDistribuicaoCliente.listQuery.isFetched;
+  const podeUsarTabelaFrete = Boolean(form.clienteId) && tabelaFretePronta && temTabelaFrete;
+  const MENSAGEM_TABELA_FRETE = form.clienteId
+    ? 'Vincule uma tabela de frete vigente a este cliente para criar proposta de Transferência, Distribuição ou Logística Retroportuária.'
+    : 'Selecione o cliente e vincule uma tabela de frete para habilitar as operações de transporte.';
   const selectedPropostas = useMemo(
     () => propostas.filter((item) => selectedIds.includes(item.id)),
     [propostas, selectedIds],
@@ -500,16 +654,17 @@ const ComercialPropostas: React.FC = () => {
       catalogoArmazenagemRef.current = '';
       return;
     }
-    if (form.tipo === 'armazenagem') {
-      if (editingId || !form.clienteId || !generalidadesArmazenagem.isSuccess) return;
+    if (form.incluiArmazenagem && !editingId && form.clienteId && generalidadesArmazenagem.isSuccess) {
       const chave = `${form.clienteId}:armazenagem`;
-      if (catalogoArmazenagemRef.current === chave) return;
-      catalogoArmazenagemRef.current = chave;
-      const condicoes = (generalidadesArmazenagem.data?.items.length
-        ? generalidadesArmazenagem.data.items
-        : CONDICOES_FRETE_PADRAO).map((item) => ({ ...item, tipo: 'armazenagem' as const }));
-      setForm((current) => ({ ...current, condicoes }));
-      return;
+      if (catalogoArmazenagemRef.current !== chave) {
+        catalogoArmazenagemRef.current = chave;
+        const condicoes = (generalidadesArmazenagem.data?.items.length
+          ? generalidadesArmazenagem.data.items
+          : CONDICOES_FRETE_PADRAO).map((item) => ({ ...item, tipo: 'armazenagem' as const }));
+        setForm((current) => (
+          current.condicoes.length > 0 ? current : { ...current, condicoes }
+        ));
+      }
     }
     if (!form.clienteId) return;
     if (form.incluiTransferencia && generalidadesTransferencia.isSuccess) {
@@ -517,6 +672,18 @@ const ComercialPropostas: React.FC = () => {
       if (catalogoTransferenciaRef.current !== chave) {
         catalogoTransferenciaRef.current = chave;
         const items = (generalidadesTransferencia.data?.items ?? []).map((item) => ({ ...item, tipo: 'frete' as const }));
+        setForm((current) => (
+          current.condicoesTransferencia.length > 0
+            ? current
+            : { ...current, condicoesTransferencia: items }
+        ));
+      }
+    }
+    if (form.incluiOpPortuaria && generalidadesOpPortuaria.isSuccess) {
+      const chave = `${editingId ?? 'novo'}:${form.clienteId}:op_portuaria`;
+      if (catalogoTransferenciaRef.current !== chave) {
+        catalogoTransferenciaRef.current = chave;
+        const items = (generalidadesOpPortuaria.data?.items ?? []).map((item) => ({ ...item, tipo: 'op_portuaria' as const }));
         setForm((current) => (
           current.condicoesTransferencia.length > 0
             ? current
@@ -539,13 +706,16 @@ const ComercialPropostas: React.FC = () => {
   }, [
     editingId,
     form.clienteId,
+    form.incluiArmazenagem,
     form.incluiDistribuicao,
+    form.incluiOpPortuaria,
     form.incluiTransferencia,
-    form.tipo,
     generalidadesArmazenagem.data?.items,
     generalidadesArmazenagem.isSuccess,
     generalidadesDistribuicao.data?.items,
     generalidadesDistribuicao.isSuccess,
+    generalidadesOpPortuaria.data?.items,
+    generalidadesOpPortuaria.isSuccess,
     generalidadesTransferencia.data?.items,
     generalidadesTransferencia.isSuccess,
     isModalOpen,
@@ -561,9 +731,9 @@ const ComercialPropostas: React.FC = () => {
     }
     const draft = draftQuery.data;
     if (draft?.hasDraft) {
-      const restaurado = formFromDraft(draft.form, { ...emptyForm(), responsavel: nomeUsuarioLogado });
+      const restaurado = formFromDraft(draft.form, { ...emptyForm(undefined, formPadroes), responsavel: nomeUsuarioLogado });
       setForm(restaurado);
-      setAbaOperacao(draft.abaOperacao === 'distribuicao' ? 'distribuicao' : 'transferencia');
+      setAbaOperacao(abaDoDraft(draft.abaOperacao));
       setDraftUpdatedAt(draft.updatedAt);
       setRestoredDraft(true);
       setDraftUnavailable(false);
@@ -625,7 +795,7 @@ const ComercialPropostas: React.FC = () => {
   const openNew = () => {
     setEditingId(null);
     setAbaOperacao('transferencia');
-    setForm({ ...emptyForm(), responsavel: nomeUsuarioLogado });
+    setForm({ ...emptyForm(undefined, formPadroes), responsavel: nomeUsuarioLogado });
     setDraftHydrated(false);
     setRestoredDraft(false);
     setDraftUpdatedAt(null);
@@ -637,39 +807,51 @@ const ComercialPropostas: React.FC = () => {
 
   const startEdit = (proposta: PropostaComercial) => {
     setEditingId(proposta.id);
+    const tipo: PropostaComercialTipo = proposta.tipo === 'armazenagem' ? 'armazenagem' : 'transporte_rodoviario';
+    const flags = normalizarFlagsExclusivos(tipo, {
+      incluiTransferencia: proposta.incluiTransferencia,
+      incluiDistribuicao: proposta.incluiDistribuicao,
+      incluiArmazenagem: propostaIncluiArmazenagem(proposta),
+      incluiOpPortuaria: Boolean(proposta.incluiOpPortuaria),
+    });
     setForm({
-      tipo: proposta.tipo,
+      tipo,
       status: proposta.status,
       clienteId: proposta.clienteId ?? '',
       clienteNome: clientes.find((item) => item.id === proposta.clienteId)?.razaoSocial || proposta.clienteNome,
       titulo: proposta.titulo,
       subtitulo: proposta.subtitulo,
-      revisao: proposta.revisao || '01',
+      revisao: proposta.revisao || '',
       dataProposta: proposta.dataProposta ?? todayISO(),
       propostaReferente: proposta.propostaReferente,
       responsavel: proposta.responsavel || nomeUsuarioLogado,
       reajuste: proposta.reajuste || 'Anual com base no índice INCT',
       att: responsavelDoCliente(proposta.clienteId ?? '') || proposta.att,
-      validade: proposta.validade || '30 dias',
-      vigencia: proposta.vigencia || '12 meses',
-      faturamento: proposta.faturamento || 'Semanal / 30 DDL',
+      validade: proposta.validade || validadePadrao,
+      vigencia: proposta.vigencia || vigenciaPadrao,
+      faturamento: proposta.faturamento || faturamentoPadrao,
       localEmissao: proposta.localEmissao,
       valorEstimado: proposta.valorEstimado ?? '',
       observacoes: proposta.observacoes,
-      incluiTransferencia: proposta.incluiTransferencia,
-      incluiDistribuicao: proposta.incluiDistribuicao,
-      condicoes: (proposta.condicoes.length ? proposta.condicoes : CONDICOES_FRETE_PADRAO).map((item) => ({ ...item })),
+      ...flags,
+      margensVeiculo: proposta.margensVeiculo ?? [],
+      condicoes: separarCondicoesProposta(
+        proposta.condicoes,
+        'armazenagem',
+        [],
+        Boolean(flags.incluiArmazenagem),
+      ),
       condicoesTransferencia: separarCondicoesProposta(
         proposta.condicoes,
-        'frete',
+        flags.incluiOpPortuaria ? 'op_portuaria' : 'frete',
         [],
-        Boolean(proposta.incluiTransferencia),
+        Boolean(flags.incluiTransferencia || flags.incluiOpPortuaria),
       ),
       condicoesDistribuicao: separarCondicoesProposta(
         proposta.condicoes,
         'distribuicao',
         [],
-        Boolean(proposta.incluiDistribuicao && !proposta.incluiTransferencia),
+        Boolean(flags.incluiDistribuicao),
       ),
       tabelaArmazenagem: cloneTabelaArmazenagem(proposta.tabelaArmazenagem),
       linhas: proposta.linhas.length
@@ -677,32 +859,39 @@ const ComercialPropostas: React.FC = () => {
             origem: linha.origem,
             entrega: linha.entrega,
             veiculo: linha.veiculo ?? '',
+            veiculoKey: linha.veiculoKey ?? '',
+            modalidade: linha.modalidade ?? 'transferencia',
+            km: linha.km ?? '',
             devolucaoContainer: linha.devolucaoContainer,
             observacoes: linha.observacoes,
             peso: linha.peso,
-            tarifaFrete: linha.tarifaFrete ?? '',
-            pedagio: linha.pedagio ?? '',
+            tarifaFrete: linha.tarifaFrete?.trim() ? formatMoneyInput(linha.tarifaFrete) : '',
+            pedagio: linha.pedagio?.trim() ? formatMoneyInput(linha.pedagio) : '',
+            retiradaCtnt: linha.retiradaCtnt?.trim() ? formatMoneyInput(linha.retiradaCtnt) : '',
+            desovaCtnt: linha.desovaCtnt?.trim() ? formatMoneyInput(linha.desovaCtnt) : '',
             adValorem: linha.adValorem,
             gris: linha.gris,
             icms: linha.icms,
             prazoDias: linha.prazoDias,
           }))
-        : [emptyLinha()],
+        : [emptyLinha(flags.incluiOpPortuaria ? 'op_portuaria' : 'transferencia')],
     });
-    setAbaOperacao(proposta.incluiTransferencia || !proposta.incluiDistribuicao ? 'transferencia' : 'distribuicao');
+    setAbaOperacao(primeiraAbaOperacao(flags));
     setDraftHydrated(true);
     setRestoredDraft(false);
     setDraftUpdatedAt(null);
     setDraftUnavailable(false);
     skipNextDraftSave.current = true;
     suppressDraftSave.current = true;
+    setSnapshotDistribuicao(proposta.tabelaDistribuicao ?? null);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
-    setForm(emptyForm());
+    setSnapshotDistribuicao(null);
+    setForm(emptyForm(undefined, formPadroes));
     setDraftHydrated(true);
     setRestoredDraft(false);
     setDraftUpdatedAt(null);
@@ -716,28 +905,61 @@ const ComercialPropostas: React.FC = () => {
     }));
   };
 
-  const toggleModalidade = (campo: 'incluiTransferencia' | 'incluiDistribuicao', checked: boolean) => {
-    setForm((current) => {
-      const next = {
+  const setTipoServico = (tipo: PropostaComercialTipo) => {
+    if (tipo === 'armazenagem') {
+      const flags = flagsExclusivos('armazenagem', null);
+      setForm((current) => ({
         ...current,
-        [campo]: checked,
-        linhas: campo === 'incluiTransferencia' && checked && current.linhas.length === 0
-          ? [emptyLinha()]
-          : current.linhas,
-      };
-      return next;
-    });
-    if (checked) {
-      if (campo === 'incluiTransferencia') catalogoTransferenciaRef.current = '';
-      if (campo === 'incluiDistribuicao') catalogoDistribuicaoRef.current = '';
-      setAbaOperacao(campo === 'incluiTransferencia' ? 'transferencia' : 'distribuicao');
+        tipo: 'armazenagem',
+        ...flags,
+        linhas: [emptyLinha()],
+        tabelaArmazenagem: cloneTabelaArmazenagem(current.tabelaArmazenagem),
+      }));
+      catalogoArmazenagemRef.current = '';
+      setAbaOperacao('armazenagem');
       return;
     }
-    setAbaOperacao((atual) => {
-      if (campo === 'incluiTransferencia' && atual === 'transferencia') return 'distribuicao';
-      if (campo === 'incluiDistribuicao' && atual === 'distribuicao') return 'transferencia';
-      return atual;
+    setForm((current) => ({
+      ...current,
+      tipo: 'transporte_rodoviario',
+      ...flagsExclusivos('transporte_rodoviario', null),
+      linhas: [emptyLinha('transferencia')],
+    }));
+    catalogoTransferenciaRef.current = '';
+    catalogoDistribuicaoRef.current = '';
+    setAbaOperacao('transferencia');
+  };
+
+  const setOperacaoTransporte = (operacao: OperacaoTransporte) => {
+    if (!podeUsarTabelaFrete) return;
+    const flags = flagsExclusivos('transporte_rodoviario', operacao);
+    setForm((current) => {
+      let linhas = current.linhas;
+      if (operacao === 'transferencia') {
+        const transf = linhas.filter((linha) => (linha.modalidade || 'transferencia') !== 'op_portuaria');
+        linhas = transf.length ? transf.map((linha) => ({ ...linha, modalidade: 'transferencia' })) : [emptyLinha('transferencia')];
+      } else if (operacao === 'portuaria') {
+        const port = linhas.filter((linha) => linha.modalidade === 'op_portuaria');
+        linhas = port.length ? port : [emptyLinha('op_portuaria')];
+      } else {
+        linhas = [emptyLinha('transferencia')];
+      }
+      return {
+        ...current,
+        tipo: 'transporte_rodoviario',
+        ...flags,
+        linhas,
+      };
     });
+    if (operacao === 'transferencia') catalogoTransferenciaRef.current = '';
+    if (operacao === 'distribuicao') catalogoDistribuicaoRef.current = '';
+    setAbaOperacao(
+      operacao === 'transferencia'
+        ? 'transferencia'
+        : operacao === 'distribuicao'
+          ? 'distribuicao'
+          : 'portuaria',
+    );
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -746,29 +968,44 @@ const ComercialPropostas: React.FC = () => {
       alert('Selecione o cliente.');
       return;
     }
-    const isRodoviario = form.tipo === 'transporte_rodoviario';
-    if (isRodoviario && form.incluiDistribuicao && !podeMarcarDistribuicao) {
-      alert('Vincule uma tabela de frete para incluir operação de distribuição.');
+    if (form.tipo === 'transporte_rodoviario'
+      && !form.incluiTransferencia
+      && !form.incluiDistribuicao
+      && !form.incluiOpPortuaria) {
+      alert(MENSAGEM_OPERACAO_OBRIGATORIA);
       return;
     }
-    if (!destinosProntosParaSalvar(form)) {
+    if (form.tipo === 'armazenagem' && !form.incluiArmazenagem) {
+      alert(MENSAGEM_SERVICO_OBRIGATORIO);
+      return;
+    }
+    const flags = normalizarFlagsExclusivos(form.tipo, form);
+    const tipo = tipoPropostaDasOperacoes(flags);
+    if (
+      (flags.incluiTransferencia || flags.incluiDistribuicao || flags.incluiOpPortuaria)
+      && !podeUsarTabelaFrete
+    ) {
+      alert(MENSAGEM_TABELA_FRETE);
+      return;
+    }
+    if (!destinosProntosParaSalvar({ ...form, ...flags })) {
       alert(MENSAGEM_DESTINOS_OBRIGATORIOS);
       return;
     }
-    if (form.tipo === 'armazenagem' && !tabelaArmazenagemProntaParaSalvar(form.tabelaArmazenagem)) {
+    if (flags.incluiArmazenagem && !tabelaArmazenagemProntaParaSalvar(form.tabelaArmazenagem)) {
       alert(MENSAGEM_TARIFAS_ARMAZENAGEM);
       return;
     }
     const titulo = form.titulo.trim()
-      || `${PROPOSTA_COMERCIAL_TIPO_LABEL[form.tipo]}${form.clienteNome.trim() ? ` — ${form.clienteNome.trim()}` : ''}`;
+      || `${PROPOSTA_COMERCIAL_TIPO_LABEL[tipo]}${form.clienteNome.trim() ? ` — ${form.clienteNome.trim()}` : ''}`;
     const payload: PropostaComercialPayload = {
-      tipo: form.tipo,
+      tipo,
       status: form.status,
       clienteId: form.clienteId,
       clienteNome: form.clienteNome.trim(),
       titulo,
       subtitulo: form.subtitulo.trim(),
-      revisao: form.revisao.trim() || '01',
+      revisao: form.revisao.trim(),
       dataProposta: form.dataProposta || null,
       propostaReferente: form.propostaReferente.trim(),
       responsavel: form.responsavel.trim(),
@@ -778,25 +1015,33 @@ const ComercialPropostas: React.FC = () => {
       vigencia: form.vigencia.trim(),
       faturamento: form.faturamento.trim(),
       localEmissao: form.localEmissao.trim(),
-      valorEstimado: isRodoviario
+      valorEstimado: (flags.incluiTransferencia || flags.incluiOpPortuaria)
         ? (subtotalGeral ? subtotalGeral.toFixed(2) : moneyOrEmpty(form.valorEstimado))
         : moneyOrEmpty(form.valorEstimado),
       observacoes: form.observacoes.trim(),
-      incluiTransferencia: isRodoviario && form.incluiTransferencia,
-      incluiDistribuicao: isRodoviario && form.incluiDistribuicao,
-      condicoes: condicoesDoFormulario(form),
-      tabelaArmazenagem: isRodoviario ? undefined : cloneTabelaArmazenagem(form.tabelaArmazenagem),
-      linhas: isRodoviario && form.incluiTransferencia
+      incluiTransferencia: flags.incluiTransferencia,
+      incluiDistribuicao: flags.incluiDistribuicao,
+      incluiArmazenagem: flags.incluiArmazenagem,
+      incluiOpPortuaria: flags.incluiOpPortuaria,
+      margensVeiculo: form.margensVeiculo,
+      condicoes: condicoesDoFormulario({ ...form, ...flags }),
+      tabelaArmazenagem: flags.incluiArmazenagem ? cloneTabelaArmazenagem(form.tabelaArmazenagem) : undefined,
+      linhas: (flags.incluiTransferencia || flags.incluiOpPortuaria)
         ? form.linhas.filter((linha) => !linhaDestinoVazia(linha)).map((linha, ordem) => ({
             ordem,
             origem: linha.origem.trim(),
             entrega: linha.entrega.trim(),
             veiculo: linha.veiculo.trim(),
+            veiculoKey: linha.veiculoKey || '',
+            modalidade: flags.incluiOpPortuaria ? 'op_portuaria' : (linha.modalidade || 'transferencia'),
+            km: (linha.km || '').trim(),
             devolucaoContainer: linha.devolucaoContainer.trim(),
             observacoes: linha.observacoes.trim(),
             peso: linha.peso.trim(),
             tarifaFrete: moneyOrEmpty(linha.tarifaFrete),
             pedagio: moneyOrEmpty(linha.pedagio),
+            retiradaCtnt: moneyOrEmpty(linha.retiradaCtnt),
+            desovaCtnt: moneyOrEmpty(linha.desovaCtnt),
             adValorem: linha.adValorem.trim(),
             gris: linha.gris.trim(),
             icms: linha.icms.trim(),
@@ -837,7 +1082,7 @@ const ComercialPropostas: React.FC = () => {
   const snapshotDoFormulario = (): PropostaComercial => ({
     id: editingId ?? 'rascunho',
     numeroIdentificacao: numeroProposta,
-    tipo: form.tipo,
+    tipo: tipoPropostaDasOperacoes(form),
     status: form.status,
     clienteId: form.clienteId || null,
     clienteNome: form.clienteNome,
@@ -857,6 +1102,16 @@ const ComercialPropostas: React.FC = () => {
     observacoes: form.observacoes,
     incluiTransferencia: form.incluiTransferencia,
     incluiDistribuicao: form.incluiDistribuicao,
+    incluiArmazenagem: form.incluiArmazenagem,
+    incluiOpPortuaria: form.incluiOpPortuaria,
+    margensVeiculo: form.margensVeiculo,
+    tabelaDistribuicao: snapshotDistribuicao,
+    historicoRevisoes: editingId
+      ? (propostas.find((item) => item.id === editingId)?.historicoRevisoes ?? [])
+      : [],
+    modoEnvio: editingId
+      ? (propostas.find((item) => item.id === editingId)?.modoEnvio ?? '')
+      : '',
     condicoes: condicoesDoFormulario(form),
     tabelaArmazenagem: cloneTabelaArmazenagem(form.tabelaArmazenagem),
     linhas: form.linhas.map((linha, ordem) => ({
@@ -864,11 +1119,16 @@ const ComercialPropostas: React.FC = () => {
       origem: linha.origem,
       entrega: linha.entrega,
       veiculo: linha.veiculo,
+      veiculoKey: linha.veiculoKey || '',
+      modalidade: linha.modalidade || 'transferencia',
+      km: linha.km || '',
       devolucaoContainer: linha.devolucaoContainer,
       observacoes: linha.observacoes,
       peso: linha.peso,
       tarifaFrete: moneyOrEmpty(linha.tarifaFrete),
       pedagio: moneyOrEmpty(linha.pedagio),
+      retiradaCtnt: moneyOrEmpty(linha.retiradaCtnt),
+      desovaCtnt: moneyOrEmpty(linha.desovaCtnt),
       adValorem: linha.adValorem,
       gris: linha.gris,
       icms: linha.icms,
@@ -880,7 +1140,7 @@ const ComercialPropostas: React.FC = () => {
   });
 
   const handlePrint = (proposta: PropostaComercial) => {
-    void printPropostaComercial(proposta, clienteDaProposta(proposta));
+    void printPropostaComercial(proposta, clienteDaProposta(proposta), { cargo: user?.cargo });
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -951,6 +1211,7 @@ const ComercialPropostas: React.FC = () => {
       || saveDraft.isPending
       || isPending
       || generalidadesTransferencia.isFetching
+      || generalidadesOpPortuaria.isFetching
       || generalidadesDistribuicao.isFetching
       || generalidadesArmazenagem.isFetching
       || tabelaDistribuicaoCliente.listQuery.isFetching
@@ -958,8 +1219,23 @@ const ComercialPropostas: React.FC = () => {
     ),
   );
   const destinosOk = destinosProntosParaSalvar(form);
-  const armazenagemOk = form.tipo !== 'armazenagem' || tabelaArmazenagemProntaParaSalvar(form.tabelaArmazenagem);
-  const canSave = canManage && Boolean(form.clienteId) && destinosOk && armazenagemOk && !isPending;
+  const armazenagemOk = !form.incluiArmazenagem || tabelaArmazenagemProntaParaSalvar(form.tabelaArmazenagem);
+  const temOperacao = form.incluiTransferencia || form.incluiDistribuicao || form.incluiArmazenagem || form.incluiOpPortuaria;
+  const operacaoFreteOk = !(
+    form.incluiTransferencia || form.incluiDistribuicao || form.incluiOpPortuaria
+  ) || podeUsarTabelaFrete;
+  /** Em rascunho ou após enviada: edita tudo. Situação Enviada só pelo e-mail. */
+  const jaEnviada = Boolean(editingId) && form.status !== 'rascunho';
+  const canEdit = canManage;
+  const canEditSituacao = canManage && form.status !== 'rascunho';
+  const canSave = canManage
+    && (canEdit || canEditSituacao)
+    && Boolean(form.clienteId)
+    && temOperacao
+    && operacaoFreteOk
+    && destinosOk
+    && armazenagemOk
+    && !isPending;
 
   return (
     <div className="fat-list-compact" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '0 4px 4px' }}>
@@ -1148,13 +1424,26 @@ const ComercialPropostas: React.FC = () => {
                           style={{ borderRadius: '4px' }}
                         />
                       </td>
-                      <td>{proposta.numeroIdentificacao || '—'}</td>
+                      <td>{rotuloNumeroProposta(proposta.numeroIdentificacao, proposta.revisao)}</td>
                       <td>{formatDateBr(proposta.dataCriacao)}</td>
                       <td>{clienteDaProposta(proposta)?.razaoSocial || proposta.clienteNome || '—'}</td>
                       <td>
                         <span className="proposta-servico-cell">
                           <i className={`bi ${iconForServico(proposta.tipo)}`} aria-hidden="true" />
-                          {PROPOSTA_COMERCIAL_TIPO_LABEL[proposta.tipo]}
+                          <span>
+                            {PROPOSTA_COMERCIAL_TIPO_LABEL[proposta.tipo]}
+                            {proposta.tipo === 'transporte_rodoviario' ? (
+                              <span className="proposta-servico-operacao">
+                                {proposta.incluiTransferencia
+                                  ? ' · Transferência'
+                                  : proposta.incluiDistribuicao
+                                    ? ' · Distribuição'
+                                    : proposta.incluiOpPortuaria
+                                      ? ' · Logística Retroportuária'
+                                      : ''}
+                              </span>
+                            ) : null}
+                          </span>
                         </span>
                       </td>
                       <td>{proposta.validade || '—'}</td>
@@ -1227,6 +1516,12 @@ const ComercialPropostas: React.FC = () => {
                   <h3 id="proposta-include-title">
                     {editingId ? 'Editar proposta' : 'Nova proposta'}
                   </h3>
+                  {editingId && jaEnviada ? (
+                    <p className="proposta-include-draft-hint">
+                      Já enviada: ao salvar mudanças, a revisão sobe (01, 02…). Depois use{' '}
+                      <strong>Enviar e-mail</strong> de novo.
+                    </p>
+                  ) : null}
                   {!editingId && draftUnavailable ? (
                     <p className="proposta-include-draft-hint is-warn">
                       Rascunho indisponível no servidor — você pode preencher normalmente, mas nada será salvo automaticamente.
@@ -1279,11 +1574,15 @@ const ComercialPropostas: React.FC = () => {
                     className="proposta-include-save"
                     disabled={!canSave}
                     title={
-                      !destinosOk
-                        ? MENSAGEM_DESTINOS_OBRIGATORIOS
-                        : !armazenagemOk
-                          ? MENSAGEM_TARIFAS_ARMAZENAGEM
-                          : undefined
+                      !temOperacao
+                        ? MENSAGEM_OPERACAO_OBRIGATORIA
+                        : !operacaoFreteOk
+                          ? MENSAGEM_TABELA_FRETE
+                          : !destinosOk
+                            ? MENSAGEM_DESTINOS_OBRIGATORIOS
+                            : !armazenagemOk
+                              ? MENSAGEM_TARIFAS_ARMAZENAGEM
+                              : undefined
                     }
                   >
                     <i className="bi bi-check2" />
@@ -1298,7 +1597,7 @@ const ComercialPropostas: React.FC = () => {
                     <IncludeField label="Número da proposta">
                       <input
                         className="proposta-include-input"
-                        value={numeroProposta}
+                        value={numeroProposta ? rotuloNumeroProposta(numeroProposta, form.revisao) : ''}
                         readOnly
                         disabled
                       />
@@ -1308,23 +1607,35 @@ const ComercialPropostas: React.FC = () => {
                     <select
                       className="proposta-include-input proposta-include-select"
                       value={form.clienteId}
-                      disabled={!canManage}
+                      disabled={!canEdit}
                       onChange={(e) => {
                         const clienteId = e.target.value;
                         const cliente = clientes.find((item) => item.id === clienteId);
+                        const keepDistribuicao = Boolean(clienteId) && form.incluiDistribuicao;
                         setForm({
                           ...form,
                           clienteId,
                           clienteNome: cliente?.razaoSocial ?? '',
                           att: (cliente?.responsavel || '').trim(),
                           incluiTransferencia: clienteId ? form.incluiTransferencia : false,
-                          incluiDistribuicao: false,
+                          incluiDistribuicao: keepDistribuicao,
+                          incluiOpPortuaria: clienteId ? form.incluiOpPortuaria : false,
+                          incluiArmazenagem: clienteId ? form.incluiArmazenagem : false,
                           condicoesTransferencia: [],
                           condicoesDistribuicao: [],
                         });
+                        setSnapshotDistribuicao(null);
                         catalogoTransferenciaRef.current = '';
                         catalogoDistribuicaoRef.current = '';
-                        setAbaOperacao((atual) => (atual === 'distribuicao' ? 'transferencia' : atual));
+                        catalogoArmazenagemRef.current = '';
+                        if (!clienteId || (form.incluiDistribuicao && !keepDistribuicao)) {
+                          setAbaOperacao(primeiraAbaOperacao({
+                            incluiTransferencia: clienteId ? form.incluiTransferencia : false,
+                            incluiDistribuicao: false,
+                            incluiArmazenagem: clienteId ? form.incluiArmazenagem : false,
+                            incluiOpPortuaria: clienteId ? form.incluiOpPortuaria : false,
+                          }));
+                        }
                       }}
                     >
                       <option value="">Nenhum cliente selecionado</option>
@@ -1333,63 +1644,71 @@ const ComercialPropostas: React.FC = () => {
                       ))}
                     </select>
                   </IncludeField>
-
-                  <div className="proposta-include-field">
-                    <span className="proposta-include-label">Serviço*</span>
+                  <IncludeField label="Tipo de serviço" required>
                     <ServicoSelect
                       value={form.tipo}
-                      disabled={!canManage}
-                      onChange={(tipo) => setForm({
-                        ...form,
-                        tipo,
-                        incluiTransferencia: tipo === 'transporte_rodoviario' ? form.incluiTransferencia : false,
-                        incluiDistribuicao: tipo === 'transporte_rodoviario' ? form.incluiDistribuicao : false,
-                        tabelaArmazenagem: tipo === 'armazenagem'
-                          ? cloneTabelaArmazenagem(form.tabelaArmazenagem)
-                          : form.tabelaArmazenagem,
-                        linhas: tipo === 'transporte_rodoviario' && form.linhas.length === 0
-                          ? [emptyLinha()]
-                          : form.linhas,
-                      })}
+                      disabled={!canEdit}
+                      onChange={setTipoServico}
                     />
-                  </div>
+                  </IncludeField>
                 </div>
 
-                {form.tipo === 'transporte_rodoviario' && form.clienteId ? (
+                {form.tipo === 'transporte_rodoviario' ? (
                   <div className="proposta-modalidades">
                     <span className="proposta-include-label">Tipo de operação</span>
                     <div className="proposta-modalidades-options">
-                      <label>
+                      <label className={!canEdit || (!form.incluiTransferencia && !podeUsarTabelaFrete) ? 'is-disabled' : undefined}>
                         <input
-                          type="checkbox"
+                          type="radio"
+                          name="proposta-operacao"
                           checked={form.incluiTransferencia}
-                          disabled={!canManage}
-                          onChange={(e) => toggleModalidade('incluiTransferencia', e.target.checked)}
+                          disabled={!canEdit || (!form.incluiTransferencia && !podeUsarTabelaFrete)}
+                          title={podeUsarTabelaFrete ? undefined : MENSAGEM_TABELA_FRETE}
+                          onChange={() => setOperacaoTransporte('transferencia')}
                         />
                         Transferência
                       </label>
-                      <label className={!canManage || (!form.incluiDistribuicao && !podeMarcarDistribuicao) ? 'is-disabled' : undefined}>
+                      <label className={!canEdit || (!form.incluiDistribuicao && !podeUsarTabelaFrete) ? 'is-disabled' : undefined}>
                         <input
-                          type="checkbox"
+                          type="radio"
+                          name="proposta-operacao"
                           checked={form.incluiDistribuicao}
-                          disabled={!canManage || (!form.incluiDistribuicao && !podeMarcarDistribuicao)}
-                          title={
-                            podeMarcarDistribuicao
-                              ? undefined
-                              : 'Vincule uma tabela de frete para incluir operação de distribuição.'
-                          }
-                          onChange={(e) => {
-                            if (e.target.checked && !podeMarcarDistribuicao) return;
-                            toggleModalidade('incluiDistribuicao', e.target.checked);
-                          }}
+                          disabled={!canEdit || (!form.incluiDistribuicao && !podeUsarTabelaFrete)}
+                          title={podeUsarTabelaFrete ? undefined : MENSAGEM_TABELA_FRETE}
+                          onChange={() => setOperacaoTransporte('distribuicao')}
                         />
                         Distribuição
                       </label>
+                      <label className={!canEdit || (!form.incluiOpPortuaria && !podeUsarTabelaFrete) ? 'is-disabled' : undefined}>
+                        <input
+                          type="radio"
+                          name="proposta-operacao"
+                          checked={form.incluiOpPortuaria}
+                          disabled={!canEdit || (!form.incluiOpPortuaria && !podeUsarTabelaFrete)}
+                          title={podeUsarTabelaFrete ? undefined : MENSAGEM_TABELA_FRETE}
+                          onChange={() => setOperacaoTransporte('portuaria')}
+                        />
+                        Logística Retroportuária
+                      </label>
                     </div>
-                    {!podeMarcarDistribuicao ? (
-                      <p className="proposta-modalidades-hint">
-                        Vincule uma tabela de frete para incluir operação de distribuição.
-                      </p>
+                    {!podeUsarTabelaFrete ? (
+                      <p className="proposta-modalidades-hint">{MENSAGEM_TABELA_FRETE}</p>
+                    ) : null}
+                    {(form.incluiTransferencia || form.incluiDistribuicao || form.incluiOpPortuaria) ? (
+                      <PropostaCondicoesEspeciais
+                        margensVeiculo={form.margensVeiculo}
+                        veiculosTarifa={tabelaDistribuicaoCliente.tabela?.config?.veiculosTarifa}
+                        canEdit={canEdit}
+                        onChange={(margens) => {
+                          setForm((current) => ({ ...current, margensVeiculo: margens }));
+                          if (form.incluiDistribuicao && form.clienteId) {
+                            previewDistribuicao.mutate(
+                              { clienteId: form.clienteId, margensVeiculo: margens },
+                              { onSuccess: (snap) => setSnapshotDistribuicao(snap as PropostaTabelaDistribuicaoSnapshot) },
+                            );
+                          }
+                        }}
+                      />
                     ) : null}
                   </div>
                 ) : null}
@@ -1418,10 +1737,10 @@ const ComercialPropostas: React.FC = () => {
                     <select
                       className="proposta-include-input proposta-include-select"
                       value={form.validade}
-                      disabled={!canManage}
+                      disabled={!canEdit}
                       onChange={(e) => setForm({ ...form, validade: e.target.value })}
                     >
-                      {optionsWithCurrent(VALIDADE_OPTIONS, form.validade).map((option) => (
+                      {optionsWithCurrent(validadeOptions, form.validade).map((option) => (
                         <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
@@ -1430,10 +1749,10 @@ const ComercialPropostas: React.FC = () => {
                     <select
                       className="proposta-include-input proposta-include-select"
                       value={form.vigencia}
-                      disabled={!canManage}
+                      disabled={!canEdit}
                       onChange={(e) => setForm({ ...form, vigencia: e.target.value })}
                     >
-                      {optionsWithCurrent(VIGENCIA_OPTIONS, form.vigencia).map((option) => (
+                      {optionsWithCurrent(vigenciaOptions, form.vigencia).map((option) => (
                         <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
@@ -1445,10 +1764,10 @@ const ComercialPropostas: React.FC = () => {
                     <select
                       className="proposta-include-input proposta-include-select"
                       value={form.faturamento}
-                      disabled={!canManage}
+                      disabled={!canEdit}
                       onChange={(e) => setForm({ ...form, faturamento: e.target.value })}
                     >
-                      {optionsWithCurrent(FATURAMENTO_OPTIONS, form.faturamento).map((option) => (
+                      {optionsWithCurrent(faturamentoOptions, form.faturamento).map((option) => (
                         <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
@@ -1457,185 +1776,113 @@ const ComercialPropostas: React.FC = () => {
                     <select
                       className="proposta-include-input proposta-include-select"
                       value={form.status}
-                      disabled={!canManage}
+                      disabled={!canEditSituacao}
+                      title={
+                        form.status === 'rascunho'
+                          ? 'A situação passa a Enviada automaticamente ao enviar o e-mail ao cliente.'
+                          : undefined
+                      }
                       onChange={(e) => setForm({ ...form, status: e.target.value as PropostaComercialStatus })}
                     >
-                      <option value="rascunho">Rascunho</option>
-                      <option value="enviada">Enviada</option>
-                      <option value="aprovada">Aceita</option>
-                      <option value="recusada">Recusada</option>
+                      {form.status === 'rascunho' ? (
+                        <option value="rascunho">Rascunho</option>
+                      ) : (
+                        <>
+                          <option value="enviada">Enviada</option>
+                          <option value="aprovada">Aceita</option>
+                          <option value="recusada">Recusada</option>
+                        </>
+                      )}
                     </select>
                   </IncludeField>
                 </div>
 
-                {form.tipo === 'armazenagem' ? (
-                  <>
-                  <PropostaTabelaArmazenagem
-                    tabela={form.tabelaArmazenagem}
-                    canEdit={canManage}
-                    onChange={(tabela) => setForm((current) => ({ ...current, tabelaArmazenagem: tabela }))}
-                  />
-                  <PropostaGeneralidadesRevisao
-                    titulo="Generalidades — Armazenagem"
-                    items={form.condicoes}
-                    canEdit={canManage}
-                    emptyHint={
-                      form.clienteId
-                        ? 'Nenhuma generalidade de armazenagem para revisar.'
-                        : 'Selecione o cliente para revisar as generalidades de armazenagem.'
-                    }
-                    onChange={(items) => setForm((current) => ({ ...current, condicoes: items }))}
-                  />
-                  </>
-                ) : null}
-
-                {form.tipo === 'transporte_rodoviario' && (form.incluiTransferencia || form.incluiDistribuicao) && (
+                {(form.incluiTransferencia || form.incluiDistribuicao || form.incluiArmazenagem || form.incluiOpPortuaria) && (
                   <section className="proposta-destinos">
-                    <div className="reports-tabs-bar proposta-operacao-tabs">
-                      {form.incluiTransferencia ? (
-                        <button
-                          type="button"
-                          className={`reports-tab-btn${abaOperacao === 'transferencia' ? ' active' : ''}`}
-                          onClick={() => setAbaOperacao('transferencia')}
-                        >
-                          Transferência
-                        </button>
-                      ) : null}
-                      {form.incluiDistribuicao ? (
-                        <button
-                          type="button"
-                          className={`reports-tab-btn${abaOperacao === 'distribuicao' ? ' active' : ''}`}
-                          onClick={() => setAbaOperacao('distribuicao')}
-                        >
-                          Distribuição
-                        </button>
-                      ) : null}
-                    </div>
-
-                    {form.incluiTransferencia && abaOperacao === 'transferencia' ? (
+                    {form.incluiTransferencia ? (
                       <>
-                    <section className="proposta-destinos-card">
-                    <div className="proposta-destinos-head">
-                      <h4>Destinos</h4>
-                      {canManage && (
-                        <button
-                          type="button"
-                          className="proposta-secao-add"
-                          onClick={() => setForm({ ...form, linhas: [...form.linhas, emptyLinha()] })}
-                        >
-                          <i className="bi bi-plus-lg" aria-hidden="true" />
-                          Adicionar
-                        </button>
-                      )}
-                    </div>
-                    <div className="table-container proposta-destinos-wrap">
-                      <table className="erp-table reports-table comercial-browse-table proposta-destinos-table">
-                        <thead>
-                          <tr>
-                            <th className="col-trecho">Origem</th>
-                            <th className="col-trecho">Destino</th>
-                            <th className="col-veiculo">Veículo</th>
-                            <th className="col-money">Frete</th>
-                            <th className="col-money">Pedágio</th>
-                            <th className="col-pct">GRIS</th>
-                            <th className="col-pct">Ad-VL</th>
-                            <th className="col-icms">ICMS</th>
-                            <th className="col-prazo">Prazo entrega</th>
-                            {canManage ? <th className="col-actions" /> : null}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {form.linhas.map((linha, index) => (
-                            <tr key={index}>
-                              <td>
-                                <ComercialEnderecoAutocomplete
-                                  compact
-                                  variant="cidade"
-                                  value={linha.origem}
-                                  disabled={!canManage}
-                                  placeholder="Ibiporã-PR"
-                                  inputClassName="proposta-destinos-input"
-                                  onChange={(origem) => updateLinha(index, { origem })}
-                                />
-                              </td>
-                              <td>
-                                <ComercialEnderecoAutocomplete
-                                  compact
-                                  variant="cidade"
-                                  value={linha.entrega}
-                                  disabled={!canManage}
-                                  placeholder="Ibiporã-PR"
-                                  inputClassName="proposta-destinos-input"
-                                  onChange={(entrega) => updateLinha(index, { entrega })}
-                                />
-                              </td>
-                              <td>
-                                <input className="proposta-destinos-input" value={linha.veiculo} disabled={!canManage} placeholder="Carreta" onChange={(e) => updateLinha(index, { veiculo: e.target.value })} />
-                              </td>
-                              <td>
-                                <input className="proposta-destinos-input" value={linha.tarifaFrete} disabled={!canManage} placeholder="R$ 0,00" onChange={(e) => updateLinha(index, { tarifaFrete: e.target.value })} />
-                              </td>
-                              <td>
-                                <input className="proposta-destinos-input" value={linha.pedagio} disabled={!canManage} placeholder="R$ 0,00" onChange={(e) => updateLinha(index, { pedagio: e.target.value })} />
-                              </td>
-                              <td>
-                                <input className="proposta-destinos-input" value={linha.gris} disabled={!canManage} placeholder="0,07%" onChange={(e) => updateLinha(index, { gris: e.target.value })} />
-                              </td>
-                              <td>
-                                <input className="proposta-destinos-input" value={linha.adValorem} disabled={!canManage} placeholder="0,00%" onChange={(e) => updateLinha(index, { adValorem: e.target.value })} />
-                              </td>
-                              <td>
-                                <input className="proposta-destinos-input" value={linha.icms} disabled={!canManage} onChange={(e) => updateLinha(index, { icms: e.target.value })} />
-                              </td>
-                              <td>
-                                <input className="proposta-destinos-input" value={linha.prazoDias} disabled={!canManage} placeholder="3 dias úteis" onChange={(e) => updateLinha(index, { prazoDias: e.target.value })} />
-                              </td>
-                              {canManage ? (
-                                <td className="col-actions">
-                                  <button
-                                    type="button"
-                                    className="btn-icon"
-                                    title="Remover destino"
-                                    disabled={form.linhas.length <= 1}
-                                    onClick={() => setForm({ ...form, linhas: form.linhas.filter((_, i) => i !== index) })}
-                                  >
-                                    <i className="bi bi-trash" />
-                                  </button>
-                                </td>
-                              ) : null}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    </section>
-                    <PropostaGeneralidadesRevisao
-                      titulo="Generalidades — Transferência"
-                      items={form.condicoesTransferencia}
-                      canEdit={canManage}
-                      emptyHint={
-                        form.clienteId
-                          ? 'Nenhuma generalidade de transferência para revisar.'
-                          : 'Selecione o cliente para revisar as generalidades de transferência.'
-                      }
-                      onChange={(items) => setForm((current) => ({ ...current, condicoesTransferencia: items }))}
-                    />
+                        <PropostaTrechosOperacao
+                          titulo="Trechos — Transferência"
+                          linhas={form.linhas.filter((linha) => (linha.modalidade || 'transferencia') !== 'op_portuaria')}
+                          canEdit={canEdit}
+                          clienteId={form.clienteId}
+                          margensVeiculo={form.margensVeiculo}
+                          grisAdvUnificado={
+                            isGrisAdvUnificado(tabelaDistribuicaoCliente.tabela?.config)
+                            || Boolean(snapshotDistribuicao?.grisAdvUnificado)
+                          }
+                          onChange={(linhas) => setForm((current) => ({
+                            ...current,
+                            linhas: linhas.map((linha) => ({ ...linha, modalidade: 'transferencia' })),
+                          }))}
+                        />
+                        <PropostaGeneralidadesRevisao
+                          titulo="Generalidades — Transferência"
+                          items={form.condicoesTransferencia}
+                          canEdit={canEdit}
+                          emptyHint={form.clienteId ? 'Nenhuma generalidade de transferência para revisar.' : 'Selecione o cliente para revisar as generalidades de transferência.'}
+                          onChange={(items) => setForm((current) => ({ ...current, condicoesTransferencia: items }))}
+                        />
                       </>
                     ) : null}
 
-                    {form.incluiDistribuicao && abaOperacao === 'distribuicao' ? (
+                    {form.incluiDistribuicao ? (
                       <>
-                        <PropostaTabelaDistribuicao clienteId={form.clienteId || null} />
+                        <PropostaTabelaDistribuicao
+                          clienteId={form.clienteId || null}
+                          snapshot={snapshotDistribuicao}
+                        />
                         <PropostaGeneralidadesRevisao
                           titulo="Generalidades — Distribuição"
                           items={form.condicoesDistribuicao}
-                          canEdit={canManage}
-                          emptyHint={
-                            form.clienteId
-                              ? 'Nenhuma generalidade de distribuição para revisar.'
-                              : 'Selecione o cliente para revisar as generalidades de distribuição.'
-                          }
+                          canEdit={canEdit}
+                          emptyHint={form.clienteId ? 'Nenhuma generalidade de distribuição para revisar.' : 'Selecione o cliente para revisar as generalidades de distribuição.'}
                           onChange={(items) => setForm((current) => ({ ...current, condicoesDistribuicao: items }))}
+                        />
+                      </>
+                    ) : null}
+
+                    {form.incluiOpPortuaria ? (
+                      <>
+                        <PropostaTrechosOperacao
+                          titulo="Trechos — Logística Retroportuária"
+                          portuaria
+                          linhas={form.linhas.filter((linha) => linha.modalidade === 'op_portuaria')}
+                          canEdit={canEdit}
+                          clienteId={form.clienteId}
+                          margensVeiculo={form.margensVeiculo}
+                          grisAdvUnificado={
+                            isGrisAdvUnificado(tabelaDistribuicaoCliente.tabela?.config)
+                            || Boolean(snapshotDistribuicao?.grisAdvUnificado)
+                          }
+                          onChange={(linhas) => setForm((current) => ({
+                            ...current,
+                            linhas: linhas.map((linha) => ({ ...linha, modalidade: 'op_portuaria' })),
+                          }))}
+                        />
+                        <PropostaGeneralidadesRevisao
+                          titulo="Generalidades — Logística Retroportuária"
+                          items={form.condicoesTransferencia}
+                          canEdit={canEdit}
+                          emptyHint="As mesmas generalidades de transferência se aplicam à operação portuária, salvo o que for ajustado aqui."
+                          onChange={(items) => setForm((current) => ({ ...current, condicoesTransferencia: items }))}
+                        />
+                      </>
+                    ) : null}
+
+                    {form.incluiArmazenagem ? (
+                      <>
+                        <PropostaTabelaArmazenagem
+                          tabela={form.tabelaArmazenagem}
+                          canEdit={canEdit}
+                          onChange={(tabela) => setForm((current) => ({ ...current, tabelaArmazenagem: tabela }))}
+                        />
+                        <PropostaGeneralidadesRevisao
+                          titulo="Generalidades — Armazenagem"
+                          items={form.condicoes}
+                          canEdit={canEdit}
+                          emptyHint={form.clienteId ? 'Nenhuma generalidade de armazenagem para revisar.' : 'Selecione o cliente para revisar as generalidades de armazenagem.'}
+                          onChange={(items) => setForm((current) => ({ ...current, condicoes: items }))}
                         />
                       </>
                     ) : null}

@@ -50,7 +50,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'name', 'roleId', 'status',
+            'id', 'username', 'name', 'cargo', 'roleId', 'status',
             'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'lastLogin',
             'googleEmail', 'googleLinkedAt', 'googlePicture', 'mustChangePassword',
         ]
@@ -88,13 +88,16 @@ class CreateUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
+        fields = ['id', 'username', 'name', 'cargo', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
         read_only_fields = ['id']
 
     def validate_username(self, value):
         if User.objects.filter(username__iexact=value).exists():
             raise serializers.ValidationError("Nome de usuário já existe.")
         return value
+
+    def validate_cargo(self, value):
+        return str(value or '').strip()[:120]
 
     def create(self, validated_data):
         password = validated_data.pop('password')
@@ -116,8 +119,11 @@ class UpdateUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
+        fields = ['id', 'username', 'name', 'cargo', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
         read_only_fields = ['id', 'username']
+
+    def validate_cargo(self, value):
+        return str(value or '').strip()[:120]
 
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)

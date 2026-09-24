@@ -18,7 +18,7 @@ _STATUS = {
     STATUS_PROPOSTA_RECUSADA,
 }
 _FORMATOS = {'moeda', 'percentual', 'tonelada', 'quantidade'}
-_ABAS = {'transferencia', 'distribuicao'}
+_ABAS = {'transferencia', 'distribuicao', 'armazenagem', 'portuaria'}
 _MAX_LINHAS = 80
 _MAX_CONDICOES = 80
 
@@ -47,7 +47,7 @@ def _sanitize_condicao(raw):
         return None
     tipo = _as_str(raw.get('tipo'), 40)
     item = {'rotulo': rotulo, 'valor': valor}
-    if tipo in {'frete', 'distribuicao', 'armazenagem'}:
+    if tipo in {'frete', 'distribuicao', 'armazenagem', 'op_portuaria'}:
         item['tipo'] = tipo
     return item
 
@@ -62,8 +62,13 @@ def _sanitize_linha(raw):
         'devolucaoContainer': _as_str(raw.get('devolucaoContainer') or raw.get('devolucao_container'), 120),
         'observacoes': _as_str(raw.get('observacoes'), 200),
         'peso': _as_str(raw.get('peso'), 40),
+        'km': _as_str(raw.get('km'), 20),
+        'veiculoKey': _as_str(raw.get('veiculoKey') or raw.get('veiculo_key'), 40),
+        'modalidade': _as_str(raw.get('modalidade'), 20) or 'transferencia',
         'tarifaFrete': _as_str(raw.get('tarifaFrete') or raw.get('tarifa_frete'), 40),
         'pedagio': _as_str(raw.get('pedagio'), 40),
+        'retiradaCtnt': _as_str(raw.get('retiradaCtnt') or raw.get('retirada_ctnt'), 40),
+        'desovaCtnt': _as_str(raw.get('desovaCtnt') or raw.get('desova_ctnt'), 40),
         'adValorem': _as_str(raw.get('adValorem') or raw.get('ad_valorem'), 20),
         'gris': _as_str(raw.get('gris'), 20),
         'icms': _as_str(raw.get('icms'), 40),
@@ -72,7 +77,12 @@ def _sanitize_linha(raw):
 
 
 def _linha_preenchida(linha):
-    return any(str(linha.get(chave) or '').strip() for chave in linha)
+    ignorar = {'modalidade'}
+    return any(
+        str(linha.get(chave) or '').strip()
+        for chave in linha
+        if chave not in ignorar
+    )
 
 
 def _sanitize_lista(fonte, sanitizer, limite):
@@ -136,8 +146,10 @@ def sanitize_draft_payload(raw):
     if aba not in _ABAS:
         aba = 'transferencia'
     linhas = _sanitize_lista(form.get('linhas'), _sanitize_linha, _MAX_LINHAS) or [{
-        'origem': '', 'entrega': '', 'veiculo': '', 'devolucaoContainer': '',
+        'origem': '', 'entrega': '', 'veiculo': '', 'veiculoKey': '', 'modalidade': 'transferencia',
+        'km': '', 'devolucaoContainer': '',
         'observacoes': '', 'peso': '', 'tarifaFrete': '', 'pedagio': '',
+        'retiradaCtnt': '', 'desovaCtnt': '',
         'adValorem': '', 'gris': '', 'icms': '', 'prazoDias': '',
     }]
     return {
@@ -149,7 +161,7 @@ def sanitize_draft_payload(raw):
             'clienteNome': _as_str(form.get('clienteNome') or form.get('cliente_nome'), 200),
             'titulo': _as_str(form.get('titulo'), 200),
             'subtitulo': _as_str(form.get('subtitulo'), 240),
-            'revisao': _as_str(form.get('revisao'), 10) or '01',
+            'revisao': _as_str(form.get('revisao'), 10),
             'dataProposta': _as_str(form.get('dataProposta') or form.get('data_proposta'), 32),
             'propostaReferente': _as_str(form.get('propostaReferente') or form.get('proposta_referente'), 200),
             'responsavel': _as_str(form.get('responsavel'), 150),
@@ -163,6 +175,10 @@ def sanitize_draft_payload(raw):
             'observacoes': _as_str(form.get('observacoes'), 2000),
             'incluiTransferencia': _as_bool(form.get('incluiTransferencia') or form.get('inclui_transferencia')),
             'incluiDistribuicao': _as_bool(form.get('incluiDistribuicao') or form.get('inclui_distribuicao')),
+            'incluiArmazenagem': _as_bool(form.get('incluiArmazenagem') or form.get('inclui_armazenagem'))
+            or tipo == TIPO_PROPOSTA_ARMAZENAGEM,
+            'incluiOpPortuaria': _as_bool(form.get('incluiOpPortuaria') or form.get('inclui_op_portuaria')),
+            'margensVeiculo': form.get('margensVeiculo') if isinstance(form.get('margensVeiculo'), list) else [],
             'condicoes': _sanitize_lista(form.get('condicoes'), _sanitize_condicao, _MAX_CONDICOES),
             'condicoesTransferencia': _sanitize_lista(form.get('condicoesTransferencia'), _sanitize_condicao, _MAX_CONDICOES),
             'condicoesDistribuicao': _sanitize_lista(form.get('condicoesDistribuicao'), _sanitize_condicao, _MAX_CONDICOES),
@@ -178,7 +194,7 @@ def has_meaningful_draft(payload):
     form = payload.get('form') if isinstance(payload.get('form'), dict) else payload
     if form.get('clienteId') or form.get('titulo') or form.get('observacoes') or form.get('propostaReferente'):
         return True
-    if form.get('incluiTransferencia') or form.get('incluiDistribuicao'):
+    if form.get('incluiTransferencia') or form.get('incluiDistribuicao') or form.get('incluiArmazenagem') or form.get('incluiOpPortuaria'):
         return True
     if form.get('tipo') == TIPO_PROPOSTA_ARMAZENAGEM:
         return True

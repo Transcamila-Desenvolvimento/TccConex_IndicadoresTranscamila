@@ -12,13 +12,14 @@ const ComercialHome: React.FC = () => {
   const canCadastro = userCanSeeAba(user, 'Comercial', 'cadastro-clientes');
   const canTabelaFrete = userCanSeeAba(user, 'Comercial', 'cadastro-tabela-frete');
   const canGeneralidades = userCanSeeAba(user, 'Comercial', 'cadastro-generalidades');
+  const canParametros = userCanSeeAba(user, 'Comercial', 'cadastro-parametros');
   const canProdutos = userCanSeeAba(user, 'Comercial', 'cadastro-produtos');
   const canPropostas = userCanSeeAba(user, 'Comercial', 'propostas-comerciais');
   const canValidacaoClientes = userCanSeeAba(user, 'Comercial', 'validacao-clientes');
   const [cotarAberto, setCotarAberto] = useState(false);
   const [acessoAberto, setAcessoAberto] = useState(false);
   const [ferramentasAberto, setFerramentasAberto] = useState(false);
-  const temAcessoRapido = canCadastro || canTabelaFrete || canGeneralidades || canProdutos || canPropostas || canValidacaoClientes;
+  const temAcessoRapido = canCadastro || canTabelaFrete || canGeneralidades || canParametros || canProdutos || canPropostas || canValidacaoClientes;
 
   return (
     <section
@@ -104,6 +105,25 @@ const ComercialHome: React.FC = () => {
               </div>
               <h4>Generalidades</h4>
               <p>Edite as condições padrão que entram nas novas propostas.</p>
+            </button>
+            )}
+            {canParametros && (
+            <button
+              type="button"
+              className="quick-access-card"
+              style={{ width: '100%', textAlign: 'left' }}
+              onClick={() => navigate('/comercial/parametros')}
+            >
+              <div className="card-header-row">
+                <div className="card-icon-wrapper">
+                  <i className="bi bi-sliders" aria-hidden="true" />
+                </div>
+                <span className="card-badge" style={{ background: 'rgba(17, 140, 196, 0.08)', color: '#118CC4' }}>
+                  Configurações
+                </span>
+              </div>
+              <h4>Parâmetros</h4>
+              <p>Logos da proposta, validades, vigências e prazos de faturamento.</p>
             </button>
             )}
             {canProdutos && (

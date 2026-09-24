@@ -123,6 +123,9 @@
               <p style="margin:0 0 4px;">Permanecemos à disposição.</p>
               <p style="margin:22px 0 0;font-size:13px;color:#6b7380;">Atenciosamente,</p>
               <p style="margin:10px 0 0;font-size:15px;font-weight:600;color:#0f2744;">{{ enviado_por }}</p>
+              {% if enviado_por_cargo %}
+              <p style="margin:4px 0 0;font-size:13px;color:#5c6570;">{{ enviado_por_cargo }}</p>
+              {% endif %}
               <p style="margin:4px 0 0;font-size:13px;color:#5c6570;">Comercial · Transcamila Cargas e Armazéns Gerais Ltda.</p>
             </td>
           </tr>

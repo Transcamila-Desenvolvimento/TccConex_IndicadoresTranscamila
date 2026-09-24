@@ -75,6 +75,12 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(published.status_code, 200, published.content)
         return created.json()['id']
 
+    def _marcar_proposta_enviada(self, proposta_id):
+        """Simula o efeito do envio de e-mail (status Enviada só pelo sistema)."""
+        from apps.comercial.models import STATUS_PROPOSTA_ENVIADA, PropostaComercial
+        updated = PropostaComercial.objects.filter(pk=proposta_id).update(status=STATUS_PROPOSTA_ENVIADA)
+        self.assertEqual(updated, 1)
+
     def test_list_requires_auth(self):
         response = self.api.get('/api/comercial/clientes/')
         self.assertIn(response.status_code, (401, 403))
@@ -286,14 +292,25 @@ class ClienteComercialTests(TestCase):
         self._auth(self.admin)
         cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
         self.assertEqual(cliente.status_code, 201, cliente.content)
+        self._publicar_tabela_distribuicao(cliente.json()['id'])
         created = self.api.post(
             '/api/comercial/propostas/',
             {
                 'tipo': 'transporte_rodoviario',
                 'titulo': 'Tabela SP-PR',
                 'clienteId': cliente.json()['id'],
+                'incluiTransferencia': True,
                 'valorEstimado': '1500.50',
                 'status': 'rascunho',
+                'linhas': [{
+                    'origem': 'Ibiporã-PR',
+                    'entrega': 'Curitiba-PR',
+                    'veiculo': 'Truck',
+                    'veiculoKey': 'de9000',
+                    'km': '50',
+                    'tarifaFrete': '1500.50',
+                    'prazoDias': '2 dias úteis',
+                }],
             },
             format='json',
             **HEADERS,
@@ -305,7 +322,7 @@ class ClienteComercialTests(TestCase):
 
         self.api.post(
             '/api/comercial/propostas/',
-            {'tipo': 'armazenagem', 'titulo': 'Palete mensal', 'status': 'enviada'},
+            {'tipo': 'armazenagem', 'titulo': 'Palete mensal', 'status': 'rascunho'},
             format='json',
             **HEADERS,
         )
@@ -318,10 +335,10 @@ class ClienteComercialTests(TestCase):
         self._auth(self.admin)
         cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
         self.assertEqual(cliente.status_code, 201, cliente.content)
-        self.api.post(
+        frete = self.api.post(
             '/api/comercial/propostas/',
             {
-                'tipo': 'transporte_rodoviario',
+                'tipo': 'armazenagem',
                 'titulo': 'Frete',
                 'clienteId': cliente.json()['id'],
                 'status': 'rascunho',
@@ -329,17 +346,23 @@ class ClienteComercialTests(TestCase):
             format='json',
             **HEADERS,
         )
-        self.api.post(
+        self.assertEqual(frete.status_code, 201, frete.content)
+        # Ajusta tipo via ORM só para o dashboard porTipo (API não cria transporte sem tabela/trechos).
+        from apps.comercial.models import PropostaComercial
+        PropostaComercial.objects.filter(pk=frete.json()['id']).update(tipo='transporte_rodoviario')
+        enviada = self.api.post(
             '/api/comercial/propostas/',
             {
                 'tipo': 'armazenagem',
                 'titulo': 'CD',
                 'clienteId': cliente.json()['id'],
-                'status': 'enviada',
+                'status': 'rascunho',
             },
             format='json',
             **HEADERS,
         )
+        self.assertEqual(enviada.status_code, 201, enviada.content)
+        self._marcar_proposta_enviada(enviada.json()['id'])
         response = self.api.get('/api/comercial/propostas/dashboard/', **HEADERS)
         self.assertEqual(response.status_code, 200, response.content)
         body = response.json()
@@ -394,28 +417,11 @@ class ClienteComercialTests(TestCase):
         cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
         self.assertEqual(cliente.status_code, 201, cliente.content)
         cliente_id = cliente.json()['id']
-        sem_tabela = self.api.post(
+        multipla = self.api.post(
             '/api/comercial/propostas/',
             {
                 'tipo': 'transporte_rodoviario',
                 'clienteId': cliente_id,
-                'incluiTransferencia': True,
-                'incluiDistribuicao': True,
-                'status': 'rascunho',
-            },
-            format='json',
-            **HEADERS,
-        )
-        self.assertEqual(sem_tabela.status_code, 400, sem_tabela.content)
-        self.assertIn('tabela', str(sem_tabela.json()).lower())
-
-        self._publicar_tabela_distribuicao(cliente_id)
-        created = self.api.post(
-            '/api/comercial/propostas/',
-            {
-                'tipo': 'transporte_rodoviario',
-                'clienteId': cliente_id,
-                'titulo': 'Com modalidades',
                 'incluiTransferencia': True,
                 'incluiDistribuicao': True,
                 'status': 'rascunho',
@@ -424,6 +430,7 @@ class ClienteComercialTests(TestCase):
                         'origem': 'Maringá - PR',
                         'entrega': 'São Paulo - SP',
                         'veiculo': 'Carreta',
+                        'km': '400',
                         'tarifaFrete': '1000.00',
                         'prazoDias': '3 dias úteis',
                     }
@@ -432,9 +439,53 @@ class ClienteComercialTests(TestCase):
             format='json',
             **HEADERS,
         )
-        self.assertEqual(created.status_code, 201, created.content)
-        self.assertTrue(created.json()['incluiTransferencia'])
-        self.assertTrue(created.json()['incluiDistribuicao'])
+        self.assertEqual(multipla.status_code, 400, multipla.content)
+        self.assertIn('apenas um tipo', str(multipla.json()).lower())
+
+        self._publicar_tabela_distribuicao(cliente_id)
+        transferencia = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'titulo': 'Só transferência',
+                'incluiTransferencia': True,
+                'status': 'rascunho',
+                'linhas': [
+                    {
+                        'origem': 'Maringá - PR',
+                        'entrega': 'São Paulo - SP',
+                        'veiculo': 'Carreta',
+                        'km': '400',
+                        'tarifaFrete': '1000.00',
+                        'prazoDias': '3 dias úteis',
+                    }
+                ],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(transferencia.status_code, 201, transferencia.content)
+        self.assertTrue(transferencia.json()['incluiTransferencia'])
+        self.assertFalse(transferencia.json()['incluiDistribuicao'])
+        self.assertFalse(transferencia.json()['incluiArmazenagem'])
+
+        distribuicao = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'titulo': 'Só distribuição',
+                'incluiDistribuicao': True,
+                'status': 'rascunho',
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(distribuicao.status_code, 201, distribuicao.content)
+        self.assertTrue(distribuicao.json()['incluiDistribuicao'])
+        self.assertFalse(distribuicao.json()['incluiTransferencia'])
+        self.assertFalse(distribuicao.json()['incluiArmazenagem'])
 
         armazenagem = self.api.post(
             '/api/comercial/propostas/',
@@ -451,16 +502,44 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(armazenagem.status_code, 201, armazenagem.content)
         self.assertFalse(armazenagem.json()['incluiTransferencia'])
         self.assertFalse(armazenagem.json()['incluiDistribuicao'])
+        self.assertTrue(armazenagem.json()['incluiArmazenagem'])
 
     def test_recusa_transferencia_sem_destinos_preenchidos(self):
         self._auth(self.admin)
         cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
         self.assertEqual(cliente.status_code, 201, cliente.content)
+        cliente_id = cliente.json()['id']
+
+        sem_tabela = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'incluiTransferencia': True,
+                'status': 'rascunho',
+                'linhas': [
+                    {
+                        'origem': 'Maringá - PR',
+                        'entrega': 'Curitiba - PR',
+                        'veiculo': 'Carreta',
+                        'km': '400',
+                        'tarifaFrete': '1500.00',
+                        'prazoDias': '2 dias úteis',
+                    }
+                ],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(sem_tabela.status_code, 400, sem_tabela.content)
+        self.assertIn('tabela de frete', str(sem_tabela.json()).lower())
+
+        self._publicar_tabela_distribuicao(cliente_id)
         vazia = self.api.post(
             '/api/comercial/propostas/',
             {
                 'tipo': 'transporte_rodoviario',
-                'clienteId': cliente.json()['id'],
+                'clienteId': cliente_id,
                 'incluiTransferencia': True,
                 'status': 'rascunho',
             },
@@ -468,13 +547,13 @@ class ClienteComercialTests(TestCase):
             **HEADERS,
         )
         self.assertEqual(vazia.status_code, 400, vazia.content)
-        self.assertIn('destinos', str(vazia.json()).lower())
+        self.assertIn('linhas', str(vazia.json()).lower())
 
         incompleta = self.api.post(
             '/api/comercial/propostas/',
             {
                 'tipo': 'transporte_rodoviario',
-                'clienteId': cliente.json()['id'],
+                'clienteId': cliente_id,
                 'incluiTransferencia': True,
                 'status': 'rascunho',
                 'linhas': [{'origem': 'Maringá - PR', 'entrega': '', 'veiculo': 'Carreta'}],
@@ -488,7 +567,7 @@ class ClienteComercialTests(TestCase):
             '/api/comercial/propostas/',
             {
                 'tipo': 'transporte_rodoviario',
-                'clienteId': cliente.json()['id'],
+                'clienteId': cliente_id,
                 'incluiTransferencia': True,
                 'status': 'rascunho',
                 'linhas': [
@@ -496,6 +575,7 @@ class ClienteComercialTests(TestCase):
                         'origem': 'Maringá - PR',
                         'entrega': 'Curitiba - PR',
                         'veiculo': 'Carreta',
+                        'km': '400',
                         'tarifaFrete': '1500.00',
                         'prazoDias': '2 dias úteis',
                     }
@@ -506,6 +586,129 @@ class ClienteComercialTests(TestCase):
         )
         self.assertEqual(preenchida.status_code, 201, preenchida.content)
         self.assertEqual(len(preenchida.json()['linhas']), 1)
+
+    def test_proposta_calcular_trecho_e_revisao(self):
+        from apps.comercial.proposta_tarifas import assunto_envio_propostas, calcular_trecho, uf_de_endereco
+
+        self._auth(self.admin)
+        self.assertEqual(uf_de_endereco('Ibiporã-PR'), 'PR')
+        trecho = calcular_trecho(
+            cliente_id=None,
+            origem='Ibiporã-PR',
+            destino='São Paulo-SP',
+            veiculo_key='de9000',
+            km=50,
+            margens=[{'bandaKey': 'de9000', 'margem': '0.33'}],
+        )
+        self.assertNotIn('erro', trecho)
+        self.assertEqual(trecho['icms'], '12%')
+        self.assertTrue(float(trecho['tarifaFrete']) > 0)
+
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self._publicar_tabela_distribuicao(cliente.json()['id'])
+        created = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente.json()['id'],
+                'incluiTransferencia': True,
+                'status': 'rascunho',
+                'linhas': [{
+                    'origem': 'Ibiporã-PR',
+                    'entrega': 'Curitiba-PR',
+                    'veiculo': 'Truck',
+                    'veiculoKey': 'de9000',
+                    'km': '50',
+                    'tarifaFrete': '1368.14',
+                    'prazoDias': '2 dias úteis',
+                }],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertFalse((created.json().get('revisao') or '').strip())
+        proposta_id = created.json()['id']
+        self._marcar_proposta_enviada(proposta_id)
+
+        # Abrir sessão não deve incrementar; só o save com alteração sobe a revisão.
+        sessao = self.api.post(f'/api/comercial/propostas/{proposta_id}/nova-revisao/', **HEADERS)
+        self.assertEqual(sessao.status_code, 200, sessao.content)
+        self.assertFalse((sessao.json().get('revisao') or '').strip())
+
+        alterada = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {
+                'linhas': [{
+                    'origem': 'Ibiporã-PR',
+                    'entrega': 'Curitiba-PR',
+                    'veiculo': 'Truck',
+                    'veiculoKey': 'de9000',
+                    'km': '50',
+                    'tarifaFrete': '1500.00',
+                    'prazoDias': '2 dias úteis',
+                }],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(alterada.status_code, 200, alterada.content)
+        self.assertEqual(alterada.json().get('revisao'), '01')
+        self.assertEqual(alterada.json().get('modoEnvio'), 'revisao')
+        from apps.comercial.models import PropostaComercial
+        obj = PropostaComercial.objects.get(pk=proposta_id)
+        self.assertIn('Revisão', assunto_envio_propostas([obj]))
+        self.assertIn('Rev. 01', assunto_envio_propostas([obj]))
+        obj.modo_envio = 'errata'
+        self.assertIn('Errata', assunto_envio_propostas([obj]))
+
+        historico = alterada.json().get('historicoRevisoes') or []
+        self.assertTrue(historico)
+        ultima = historico[-1]
+        self.assertEqual(ultima['tipo'], 'revisao')
+        campos = ' '.join(item['campo'] for item in (ultima.get('alteracoes') or []))
+        self.assertIn('Frete', campos)
+        self.assertIn('1.500,00', ultima.get('resumo') or '')
+
+    def test_status_enviada_somente_pelo_sistema(self):
+        self._auth(self.admin)
+        criada = self.api.post(
+            '/api/comercial/propostas/',
+            {'tipo': 'armazenagem', 'titulo': 'Status', 'status': 'enviada'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(criada.status_code, 201, criada.content)
+        self.assertEqual(criada.json()['status'], 'rascunho')
+        proposta_id = criada.json()['id']
+
+        tentou_enviar = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'status': 'enviada'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(tentou_enviar.status_code, 200, tentou_enviar.content)
+        self.assertEqual(tentou_enviar.json()['status'], 'rascunho')
+
+        self._marcar_proposta_enviada(proposta_id)
+        aceita = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'status': 'aprovada'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(aceita.status_code, 200, aceita.content)
+        self.assertEqual(aceita.json()['status'], 'aprovada')
+
+        voltar = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'status': 'rascunho'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(voltar.status_code, 200, voltar.content)
+        self.assertEqual(voltar.json()['status'], 'aprovada')
 
     def test_proposta_armazenagem_grava_tabela(self):
         self._auth(self.admin)
@@ -586,6 +789,7 @@ class ClienteComercialTests(TestCase):
         cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
         self.assertEqual(cliente.status_code, 201, cliente.content)
         cliente_id = cliente.json()['id']
+        self._publicar_tabela_distribuicao(cliente_id)
         created = self.api.post(
             '/api/comercial/propostas/',
             {
@@ -598,6 +802,7 @@ class ClienteComercialTests(TestCase):
                         'origem': 'Maringá - PR',
                         'entrega': 'Curitiba - PR',
                         'veiculo': 'Carreta',
+                        'km': '400',
                         'tarifaFrete': '1500.00',
                         'prazoDias': '2 dias úteis',
                     }
@@ -660,13 +865,14 @@ class ClienteComercialTests(TestCase):
                 'titulo': 'Recente',
                 'dataProposta': '2026-06-01',
                 'validade': '10 dias',
-                'status': 'enviada',
+                'status': 'rascunho',
             },
             format='json',
             **HEADERS,
         )
         self.assertEqual(antiga.status_code, 201, antiga.content)
         self.assertEqual(recente.status_code, 201, recente.content)
+        self._marcar_proposta_enviada(recente.json()['id'])
 
         por_criacao = self.api.get('/api/comercial/propostas/?ordering=data_criacao_desc', **HEADERS)
         self.assertEqual(por_criacao.status_code, 200)
@@ -688,7 +894,7 @@ class ClienteComercialTests(TestCase):
         )
         segunda = self.api.post(
             '/api/comercial/propostas/',
-            {'tipo': 'armazenagem', 'titulo': 'Segunda', 'dataProposta': '2026-06-01', 'status': 'enviada'},
+            {'tipo': 'armazenagem', 'titulo': 'Segunda', 'dataProposta': '2026-06-01', 'status': 'rascunho'},
             format='json',
             **HEADERS,
         )
@@ -699,6 +905,8 @@ class ClienteComercialTests(TestCase):
             **HEADERS,
         )
         self.assertEqual(primeira.status_code, 201, primeira.content)
+        self.assertEqual(segunda.status_code, 201, segunda.content)
+        self._marcar_proposta_enviada(segunda.json()['id'])
         self.assertEqual(primeira.json()['numeroIdentificacao'], '001-2026')
         self.assertEqual(segunda.json()['numeroIdentificacao'], '002-2026')
         self.assertEqual(outra_ano.json()['numeroIdentificacao'], '001-2025')
@@ -719,6 +927,9 @@ class ClienteComercialTests(TestCase):
 
     def test_cria_proposta_frete_com_tabela_e_total(self):
         self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(cliente.status_code, 201, cliente.content)
+        self._publicar_tabela_distribuicao(cliente.json()['id'])
         created = self.api.post(
             '/api/comercial/propostas/',
             {
@@ -727,6 +938,8 @@ class ClienteComercialTests(TestCase):
                 'subtitulo': 'Porto de Paranaguá – Logística de Contêineres',
                 'revisao': '01',
                 'dataProposta': '2026-03-25',
+                'clienteId': cliente.json()['id'],
+                'incluiTransferencia': True,
                 'clienteNome': 'M - OCEAN SHIPPING',
                 'propostaReferente': 'Porto Paranaguá',
                 'responsavel': 'Marco Aurelio Coradassi',
@@ -736,6 +949,8 @@ class ClienteComercialTests(TestCase):
                     {
                         'origem': 'Paranaguá - PR',
                         'entrega': 'Guarapuava - PR',
+                        'veiculo': 'Carreta',
+                        'km': '250',
                         'devolucaoContainer': 'Paranaguá',
                         'observacoes': "CTNR de 40'",
                         'peso': '14 Ton',
@@ -769,12 +984,13 @@ class ClienteComercialTests(TestCase):
                 'tipo': 'armazenagem',
                 'clienteId': cliente.json()['id'],
                 'clienteNome': 'Empresa Teste',
-                'status': 'enviada',
+                'status': 'rascunho',
             },
             format='json',
             **HEADERS,
         )
         self.assertEqual(created.status_code, 201, created.content)
+        self._marcar_proposta_enviada(created.json()['id'])
         self.assertEqual(created.json()['clienteNome'], 'EMPRESA TESTE LTDA')
         listed = self.api.get('/api/comercial/propostas/', **HEADERS)
         self.assertEqual(listed.json()['results'][0]['clienteNome'], 'EMPRESA TESTE LTDA')
@@ -826,11 +1042,10 @@ class ClienteComercialTests(TestCase):
         proposta = self.api.post(
             '/api/comercial/propostas/',
             {
-                'tipo': 'transporte_rodoviario',
+                'tipo': 'armazenagem',
                 'clienteId': cliente.json()['id'],
                 'att': 'Bianca',
                 'status': 'rascunho',
-                'linhas': [{'origem': 'Ibiporã-PR', 'entrega': 'Rondonópolis', 'veiculo': 'Carreta'}],
             },
             format='json',
             **HEADERS,
@@ -853,7 +1068,7 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(email_obj.cc, ['diretor@transcamila.com.br'])
         self.assertIn('miguel.ribeiro@transcamila.com.br', email_obj.from_email)
         self.assertTrue(email_obj.attachments)
-        self.assertIn('cid:logo_transcamila', email_obj.body)
+        self.assertIn('cid:logo_tccconex', email_obj.body)
         pdf_anexo = next(
             (item[0] for item in email_obj.attachments if isinstance(item, tuple) and str(item[0]).endswith('.pdf')),
             '',
@@ -880,23 +1095,35 @@ class ClienteComercialTests(TestCase):
             **HEADERS,
         )
         cliente_id = cliente.json()['id']
+        self._publicar_tabela_distribuicao(cliente_id)
         frete = self.api.post(
             '/api/comercial/propostas/',
             {
                 'tipo': 'transporte_rodoviario',
                 'clienteId': cliente_id,
+                'incluiTransferencia': True,
                 'status': 'rascunho',
-                'linhas': [{'origem': 'Ibiporã-PR', 'entrega': 'Rondonópolis', 'veiculo': 'Carreta'}],
+                'linhas': [{
+                    'origem': 'Ibiporã-PR',
+                    'entrega': 'Rondonópolis-MT',
+                    'veiculo': 'Carreta',
+                    'veiculoKey': 'de14001',
+                    'km': '100',
+                    'tarifaFrete': '1000.00',
+                    'prazoDias': '3 dias úteis',
+                }],
             },
             format='json',
             **HEADERS,
         )
+        self.assertEqual(frete.status_code, 201, frete.content)
         armazem = self.api.post(
             '/api/comercial/propostas/',
             {'tipo': 'armazenagem', 'clienteId': cliente_id, 'status': 'rascunho'},
             format='json',
             **HEADERS,
         )
+        self.assertEqual(armazem.status_code, 201, armazem.content)
         response = self.api.post(
             '/api/comercial/propostas/enviar-email-lote/',
             {
@@ -931,23 +1158,35 @@ class ClienteComercialTests(TestCase):
             format='json',
             **HEADERS,
         )
+        self._publicar_tabela_distribuicao(cliente_a.json()['id'])
         frete = self.api.post(
             '/api/comercial/propostas/',
             {
                 'tipo': 'transporte_rodoviario',
                 'clienteId': cliente_a.json()['id'],
+                'incluiTransferencia': True,
                 'status': 'rascunho',
-                'linhas': [{'origem': 'Ibiporã-PR', 'entrega': 'Rondonópolis', 'veiculo': 'Carreta'}],
+                'linhas': [{
+                    'origem': 'Ibiporã-PR',
+                    'entrega': 'Rondonópolis-MT',
+                    'veiculo': 'Carreta',
+                    'veiculoKey': 'de14001',
+                    'km': '100',
+                    'tarifaFrete': '1000.00',
+                    'prazoDias': '3 dias úteis',
+                }],
             },
             format='json',
             **HEADERS,
         )
+        self.assertEqual(frete.status_code, 201, frete.content)
         armazem = self.api.post(
             '/api/comercial/propostas/',
             {'tipo': 'armazenagem', 'clienteId': cliente_b.json()['id'], 'status': 'rascunho'},
             format='json',
             **HEADERS,
         )
+        self.assertEqual(armazem.status_code, 201, armazem.content)
         response = self.api.post(
             '/api/comercial/propostas/enviar-email-lote/',
             {'ids': [frete.json()['id'], armazem.json()['id']]},
@@ -1024,12 +1263,13 @@ class ClienteComercialTests(TestCase):
             {
                 'tipo': 'armazenagem',
                 'clienteId': cliente_id,
-                'status': 'enviada',
+                'status': 'rascunho',
             },
             format='json',
             **HEADERS,
         )
         self.assertEqual(proposta.status_code, 201, proposta.content)
+        self._marcar_proposta_enviada(proposta.json()['id'])
         atual = self.api.get(f'/api/comercial/clientes/{cliente_id}/', **HEADERS)
         self.assertEqual(atual.json()['situacao'], 'potencial')
 
@@ -1427,6 +1667,111 @@ class ClienteComercialTests(TestCase):
         )
         self.assertEqual(sim_interno['icms']['tipo'], 'interno')
         self.assertEqual(sim_interno['icms']['aliquotaPercent'], 18)
+
+    def test_margem_antt_por_veiculo_nao_altera_tabela_sem_config(self):
+        from decimal import Decimal, ROUND_HALF_UP
+        from apps.comercial.tabela_distribuicao import (
+            gerar_faixas_distribuicao,
+            preset_config_ccab,
+            preset_veiculos_antt_oficial,
+        )
+
+        sem_antt = gerar_faixas_distribuicao(preset_config_ccab())
+        self.assertNotIn('antt', sem_antt[0]['tarifas'][6])
+
+        config = preset_config_ccab()
+        config.update(preset_veiculos_antt_oficial())
+        faixas = gerar_faixas_distribuicao(config)
+        truck = next(item for item in faixas[0]['tarifas'] if item['key'] == 'de9000')
+        km_ate = Decimal('50')
+        antt_fixo = Decimal('642.55')
+        antt_km = Decimal('5.4821')
+        margem = Decimal('0.33')
+        esperado_antt = (km_ate * antt_km + antt_fixo).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        esperado_cliente = (
+            km_ate * (antt_km / (Decimal('1') - margem)) + (antt_fixo / (Decimal('1') - margem))
+        ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        self.assertEqual(truck['antt'], str(esperado_antt))
+        self.assertEqual(truck['valor'], str(esperado_cliente))
+        self.assertTrue(Decimal(truck['margem']) > 0)
+
+        carreta6 = next(item for item in faixas[0]['tarifas'] if item['key'] == 'de14001')
+        carreta7 = next(item for item in faixas[0]['tarifas'] if item['key'] == 'acima26001')
+        antt7 = (km_ate * Decimal('8.5321') + Decimal('942.48')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        cliente6 = (
+            km_ate * (Decimal('7.7758') / Decimal('0.75')) + (Decimal('777.73') / Decimal('0.75'))
+        ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        self.assertEqual(carreta6['valor'], str(cliente6))
+        self.assertEqual(carreta6['antt'], str(antt7))
+        self.assertEqual(carreta7['antt'], str(antt7))
+        # Margem realizada vs piso 7 eixos ≠ margem configurada sobre ANTT 6 eixos.
+        self.assertNotEqual(carreta6['margem'], '0.2500')
+
+    def test_oficial_distribuicao_bate_planilha(self):
+        from decimal import Decimal, ROUND_HALF_UP
+        from apps.comercial.tabela_distribuicao import (
+            gerar_faixas_distribuicao,
+            preset_config_oficial_distribuicao,
+        )
+
+        faixas = gerar_faixas_distribuicao(preset_config_oficial_distribuicao())
+        self.assertEqual(faixas[0]['kmDe'], 0)
+        self.assertEqual(faixas[0]['kmAte'], 50)
+        self.assertEqual(faixas[-1]['kmDe'], 3401)
+        self.assertEqual(faixas[-1]['kmAte'], 3600)
+        self.assertEqual(faixas[0]['pedagioTon'], '17.00')
+        self.assertEqual(faixas[0]['grisPercent'], '0.0015')
+
+        def round2(valor):
+            return valor.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        km = Decimal('50')
+        truck = next(item for item in faixas[0]['tarifas'] if item['key'] == 'de9000')
+        carreta6 = next(item for item in faixas[0]['tarifas'] if item['key'] == 'de14001')
+        carreta7 = next(item for item in faixas[0]['tarifas'] if item['key'] == 'acima26001')
+        k = round2(km * (Decimal('5.4821') / Decimal('0.67')) + (Decimal('642.55') / Decimal('0.67')))
+        n = round2(km * (Decimal('7.7758') / Decimal('0.75')) + (Decimal('777.73') / Decimal('0.75')))
+        q = round2(km * (Decimal('8.5321') / Decimal('0.75')) + (Decimal('942.48') / Decimal('0.75')))
+        antt7 = round2(km * Decimal('8.5321') + Decimal('942.48'))
+        self.assertEqual(truck['valor'], str(k))
+        self.assertEqual(carreta6['valor'], str(n))
+        self.assertEqual(carreta7['valor'], str(q))
+        self.assertEqual(carreta6['antt'], str(antt7))
+        self.assertEqual(truck['valor'], '1368.14')
+        self.assertEqual(carreta6['valor'], '1555.36')
+        self.assertEqual(carreta7['valor'], '1825.45')
+        ate499 = next(item for item in faixas[0]['tarifas'] if item['key'] == 'ate499')
+        self.assertEqual(ate499['valor'], str(round2(k / Decimal('5'))))
+        self.assertEqual(faixas[0]['freteMinimo'], str(round2(Decimal('0.499') * (k / Decimal('5')))))
+
+    def test_calcular_trecho_segue_vlookup_faixa_planilha(self):
+        """Transferência oficial: frete pela faixa (kmAte), não pelo km exato."""
+        from apps.comercial.proposta_tarifas import calcular_trecho
+
+        # km 540 → faixa 501–600 (kmAte 600) → Truck 5868.37 na SIMULAÇÃO
+        truck = calcular_trecho(
+            cliente_id=None,
+            origem='Ibiporã-PR',
+            destino='Dourados-MS',
+            veiculo_key='de9000',
+            km=540,
+        )
+        self.assertEqual(truck['tarifaFrete'], '5868.37')
+        self.assertEqual(truck['kmFaixaAte'], 600)
+        self.assertEqual(truck['pedagio'], '')
+        self.assertEqual(truck['gris'], '0,15%')
+
+        # km 1265 → faixa 1201–1400 → Carreta 6 = 15551.80 (margem 25%)
+        c6 = calcular_trecho(
+            cliente_id=None,
+            origem='Resende-RJ',
+            destino='Dourados-MS',
+            veiculo_key='de14001',
+            km=1265,
+        )
+        self.assertEqual(c6['tarifaFrete'], '15551.80')
+        self.assertEqual(c6['kmFaixaAte'], 1400)
+
 
     def test_albaugh_distribuicao_calculo(self):
         from apps.comercial.tabela_distribuicao import (

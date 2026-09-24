@@ -91,7 +91,14 @@ def send_gmail_as_user(user, email_obj: EmailMessage) -> None:
         )
 
     mime = _prepare_mime(user, email_obj, google_email)
-    raw = base64.urlsafe_b64encode(mime.as_bytes()).decode('ascii').rstrip('=')
+    raw_bytes = mime.as_bytes()
+    # Gmail limita ~25 MB; base64 aumenta ~4/3.
+    if len(raw_bytes) > 18 * 1024 * 1024:
+        raise ValueError(
+            'O PDF da proposta ficou grande demais para enviar pelo Gmail. '
+            'Use Imprimir e anexe o arquivo manualmente, ou reduza o conteúdo da proposta.'
+        )
+    raw = base64.urlsafe_b64encode(raw_bytes).decode('ascii').rstrip('=')
     payload = json.dumps({'raw': raw}).encode('utf-8')
     request = urllib.request.Request(
         'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
@@ -103,8 +110,12 @@ def send_gmail_as_user(user, email_obj: EmailMessage) -> None:
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=90) as response:
             response.read()
     except urllib.error.HTTPError as exc:
         body = exc.read().decode('utf-8', errors='replace')
         raise ValueError(format_gmail_http_error(exc.code, body)) from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise ValueError(
+            'Não foi possível concluir o envio pelo Gmail (rede ou tempo esgotado). Tente novamente.'
+        ) from exc

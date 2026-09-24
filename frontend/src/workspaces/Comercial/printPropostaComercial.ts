@@ -1,6 +1,6 @@
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import logoTranscamila from '../../assets/logo-transcamila-30-anos.png';
+import logoIndicadores from '../../assets/Logo_Indicadores.png';
 import { apiService } from '../../services/apiService';
 import type {
   ClienteComercial,
@@ -20,12 +20,31 @@ import {
   CONDICOES_FRETE_PADRAO,
   PROPOSTA_COMERCIAL_STATUS_LABEL,
   PROPOSTA_COMERCIAL_TIPO_LABEL,
+  propostaIncluiArmazenagem,
+  rotuloNumeroProposta,
 } from '../../types/domain';
 
-const A4_LANDSCAPE_PX = 1123;
-const A4_LANDSCAPE_HEIGHT_PX = 794;
 const A4_PORTRAIT_PX = 794;
 const A4_PORTRAIT_HEIGHT_PX = 1123;
+
+const logoPdfFallbackUrl = () => new URL(logoIndicadores, window.location.href).href;
+
+async function resolveLogoPdfUrl(): Promise<string> {
+  try {
+    const parametros = await apiService.getParametrosComercial();
+    if (parametros.logoPdfUrl) return parametros.logoPdfUrl;
+  } catch {
+    /* usa fallback estático */
+  }
+  return logoPdfFallbackUrl();
+}
+
+/** Logo ativa durante a geração do PDF (definida em generatePropostaComercialPdfBlob). */
+let activeLogoPdfUrl = '';
+/** Cargo do assinante na geração do PDF. */
+let activeAssinaturaCargo = '';
+
+const logoPdfUrlAtual = () => activeLogoPdfUrl || logoPdfFallbackUrl();
 
 const escapeHtml = (value: string) =>
   value
@@ -61,51 +80,116 @@ const field = (label: string, value: string) => `
   </div>
 `;
 
-const buildDestinosTable = (proposta: PropostaComercial) => {
+/** Status só no PDF quando a proposta foi aceita ou recusada. */
+const fieldStatusProposta = (proposta: PropostaComercial) => (
+  proposta.status === 'aprovada' || proposta.status === 'recusada'
+    ? field('Status da proposta', dash(PROPOSTA_COMERCIAL_STATUS_LABEL[proposta.status]))
+    : ''
+);
+
+const destinosGrisAdvUnificado = (proposta: PropostaComercial) => {
+  if (proposta.tabelaDistribuicao?.grisAdvUnificado) return true;
+  const linhas = proposta.linhas ?? [];
+  const comTaxa = linhas.filter((linha) => String(linha.gris ?? '').trim() || String(linha.adValorem ?? '').trim());
+  return comTaxa.length > 0 && comTaxa.every((linha) => String(linha.gris ?? '').trim() === String(linha.adValorem ?? '').trim());
+};
+
+const buildDestinosTable = (proposta: PropostaComercial, modalidade: 'transferencia' | 'op_portuaria' = 'transferencia') => {
   if (proposta.tipo !== 'transporte_rodoviario') return '';
-  const linhas = proposta.linhas.filter((linha) =>
-    [linha.origem, linha.entrega, linha.veiculo, linha.tarifaFrete, linha.pedagio].some((item) => String(item ?? '').trim()),
+  const linhas = proposta.linhas.filter((linha) => {
+    const tipo = linha.modalidade || 'transferencia';
+    if (modalidade === 'op_portuaria') return tipo === 'op_portuaria';
+    return tipo !== 'op_portuaria';
+  }).filter((linha) =>
+    [linha.origem, linha.entrega, linha.veiculo, linha.km, linha.tarifaFrete, linha.pedagio].some((item) => String(item ?? '').trim()),
   );
-  const source = linhas.length ? linhas : proposta.linhas;
+  const source = linhas.length ? linhas : [];
+  const portuaria = modalidade === 'op_portuaria';
+  const grisAdvUnificado = destinosGrisAdvUnificado(proposta);
   const rows = source.map((linha) => `
     <tr>
       <td>${dash(linha.origem)}</td>
       <td>${dash(linha.entrega)}</td>
       <td>${dash(linha.veiculo)}</td>
+      <td>${dash(linha.km)}</td>
       <td>${formatMoneyBr(linha.tarifaFrete)}</td>
       <td>${formatMoneyBr(linha.pedagio)}</td>
-      <td>${dash(linha.gris)}</td>
-      <td>${dash(linha.adValorem)}</td>
+      ${portuaria ? `<td>${formatMoneyBr(linha.retiradaCtnt)}</td><td>${formatMoneyBr(linha.desovaCtnt)}</td>` : ''}
+      ${grisAdvUnificado
+        ? `<td>${dash(linha.gris || linha.adValorem)}</td>`
+        : `<td>${dash(linha.gris)}</td><td>${dash(linha.adValorem)}</td>`}
       <td>${dash(linha.icms)}</td>
       <td>${dash(linha.prazoDias)}</td>
     </tr>
   `).join('');
+  const colunas = (portuaria ? 12 : 10) - (grisAdvUnificado ? 1 : 0);
 
   return `
     <section class="block">
-      <h2>Destinos</h2>
+      <h2>${portuaria ? 'Logística Retroportuária de Contêiner' : 'Transferência'}</h2>
       <table class="destinos">
         <thead>
           <tr>
             <th>Origem</th>
             <th>Destino</th>
             <th>Veículo</th>
+            <th>Km</th>
             <th>Frete</th>
             <th>Pedágio</th>
-            <th>GRIS</th>
-            <th>Ad-VL</th>
+            ${portuaria ? '<th>Retirada CTNT</th><th>Desova CTNT</th>' : ''}
+            ${grisAdvUnificado ? '<th>GRIS/ADV</th>' : '<th>GRIS</th><th>Ad-VL</th>'}
             <th>ICMS</th>
             <th>Prazo</th>
           </tr>
         </thead>
-        <tbody>${rows || '<tr><td colspan="9">Nenhum destino informado.</td></tr>'}</tbody>
+        <tbody>${rows || `<tr><td colspan="${colunas}">Nenhum trecho informado.</td></tr>`}</tbody>
       </table>
     </section>
   `;
 };
 
+const buildHistoricoRevisoes = (proposta: PropostaComercial) => {
+  const itens = (proposta.historicoRevisoes ?? []).filter(
+    (item) => (item.alteracoes?.length ?? 0) > 0,
+  );
+  if (!itens.length) return '';
+
+  const blocos = [...itens].reverse().map((item) => {
+    const rotuloRev = item.revisao
+      ? `Rev. ${escapeHtml(item.revisao)}`
+      : (item.tipo === 'errata' ? 'Errata' : 'Revisão');
+    const meta = [
+      rotuloRev,
+      item.data ? formatDateBr(item.data) : '',
+      item.usuario || '',
+    ].filter(Boolean).join(' · ');
+    const alts = (item.alteracoes ?? []).map((alt) => `
+      <li>
+        <span class="rev-campo">${escapeHtml(alt.campo)}</span>
+        <span class="rev-de">${escapeHtml(alt.de)}</span>
+        <span class="rev-seta">→</span>
+        <span class="rev-para">${escapeHtml(alt.para)}</span>
+      </li>
+    `).join('');
+    return `
+      <article class="rev-bloco">
+        <header class="rev-cabecalho">${meta}</header>
+        <ul class="rev-lista">${alts}</ul>
+      </article>
+    `;
+  }).join('');
+
+  return `
+    <section class="block rev-trilha">
+      <h2>Revisão de valores</h2>
+      <p class="rev-intro">Trilha das alterações de valores entre revisões desta proposta.</p>
+      ${blocos}
+    </section>
+  `;
+};
+
 const buildArmazenagemTable = (proposta: PropostaComercial) => {
-  if (proposta.tipo !== 'armazenagem') return '';
+  if (!propostaIncluiArmazenagem(proposta)) return '';
   const tabela = proposta.tabelaArmazenagem;
   if (!tabela?.itens?.length) return '';
   const rows = tabela.itens.map((item) => `
@@ -195,7 +279,7 @@ const buildArmazenagemDocumentoHtml = (
   cliente: ClienteComercial | null | undefined,
   opcoes: ArmazHtmlOpcoes,
 ) => {
-  const logoUrl = new URL(logoTranscamila, window.location.href).href;
+  const logoUrl = logoPdfUrlAtual();
   const clienteNome = cliente?.razaoSocial || proposta.clienteNome;
   const revisao = formatDateBr(proposta.dataProposta || proposta.dataCriacao);
   return `<!DOCTYPE html>
@@ -214,31 +298,7 @@ const buildArmazenagemDocumentoHtml = (
       font: 11px/1.4 "Segoe UI", Calibri, Arial, sans-serif;
     }
     body { padding: 10mm 10mm 12mm; }
-    .brand {
-      display: inline-block;
-      margin: 0 0 10px;
-    }
-    .brand h1 {
-      margin: 0;
-      font-size: 22px;
-      font-weight: 400;
-      color: #1179b9;
-      line-height: 1.2;
-    }
-    .brand .company {
-      margin: 4px 0 0;
-      font-size: 12px;
-      font-weight: 400;
-      color: #333;
-    }
-    .brand-rule {
-      display: block;
-      height: 1px;
-      margin-top: 6px;
-      background: #2a3b66;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
+    ${brandCss(32)}
     .meta {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
@@ -333,44 +393,14 @@ const buildArmazenagemDocumentoHtml = (
       font-weight: 600;
       margin-right: 6px;
     }
-    .assinatura {
-      margin-top: 12mm;
-      break-inside: avoid;
-      page-break-inside: avoid;
-    }
-    .sign-line {
-      display: block;
-      width: 62mm;
-      height: 1px;
-      background: #4a4a4a;
-      margin-bottom: 6px;
-    }
-    .sign-name {
-      margin: 0;
-      font-size: 12px;
-      color: #333;
-    }
-    .page-footer {
-      margin-top: 10mm;
-      height: 18mm;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      gap: 12px;
-    }
-    .logo-30 { height: 32px; width: auto; }
-    .page-ornament { width: 52%; height: 16mm; max-width: 88mm; }
+    ${assinaturaCss('88mm')}
   </style>
 </head>
 <body>
   ${opcoes.includeMeta ? `
-  <header class="brand">
-    <h1>Proposta comercial — ${escapeHtml(PROPOSTA_COMERCIAL_TIPO_LABEL[proposta.tipo])}</h1>
-    <p class="company">Transcamila Cargas E Armazéns Gerais Ltda.</p>
-    <span class="brand-rule"></span>
-  </header>
+  ${buildBrandHeaderHtml('Proposta comercial', logoUrl, PROPOSTA_COMERCIAL_TIPO_LABEL[proposta.tipo])}
   <section class="meta">
-    ${field('Número da proposta', dash(proposta.numeroIdentificacao))}
+    ${field('Número da proposta', dash(rotuloNumeroProposta(proposta.numeroIdentificacao, proposta.revisao)))}
     ${field('Cliente', dash(clienteNome))}
     ${field('CNPJ', dash(cliente?.cnpj))}
     ${field('Serviço', dash(PROPOSTA_COMERCIAL_TIPO_LABEL[proposta.tipo]))}
@@ -378,14 +408,14 @@ const buildArmazenagemDocumentoHtml = (
     ${field('Validade da proposta', dash(proposta.validade))}
     ${field('Vigência do contrato', dash(proposta.vigencia))}
     ${field('Faturamento', dash(proposta.faturamento))}
-    ${field('Status da proposta', dash(PROPOSTA_COMERCIAL_STATUS_LABEL[proposta.status]))}
+    ${fieldStatusProposta(proposta)}
   </section>
   ` : ''}
   ${opcoes.includeTabela ? buildArmazenagemTable(proposta) : ''}
   ${opcoes.includeCondicoes
     ? buildArmazenagemObservacoes(opcoes.obsPagina ?? observacoesArmazenagem(proposta))
     : ''}
-  ${opcoes.includeAssinatura ? buildAssinaturaHtml(proposta, logoUrl) : ''}
+  ${opcoes.includeAssinatura ? buildAssinaturaHtml(proposta) : ''}
 </body>
 </html>`;
 };
@@ -482,11 +512,11 @@ const chunk = <T,>(items: T[], size: number) => {
   return groups;
 };
 
-type PrintSecao = 'geral' | 'transferencia' | 'distribuicao';
+type PrintSecao = 'geral' | 'transferencia' | 'distribuicao' | 'portuaria';
 
 const condicoesDaSecao = (proposta: PropostaComercial, secao: PrintSecao): PropostaCondicaoComercial[] => {
   const todas = proposta.condicoes.length ? proposta.condicoes : CONDICOES_FRETE_PADRAO;
-  const tipo = secao === 'distribuicao' ? 'distribuicao' : secao === 'transferencia' ? 'frete' : undefined;
+  const tipo = secao === 'distribuicao' ? 'distribuicao' : (secao === 'transferencia' || secao === 'portuaria') ? 'frete' : undefined;
   const tipadas = tipo ? todas.filter((item) => item.tipo === tipo) : [];
   if (tipadas.length) return tipadas;
   const semTipo = todas.filter((item) => !item.tipo);
@@ -533,22 +563,131 @@ const secoesDaProposta = (proposta: PropostaComercial): PrintSecao[] => {
   if (proposta.tipo !== 'transporte_rodoviario') return ['geral'];
   const transferencia = proposta.incluiTransferencia;
   const distribuicao = proposta.incluiDistribuicao;
-  if (transferencia && distribuicao) return ['transferencia', 'distribuicao'];
-  if (distribuicao) return ['distribuicao'];
-  return ['transferencia'];
+  const portuaria = Boolean(proposta.incluiOpPortuaria);
+  const secoes: PrintSecao[] = [];
+  if (transferencia) secoes.push('transferencia');
+  if (distribuicao) secoes.push('distribuicao');
+  if (portuaria) secoes.push('portuaria');
+  if (!secoes.length) return ['transferencia'];
+  return secoes;
 };
 
-const buildAssinaturaHtml = (proposta: PropostaComercial, logoUrl: string) => `
+const buildAssinaturaHtml = (proposta: PropostaComercial) => {
+  const cargo = (activeAssinaturaCargo || '').trim();
+  return `
   <div class="assinatura">
     <span class="sign-line"></span>
     <p class="sign-name">${dash(proposta.responsavel)}</p>
+    ${cargo ? `<p class="sign-cargo">${escapeHtml(cargo)}</p>` : ''}
   </div>
   <div class="page-footer">
-    <img class="logo-30" src="${escapeHtml(logoUrl)}" alt="Transcamila Luft Logistics" />
     <svg class="page-ornament" viewBox="0 0 400 140" preserveAspectRatio="xMaxYMax meet" aria-hidden="true">
       <path d="M 6 128 H 338 Q 386 128 386 80 V 6" fill="none" stroke="#1179b9" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
   </div>
+`;
+};
+
+const buildBrandHeaderHtml = (titulo: string, logoUrl: string, secao = '') => {
+  const documento = (titulo.split('—')[0] || 'Proposta comercial').trim() || 'Proposta comercial';
+  const secaoLabel = secao.trim() || (titulo.includes('—') ? titulo.split('—').slice(1).join('—').trim() : '');
+  return `
+  <header class="brand">
+    <div class="brand-top">
+      <img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="Transcamila Luft Logistics" />
+      <div class="brand-title">
+        <p class="brand-doc">${escapeHtml(documento)}${secaoLabel ? ` · ${escapeHtml(secaoLabel)}` : ''}</p>
+        <p class="company">Transcamila Cargas E Armazéns Gerais Ltda.</p>
+      </div>
+    </div>
+    <span class="brand-rule" aria-hidden="true"></span>
+  </header>
+`;
+};
+
+const brandCss = (logoHeightPx: number) => `
+    .brand {
+      margin: 0 0 10px;
+    }
+    .brand-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-logo {
+      height: ${logoHeightPx}px;
+      width: auto;
+      max-width: 150px;
+      object-fit: contain;
+      display: block;
+      flex: 0 0 auto;
+    }
+    .brand-title {
+      min-width: 0;
+      flex: 1 1 auto;
+      padding-left: 10px;
+      border-left: 1px solid #192c4d;
+    }
+    .brand-doc {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: #1179b9;
+      line-height: 1.25;
+    }
+    .brand-title .company {
+      margin: 2px 0 0;
+      font-size: 9.5px;
+      font-weight: 400;
+      color: #64748b;
+      line-height: 1.25;
+    }
+    .brand-rule {
+      display: block;
+      height: 1px;
+      margin-top: 8px;
+      background: #192c4d;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+`;
+
+const assinaturaCss = (ornamentMaxWidth: string) => `
+    .assinatura {
+      margin-top: 12mm;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .sign-line {
+      display: block;
+      width: 62mm;
+      height: 1px;
+      background: #4a4a4a;
+      margin-bottom: 6px;
+    }
+    .sign-name {
+      margin: 0;
+      font-size: 12px;
+      color: #333;
+    }
+    .sign-cargo {
+      margin: 2px 0 0;
+      font-size: 10.5px;
+      color: #64748b;
+      line-height: 1.25;
+    }
+    .page-footer {
+      margin-top: 10mm;
+      height: 14mm;
+      display: flex;
+      justify-content: flex-end;
+      align-items: flex-end;
+    }
+    .page-ornament {
+      width: 52%;
+      height: 14mm;
+      max-width: ${ornamentMaxWidth};
+    }
 `;
 
 const buildHtml = (
@@ -558,19 +697,21 @@ const buildHtml = (
   tabela: TabelaFrete | null,
   opcoes: HtmlOpcoes,
 ) => {
-  const logoUrl = new URL(logoTranscamila, window.location.href).href;
-  const isPortrait = false;
+  const logoUrl = logoPdfUrlAtual();
+  const isPortrait = true;
   const tituloSecao = secao === 'distribuicao'
     ? 'Distribuição'
-    : secao === 'transferencia'
-      ? 'Transferência'
-      : '';
+    : secao === 'portuaria'
+      ? 'Logística Retroportuária de Contêiner'
+      : secao === 'transferencia'
+        ? 'Transferência'
+        : '';
   const closingHtml = `
   ${opcoes.includeCondicoes ? buildCondicoesTable(proposta, secao, 3, opcoes.condicoesPagina) : ''}
   ${opcoes.includeAssinatura && proposta.observacoes.trim()
     ? `<section class="block"><h2>Observações</h2><div class="obs">${escapeHtml(proposta.observacoes.trim())}</div></section>`
     : ''}
-  ${opcoes.includeAssinatura ? buildAssinaturaHtml(proposta, logoUrl) : ''}
+  ${opcoes.includeAssinatura ? buildAssinaturaHtml(proposta) : ''}
 `;
 
   return `<!DOCTYPE html>
@@ -589,31 +730,7 @@ const buildHtml = (
       font: 11px/1.35 "Segoe UI", Calibri, Arial, sans-serif;
     }
     body { padding: 10mm 10mm 12mm 10mm; }
-    .brand {
-      display: inline-block;
-      margin: 0 0 10px;
-    }
-    .brand h1 {
-      margin: 0;
-      font-size: 22px;
-      font-weight: 400;
-      color: #1179b9;
-      line-height: 1.2;
-    }
-    .brand .company {
-      margin: 4px 0 0;
-      font-size: 12px;
-      font-weight: 400;
-      color: #333;
-    }
-    .brand-rule {
-      display: block;
-      height: 1px;
-      margin-top: 6px;
-      background: #2a3b66;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
+    ${brandCss(isPortrait ? 32 : 34)}
     .meta {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
@@ -678,6 +795,10 @@ const buildHtml = (
       padding: 5px 6px 5px 0;
       border-bottom: 1px solid #ececec;
     }
+    .destinos td.alts {
+      font-size: ${isPortrait ? '7.5px' : '9px'};
+      line-height: 1.35;
+    }
     .destinos.faixas {
       width: 100%;
       margin: 0;
@@ -719,7 +840,7 @@ const buildHtml = (
       border-bottom: 1.5px solid #3a3a3a;
     }
     .destinos.faixas thead th.unit-veiculo {
-      color: #c0392b;
+      color: #192c4d;
       font-weight: 700;
     }
     .destinos.faixas td {
@@ -803,51 +924,54 @@ const buildHtml = (
       color: #333;
       font-size: 12px;
     }
-    .assinatura {
-      margin-top: 12mm;
+    .rev-trilha { margin-top: 8px; }
+    .rev-intro {
+      margin: 0 0 10px;
+      font-size: 10px;
+      color: #64748b;
+    }
+    .rev-bloco {
+      margin: 0 0 10px;
+      padding: 8px 10px;
+      border: 1px solid #e2e8f0;
+      border-left: 3px solid #1179b9;
+      border-radius: 4px;
       break-inside: avoid;
       page-break-inside: avoid;
     }
-    .sign-line {
-      display: block;
-      width: 62mm;
-      height: 1px;
-      background: #4a4a4a;
-      margin-bottom: 6px;
+    .rev-cabecalho {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #0f2744;
     }
-    .sign-name {
+    .rev-lista {
       margin: 0;
-      font-size: 12px;
-      color: #333;
+      padding: 0;
+      list-style: none;
     }
-    .page-footer {
-      margin-top: 10mm;
-      height: 18mm;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      gap: 12px;
+    .rev-lista li {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 6px;
+      align-items: baseline;
+      padding: 3px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 10px;
+      color: #334155;
     }
-    .logo-30 {
-      height: ${isPortrait ? '32px' : '40px'};
-      width: auto;
-      flex-shrink: 0;
-    }
-    .page-ornament {
-      width: 52%;
-      height: 16mm;
-      max-width: ${isPortrait ? '88mm' : '160mm'};
-    }
+    .rev-lista li:last-child { border-bottom: 0; }
+    .rev-campo { font-weight: 500; color: #0f2744; }
+    .rev-de { color: #94a3b8; text-decoration: line-through; }
+    .rev-seta { color: #1179b9; font-weight: 600; }
+    .rev-para { color: #0f2744; font-weight: 600; }
+    ${assinaturaCss(isPortrait ? '88mm' : '160mm')}
   </style>
 </head>
 <body>
-  <header class="brand">
-    <h1>Proposta comercial${tituloSecao ? ` — ${tituloSecao}` : ''}</h1>
-    <p class="company">Transcamila Cargas E Armazéns Gerais Ltda.</p>
-    <span class="brand-rule"></span>
-  </header>
+  ${buildBrandHeaderHtml('Proposta comercial', logoUrl, tituloSecao)}
   ${opcoes.includeMeta ? `<section class="meta">
-    ${field('Número da proposta', dash(proposta.numeroIdentificacao))}
+    ${field('Número da proposta', dash(rotuloNumeroProposta(proposta.numeroIdentificacao, proposta.revisao)))}
     ${field('Cliente', dash(cliente?.razaoSocial || proposta.clienteNome))}
     ${field('CNPJ', dash(cliente?.cnpj))}
     ${field('Serviço', dash(PROPOSTA_COMERCIAL_TIPO_LABEL[proposta.tipo]))}
@@ -855,11 +979,13 @@ const buildHtml = (
     ${field('Validade da proposta', dash(proposta.validade))}
     ${field('Vigência do contrato', dash(proposta.vigencia))}
     ${field('Faturamento', dash(proposta.faturamento))}
-    ${field('Status da proposta', dash(PROPOSTA_COMERCIAL_STATUS_LABEL[proposta.status]))}
+    ${fieldStatusProposta(proposta)}
   </section>` : ''}
   ${opcoes.includeTabela && secao === 'distribuicao' ? buildDistribuicaoTable(tabela, opcoes.faixasPagina) : ''}
-  ${opcoes.includeTabela && (secao === 'transferencia' || secao === 'geral') ? buildDestinosTable(proposta) : ''}
+  ${opcoes.includeTabela && (secao === 'transferencia' || secao === 'geral') ? buildDestinosTable(proposta, 'transferencia') : ''}
+  ${opcoes.includeTabela && secao === 'portuaria' ? buildDestinosTable(proposta, 'op_portuaria') : ''}
   ${opcoes.includeTabela && secao === 'geral' ? buildArmazenagemTable(proposta) : ''}
+  ${opcoes.includeAssinatura ? buildHistoricoRevisoes(proposta) : ''}
   ${closingHtml}
 </body>
 </html>`;
@@ -884,9 +1010,10 @@ const footerDaProposta = (
   _cliente?: ClienteComercial | null,
 ): RunningFooter => {
   const numero = (proposta.numeroIdentificacao || '').trim() || '—';
+  const revisao = (proposta.revisao || '').trim();
   return {
     left: 'COMERCIAL',
-    right: `PROPOSTA - ${numero}`,
+    right: revisao ? `PROPOSTA - ${numero} Rev. ${revisao}` : `PROPOSTA - ${numero}`,
   };
 };
 
@@ -925,29 +1052,30 @@ const stampCanvas = (
   const pageHeight = pdf.internal.pageSize.getHeight();
   const imgWidth = pageWidth;
   const imgHeight = (canvas.height * imgWidth) / canvas.width;
-  const imgData = canvas.toDataURL('image/png');
+  // JPEG compacto: PNG em scale 2 estoura o Gmail/proxy (ECONNRESET / falha no envio).
+  const imgData = canvas.toDataURL('image/jpeg', 0.82);
   const overflowMm = 4;
 
   if (fitOnePage || imgHeight <= pageHeight + overflowMm) {
     const scale = imgHeight > pageHeight ? pageHeight / imgHeight : 1;
-    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth * scale, imgHeight * scale);
+    pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth * scale, imgHeight * scale);
     return;
   }
 
   let heightLeft = imgHeight;
   let position = 0;
-  pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+  pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
   heightLeft -= pageHeight;
   while (heightLeft > overflowMm) {
     position -= pageHeight;
     pdf.addPage('a4', orientation);
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
     heightLeft -= pageHeight;
   }
 };
 
 const pageMetrics = (_secao?: PrintSecao) => (
-  { orientation: 'landscape' as const, widthPx: A4_LANDSCAPE_PX, heightPx: A4_LANDSCAPE_HEIGHT_PX }
+  { orientation: 'portrait' as const, widthPx: A4_PORTRAIT_PX, heightPx: A4_PORTRAIT_HEIGHT_PX }
 );
 
 const maiorQuantidadeQueCabe = async (
@@ -976,7 +1104,7 @@ const captureHtml = async (html: string, pageWidthPx: number) => {
   const { iframe, frameDocument, contentHeight } = await renderHtmlFrame(html, pageWidthPx);
   try {
     const canvas = await html2canvas(frameDocument.body, {
-      scale: 2,
+      scale: 1.5,
       useCORS: true,
       backgroundColor: '#ffffff',
       width: pageWidthPx,
@@ -1027,30 +1155,47 @@ const appendDistribuicaoPaginada = async (
     captureHtml(buildHtml(proposta, cliente, 'distribuicao', tabela, opcoes), page.widthPx)
   );
 
-  const caberNaFolha = (height: number) => height <= page.heightPx + 12;
+  const caberNaFolha = (height: number) => height <= page.heightPx + 24;
 
   const encaixarFaixas = async (
     restantes: TabelaFreteFaixa[],
     includeMeta: boolean,
     includeFechamento: boolean,
   ) => {
-    let take = Math.min(includeMeta ? 20 : 26, restantes.length);
-    let ultimo = await render({
+    const take = Math.max(1, await maiorQuantidadeQueCabe(
+      caberNaFolha,
+      (quantidade) => render({
+        includeMeta,
+        includeTabela: quantidade > 0,
+        includeCondicoes: includeFechamento,
+        includeAssinatura: includeFechamento && includeAssinatura,
+        faixasPagina: restantes.slice(0, Math.max(0, quantidade)),
+      }),
+      restantes.length,
+      false,
+    ));
+    const ultimo = await render({
       includeMeta,
       includeTabela: true,
       includeCondicoes: includeFechamento,
       includeAssinatura: includeFechamento && includeAssinatura,
       faixasPagina: restantes.slice(0, take),
     });
-    while (!caberNaFolha(ultimo.contentHeight) && take > 1) {
-      take -= 1;
-      ultimo = await render({
-        includeMeta,
-        includeTabela: true,
-        includeCondicoes: includeFechamento,
-        includeAssinatura: includeFechamento && includeAssinatura,
-        faixasPagina: restantes.slice(0, take),
-      });
+    // Se mesmo 1 faixa estourou (cabeçalho grande), ainda assim emite 1 e deixa o fitOnePage ajustar.
+    if (!caberNaFolha(ultimo.contentHeight) && take > 1) {
+      let reduzido = take;
+      let tentativa = ultimo;
+      while (!caberNaFolha(tentativa.contentHeight) && reduzido > 1) {
+        reduzido -= 1;
+        tentativa = await render({
+          includeMeta,
+          includeTabela: true,
+          includeCondicoes: includeFechamento,
+          includeAssinatura: includeFechamento && includeAssinatura,
+          faixasPagina: restantes.slice(0, reduzido),
+        });
+      }
+      return { take: reduzido, ...tentativa };
     }
     return { take, ...ultimo };
   };
@@ -1304,6 +1449,16 @@ const renderHtmlFrame = async (html: string, pageWidthPx: number) => {
 
 const loadTabelaDistribuicao = async (proposta: PropostaComercial, cliente?: ClienteComercial | null) => {
   if (!proposta.incluiDistribuicao) return null;
+  if (proposta.tabelaDistribuicao?.faixas?.length) {
+    return {
+      id: proposta.tabelaDistribuicao.tabelaId || '',
+      nome: proposta.tabelaDistribuicao.nome || 'Distribuição',
+      codigo: proposta.tabelaDistribuicao.codigo || '',
+      revisao: proposta.tabelaDistribuicao.revisaoTabela || 1,
+      faixas: proposta.tabelaDistribuicao.faixas,
+      config: { grisAdvUnificado: proposta.tabelaDistribuicao.grisAdvUnificado },
+    } as TabelaFrete;
+  }
   const clienteId = cliente?.id || proposta.clienteId;
   if (!clienteId) return null;
   const list = await apiService.getTabelasFrete({
@@ -1417,38 +1572,52 @@ const generateArmazenagemPdfBlob = async (
 export async function generatePropostaComercialPdfBlob(
   proposta: PropostaComercial,
   cliente?: ClienteComercial | null,
+  opcoes?: { cargo?: string },
 ): Promise<Blob> {
-  if (proposta.tipo === 'armazenagem') {
-    return generateArmazenagemPdfBlob(proposta, cliente);
-  }
-  const secoes = secoesDaProposta(proposta);
-  const tabela = secoes.includes('distribuicao')
-    ? await loadTabelaDistribuicao(proposta, cliente)
-    : null;
-  const ultima = secoes[secoes.length - 1];
-  let pdf: jsPDF | null = null;
+  activeLogoPdfUrl = await resolveLogoPdfUrl();
+  activeAssinaturaCargo = (opcoes?.cargo || '').trim();
+  try {
+    if (
+      propostaIncluiArmazenagem(proposta)
+      && !proposta.incluiTransferencia
+      && !proposta.incluiDistribuicao
+      && !proposta.incluiOpPortuaria
+    ) {
+      return await generateArmazenagemPdfBlob(proposta, cliente);
+    }
+    const secoes = secoesDaProposta(proposta);
+    const tabela = secoes.includes('distribuicao')
+      ? await loadTabelaDistribuicao(proposta, cliente)
+      : null;
+    const ultima = secoes[secoes.length - 1];
+    let pdf: jsPDF | null = null;
 
-  for (const secao of secoes) {
-    pdf = await appendSecaoPdf(
-      pdf,
-      proposta,
-      cliente,
-      secao,
-      tabela,
-      secao === ultima,
-    );
-  }
+    for (const secao of secoes) {
+      pdf = await appendSecaoPdf(
+        pdf,
+        proposta,
+        cliente,
+        secao,
+        tabela,
+        secao === ultima,
+      );
+    }
 
-  applyRunningFooters(pdf!, footerDaProposta(proposta, cliente));
-  return pdf!.output('blob');
+    applyRunningFooters(pdf!, footerDaProposta(proposta, cliente));
+    return pdf!.output('blob');
+  } finally {
+    activeLogoPdfUrl = '';
+    activeAssinaturaCargo = '';
+  }
 }
 
 export async function printPropostaComercial(
   proposta: PropostaComercial,
   cliente?: ClienteComercial | null,
+  opcoes?: { cargo?: string },
 ) {
   try {
-    const blob = await generatePropostaComercialPdfBlob(proposta, cliente);
+    const blob = await generatePropostaComercialPdfBlob(proposta, cliente, opcoes);
     const url = URL.createObjectURL(blob);
     document.getElementById('proposta-pdf-print-frame')?.remove();
     const iframe = document.createElement('iframe');

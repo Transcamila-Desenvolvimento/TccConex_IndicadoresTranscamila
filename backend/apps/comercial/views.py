@@ -22,6 +22,7 @@ from .models import (
     GeneralidadeComercial,
     HomologacaoProdutoEvento,
     MatrizIcmsUf,
+    ParametrosComercial,
     ProdutoComercial,
     PropostaComercial,
     PropostaComercialDraft,
@@ -41,8 +42,16 @@ from .models import (
     TIPO_TABELA_DISTRIBUICAO,
     TabelaFrete,
     TabelaFreteLinha,
+    FATURAMENTO_PROPOSTA_DEFAULT,
+    PRAZOS_FATURAMENTO_PADRAO,
+    VALIDADE_PROPOSTA_DEFAULT,
+    VALIDADES_PROPOSTA_PADRAO,
+    VIGENCIA_CONTRATO_DEFAULT,
+    VIGENCIAS_CONTRATO_PADRAO,
     ensure_generalidades,
     ensure_matriz_icms,
+    ensure_parametros_comercial,
+    _lista_opcoes,
     aplicar_padrao_generalidades,
     gravar_catalogo_generalidades,
     normalizar_homologacao,
@@ -170,6 +179,9 @@ _GERENCIAR_GENERALIDADES_DETAIL = (
 )
 _GERENCIAR_ICMS_UF_DETAIL = (
     'Acesso negado. Solicite ao administrador a função "Cadastrar e editar" de ICMS por UF.'
+)
+_GERENCIAR_PARAMETROS_DETAIL = (
+    'Acesso negado. Solicite ao administrador a função "Cadastrar e editar" de Parâmetros do Comercial.'
 )
 
 
@@ -666,6 +678,47 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         super().perform_destroy(instance)
         record_audit(self.request.user, 'comercial.proposta.excluida', f'Proposta "{titulo}" excluída.')
 
+    @action(detail=False, methods=['post'], url_path='calcular-trecho')
+    def calcular_trecho(self, request):
+        from .proposta_tarifas import calcular_trecho
+        resultado = calcular_trecho(
+            cliente_id=request.data.get('clienteId') or request.data.get('cliente_id'),
+            origem=request.data.get('origem') or '',
+            destino=request.data.get('destino') or request.data.get('entrega') or '',
+            veiculo_key=request.data.get('veiculoKey') or request.data.get('veiculo') or '',
+            km=request.data.get('km'),
+            margens=request.data.get('margensVeiculo') or request.data.get('margens'),
+        )
+        if resultado.get('erro'):
+            return Response({'detail': resultado['erro']}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(resultado)
+
+    @action(detail=False, methods=['post'], url_path='preview-distribuicao')
+    def preview_distribuicao(self, request):
+        from .proposta_tarifas import snapshot_distribuicao
+        snap = snapshot_distribuicao(
+            request.data.get('clienteId') or request.data.get('cliente_id'),
+            request.data.get('margensVeiculo') or request.data.get('margens'),
+        )
+        if not snap:
+            return Response(
+                {'detail': 'Nenhuma tabela de distribuição vigente vinculada a este cliente.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(snap)
+
+    @action(detail=True, methods=['post'], url_path='nova-revisao')
+    def nova_revisao(self, request, pk=None):
+        """Compatibilidade: não incrementa revisão.
+
+        A revisão sobe só ao salvar alterações com modoEnvio=revisao.
+        """
+        denied = _funcao_required_response(request, 'gerenciar-propostas', _GERENCIAR_PROPOSTAS_DETAIL)
+        if denied:
+            return denied
+        proposta = self.get_object()
+        return Response(self.get_serializer(proposta).data)
+
     @action(detail=False, methods=['get'], url_path='dashboard')
     def dashboard(self, request):
         qs = super().get_queryset()
@@ -1139,7 +1192,7 @@ class GeneralidadesCatalogoView(ModuleScopedViewMixin, APIView):
         tipo = (request.query_params.get('tipo') or data.get('tipo') or '').strip()
         if tipo not in TIPOS_GENERALIDADE:
             return None, Response(
-                {'detail': 'Informe o tipo de serviço (frete, distribuicao ou armazenagem).'},
+                {'detail': 'Informe o tipo de serviço (frete, distribuicao, armazenagem ou op_portuaria).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         cliente_id = str(cliente_raw or '').strip()
@@ -1297,6 +1350,154 @@ class MatrizIcmsUfView(ModuleScopedViewMixin, APIView):
         registro.matriz = aliquotas_por_uf_padrao()
         registro.save(update_fields=['matriz', 'atualizado_em'])
         record_audit(request.user, 'comercial.icms_ufs.restauradas', 'Matriz ICMS por UF restaurada ao padrão Brasil.')
+        return Response(self._payload(registro))
+
+
+def _logo_data_url(blob, content_type: str) -> str | None:
+    if not blob:
+        return None
+    import base64
+    tipo = (content_type or 'image/png').strip() or 'image/png'
+    if '/' not in tipo:
+        tipo = f'image/{tipo}'
+    encoded = base64.b64encode(bytes(blob)).decode('ascii')
+    return f'data:{tipo};base64,{encoded}'
+
+
+def _decode_logo_data_url(raw) -> tuple[bytes | None, str]:
+    texto = str(raw or '').strip()
+    if not texto:
+        return None, ''
+    if not texto.startswith('data:') or ';base64,' not in texto:
+        raise ValueError('Logo inválido. Envie uma imagem em data URL.')
+    header, _, encoded = texto.partition(';base64,')
+    tipo = header.replace('data:', '', 1).strip() or 'image/png'
+    if not tipo.startswith('image/'):
+        raise ValueError('A logo deve ser uma imagem (PNG, JPG ou WEBP).')
+    import base64
+    try:
+        data = base64.b64decode(encoded, validate=True)
+    except Exception as exc:
+        raise ValueError('Não foi possível ler a imagem da logo.') from exc
+    if not data:
+        raise ValueError('A logo está vazia.')
+    if len(data) > 2 * 1024 * 1024:
+        raise ValueError('A logo deve ter no máximo 2 MB.')
+    return data, tipo[:40]
+
+
+class ParametrosComercialView(ModuleScopedViewMixin, APIView):
+    permission_module = 'Comercial'
+    permission_requires_filial = False
+
+    def _payload(self, registro: ParametrosComercial):
+        return {
+            'validades': list(registro.validades or []),
+            'validadePadrao': registro.validade_padrao or VALIDADE_PROPOSTA_DEFAULT,
+            'vigencias': list(registro.vigencias or []),
+            'vigenciaPadrao': registro.vigencia_padrao or VIGENCIA_CONTRATO_DEFAULT,
+            'prazosFaturamento': list(registro.prazos_faturamento or []),
+            'faturamentoPadrao': registro.faturamento_padrao or FATURAMENTO_PROPOSTA_DEFAULT,
+            'logoPdfUrl': _logo_data_url(registro.logo_pdf, registro.logo_pdf_tipo),
+            'logoEmailUrl': _logo_data_url(registro.logo_email, registro.logo_email_tipo),
+            'atualizadoEm': registro.atualizado_em,
+        }
+
+    def get(self, request):
+        return Response(self._payload(ensure_parametros_comercial()))
+
+    def put(self, request):
+        denied = _funcao_required_response(request, 'gerenciar-parametros', _GERENCIAR_PARAMETROS_DETAIL)
+        if denied:
+            return denied
+        registro = ensure_parametros_comercial()
+        data = request.data if isinstance(request.data, dict) else {}
+
+        if 'validades' in data:
+            registro.validades = _lista_opcoes(data.get('validades'), VALIDADES_PROPOSTA_PADRAO)
+        if 'vigencias' in data:
+            registro.vigencias = _lista_opcoes(data.get('vigencias'), VIGENCIAS_CONTRATO_PADRAO)
+        if 'prazosFaturamento' in data or 'prazos_faturamento' in data:
+            registro.prazos_faturamento = _lista_opcoes(
+                data.get('prazosFaturamento', data.get('prazos_faturamento')),
+                PRAZOS_FATURAMENTO_PADRAO,
+            )
+
+        validade_padrao = str(data.get('validadePadrao') or data.get('validade_padrao') or '').strip()
+        if validade_padrao:
+            if validade_padrao not in registro.validades:
+                registro.validades = [*registro.validades, validade_padrao]
+            registro.validade_padrao = validade_padrao[:80]
+        elif registro.validade_padrao not in registro.validades:
+            registro.validade_padrao = registro.validades[0] if registro.validades else VALIDADE_PROPOSTA_DEFAULT
+
+        vigencia_padrao = str(data.get('vigenciaPadrao') or data.get('vigencia_padrao') or '').strip()
+        if vigencia_padrao:
+            if vigencia_padrao not in registro.vigencias:
+                registro.vigencias = [*registro.vigencias, vigencia_padrao]
+            registro.vigencia_padrao = vigencia_padrao[:80]
+        elif registro.vigencia_padrao not in registro.vigencias:
+            registro.vigencia_padrao = registro.vigencias[0] if registro.vigencias else VIGENCIA_CONTRATO_DEFAULT
+
+        faturamento_padrao = str(data.get('faturamentoPadrao') or data.get('faturamento_padrao') or '').strip()
+        if faturamento_padrao:
+            if faturamento_padrao not in registro.prazos_faturamento:
+                registro.prazos_faturamento = [*registro.prazos_faturamento, faturamento_padrao]
+            registro.faturamento_padrao = faturamento_padrao[:120]
+        elif registro.faturamento_padrao not in registro.prazos_faturamento:
+            registro.faturamento_padrao = (
+                registro.prazos_faturamento[0] if registro.prazos_faturamento else FATURAMENTO_PROPOSTA_DEFAULT
+            )
+
+        try:
+            if 'logoPdfUrl' in data or 'logo_pdf_url' in data:
+                raw = data.get('logoPdfUrl', data.get('logo_pdf_url'))
+                if raw in (None, ''):
+                    registro.logo_pdf = None
+                    registro.logo_pdf_tipo = ''
+                else:
+                    blob, tipo = _decode_logo_data_url(raw)
+                    registro.logo_pdf = blob
+                    registro.logo_pdf_tipo = tipo
+            if 'logoEmailUrl' in data or 'logo_email_url' in data:
+                raw = data.get('logoEmailUrl', data.get('logo_email_url'))
+                if raw in (None, ''):
+                    registro.logo_email = None
+                    registro.logo_email_tipo = ''
+                else:
+                    blob, tipo = _decode_logo_data_url(raw)
+                    registro.logo_email = blob
+                    registro.logo_email_tipo = tipo
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        registro.save()
+        record_audit(request.user, 'comercial.parametros.atualizados', 'Parâmetros do Comercial atualizados.')
+        return Response(self._payload(registro))
+
+    def post(self, request):
+        denied = _funcao_required_response(request, 'gerenciar-parametros', _GERENCIAR_PARAMETROS_DETAIL)
+        if denied:
+            return denied
+        acao = (request.data.get('acao') or '').strip()
+        if acao != 'restaurar-padrao':
+            return Response({'detail': 'Ação inválida.'}, status=status.HTTP_400_BAD_REQUEST)
+        registro = ensure_parametros_comercial()
+        registro.validades = list(VALIDADES_PROPOSTA_PADRAO)
+        registro.validade_padrao = VALIDADE_PROPOSTA_DEFAULT
+        registro.vigencias = list(VIGENCIAS_CONTRATO_PADRAO)
+        registro.vigencia_padrao = VIGENCIA_CONTRATO_DEFAULT
+        registro.prazos_faturamento = list(PRAZOS_FATURAMENTO_PADRAO)
+        registro.faturamento_padrao = FATURAMENTO_PROPOSTA_DEFAULT
+        registro.save(update_fields=[
+            'validades', 'validade_padrao', 'vigencias', 'vigencia_padrao',
+            'prazos_faturamento', 'faturamento_padrao', 'atualizado_em',
+        ])
+        record_audit(
+            request.user,
+            'comercial.parametros.restaurados',
+            'Listas de validade, vigência e faturamento restauradas ao padrão.',
+        )
         return Response(self._payload(registro))
 
 

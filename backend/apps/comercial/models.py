@@ -515,22 +515,34 @@ STATUS_PROPOSTA_CHOICES = [
 TIPO_GENERALIDADE_FRETE = 'frete'
 TIPO_GENERALIDADE_DISTRIBUICAO = 'distribuicao'
 TIPO_GENERALIDADE_ARMAZENAGEM = 'armazenagem'
+TIPO_GENERALIDADE_OP_PORTUARIA = 'op_portuaria'
 TIPO_GENERALIDADE_CHOICES = [
     (TIPO_GENERALIDADE_FRETE, 'Transferência'),
     (TIPO_GENERALIDADE_DISTRIBUICAO, 'Distribuição'),
     (TIPO_GENERALIDADE_ARMAZENAGEM, 'Armazenagem'),
+    (TIPO_GENERALIDADE_OP_PORTUARIA, 'Logística Retroportuária'),
 ]
 TIPOS_GENERALIDADE = {key for key, _label in TIPO_GENERALIDADE_CHOICES}
 
 
-def tipos_servico_generalidade(tipo_proposta, inclui_transferencia=False, inclui_distribuicao=False):
-    if tipo_proposta == TIPO_PROPOSTA_ARMAZENAGEM:
+def tipos_servico_generalidade(
+    tipo_proposta,
+    inclui_transferencia=False,
+    inclui_distribuicao=False,
+    inclui_armazenagem=False,
+    inclui_op_portuaria=False,
+):
+    if tipo_proposta == TIPO_PROPOSTA_ARMAZENAGEM and not inclui_transferencia and not inclui_distribuicao and not inclui_op_portuaria:
         return [TIPO_GENERALIDADE_ARMAZENAGEM]
     tipos = []
     if inclui_distribuicao:
         tipos.append(TIPO_GENERALIDADE_DISTRIBUICAO)
     if inclui_transferencia:
         tipos.append(TIPO_GENERALIDADE_FRETE)
+    if inclui_op_portuaria:
+        tipos.append(TIPO_GENERALIDADE_OP_PORTUARIA)
+    if inclui_armazenagem or tipo_proposta == TIPO_PROPOSTA_ARMAZENAGEM:
+        tipos.append(TIPO_GENERALIDADE_ARMAZENAGEM)
     return tipos
 
 
@@ -650,6 +662,8 @@ def catalogo_generalidades_padrao(tipo_servico):
         return CONSIDERACOES_DISTRIBUICAO_PADRAO
     if tipo_servico == TIPO_GENERALIDADE_ARMAZENAGEM:
         return OBSERVACOES_ARMAZENAGEM_PADRAO
+    if tipo_servico == TIPO_GENERALIDADE_OP_PORTUARIA:
+        return CONDICOES_FRETE_PADRAO
     return CONDICOES_FRETE_PADRAO
 
 
@@ -671,7 +685,7 @@ class PropostaComercial(models.Model):
     )
     titulo = models.CharField(max_length=200, verbose_name='Título')
     subtitulo = models.CharField(max_length=240, blank=True, default='', verbose_name='Subtítulo')
-    revisao = models.CharField(max_length=10, blank=True, default='01', verbose_name='Revisão')
+    revisao = models.CharField(max_length=10, blank=True, default='', verbose_name='Revisão')
     data_proposta = models.DateField(null=True, blank=True, verbose_name='Data da proposta')
     proposta_referente = models.CharField(max_length=200, blank=True, default='')
     responsavel = models.CharField(max_length=150, blank=True, default='', verbose_name='Responsável')
@@ -692,12 +706,18 @@ class PropostaComercial(models.Model):
     observacoes = models.TextField(blank=True, default='')
     inclui_transferencia = models.BooleanField(default=False, verbose_name='Transferência')
     inclui_distribuicao = models.BooleanField(default=False, verbose_name='Distribuição')
+    inclui_armazenagem = models.BooleanField(default=False, verbose_name='Armazenagem')
+    inclui_op_portuaria = models.BooleanField(default=False, verbose_name='Op. Portuária')
     condicoes = models.JSONField(default=list, blank=True, verbose_name='Generalidades e condições')
     tabela_armazenagem = models.JSONField(
         default=dict,
         blank=True,
         verbose_name='Tabela de armazenagem',
     )
+    margens_veiculo = models.JSONField(default=list, blank=True, verbose_name='Margens da proposta')
+    tabela_distribuicao = models.JSONField(default=dict, blank=True, verbose_name='Snapshot da tabela de distribuição')
+    historico_revisoes = models.JSONField(default=list, blank=True, verbose_name='Trilha de revisões')
+    modo_envio = models.CharField(max_length=20, blank=True, default='', verbose_name='Próximo envio')
     ano = models.PositiveIntegerField(null=True, blank=True, db_index=True, verbose_name='Ano da numeração')
     numero = models.PositiveIntegerField(null=True, blank=True, verbose_name='Número da proposta')
     data_criacao = models.DateTimeField(auto_now_add=True)
@@ -745,6 +765,8 @@ class PropostaComercial(models.Model):
     def save(self, *args, **kwargs):
         if self.tipo in {'frete', 'transporte_container'}:
             self.tipo = TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO
+        if self.tipo == TIPO_PROPOSTA_ARMAZENAGEM:
+            self.inclui_armazenagem = True
         self.titulo = ' '.join((self.titulo or '').split())
         if not self.titulo:
             servico = dict(TIPO_PROPOSTA_CHOICES).get(self.tipo, 'Proposta')
@@ -757,6 +779,8 @@ class PropostaComercial(models.Model):
                     self.tipo,
                     self.inclui_transferencia,
                     self.inclui_distribuicao,
+                    self.inclui_armazenagem,
+                    self.inclui_op_portuaria,
                 ),
             )
         if self.cliente_id:
@@ -838,11 +862,20 @@ class PropostaFreteLinha(models.Model):
     origem = models.CharField(max_length=120, blank=True, default='')
     entrega = models.CharField(max_length=120, blank=True, default='', verbose_name='Destino')
     veiculo = models.CharField(max_length=80, blank=True, default='', verbose_name='Veículo')
+    veiculo_key = models.CharField(max_length=40, blank=True, default='')
+    modalidade = models.CharField(max_length=20, blank=True, default='transferencia')
+    km = models.CharField(max_length=20, blank=True, default='')
     devolucao_container = models.CharField(max_length=120, blank=True, default='', verbose_name='Dev. CTNR')
     observacoes = models.CharField(max_length=200, blank=True, default='')
     peso = models.CharField(max_length=40, blank=True, default='')
     tarifa_frete = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     pedagio = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    retirada_ctnt = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True, verbose_name='Retirada CTNT',
+    )
+    desova_ctnt = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True, verbose_name='Desova CTNT',
+    )
     ad_valorem = models.CharField(max_length=20, blank=True, default='', verbose_name='Ad-VL')
     gris = models.CharField(max_length=20, blank=True, default='', verbose_name='GRIS')
     icms = models.CharField(max_length=40, blank=True, default='Não incluso')
@@ -855,10 +888,9 @@ class PropostaFreteLinha(models.Model):
         verbose_name_plural = 'Linhas de frete'
 
     def save(self, *args, **kwargs):
-        tarifa = self.tarifa_frete or 0
-        pedagio = self.pedagio or 0
-        if self.tarifa_frete is not None or self.pedagio is not None:
-            self.total_estimado = tarifa + pedagio
+        partes = [self.tarifa_frete, self.pedagio, self.retirada_ctnt, self.desova_ctnt]
+        if any(valor is not None for valor in partes):
+            self.total_estimado = sum((valor or 0) for valor in partes)
         super().save(*args, **kwargs)
 
 
@@ -1215,6 +1247,95 @@ class MatrizIcmsUf(models.Model):
 
     def __str__(self):
         return 'Matriz ICMS por UF'
+
+
+class ParametrosComercial(models.Model):
+    logo_pdf = models.BinaryField(null=True, blank=True, verbose_name='Logo do PDF da proposta')
+    logo_pdf_tipo = models.CharField(max_length=40, blank=True, default='')
+    logo_email = models.BinaryField(null=True, blank=True, verbose_name='Logo do e-mail da proposta')
+    logo_email_tipo = models.CharField(max_length=40, blank=True, default='')
+    validades = models.JSONField(default=list, blank=True, verbose_name='Validades das propostas')
+    validade_padrao = models.CharField(max_length=80, blank=True, default='')
+    prazos_faturamento = models.JSONField(default=list, blank=True, verbose_name='Prazos de faturamento')
+    faturamento_padrao = models.CharField(max_length=120, blank=True, default='')
+    vigencias = models.JSONField(default=list, blank=True, verbose_name='Vigências do contrato')
+    vigencia_padrao = models.CharField(max_length=80, blank=True, default='')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Parâmetros do Comercial'
+        verbose_name_plural = 'Parâmetros do Comercial'
+
+    def __str__(self):
+        return 'Parâmetros do Comercial'
+
+
+VALIDADES_PROPOSTA_PADRAO = ['5 dias', '7 dias', '15 dias', '30 dias', '45 dias', '60 dias']
+VIGENCIAS_CONTRATO_PADRAO = ['3 meses', '6 meses', '12 meses', '24 meses', '36 meses', 'Indeterminada']
+PRAZOS_FATURAMENTO_PADRAO = [
+    'Semanal',
+    'Quinzenal',
+    'Mensal',
+    'Semanal / 15 DDL',
+    'Semanal / 30 DDL',
+    'Quinzenal / 30 DDL',
+    'Mensal / 30 DDL',
+    '15 DDL',
+    '30 DDL',
+    '45 DDL',
+]
+VALIDADE_PROPOSTA_DEFAULT = '30 dias'
+VIGENCIA_CONTRATO_DEFAULT = '12 meses'
+FATURAMENTO_PROPOSTA_DEFAULT = 'Semanal / 30 DDL'
+
+
+def _lista_opcoes(raw, padrao):
+    if not isinstance(raw, list):
+        return list(padrao)
+    limpas = []
+    vistas = set()
+    for item in raw:
+        texto = str(item or '').strip()
+        if not texto or texto in vistas:
+            continue
+        vistas.add(texto)
+        limpas.append(texto[:120])
+    return limpas or list(padrao)
+
+
+def ensure_parametros_comercial():
+    registro = ParametrosComercial.objects.first()
+    if registro:
+        mudou = False
+        if not registro.validades:
+            registro.validades = list(VALIDADES_PROPOSTA_PADRAO)
+            mudou = True
+        if not registro.vigencias:
+            registro.vigencias = list(VIGENCIAS_CONTRATO_PADRAO)
+            mudou = True
+        if not registro.prazos_faturamento:
+            registro.prazos_faturamento = list(PRAZOS_FATURAMENTO_PADRAO)
+            mudou = True
+        if not registro.validade_padrao:
+            registro.validade_padrao = VALIDADE_PROPOSTA_DEFAULT
+            mudou = True
+        if not registro.vigencia_padrao:
+            registro.vigencia_padrao = VIGENCIA_CONTRATO_DEFAULT
+            mudou = True
+        if not registro.faturamento_padrao:
+            registro.faturamento_padrao = FATURAMENTO_PROPOSTA_DEFAULT
+            mudou = True
+        if mudou:
+            registro.save()
+        return registro
+    return ParametrosComercial.objects.create(
+        validades=list(VALIDADES_PROPOSTA_PADRAO),
+        validade_padrao=VALIDADE_PROPOSTA_DEFAULT,
+        vigencias=list(VIGENCIAS_CONTRATO_PADRAO),
+        vigencia_padrao=VIGENCIA_CONTRATO_DEFAULT,
+        prazos_faturamento=list(PRAZOS_FATURAMENTO_PADRAO),
+        faturamento_padrao=FATURAMENTO_PROPOSTA_DEFAULT,
+    )
 
 
 def ensure_matriz_icms():

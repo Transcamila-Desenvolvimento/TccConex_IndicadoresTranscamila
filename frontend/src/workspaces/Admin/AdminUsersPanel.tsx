@@ -95,6 +95,7 @@ const AdminUsersPanel: React.FC = () => {
   // Form states
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
+  const [cargo, setCargo] = useState('');
   const [password, setPassword] = useState('');
   const [roleId, setRoleId] = useState('2');
   const [status, setStatus] = useState('ativo');
@@ -153,6 +154,7 @@ const AdminUsersPanel: React.FC = () => {
     setEditingUserId(null);
     setUsername('');
     setName('');
+    setCargo('');
     setPassword('');
     setRoleId(defaultRoleId);
     setStatus('ativo');
@@ -168,6 +170,7 @@ const AdminUsersPanel: React.FC = () => {
     setEditingUserId(user.id);
     setUsername(user.username);
     setName(user.name);
+    setCargo(user.cargo || '');
     setPassword('');
     setRoleId(user.roleId);
     setStatus(user.status);
@@ -251,7 +254,18 @@ const AdminUsersPanel: React.FC = () => {
       Object.entries(funcoes).filter(([module, keys]) => environments.includes(module) && keys.length > 0),
     );
 
-    const userData: any = { username, name, roleId, status, environments, filiais, indicadores, funcoes: funcoesFiltradas, abas };
+    const userData: any = {
+      username,
+      name,
+      cargo: cargo.trim(),
+      roleId,
+      status,
+      environments,
+      filiais,
+      indicadores,
+      funcoes: funcoesFiltradas,
+      abas,
+    };
     if (password) userData.password = password;
 
     try {
@@ -552,6 +566,7 @@ const AdminUsersPanel: React.FC = () => {
                   </th>
                   <th>Usuário</th>
                   <th>Nome Completo</th>
+                  <th>Cargo</th>
                   <th>Conta Google</th>
                   <th>Função</th>
                   <th>Status</th>
@@ -562,7 +577,7 @@ const AdminUsersPanel: React.FC = () => {
               <tbody>
                 {usersQueryState.canShowEmpty && usersList.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
+                    <td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
                       Nenhum usuário operacional cadastrado com os filtros ativos.
                     </td>
                   </tr>
@@ -598,6 +613,13 @@ const AdminUsersPanel: React.FC = () => {
                           </div>
                         </td>
                         <td>{u.name}</td>
+                        <td>
+                          {(u.cargo || '').trim() ? (
+                            u.cargo
+                          ) : (
+                            <small style={{ color: 'var(--text-muted)' }}>—</small>
+                          )}
+                        </td>
                         <td>
                           {googleEmail ? (
                             <span title={googleEmail}>{googleEmail}</span>
@@ -710,6 +732,20 @@ const AdminUsersPanel: React.FC = () => {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       autoComplete="off"
+                    />
+                  </div>
+                </div>
+                <div className="admin-form-row" style={{ marginTop: '10px' }}>
+                  <div className="login-group">
+                    <label htmlFor="admin-user-cargo">Cargo <small style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(opcional)</small></label>
+                    <input
+                      type="text"
+                      id="admin-user-cargo"
+                      placeholder="Ex: Analista Comercial"
+                      maxLength={120}
+                      value={cargo}
+                      onChange={(e) => setCargo(e.target.value)}
+                      autoComplete="organization-title"
                     />
                   </div>
                 </div>

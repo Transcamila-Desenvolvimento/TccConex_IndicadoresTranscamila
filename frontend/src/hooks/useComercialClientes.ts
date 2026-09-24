@@ -14,6 +14,7 @@ import type {
   TabelaFretePayload,
   TabelaFreteQueryParams,
   IcmsUfAliquotas,
+  ParametrosComercialPayload,
   ProdutoComercialPayload,
   ProdutoComercialLotePayload,
   ProdutoComercialQueryParams,
@@ -41,6 +42,7 @@ export function bumpPropostaDraftGen(queryClient: ReturnType<typeof useQueryClie
 export const COMERCIAL_TABELA_FRETE_KEY = ['comercial', 'tabela-frete'] as const;
 export const COMERCIAL_GENERALIDADES_KEY = ['comercial', 'generalidades'] as const;
 export const COMERCIAL_ICMS_UFS_KEY = ['comercial', 'icms-ufs'] as const;
+export const COMERCIAL_PARAMETROS_KEY = ['comercial', 'parametros'] as const;
 export const COMERCIAL_PRODUTOS_KEY = ['comercial', 'produtos'] as const;
 
 export function useClienteComercial(id: string | null) {
@@ -183,7 +185,7 @@ export function useDeletePropostaComercialDraft() {
           clienteNome: '',
           titulo: '',
           subtitulo: '',
-          revisao: '01',
+          revisao: '',
           dataProposta: '',
           propostaReferente: '',
           responsavel: '',
@@ -197,6 +199,7 @@ export function useDeletePropostaComercialDraft() {
           observacoes: '',
           incluiTransferencia: false,
           incluiDistribuicao: false,
+          incluiArmazenagem: false,
           condicoes: [],
           condicoesTransferencia: [],
           condicoesDistribuicao: [],
@@ -230,6 +233,38 @@ export function useUpdatePropostaComercial() {
       queryClient.invalidateQueries({ queryKey: COMERCIAL_CLIENTES_KEY });
       queryClient.invalidateQueries({ queryKey: COMERCIAL_GENERALIDADES_KEY });
     },
+  });
+}
+
+export function useNovaRevisaoPropostaComercial() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.novaRevisaoPropostaComercial(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: COMERCIAL_PROPOSTAS_KEY });
+    },
+  });
+}
+
+export function useCalcularTrechoProposta() {
+  return useMutation({
+    mutationFn: (payload: {
+      clienteId?: string | null;
+      origem: string;
+      destino: string;
+      veiculoKey: string;
+      km: string | number;
+      margensVeiculo?: Array<{ bandaKey: string; margem: string }>;
+    }) => apiService.calcularTrechoProposta(payload),
+  });
+}
+
+export function usePreviewDistribuicaoProposta() {
+  return useMutation({
+    mutationFn: (payload: {
+      clienteId?: string | null;
+      margensVeiculo?: Array<{ bandaKey: string; margem: string }>;
+    }) => apiService.previewDistribuicaoProposta(payload),
   });
 }
 
@@ -464,8 +499,16 @@ export function useComercialGeneralidadesProposta(
   tipoProposta: PropostaComercialTipo,
   incluiTransferencia: boolean,
   incluiDistribuicao: boolean,
+  incluiArmazenagem = false,
+  incluiOpPortuaria = false,
 ) {
-  const tipos = tiposGeneralidadeDaProposta(tipoProposta, incluiTransferencia, incluiDistribuicao);
+  const tipos = tiposGeneralidadeDaProposta(
+    tipoProposta,
+    incluiTransferencia,
+    incluiDistribuicao,
+    incluiArmazenagem,
+    incluiOpPortuaria,
+  );
   const primeiro = useComercialGeneralidades(clienteId, tipos[0] ?? null);
   const segundo = useComercialGeneralidades(clienteId, tipos[1] ?? null);
   const items = mergeGeneralidades(primeiro.data?.items, segundo.data?.items, tipos.length);
@@ -550,6 +593,35 @@ export function useRestaurarComercialIcmsUfs() {
   return useMutation({
     mutationFn: () => apiService.restaurarIcmsUfsComercial(),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: COMERCIAL_ICMS_UFS_KEY }),
+  });
+}
+
+export function useComercialParametros() {
+  return useQuery({
+    queryKey: COMERCIAL_PARAMETROS_KEY,
+    queryFn: () => apiService.getParametrosComercial(),
+  });
+}
+
+export function useSaveComercialParametros() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ParametrosComercialPayload) => apiService.saveParametrosComercial(payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(COMERCIAL_PARAMETROS_KEY, data);
+      queryClient.invalidateQueries({ queryKey: COMERCIAL_PARAMETROS_KEY });
+    },
+  });
+}
+
+export function useRestaurarComercialParametros() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiService.restaurarParametrosComercial(),
+    onSuccess: (data) => {
+      queryClient.setQueryData(COMERCIAL_PARAMETROS_KEY, data);
+      queryClient.invalidateQueries({ queryKey: COMERCIAL_PARAMETROS_KEY });
+    },
   });
 }
 

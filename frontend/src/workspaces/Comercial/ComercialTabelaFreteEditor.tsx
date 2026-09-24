@@ -31,6 +31,7 @@ import type {
   TabelaFretePassoKm,
   TabelaFretePrazoRegra,
   TabelaFreteStatus,
+  TabelaFreteVeiculoTarifa,
 } from '../../types/domain';
 import ComercialTabelaFreteSimulador from './ComercialTabelaFreteSimulador';
 import ComercialTabelaFreteStatusBadge from './ComercialTabelaFreteStatusBadge';
@@ -83,6 +84,44 @@ const CALCULO_COLUNA_OPTIONS: TabelaFreteColunaCalculo[] = [
   'percentual_frete',
   'por_tonelada',
   'por_km',
+];
+
+const rotuloColunaAntt = (item?: TabelaFreteVeiculoTarifa | null) => {
+  const rotulo = (item?.rotulo || '').toLowerCase();
+  if (rotulo.includes('7')) return 'ANTT - 7 eixos';
+  if (rotulo.includes('6')) return 'ANTT - 6 eixos';
+  return 'ANTT';
+};
+
+const itemConsultaAntt = (
+  item: TabelaFreteVeiculoTarifa | undefined,
+  veiculos: TabelaFreteVeiculoTarifa[],
+) => {
+  if (!item) return item;
+  if (item.anttConsultaBandaKey) {
+    const outro = veiculos.find((veiculo) => veiculo.bandaKey === item.anttConsultaBandaKey);
+    if (outro) return outro;
+  }
+  const rotulo = (item.rotulo || '').toLowerCase();
+  if (rotulo.includes('6')) {
+    const sete = veiculos.find((veiculo) => (veiculo.rotulo || '').toLowerCase().includes('7'));
+    if (sete) return sete;
+  }
+  return item;
+};
+
+const TIPOS_VEICULO_ANTT: Array<Pick<TabelaFreteVeiculoTarifa, 'bandaKey' | 'rotulo' | 'anttConsultaBandaKey'>> = [
+  { bandaKey: 'de9000', rotulo: 'Truck' },
+  { bandaKey: 'de14001', rotulo: 'Carreta 6 eixos', anttConsultaBandaKey: 'acima26001' },
+  { bandaKey: 'acima26001', rotulo: 'Carreta 7 eixos' },
+];
+
+const ANTT_FONTE_MODELO = 'Resolução ANTT nº 6.084/2026 — 17/07/2026';
+const ANTT_DATA_MODELO = '2026-07-17';
+const VEICULOS_ANTT_MODELO: TabelaFreteVeiculoTarifa[] = [
+  { ...TIPOS_VEICULO_ANTT[0], anttFixo: '642.55', anttPorKm: '5.4821', margem: '0.33' },
+  { ...TIPOS_VEICULO_ANTT[1], anttFixo: '777.73', anttPorKm: '7.7758', margem: '0.25' },
+  { ...TIPOS_VEICULO_ANTT[2], anttFixo: '942.48', anttPorKm: '8.5321', margem: '0.25' },
 ];
 
 type FreteForm = {
@@ -202,7 +241,9 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
   const [historicoOpen, setHistoricoOpen] = useState(false);
   const [regrasOpen, setRegrasOpen] = useState(false);
   const [bandasOpen, setBandasOpen] = useState(false);
+  const [anttOpen, setAnttOpen] = useState(false);
   const [colunasOpen, setColunasOpen] = useState(false);
+  const [acoesOpen, setAcoesOpen] = useState(false);
   const [linhaModal, setLinhaModal] = useState(false);
   const [editingLinhaId, setEditingLinhaId] = useState<string | null>(null);
   const [linhaForm, setLinhaForm] = useState<FreteForm>(emptyLinha());
@@ -219,7 +260,18 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
     setFaixas(tabela.faixas ?? []);
     setParamsOpen(tabela.status === 'rascunho');
     setGradeOpen(true);
+    setAcoesOpen(false);
   }, [tabela]);
+
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest('.tabela-frete-acoes-dropdown')) {
+        setAcoesOpen(false);
+      }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
 
   const isLocked = status !== 'rascunho';
   const canEditTarifa = canManage && !isLocked;
@@ -299,6 +351,53 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
   const removeBanda = (index: number) => {
     if (!config || config.bandas.length <= 1) return;
     setConfig({ ...config, bandas: config.bandas.filter((_, i) => i !== index) });
+  };
+
+  const veiculosTarifa = config?.veiculosTarifa ?? [];
+  const temConsultaAntt = veiculosTarifa.length > 0;
+  const anttPorBanda = new Map(veiculosTarifa.map((item) => [item.bandaKey, item]));
+  const colunasConsultaAntt = bandas.reduce((total, banda) => total + (anttPorBanda.has(banda.key) ? 2 : 0), 0);
+
+  const setVeiculoTarifa = (index: number, patch: Partial<TabelaFreteVeiculoTarifa>) => {
+    if (!config) return;
+    const lista = veiculosTarifa.map((item, i) => (i === index ? { ...item, ...patch } : item));
+    setConfig({ ...config, veiculosTarifa: lista });
+  };
+
+  const addVeiculoTarifa = () => {
+    if (!config) return;
+    const usadas = new Set(veiculosTarifa.map((item) => item.bandaKey));
+    const proximo = TIPOS_VEICULO_ANTT.find((tipo) => !usadas.has(tipo.bandaKey));
+    if (!proximo) return;
+    setConfig({
+      ...config,
+      veiculosTarifa: [
+        ...veiculosTarifa,
+        {
+          bandaKey: proximo.bandaKey,
+          rotulo: proximo.rotulo,
+          anttConsultaBandaKey: proximo.anttConsultaBandaKey,
+          anttFixo: '',
+          anttPorKm: '',
+          margem: '0.33',
+        },
+      ],
+    });
+  };
+
+  const removeVeiculoTarifa = (index: number) => {
+    if (!config) return;
+    setConfig({ ...config, veiculosTarifa: veiculosTarifa.filter((_, i) => i !== index) });
+  };
+
+  const aplicarModeloAntt = () => {
+    if (!config) return;
+    setConfig({
+      ...config,
+      anttFonte: ANTT_FONTE_MODELO,
+      anttFonteData: ANTT_DATA_MODELO,
+      veiculosTarifa: VEICULOS_ANTT_MODELO.map((item) => ({ ...item })),
+    });
   };
 
   const setColunaExtra = (index: number, patch: Partial<TabelaFreteColunaExtra>) => {
@@ -673,9 +772,33 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                 </button>
                 {paramsOpen && tabela.tipo === 'distribuicao' && canEditTarifa ? (
                   <div className="tabela-frete-section-actions">
-                    <button type="button" className="reports-action-btn secondary tabela-frete-meta-action-btn" onClick={() => setRegrasOpen(true)}>Faixas de km e prazos</button>
-                    <button type="button" className="reports-action-btn secondary tabela-frete-meta-action-btn" onClick={() => setBandasOpen(true)}>Bandas de peso</button>
-                    <button type="button" className="reports-action-btn secondary tabela-frete-meta-action-btn" onClick={() => setColunasOpen(true)}>Colunas extras</button>
+                    <div className="reports-dropdown-wrapper tabela-frete-acoes-dropdown">
+                      <button
+                        type="button"
+                        className="reports-action-btn secondary tabela-frete-meta-action-btn"
+                        aria-expanded={acoesOpen}
+                        onClick={() => setAcoesOpen((open) => !open)}
+                      >
+                        <span>Outras ações</span>
+                        <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      <div className={`reports-dropdown-menu reports-dropdown-menu--wide ${acoesOpen ? 'show' : ''}`}>
+                        <span className="reports-dropdown-item" onClick={() => { setAcoesOpen(false); setRegrasOpen(true); }}>
+                          <span className="reports-dropdown-item-left">Faixas de km e prazos</span>
+                        </span>
+                        <span className="reports-dropdown-item" onClick={() => { setAcoesOpen(false); setBandasOpen(true); }}>
+                          <span className="reports-dropdown-item-left">Bandas de peso</span>
+                        </span>
+                        <span className="reports-dropdown-item" onClick={() => { setAcoesOpen(false); setAnttOpen(true); }}>
+                          <span className="reports-dropdown-item-left">ANTT e margens</span>
+                        </span>
+                        <span className="reports-dropdown-item" onClick={() => { setAcoesOpen(false); setColunasOpen(true); }}>
+                          <span className="reports-dropdown-item-left">Colunas extras</span>
+                        </span>
+                      </div>
+                    </div>
                     <button type="button" className="reports-action-btn primary tabela-frete-meta-action-btn" style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }} disabled={saving} onClick={handleRecalcular}>
                       {preview.isPending ? 'Calculando...' : 'Recalcular faixas'}
                     </button>
@@ -819,6 +942,11 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                 <button type="button" className="tabela-frete-fold-trigger" aria-expanded={gradeOpen} onClick={() => setGradeOpen((open) => !open)}>
                   <i className={`bi ${gradeOpen ? 'bi-chevron-down' : 'bi-chevron-right'}`} aria-hidden />
                   <span className="tabela-frete-fold-title">{tabela.tipo === 'distribuicao' ? 'Grade de faixas' : 'Trechos'}</span>
+                  {tabela.tipo === 'distribuicao' && temConsultaAntt ? (
+                    <span className="tabela-frete-interno-tag" title="ANTT e margem comercial ficam só no ERP, não vão na proposta nem na tabela do cliente.">
+                      Consulta interna: ANTT e margem
+                    </span>
+                  ) : null}
                   <span className="reports-records-count">
                     {tabela.tipo === 'distribuicao'
                       ? `${faixas.length} faixa${faixas.length === 1 ? '' : 's'}`
@@ -894,14 +1022,29 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                         <th className="is-km">De</th>
                         <th className="is-km">Até</th>
                         <th className="is-money">Frete mín.</th>
-                        {bandas.map((banda) => (
-                          <th
-                            key={banda.key || banda.rotulo}
-                            className={`is-banda${isTarifaVeiculo(banda) ? ' is-veiculo' : ' is-ton'}`}
-                          >
-                            {banda.rotulo}
-                          </th>
-                        ))}
+                        {bandas.map((banda) => {
+                          const consulta = anttPorBanda.get(banda.key);
+                          if (!consulta) {
+                            return (
+                              <th
+                                key={banda.key || banda.rotulo}
+                                className={`is-banda${isTarifaVeiculo(banda) ? ' is-veiculo' : ' is-ton'}`}
+                              >
+                                {banda.rotulo}
+                              </th>
+                            );
+                          }
+                          return (
+                            <React.Fragment key={banda.key || banda.rotulo}>
+                              <th className="is-banda is-veiculo">
+                                <span className="tabela-frete-th-banda">{banda.rotulo}</span>
+                                <span className="tabela-frete-th-sub">R$ p/veículo</span>
+                              </th>
+                              <th className="is-antt">{rotuloColunaAntt(itemConsultaAntt(consulta, veiculosTarifa))}</th>
+                              <th className="is-margem">Margem</th>
+                            </React.Fragment>
+                          );
+                        })}
                         <th className="is-extra is-group-start">Pedágio/t</th>
                         {grisAdvUnificado ? (
                           <th className="is-extra">GRIS/ADV %</th>
@@ -921,7 +1064,7 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                     <tbody>
                       {faixas.length === 0 ? (
                         <tr>
-                          <td colSpan={8 + bandas.length + extras.length} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
+                          <td colSpan={8 + bandas.length + extras.length + colunasConsultaAntt} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
                             Clique em Recalcular faixas para gerar a tabela.
                           </td>
                         </tr>
@@ -930,11 +1073,22 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                           <td className="is-km">{faixa.kmDe}</td>
                           <td className="is-km">{faixa.kmAte}</td>
                           <td className="is-money">{formatTabelaAmount(faixa.freteMinimo)}</td>
-                          {faixa.tarifas.map((tarifa) => (
-                            <td key={tarifa.key} className={`is-banda${isTarifaVeiculo(tarifa) ? ' is-veiculo' : ' is-ton'}`}>
-                              {formatTabelaAmount(tarifa.valor)}
-                            </td>
-                          ))}
+                          {faixa.tarifas.map((tarifa) => {
+                            const consulta = anttPorBanda.get(tarifa.key);
+                            return (
+                              <React.Fragment key={tarifa.key}>
+                                <td className={`is-banda${isTarifaVeiculo(tarifa) ? ' is-veiculo' : ' is-ton'}`}>
+                                  {formatTabelaAmount(tarifa.valor)}
+                                </td>
+                                {consulta ? (
+                                  <>
+                                    <td className="is-antt">{tarifa.antt ? formatTabelaAmount(tarifa.antt) : '—'}</td>
+                                    <td className="is-margem">{tarifa.margem ? formatTabelaPercentFator(tarifa.margem) : '—'}</td>
+                                  </>
+                                ) : null}
+                              </React.Fragment>
+                            );
+                          })}
                           <td className="is-extra is-group-start">
                             {canEditTarifa ? (
                               <input className="proposta-destinos-input" value={faixa.pedagioTon} onChange={(e) => patchOverride(faixa, 'pedagioTon', e.target.value)} />
@@ -1098,6 +1252,150 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                     onClick={() => {
                       handleRecalcular();
                       setBandasOpen(false);
+                    }}
+                  >
+                    {preview.isPending ? 'Calculando...' : 'Recalcular faixas'}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {anttOpen && config && (
+        <div className="search-backdrop tabela-frete-modal-backdrop" style={{ display: 'flex' }} onClick={(e) => { if (e.target === e.currentTarget) setAnttOpen(false); }}>
+          <div className="modal-card tabela-frete-bandas-modal">
+            <div className="modal-header">
+              <h3>ANTT e margens comerciais</h3>
+              <button type="button" className="btn-icon" onClick={() => setAnttOpen(false)} aria-label="Fechar"><i className="bi bi-x-lg" /></button>
+            </div>
+            <div className="modal-body">
+              <p className="tabela-frete-hint">
+                Igual à caixa de referência da planilha: <strong>Truck</strong>, <strong>Carreta 6</strong> e <strong>Carreta 7</strong>
+                com CC, CCD e margem. A tarifa do cliente é <strong>ANTT ÷ (1 − margem)</strong>.
+                Cada tipo já preenche a coluna certa da grade (9–14 t, 14–26 t e acima de 26 t). ANTT e margem não vão na proposta.
+              </p>
+              <div className="tabela-frete-params-row" style={{ marginBottom: 12 }}>
+                <ParamsField label="Fonte da tabela ANTT" size="modo">
+                  <input
+                    disabled={!canEditTarifa}
+                    value={config.anttFonte ?? ''}
+                    placeholder="Ex.: Resolução ANTT nº 6.084/2026"
+                    onChange={(e) => setConfig({ ...config, anttFonte: e.target.value })}
+                  />
+                </ParamsField>
+                <ParamsField label="Data da fonte" size="km">
+                  <input
+                    type="date"
+                    disabled={!canEditTarifa}
+                    value={config.anttFonteData ?? ''}
+                    onChange={(e) => setConfig({ ...config, anttFonteData: e.target.value })}
+                  />
+                </ParamsField>
+              </div>
+              <div className="table-container tabela-frete-bandas-wrap">
+                <table className="data-table tabela-frete-mini tabela-frete-bandas-table">
+                  <thead>
+                    <tr>
+                      <th>Tipo de veículo</th>
+                      <th>CC ANTT (R$)</th>
+                      <th>CCD ANTT (R$/km)</th>
+                      <th>Margem ERP %</th>
+                      {canManage ? <th aria-label="Ações" /> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {veiculosTarifa.length === 0 ? (
+                      <tr>
+                        <td colSpan={canManage ? 5 : 4} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '16px' }}>
+                          Nenhum tipo de veículo. Carregue o modelo oficial ou adicione Truck, Carreta 6 ou Carreta 7.
+                        </td>
+                      </tr>
+                    ) : veiculosTarifa.map((item, index) => (
+                      <tr key={`${item.bandaKey}-${index}`}>
+                        <td>
+                          <select
+                            disabled={!canEditTarifa}
+                            value={TIPOS_VEICULO_ANTT.some((tipo) => tipo.bandaKey === item.bandaKey) ? item.bandaKey : ''}
+                            onChange={(e) => {
+                              const tipo = TIPOS_VEICULO_ANTT.find((opcao) => opcao.bandaKey === e.target.value);
+                              if (!tipo) return;
+                              setVeiculoTarifa(index, {
+                                bandaKey: tipo.bandaKey,
+                                rotulo: tipo.rotulo,
+                                anttConsultaBandaKey: tipo.anttConsultaBandaKey,
+                              });
+                            }}
+                          >
+                            {!TIPOS_VEICULO_ANTT.some((tipo) => tipo.bandaKey === item.bandaKey) ? (
+                              <option value="">Selecione</option>
+                            ) : null}
+                            {TIPOS_VEICULO_ANTT.map((tipo) => (
+                              <option
+                                key={tipo.bandaKey}
+                                value={tipo.bandaKey}
+                                disabled={veiculosTarifa.some((outro, outroIndex) => outroIndex !== index && outro.bandaKey === tipo.bandaKey)}
+                              >
+                                {tipo.rotulo}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            disabled={!canEditTarifa}
+                            inputMode="decimal"
+                            value={item.anttFixo}
+                            onChange={(e) => setVeiculoTarifa(index, { anttFixo: e.target.value })}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            disabled={!canEditTarifa}
+                            inputMode="decimal"
+                            value={item.anttPorKm}
+                            onChange={(e) => setVeiculoTarifa(index, { anttPorKm: e.target.value })}
+                          />
+                        </td>
+                        <td>
+                          <PercentFatorInput
+                            disabled={!canEditTarifa}
+                            fator={item.margem}
+                            onFatorChange={(valor) => setVeiculoTarifa(index, { margem: valor })}
+                          />
+                        </td>
+                        {canManage ? (
+                          <td>
+                            <button type="button" className="btn-icon" title="Remover" disabled={!canEditTarifa} onClick={() => removeVeiculoTarifa(index)}>
+                              <i className="bi bi-trash" />
+                            </button>
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="modal-footer tabela-frete-bandas-footer">
+              {canManage && canEditTarifa ? (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" className="reports-action-btn secondary" onClick={addVeiculoTarifa} disabled={veiculosTarifa.length >= TIPOS_VEICULO_ANTT.length}>Adicionar veículo</button>
+                  <button type="button" className="reports-action-btn secondary" onClick={aplicarModeloAntt}>Carregar modelo oficial</button>
+                </div>
+              ) : <span />}
+              <div className="tabela-frete-bandas-footer-actions">
+                <button type="button" className="reports-action-btn secondary" onClick={() => setAnttOpen(false)}>Fechar</button>
+                {canEditTarifa ? (
+                  <button
+                    type="button"
+                    className="reports-action-btn primary"
+                    style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
+                    disabled={saving}
+                    onClick={() => {
+                      handleRecalcular();
+                      setAnttOpen(false);
                     }}
                   >
                     {preview.isPending ? 'Calculando...' : 'Recalcular faixas'}

@@ -497,6 +497,13 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-icms-ufs')
       },
       {
+        title: "Parâmetros",
+        path: "Comercial / Parâmetros",
+        icon: <i className="bi bi-sliders search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/comercial/parametros'),
+        show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-parametros')
+      },
+      {
         title: "Composição de produtos",
         path: "Comercial / Cadastros / Composição de produtos",
         icon: <i className="bi bi-box-seam search-item-icon" aria-hidden="true" />,
@@ -596,6 +603,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/comercial/cadastros/generalidades')) return `${env} / Cadastros / Generalidades`;
     if (path.startsWith('/comercial/cadastros/icms-ufs')) return `${env} / Cadastros / ICMS por UF`;
     if (path.startsWith('/comercial/cadastros/produtos')) return `${env} / Cadastros / Composição de produtos`;
+    if (path.startsWith('/comercial/parametros') || path.startsWith('/comercial/cadastros/parametros')) return `${env} / Parâmetros`;
     if (path.startsWith('/comercial/propostas')) return `${env} / Propostas comerciais`;
     if (path.startsWith('/comercial/validacao-clientes')) return `${env} / Validação clientes`;
     if (path.startsWith('/comercial')) return env;
@@ -1426,6 +1434,18 @@ const DashboardLayout: React.FC = () => {
                     )}
                   </div>
                 </div>
+                )}
+                {canAba('Comercial', 'cadastro-parametros') && (
+                <Link
+                  to="/comercial/parametros"
+                  className={`nav-btn ${isRouteActive('/comercial/parametros') ? 'active' : ''}`}
+                  data-tooltip="Parâmetros"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="sliders" />
+                    <span className="nav-text">Parâmetros</span>
+                  </div>
+                </Link>
                 )}
               </div>
             )}

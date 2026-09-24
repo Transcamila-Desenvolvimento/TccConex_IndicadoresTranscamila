@@ -138,12 +138,19 @@ export const FUNCAO_ITEMS = [
     label: 'Cadastrar e editar',
     description: 'Permite cadastrar generalidades por cliente e tipo de serviço (transferência, distribuição ou armazenagem).',
   },
-    {
+  {
     module: 'Comercial',
     aba: 'cadastro-icms-ufs',
     key: 'gerenciar-icms-ufs',
     label: 'Cadastrar e editar',
     description: 'Permite configurar a matriz de alíquotas ICMS por UF de origem e destino.',
+  },
+  {
+    module: 'Comercial',
+    aba: 'cadastro-parametros',
+    key: 'gerenciar-parametros',
+    label: 'Cadastrar e editar',
+    description: 'Permite configurar logos da proposta, validades, vigências e prazos de faturamento.',
   },
   {
     module: 'Comercial',

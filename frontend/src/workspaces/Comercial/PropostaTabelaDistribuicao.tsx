@@ -2,10 +2,12 @@ import { type ReactNode, useLayoutEffect, useId, useRef, useState } from 'react'
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import { useTabelaFreteDistribuicaoCliente } from '../../hooks/useComercialClientes';
+import type { PropostaTabelaDistribuicaoSnapshot } from '../../types/domain';
 import { formatColunaExtraValor, formatTabelaAmount, formatTabelaPercentFator, isGrisAdvUnificado, isTarifaVeiculo } from './formatTabelaFrete';
 
 type Props = {
   clienteId: string | null;
+  snapshot?: PropostaTabelaDistribuicaoSnapshot | null;
 };
 
 function PropostaDistribuicaoGradeScroll({ children }: { children: ReactNode }) {
@@ -73,16 +75,20 @@ function PropostaDistribuicaoGradeScroll({ children }: { children: ReactNode }) 
   );
 }
 
-export default function PropostaTabelaDistribuicao({ clienteId }: Props) {
+export default function PropostaTabelaDistribuicao({
+  clienteId,
+  snapshot = null,
+}: Props) {
   const { listQuery, detalheQuery, tabela } = useTabelaFreteDistribuicaoCliente(clienteId, Boolean(clienteId));
   const listState = useAsyncQueryState(listQuery);
   const detalheState = useAsyncQueryState(detalheQuery);
-  const [aberta, setAberta] = useState(false);
+  const [aberta, setAberta] = useState(true);
   const painelId = useId();
-  const faixas = tabela?.faixas ?? [];
+  const faixas = (snapshot?.faixas?.length ? snapshot.faixas : tabela?.faixas) ?? [];
   const bandas = faixas[0]?.tarifas ?? [];
   const extras = faixas[0]?.extras ?? [];
-  const grisAdvUnificado = isGrisAdvUnificado(tabela?.config);
+  const grisAdvUnificado = snapshot?.grisAdvUnificado ?? isGrisAdvUnificado(tabela?.config);
+  const nomeTabela = snapshot?.nome || tabela?.nome || listQuery.data?.results[0]?.nome;
 
   if (!clienteId) {
     return (
@@ -115,8 +121,8 @@ export default function PropostaTabelaDistribuicao({ clienteId }: Props) {
               >
                 <span className="proposta-distribuicao-toggle-copy">
                   <span className="proposta-distribuicao-toggle-title">Tabela de distribuição</span>
-                  {(tabela?.nome || listQuery.data?.results[0]?.nome) ? (
-                    <span className="proposta-distribuicao-nome">{tabela?.nome || listQuery.data?.results[0]?.nome}</span>
+                  {nomeTabela ? (
+                    <span className="proposta-distribuicao-nome">{nomeTabela}</span>
                   ) : null}
                 </span>
                 <i className={`bi ${aberta ? 'bi-chevron-up' : 'bi-chevron-down'}`} aria-hidden="true" />

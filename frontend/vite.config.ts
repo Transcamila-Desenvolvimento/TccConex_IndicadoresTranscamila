@@ -13,6 +13,9 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:8001',
         changeOrigin: true,
+        // Envio de proposta (PDF + Gmail) pode passar de 30s.
+        timeout: 180_000,
+        proxyTimeout: 180_000,
       },
       '/ws': {
         target: 'ws://127.0.0.1:8001',

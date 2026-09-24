@@ -8,6 +8,7 @@ import ComercialHome from './ComercialHome';
 import ComercialCadastroClientes from './ComercialCadastroClientes';
 import ComercialCadastroGeneralidades from './ComercialCadastroGeneralidades';
 import ComercialCadastroIcmsUfs from './ComercialCadastroIcmsUfs';
+import ComercialCadastroParametros from './ComercialCadastroParametros';
 import ComercialCadastroProdutos from './ComercialCadastroProdutos';
 import ComercialPropostas from './ComercialPropostas';
 import ComercialValidacaoClientes from './ComercialValidacaoClientes';
@@ -28,6 +29,8 @@ const ComercialWorkspace: React.FC = () => {
       <Route path="cadastros/produtos" element={<AbaRoute module="Comercial" aba="cadastro-produtos" fallback={fallback}><ComercialCadastroProdutos /></AbaRoute>} />
       <Route path="propostas" element={<AbaRoute module="Comercial" aba="propostas-comerciais" fallback={fallback}><ComercialPropostas /></AbaRoute>} />
       <Route path="validacao-clientes" element={<AbaRoute module="Comercial" aba="validacao-clientes" fallback={fallback}><ComercialValidacaoClientes /></AbaRoute>} />
+      <Route path="parametros" element={<AbaRoute module="Comercial" aba="cadastro-parametros" fallback={fallback}><ComercialCadastroParametros /></AbaRoute>} />
+      <Route path="cadastros/parametros" element={<Navigate to="/comercial/parametros" replace />} />
       <Route path="*" element={<Navigate to={fallback} replace />} />
     </Routes>
   );

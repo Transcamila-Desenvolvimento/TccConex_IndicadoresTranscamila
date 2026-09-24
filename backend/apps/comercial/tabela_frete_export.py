@@ -183,11 +183,59 @@ def _sheet_transferencia(wb, tabela):
     return ws
 
 
+def _sheet_consulta_antt(wb, tabela):
+    config = merge_config(tabela.config or {})
+    veiculos = config.get('veiculosTarifa') or []
+    if not veiculos:
+        return None
+    ws = wb.create_sheet('Consulta interna ANTT')
+    ws['A1'] = 'Consulta interna — não enviar ao cliente'
+    ws['A1'].font = Font(bold=True, color='B45309')
+    ws['A2'] = 'Fonte ANTT'
+    ws['A2'].font = _LABEL_FONT
+    ws['B2'] = config.get('anttFonte') or '—'
+    ws['A3'] = 'Data da fonte'
+    ws['A3'].font = _LABEL_FONT
+    ws['B3'] = config.get('anttFonteData') or '—'
+    ws['A5'] = 'Margem comercial por tipo de veículo (ERP)'
+    ws['A5'].font = Font(bold=True, color='334155')
+    _write_header_row(ws, ['Tipo', 'CC ANTT (R$)', 'CCD ANTT (R$/km)', 'Margem comercial %'], row=6)
+    for index, item in enumerate(veiculos, start=7):
+        ws.cell(row=index, column=1, value=item.get('rotulo'))
+        ws.cell(row=index, column=2, value=_as_number(item.get('anttFixo')))
+        ws.cell(row=index, column=3, value=_as_number(item.get('anttPorKm')))
+        ws.cell(row=index, column=4, value=_fator_para_percentual(item.get('margem')))
+
+    faixas = list(tabela.faixas or [])
+    start = 8 + len(veiculos)
+    ws.cell(row=start, column=1, value='Piso ANTT e margem realizada na grade (consulta)').font = Font(bold=True, color='334155')
+    headers = ['De', 'Até']
+    for item in veiculos:
+        rotulo = item.get('rotulo') or item.get('bandaKey')
+        headers.extend([f'{rotulo} — cliente', f'{rotulo} — ANTT', f'{rotulo} — margem %'])
+    _write_header_row(ws, headers, row=start + 1)
+    for row_index, faixa in enumerate(faixas, start=start + 2):
+        tarifas = {item.get('key'): item for item in (faixa.get('tarifas') or []) if item.get('key')}
+        valores = [faixa.get('kmDe'), faixa.get('kmAte')]
+        for item in veiculos:
+            tarifa = tarifas.get(item.get('bandaKey')) or {}
+            valores.extend([
+                _as_number(tarifa.get('valor')),
+                _as_number(tarifa.get('antt')),
+                _fator_para_percentual(tarifa.get('margem')),
+            ])
+        for col, value in enumerate(valores, start=1):
+            ws.cell(row=row_index, column=col, value=value)
+    _autosize(ws, min_width=14, max_width=28)
+    return ws
+
+
 def build_tabela_frete_xlsx(tabela):
     wb = Workbook()
     _sheet_identificacao(wb, tabela)
     if tabela.tipo == TIPO_TABELA_DISTRIBUICAO:
         _sheet_distribuicao(wb, tabela)
+        _sheet_consulta_antt(wb, tabela)
     else:
         _sheet_transferencia(wb, tabela)
     output = io.BytesIO()
