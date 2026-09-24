@@ -898,13 +898,6 @@ const ComercialPropostas: React.FC = () => {
     setDraftUnavailable(false);
   };
 
-  const updateLinha = (index: number, patch: Partial<LinhaForm>) => {
-    setForm((current) => ({
-      ...current,
-      linhas: current.linhas.map((linha, i) => (i === index ? { ...linha, ...patch } : linha)),
-    }));
-  };
-
   const setTipoServico = (tipo: PropostaComercialTipo) => {
     if (tipo === 'armazenagem') {
       const flags = flagsExclusivos('armazenagem', null);
