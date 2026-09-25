@@ -148,10 +148,19 @@ const buildDestinosTable = (proposta: PropostaComercial, modalidade: 'transferen
   `;
 };
 
+const alteracaoVisivelNoPdf = (campo: string) => {
+  const rotulo = (campo || '').trim().toLowerCase();
+  if (!rotulo || rotulo === 'valor estimado') return false;
+  return rotulo.startsWith('trecho') || rotulo.startsWith('margem');
+};
+
 const buildHistoricoRevisoes = (proposta: PropostaComercial) => {
-  const itens = (proposta.historicoRevisoes ?? []).filter(
-    (item) => (item.alteracoes?.length ?? 0) > 0,
-  );
+  const itens = (proposta.historicoRevisoes ?? [])
+    .map((item) => ({
+      ...item,
+      alteracoes: (item.alteracoes ?? []).filter((alt) => alteracaoVisivelNoPdf(alt.campo)),
+    }))
+    .filter((item) => (item.alteracoes?.length ?? 0) > 0);
   if (!itens.length) return '';
 
   const blocos = [...itens].reverse().map((item) => {
@@ -708,6 +717,7 @@ const buildHtml = (
         : '';
   const closingHtml = `
   ${opcoes.includeCondicoes ? buildCondicoesTable(proposta, secao, 3, opcoes.condicoesPagina) : ''}
+  ${opcoes.includeAssinatura ? buildHistoricoRevisoes(proposta) : ''}
   ${opcoes.includeAssinatura && proposta.observacoes.trim()
     ? `<section class="block"><h2>Observações</h2><div class="obs">${escapeHtml(proposta.observacoes.trim())}</div></section>`
     : ''}
@@ -985,7 +995,6 @@ const buildHtml = (
   ${opcoes.includeTabela && (secao === 'transferencia' || secao === 'geral') ? buildDestinosTable(proposta, 'transferencia') : ''}
   ${opcoes.includeTabela && secao === 'portuaria' ? buildDestinosTable(proposta, 'op_portuaria') : ''}
   ${opcoes.includeTabela && secao === 'geral' ? buildArmazenagemTable(proposta) : ''}
-  ${opcoes.includeAssinatura ? buildHistoricoRevisoes(proposta) : ''}
   ${closingHtml}
 </body>
 </html>`;

@@ -374,10 +374,8 @@ def marcar_envio_historico(proposta, tipo, usuario=None, resumo=''):
     return historico
 
 
-# Campos comerciais relevantes para a trilha de revisão de valores (visível ao cliente).
-CAMPOS_AUDITORIA = (
-    ('valor_estimado', 'Valor estimado'),
-)
+# Campos de cabeçalho na trilha do PDF: só margens e trechos (não o total estimado).
+CAMPOS_AUDITORIA = ()
 
 # Valores de trecho (não inclui textos longos / observações / rota).
 LINHA_AUDITORIA = (
