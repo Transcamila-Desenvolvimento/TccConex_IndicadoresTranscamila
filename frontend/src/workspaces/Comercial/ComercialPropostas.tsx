@@ -40,6 +40,7 @@ import {
   PROPOSTA_COMERCIAL_TIPO_LABEL,
   marcarCondicoesTipo,
   propostaIncluiArmazenagem,
+  MAX_PROPOSTAS_EMAIL,
   propostasEnviaveisPorEmail,
   rotuloNumeroProposta,
   separarCondicoesProposta,
@@ -1251,10 +1252,8 @@ const ComercialPropostas: React.FC = () => {
               </svg>
             </button>
             <div className={`reports-dropdown-menu ${isActionsMenuOpen ? 'show' : ''}`}>
-              {selectedPropostas.length <= 2 && (
+              {selectedPropostas.length === 1 && (
                 <>
-                  {selectedPropostas.length === 1 && (
-                    <>
                   <span className="reports-dropdown-item" onClick={handlePrintSelected}>
                     <span className="reports-dropdown-item-left">
                       <i className="bi bi-printer" />
@@ -1267,15 +1266,15 @@ const ComercialPropostas: React.FC = () => {
                       Editar
                     </span>
                   </span>
-                    </>
-                  )}
-                  <span className="reports-dropdown-item" onClick={handleEmailSelected}>
-                    <span className="reports-dropdown-item-left">
-                      <i className="bi bi-envelope" />
-                      Enviar e-mail
-                    </span>
-                  </span>
                 </>
+              )}
+              {selectedPropostas.length >= 1 && selectedPropostas.length <= MAX_PROPOSTAS_EMAIL && (
+                <span className="reports-dropdown-item" onClick={handleEmailSelected}>
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-envelope" />
+                    Enviar e-mail
+                  </span>
+                </span>
               )}
               {canManage && selectedPropostas.length > 0 && (
                 <span className="reports-dropdown-item is-danger" onClick={() => { void handleDeleteSelected(); }}>

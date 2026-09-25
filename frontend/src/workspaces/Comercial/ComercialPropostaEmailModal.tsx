@@ -39,7 +39,12 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
-  const numeros = propostas.map((item) => item.numeroIdentificacao).filter(Boolean).join(' e ');
+  const numeros = (() => {
+    const parts = propostas.map((item) => item.numeroIdentificacao).filter(Boolean);
+    if (parts.length <= 1) return parts[0] || '';
+    if (parts.length === 2) return `${parts[0]} e ${parts[1]}`;
+    return `${parts.slice(0, -1).join(', ')} e ${parts[parts.length - 1]}`;
+  })();
 
   useEffect(() => {
     setErrorMsg(null);
@@ -127,7 +132,7 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
           <form onSubmit={handleSubmit} style={{ padding: '16px 24px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
             <p style={{ margin: 0, fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
               {propostas.length > 1
-                ? 'As propostas de frete e armazenagem serão enviadas no mesmo e-mail, pelo seu Gmail vinculado'
+                ? 'As propostas selecionadas do mesmo cliente serão enviadas no mesmo e-mail, pelo seu Gmail vinculado'
                 : 'A proposta será enviada pelo seu Gmail vinculado'}
               {googleEmail ? <> (<strong>{googleEmail}</strong>)</> : null},
               com o mesmo PDF da impressão em anexo. Os demais envios do sistema continuam pelo e-mail corporativo.

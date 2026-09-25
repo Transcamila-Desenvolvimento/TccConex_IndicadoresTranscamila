@@ -16,12 +16,24 @@ from apps.accounts.google_gmail_service import send_gmail_as_user
 from .models import (
     STATUS_PROPOSTA_ENVIADA,
     STATUS_PROPOSTA_RASCUNHO,
-    TIPO_PROPOSTA_ARMAZENAGEM,
+    TIPO_GENERALIDADE_CHOICES,
     TIPO_PROPOSTA_CHOICES,
-    TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO,
+    tipos_servico_generalidade,
 )
 
 PDF_MAX_BYTES = 8 * 1024 * 1024
+MAX_PROPOSTAS_EMAIL = 4
+
+
+def _juntar_lista(itens: list[str]) -> str:
+    partes = [str(item).strip() for item in itens if str(item or '').strip()]
+    if not partes:
+        return '—'
+    if len(partes) == 1:
+        return partes[0]
+    if len(partes) == 2:
+        return f'{partes[0]} e {partes[1]}'
+    return f'{", ".join(partes[:-1])} e {partes[-1]}'
 
 
 def _safe_filename_part(value: str, max_len: int = 80) -> str:
@@ -149,18 +161,15 @@ def request_proposta_ids(data) -> list[str]:
 def validar_envio_conjunto(propostas) -> None:
     if not propostas:
         raise ValueError('Selecione ao menos uma proposta para enviar.')
+    if len(propostas) > MAX_PROPOSTAS_EMAIL:
+        raise ValueError(
+            f'Selecione no máximo {MAX_PROPOSTAS_EMAIL} propostas do mesmo cliente para o mesmo e-mail.'
+        )
     if len(propostas) == 1:
         return
-    if len(propostas) != 2:
-        raise ValueError('Selecione no máximo duas propostas (frete e armazenagem) do mesmo cliente.')
-    primeira, segunda = propostas
-    cliente_a = getattr(primeira, 'cliente_id', None)
-    cliente_b = getattr(segunda, 'cliente_id', None)
-    if not cliente_a or cliente_a != cliente_b:
-        raise ValueError('Só é possível enviar duas propostas juntas quando forem do mesmo cliente.')
-    tipos = {primeira.tipo, segunda.tipo}
-    if tipos != {TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO, TIPO_PROPOSTA_ARMAZENAGEM}:
-        raise ValueError('O envio conjunto deve ser uma proposta de frete e uma de armazenagem.')
+    cliente_ids = {getattr(item, 'cliente_id', None) for item in propostas}
+    if None in cliente_ids or len(cliente_ids) != 1:
+        raise ValueError('Só é possível enviar várias propostas juntas quando forem do mesmo cliente.')
 
 
 def _usuario_display(user) -> str:
@@ -187,6 +196,20 @@ def _fmt_date(value) -> str:
 
 def _tipo_label(tipo: str) -> str:
     return dict(TIPO_PROPOSTA_CHOICES).get(tipo, 'Proposta comercial')
+
+
+def _servico_label(proposta) -> str:
+    tipos = tipos_servico_generalidade(
+        proposta.tipo,
+        inclui_transferencia=bool(getattr(proposta, 'inclui_transferencia', False)),
+        inclui_distribuicao=bool(getattr(proposta, 'inclui_distribuicao', False)),
+        inclui_armazenagem=bool(getattr(proposta, 'inclui_armazenagem', False)),
+        inclui_op_portuaria=bool(getattr(proposta, 'inclui_op_portuaria', False)),
+    )
+    labels = dict(TIPO_GENERALIDADE_CHOICES)
+    if tipos:
+        return ' + '.join(labels.get(tipo, tipo) for tipo in tipos)
+    return _tipo_label(proposta.tipo)
 
 
 def _saudacao(proposta) -> str:
@@ -248,7 +271,7 @@ def _build_context(proposta, user) -> dict:
         'numero': rotulo_revisao(proposta),
         'cliente_nome': cliente_nome,
         'cliente_cnpj': getattr(cliente, 'cnpj', '') or '—',
-        'servico': _tipo_label(proposta.tipo),
+        'servico': _servico_label(proposta),
         'emissao': _fmt_date(proposta.data_proposta or (proposta.data_criacao.date() if proposta.data_criacao else None)),
         'validade': proposta.validade or '—',
         'vigencia': proposta.vigencia or '—',
@@ -312,9 +335,10 @@ def send_propostas_comerciais_email(
     context = dict(contextos[0])
     numeros = [item['numero'] for item in contextos]
     servicos = [item['servico'] for item in contextos]
-    context['numero'] = ' e '.join(numeros)
-    context['servico'] = ' e '.join(servicos)
+    context['numero'] = _juntar_lista(numeros)
+    context['servico'] = _juntar_lista(servicos)
     context['plural'] = len(propostas) > 1
+    context['itens'] = contextos
     html_body = render_to_string('comercial/emails/proposta.html', context)
     cliente_nome = context['cliente_nome']
     remetente = f'{_usuario_display(user)} <{google_from}>'

@@ -670,6 +670,56 @@ class ClienteComercialTests(TestCase):
         self.assertIn('Frete', campos)
         self.assertIn('1.500,00', ultima.get('resumo') or '')
 
+    def test_revisao_margem_mostra_percentual_anterior_da_tabela(self):
+        """Sem override gravado, a trilha deve mostrar a margem efetiva da tabela (não —)."""
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(cliente.status_code, 201, cliente.content)
+        self._publicar_tabela_distribuicao(cliente.json()['id'])
+        created = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente.json()['id'],
+                'incluiTransferencia': True,
+                'status': 'rascunho',
+                'linhas': [{
+                    'origem': 'Ibiporã-PR',
+                    'entrega': 'Curitiba-PR',
+                    'veiculo': 'Truck',
+                    'veiculoKey': 'de9000',
+                    'km': '50',
+                    'tarifaFrete': '1368.14',
+                    'prazoDias': '2 dias úteis',
+                }],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        proposta_id = created.json()['id']
+        self._marcar_proposta_enviada(proposta_id)
+
+        alterada = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {
+                'margensVeiculo': [
+                    {'bandaKey': 'de9000', 'rotulo': 'Truck', 'margem': '0.24'},
+                ],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(alterada.status_code, 200, alterada.content)
+        historico = alterada.json().get('historicoRevisoes') or []
+        self.assertTrue(historico)
+        alts = historico[-1].get('alteracoes') or []
+        margem = next((item for item in alts if 'Margem' in (item.get('campo') or '')), None)
+        self.assertIsNotNone(margem)
+        self.assertNotEqual(margem.get('de'), '—')
+        self.assertIn('%', margem.get('de') or '')
+        self.assertEqual(margem.get('para'), '24%')
+
     def test_status_enviada_somente_pelo_sistema(self):
         self._auth(self.admin)
         criada = self.api.post(
@@ -1195,6 +1245,101 @@ class ClienteComercialTests(TestCase):
         )
         self.assertEqual(response.status_code, 400, response.content)
         self.assertIn('mesmo cliente', response.json()['detail'])
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+    def test_enviar_email_lote_varios_tipos_mesmo_cliente(self, mock_send):
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        self._auth(self.admin)
+        cliente = self.api.post(
+            '/api/comercial/clientes/',
+            {**PAYLOAD, 'email': 'compras@empresa.com', 'cnpj': '00.000.000/0008-68'},
+            format='json',
+            **HEADERS,
+        )
+        cliente_id = cliente.json()['id']
+        self._publicar_tabela_distribuicao(cliente_id)
+        transferencia = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'incluiTransferencia': True,
+                'status': 'rascunho',
+                'linhas': [{
+                    'origem': 'Ibiporã-PR',
+                    'entrega': 'Rondonópolis-MT',
+                    'veiculo': 'Carreta',
+                    'veiculoKey': 'de14001',
+                    'km': '100',
+                    'tarifaFrete': '1000.00',
+                    'prazoDias': '3 dias úteis',
+                }],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(transferencia.status_code, 201, transferencia.content)
+        distribuicao = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'incluiDistribuicao': True,
+                'status': 'rascunho',
+                'linhas': [{
+                    'origem': 'Curitiba-PR',
+                    'entrega': 'Londrina-PR',
+                    'veiculo': 'Truck',
+                    'veiculoKey': 'de14002',
+                    'km': '50',
+                    'tarifaFrete': '500.00',
+                    'prazoDias': '2 dias úteis',
+                }],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(distribuicao.status_code, 201, distribuicao.content)
+        armazem = self.api.post(
+            '/api/comercial/propostas/',
+            {'tipo': 'armazenagem', 'clienteId': cliente_id, 'status': 'rascunho'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(armazem.status_code, 201, armazem.content)
+        ids = [transferencia.json()['id'], distribuicao.json()['id'], armazem.json()['id']]
+        response = self.api.post(
+            '/api/comercial/propostas/enviar-email-lote/',
+            {
+                'ids': ids,
+                'pdf': [
+                    self._pdf_upload('transf.pdf'),
+                    self._pdf_upload('dist.pdf'),
+                    self._pdf_upload('armazem.pdf'),
+                ],
+            },
+            format='multipart',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        mock_send.assert_called_once()
+        _user, email_obj = mock_send.call_args.args
+        pdfs = [item[0] for item in email_obj.attachments if isinstance(item, tuple) and str(item[0]).endswith('.pdf')]
+        self.assertEqual(len(pdfs), 3)
+        self.assertIn('Propostas comerciais nº', email_obj.subject)
+        body = email_obj.body
+        self.assertIn('Proposta 1', body)
+        self.assertIn('Proposta 2', body)
+        self.assertIn('Proposta 3', body)
+        self.assertIn('Transferência', body)
+        self.assertIn('Distribuição', body)
+        self.assertIn('Armazenagem', body)
+        for proposta_id in ids:
+            self.assertEqual(
+                self.api.get(f'/api/comercial/propostas/{proposta_id}/', **HEADERS).json()['status'],
+                'enviada',
+            )
 
     def test_enviar_email_exige_destinatario(self):
         self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'

@@ -275,9 +275,18 @@ def rotulo_revisao(proposta) -> str:
     return f'{numero} Rev. {revisao}'
 
 
+def _juntar_numeros_assunto(propostas) -> str:
+    numeros = [rotulo_revisao(item) for item in propostas]
+    if len(numeros) == 1:
+        return numeros[0]
+    if len(numeros) == 2:
+        return f'{numeros[0]} e {numeros[1]}'
+    return f'{", ".join(numeros[:-1])} e {numeros[-1]}'
+
+
 def assunto_envio_propostas(propostas) -> str:
     if len(propostas) > 1:
-        numeros = ' e '.join(rotulo_revisao(item) for item in propostas)
+        numeros = _juntar_numeros_assunto(propostas)
         prefixos = {getattr(item, 'modo_envio', '') or '' for item in propostas}
         prefixo = ''
         if prefixos == {MODO_ENVIO_ERRATA}:
@@ -442,19 +451,33 @@ def _linha_snapshot(linha) -> dict:
     }
 
 
+def _margens_efetivas_auditoria(proposta) -> list:
+    """Margens reais usadas no cálculo (tabela do cliente + overrides da proposta)."""
+    cliente_id = getattr(proposta, 'cliente_id', None)
+    tabela = tabela_distribuicao_do_cliente(cliente_id) if cliente_id else None
+    base_config = (tabela.config if tabela else None) or preset_config_oficial_distribuicao()
+    # Snapshot já salvo na proposta pode refletir a tabela no momento do vínculo.
+    snap = getattr(proposta, 'tabela_distribuicao', None) or {}
+    if isinstance(snap, dict) and snap.get('veiculosTarifa') and not tabela:
+        base_config = {'veiculosTarifa': snap.get('veiculosTarifa')}
+    config = aplicar_margens_config(base_config, proposta.margens_veiculo or [])
+    veiculos = normalizar_veiculos_tarifa(config.get('veiculosTarifa') or VEICULOS_TARIFA_MODELO_OFICIAL)
+    return [
+        {
+            'bandaKey': item.get('bandaKey'),
+            'rotulo': item.get('rotulo') or item.get('bandaKey'),
+            'margem': str(item.get('margem') or ''),
+        }
+        for item in veiculos
+        if item.get('bandaKey')
+    ]
+
+
 def snapshot_proposta(proposta) -> dict:
     return {
         'campos': {chave: getattr(proposta, chave) for chave, _rotulo in CAMPOS_AUDITORIA},
         'linhas': [_linha_snapshot(linha) for linha in proposta.linhas.all().order_by('ordem', 'pk')],
-        'margens': [
-            {
-                'bandaKey': item.get('bandaKey'),
-                'rotulo': item.get('rotulo') or item.get('bandaKey'),
-                'margem': str(item.get('margem') or ''),
-            }
-            for item in (proposta.margens_veiculo or [])
-            if isinstance(item, dict)
-        ],
+        'margens': _margens_efetivas_auditoria(proposta),
         'condicoes': [
             {
                 'rotulo': item.get('rotulo') or '',

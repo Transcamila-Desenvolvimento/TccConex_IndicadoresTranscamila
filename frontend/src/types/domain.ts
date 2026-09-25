@@ -2323,28 +2323,25 @@ export function clientePropostaKey(proposta: { clienteId?: string | null; client
   return (proposta.clienteId || '').trim() || (proposta.clienteNome || '').trim().toLowerCase();
 }
 
+/** Máximo de propostas no mesmo e-mail (mesmo cliente, quaisquer tipos/operações). */
+export const MAX_PROPOSTAS_EMAIL = 4;
+
 export function propostasEnviaveisPorEmail(propostas: { clienteId?: string | null; clienteNome?: string | null; tipo: PropostaComercialTipo }[]) {
+  if (propostas.length === 0) {
+    return { ok: false as const, motivo: 'Selecione ao menos uma proposta para enviar.' };
+  }
+  if (propostas.length > MAX_PROPOSTAS_EMAIL) {
+    return {
+      ok: false as const,
+      motivo: `Selecione no máximo ${MAX_PROPOSTAS_EMAIL} propostas do mesmo cliente para o mesmo e-mail.`,
+    };
+  }
   if (propostas.length === 1) return { ok: true as const };
-  if (propostas.length !== 2) {
+  const chaves = new Set(propostas.map((item) => clientePropostaKey(item)).filter(Boolean));
+  if (chaves.size !== 1) {
     return {
       ok: false as const,
-      motivo: 'Selecione no máximo duas propostas (frete e armazenagem) do mesmo cliente.',
-    };
-  }
-  const [primeira, segunda] = propostas;
-  const clienteA = clientePropostaKey(primeira);
-  const clienteB = clientePropostaKey(segunda);
-  if (!clienteA || clienteA !== clienteB) {
-    return {
-      ok: false as const,
-      motivo: 'Só é possível enviar duas propostas juntas quando forem do mesmo cliente.',
-    };
-  }
-  const tipos = new Set([primeira.tipo, segunda.tipo]);
-  if (!(tipos.has('transporte_rodoviario') && tipos.has('armazenagem'))) {
-    return {
-      ok: false as const,
-      motivo: 'O envio conjunto deve ser uma proposta de frete e uma de armazenagem.',
+      motivo: 'Só é possível enviar várias propostas juntas quando forem do mesmo cliente.',
     };
   }
   return { ok: true as const };
