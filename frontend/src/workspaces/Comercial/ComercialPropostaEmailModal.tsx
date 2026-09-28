@@ -52,6 +52,32 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
 
   if (!proposta) return null;
 
+  const isErroRede = (err: unknown) => {
+    const msg = getComercialErrorMessage(err);
+    const axiosErr = err as { code?: string; response?: unknown };
+    return (
+      !axiosErr.response
+      || axiosErr.code === 'ERR_NETWORK'
+      || /ECONNRESET|timeout|Network Error|status code 50[245]/i.test(msg)
+    );
+  };
+
+  // Acima disso o upload/Gmail costuma falhar (revisão alonga o fechamento).
+  const PDF_EMAIL_SAFE_BYTES = 5.5 * 1024 * 1024;
+
+  const gerarPdfs = async (compact: boolean) => {
+    const pdfs: Blob[] = [];
+    for (const item of propostas) {
+      pdfs.push(await generatePropostaComercialPdfBlob(item, clienteFor(item), {
+        cargo: user?.cargo,
+        compact,
+      }));
+    }
+    return pdfs;
+  };
+
+  const tamanhoTotal = (pdfs: Blob[]) => pdfs.reduce((acc, pdf) => acc + pdf.size, 0);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setErrorMsg(null);
@@ -64,12 +90,21 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
       setErrorMsg('Informe o e-mail do cliente ou outro destinatário.');
       return;
     }
-    let pdfs: Blob[];
+    const payloadBase = {
+      ids: propostas.map((item) => item.id),
+      revisoes: propostas.map((item) => item.revisao || ''),
+      to,
+      cc: ccTags.map((tag) => tag.email).filter((email) => email.toLowerCase() !== googleEmailNorm),
+    };
+
     setGeneratingPdf(true);
+    let pdfs: Blob[];
     try {
-      pdfs = [];
-      for (const item of propostas) {
-        pdfs.push(await generatePropostaComercialPdfBlob(item, clienteFor(item), { cargo: user?.cargo }));
+      // Qualidade normal primeiro (igual à impressão).
+      pdfs = await gerarPdfs(false);
+      // Revisão/ajustes podem inflar o anexo: compacta antes de subir se passar do limite seguro.
+      if (tamanhoTotal(pdfs) > PDF_EMAIL_SAFE_BYTES) {
+        pdfs = await gerarPdfs(true);
       }
     } catch {
       setErrorMsg('Não foi possível gerar o PDF da proposta.');
@@ -77,30 +112,42 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
       return;
     }
     setGeneratingPdf(false);
-    enviarEmail.mutate(
-      {
-        ids: propostas.map((item) => item.id),
-        to,
-        cc: ccTags.map((tag) => tag.email).filter((email) => email.toLowerCase() !== googleEmailNorm),
-        pdfs,
-      },
-      {
-        onSuccess: (res) => setSuccess(res.message ?? 'Proposta enviada com sucesso.'),
-        onError: (err) => {
-          const msg = getComercialErrorMessage(err);
-          const axiosErr = err as { code?: string; message?: string; response?: unknown };
-          const rede =
-            !axiosErr.response
-            || axiosErr.code === 'ERR_NETWORK'
-            || /ECONNRESET|timeout|Network Error|status code 50[245]/i.test(msg);
-          setErrorMsg(
-            rede
-              ? 'Falha de conexão ao enviar (PDF grande ou tempo esgotado). Tente de novo; se persistir, use Imprimir e anexe o PDF no Gmail.'
-              : msg,
-          );
-        },
-      },
-    );
+
+    try {
+      const res = await enviarEmail.mutateAsync({ ...payloadBase, pdfs });
+      setSuccess(res.message ?? 'Proposta enviada com sucesso.');
+      return;
+    } catch (err) {
+      if (!isErroRede(err)) {
+        setErrorMsg(getComercialErrorMessage(err));
+        return;
+      }
+    }
+
+    // Retry automático com PDF mais leve só se a rede/proxy falhou.
+    setGeneratingPdf(true);
+    try {
+      pdfs = await gerarPdfs(true);
+    } catch {
+      setErrorMsg(
+        'Falha de conexão ao enviar. Não foi possível gerar o PDF reduzido. Use Imprimir e anexe no Gmail.',
+      );
+      setGeneratingPdf(false);
+      return;
+    }
+    setGeneratingPdf(false);
+
+    try {
+      const res = await enviarEmail.mutateAsync({ ...payloadBase, pdfs });
+      setSuccess(res.message ?? 'Proposta enviada com sucesso.');
+    } catch (err) {
+      const msg = getComercialErrorMessage(err);
+      setErrorMsg(
+        isErroRede(err)
+          ? 'Falha de conexão ao enviar (PDF grande ou tempo esgotado). Tente de novo; se persistir, use Imprimir e anexe o PDF no Gmail.'
+          : msg,
+      );
+    }
   };
 
   const busy = generatingPdf || enviarEmail.isPending;

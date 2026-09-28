@@ -96,6 +96,7 @@ const AdminUsersPanel: React.FC = () => {
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
   const [cargo, setCargo] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [password, setPassword] = useState('');
   const [roleId, setRoleId] = useState('2');
   const [status, setStatus] = useState('ativo');
@@ -155,6 +156,7 @@ const AdminUsersPanel: React.FC = () => {
     setUsername('');
     setName('');
     setCargo('');
+    setTelefone('');
     setPassword('');
     setRoleId(defaultRoleId);
     setStatus('ativo');
@@ -171,6 +173,7 @@ const AdminUsersPanel: React.FC = () => {
     setUsername(user.username);
     setName(user.name);
     setCargo(user.cargo || '');
+    setTelefone(user.telefone || '');
     setPassword('');
     setRoleId(user.roleId);
     setStatus(user.status);
@@ -258,6 +261,7 @@ const AdminUsersPanel: React.FC = () => {
       username,
       name,
       cargo: cargo.trim(),
+      telefone: telefone.trim(),
       roleId,
       status,
       environments,
@@ -746,6 +750,18 @@ const AdminUsersPanel: React.FC = () => {
                       value={cargo}
                       onChange={(e) => setCargo(e.target.value)}
                       autoComplete="organization-title"
+                    />
+                  </div>
+                  <div className="login-group">
+                    <label htmlFor="admin-user-telefone">Telefone <small style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(opcional)</small></label>
+                    <input
+                      type="tel"
+                      id="admin-user-telefone"
+                      placeholder="Ex: (43) 99999-9999"
+                      maxLength={30}
+                      value={telefone}
+                      onChange={(e) => setTelefone(e.target.value)}
+                      autoComplete="tel"
                     />
                   </div>
                 </div>

@@ -57,7 +57,7 @@ export const fatorToPercentualInput = (fator?: string | number | null) => {
   const amount = parseTabelaNumber(fator);
   if (amount == null) return '';
   const percentual = roundDecimal(amount * 100, 6);
-  return percentual.toLocaleString('pt-BR', { maximumFractionDigits: 6, minimumFractionDigits: 0 });
+  return percentual.toLocaleString('pt-BR', { maximumFractionDigits: 6, minimumFractionDigits: 2 });
 };
 
 /** Percentual comum digitado (0,15 ou 0,15%) → fator da cotação (0,0015). */

@@ -24,6 +24,54 @@ PAYLOAD = {
 }
 
 
+class ConsolidarAlteracoesRevisaoTests(TestCase):
+    def test_varias_edicoes_na_mesma_revisao_viram_uma_linha(self):
+        from .proposta_tarifas import consolidar_alteracoes
+
+        campo = 'Trecho 1 (Ibiporã-PR → Rondonópolis-MT) · Frete'
+        resultado = consolidar_alteracoes([
+            {'campo': campo, 'de': 'R$ 14.013,77', 'para': 'R$ 14.203,15 (aumento de 1,4%)'},
+            {'campo': campo, 'de': 'R$ 14.203,15', 'para': 'R$ 13.829,38 (desconto de 2,6%)'},
+            {'campo': campo, 'de': 'R$ 13.829,38', 'para': 'R$ 14.397,71 (aumento de 4,1%)'},
+        ])
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]['de'], 'R$ 14.013,77')
+        self.assertEqual(resultado[0]['para'], 'R$ 14.397,71 (aumento de 2,7%)')
+
+    def test_ajustes_iniciais_congelados_permanecem_com_revisao(self):
+        from types import SimpleNamespace
+        from .proposta_tarifas import ajustes_iniciais_proposta
+
+        congelado = [{'campo': 'Trecho 1 · Frete', 'de': 'R$ 13.643,35', 'para': 'R$ 13.500,00'}]
+        proposta = SimpleNamespace(revisao='02', ajustes_iniciais=congelado, historico_revisoes=[])
+        self.assertEqual(ajustes_iniciais_proposta(proposta), congelado)
+
+    def test_frete_original_vem_do_primeiro_de_da_trilha(self):
+        from types import SimpleNamespace
+        from .proposta_tarifas import _fretes_originais_da_trilha
+
+        campo = 'Trecho 1 (A → B) · Frete'
+        proposta = SimpleNamespace(historico_revisoes=[
+            {'tipo': 'revisao', 'revisao': '01', 'alteracoes': [
+                {'campo': campo, 'de': 'R$ 13.643,35', 'para': 'R$ 13.448,44 (desconto de 1,4%)'},
+            ]},
+            {'tipo': 'revisao', 'revisao': '02', 'alteracoes': [
+                {'campo': campo, 'de': 'R$ 13.448,44', 'para': 'R$ 13.900,00 (aumento de 3,4%)'},
+            ]},
+        ])
+        self.assertEqual(_fretes_originais_da_trilha(proposta), {campo: 'R$ 13.643,35'})
+
+    def test_voltar_ao_valor_enviado_remove_a_linha(self):
+        from .proposta_tarifas import consolidar_alteracoes
+
+        campo = 'Trecho 1 · Frete'
+        resultado = consolidar_alteracoes([
+            {'campo': campo, 'de': 'R$ 1.000,00', 'para': 'R$ 1.100,00 (aumento de 10%)'},
+            {'campo': campo, 'de': 'R$ 1.100,00', 'para': 'R$ 1.000,00 (desconto de 9,1%)'},
+        ])
+        self.assertEqual(resultado, [])
+
+
 class ClienteComercialTests(TestCase):
     def setUp(self):
         self.api = APIClient()
@@ -668,10 +716,12 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(ultima['tipo'], 'revisao')
         campos = ' '.join(item['campo'] for item in (ultima.get('alteracoes') or []))
         self.assertIn('Frete', campos)
-        self.assertIn('1.500,00', ultima.get('resumo') or '')
+        resumo = (ultima.get('resumo') or '').lower()
+        self.assertTrue('aumento' in resumo or 'desconto' in resumo)
+        self.assertIn('%', ultima.get('resumo') or '')
 
-    def test_revisao_margem_mostra_percentual_anterior_da_tabela(self):
-        """Sem override gravado, a trilha deve mostrar a margem efetiva da tabela (não —)."""
+    def test_revisao_frete_mostra_percentual_aumento_desconto(self):
+        """Na trilha do cliente, alteração de frete aparece como aumento/desconto %, sem margem."""
         self._auth(self.admin)
         cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
         self.assertEqual(cliente.status_code, 201, cliente.content)
@@ -689,7 +739,7 @@ class ClienteComercialTests(TestCase):
                     'veiculo': 'Truck',
                     'veiculoKey': 'de9000',
                     'km': '50',
-                    'tarifaFrete': '1368.14',
+                    'tarifaFrete': '1000.00',
                     'prazoDias': '2 dias úteis',
                 }],
             },
@@ -703,9 +753,15 @@ class ClienteComercialTests(TestCase):
         alterada = self.api.patch(
             f'/api/comercial/propostas/{proposta_id}/',
             {
-                'margensVeiculo': [
-                    {'bandaKey': 'de9000', 'rotulo': 'Truck', 'margem': '0.24'},
-                ],
+                'linhas': [{
+                    'origem': 'Ibiporã-PR',
+                    'entrega': 'Curitiba-PR',
+                    'veiculo': 'Truck',
+                    'veiculoKey': 'de9000',
+                    'km': '50',
+                    'tarifaFrete': '1100.00',
+                    'prazoDias': '2 dias úteis',
+                }],
             },
             format='json',
             **HEADERS,
@@ -714,11 +770,130 @@ class ClienteComercialTests(TestCase):
         historico = alterada.json().get('historicoRevisoes') or []
         self.assertTrue(historico)
         alts = historico[-1].get('alteracoes') or []
-        margem = next((item for item in alts if 'Margem' in (item.get('campo') or '')), None)
-        self.assertIsNotNone(margem)
-        self.assertNotEqual(margem.get('de'), '—')
-        self.assertIn('%', margem.get('de') or '')
-        self.assertEqual(margem.get('para'), '24%')
+        frete = next((item for item in alts if 'Frete' in (item.get('campo') or '')), None)
+        self.assertIsNotNone(frete)
+        self.assertIn('1.000,00', frete.get('de') or '')
+        self.assertIn('1.100,00', frete.get('para') or '')
+        self.assertIn('aumento de', (frete.get('para') or '').lower())
+        self.assertIn('%', frete.get('para') or '')
+        self.assertFalse(any('Margem' in (item.get('campo') or '') for item in alts))
+
+        desconto = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {
+                'linhas': [{
+                    'origem': 'Ibiporã-PR',
+                    'entrega': 'Curitiba-PR',
+                    'veiculo': 'Truck',
+                    'veiculoKey': 'de9000',
+                    'km': '50',
+                    'tarifaFrete': '990.00',
+                    'prazoDias': '2 dias úteis',
+                }],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(desconto.status_code, 200, desconto.content)
+        alts2 = (desconto.json().get('historicoRevisoes') or [])[-1].get('alteracoes') or []
+        frete_desconto = next(
+            (
+                item for item in alts2
+                if 'desconto' in (item.get('para') or '').lower() and 'Frete' in (item.get('campo') or '')
+            ),
+            None,
+        )
+        self.assertIsNotNone(frete_desconto)
+        self.assertRegex(frete_desconto.get('para') or '', r'R\$\s*990,00')
+
+    def test_distribuicao_ajuste_inicial_e_revisao_por_veiculo(self):
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        cliente_id = cliente.json()['id']
+        self._publicar_tabela_distribuicao(cliente_id)
+        created = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'incluiDistribuicao': True,
+                'status': 'rascunho',
+                'margensVeiculo': [{'bandaKey': 'de9000', 'rotulo': 'Truck', 'margem': '0.40'}],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        ajustes = [
+            item for item in created.json()['ajustesIniciais']
+            if item['campo'].startswith('Distribuição ·')
+        ]
+        self.assertEqual(len(ajustes), 1, created.json()['ajustesIniciais'])
+        self.assertEqual(ajustes[0]['de'], '')
+        self.assertRegex(ajustes[0]['para'], r'^(Aumento|Desconto) inicial de [\d,]+% sobre a tabela padrão')
+
+        proposta_id = created.json()['id']
+        self._marcar_proposta_enviada(proposta_id)
+        # (1 − 0,40) / (1 − 0,46) − 1 = +11,1% no preço de todas as faixas.
+        revisada = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'margensVeiculo': [{'bandaKey': 'de9000', 'rotulo': 'Truck', 'margem': '0.46'}]},
+            format='json',
+            **HEADERS,
+        ).json()
+        self.assertEqual(revisada['modoEnvio'], 'revisao')
+        linhas = [
+            item for item in revisada['historicoRevisoes'][-1]['alteracoes']
+            if item['campo'].startswith('Distribuição ·')
+        ]
+        self.assertEqual(len(linhas), 1, revisada['historicoRevisoes'])
+        self.assertEqual(
+            linhas[0]['para'],
+            'Aumento de 11,1% em relação à versão anterior, em todas as faixas de km',
+        )
+
+    def test_ajustes_iniciais_aparecem_sem_revisao(self):
+        """Margem diferente da tabela na versão inicial gera ajuste inicial, não revisão."""
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(cliente.status_code, 201, cliente.content)
+        cliente_id = cliente.json()['id']
+        self._publicar_tabela_distribuicao(cliente_id)
+        created = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente_id,
+                'incluiTransferencia': True,
+                'status': 'rascunho',
+                'margensVeiculo': [
+                    {'bandaKey': 'de9000', 'rotulo': 'Truck', 'margem': '0.40'},
+                ],
+                'linhas': [{
+                    'origem': 'Ibiporã-PR',
+                    'entrega': 'Curitiba-PR',
+                    'veiculo': 'Truck',
+                    'veiculoKey': 'de9000',
+                    'km': '50',
+                    'tarifaFrete': '1500.00',
+                    'prazoDias': '2 dias úteis',
+                }],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertEqual(created.json().get('revisao') or '', '')
+        ajustes = created.json().get('ajustesIniciais') or []
+        self.assertTrue(ajustes, created.json())
+        frete = next((item for item in ajustes if 'Frete' in (item.get('campo') or '')), None)
+        self.assertIsNotNone(frete)
+        self.assertTrue(
+            'aumento inicial' in (frete.get('para') or '').lower()
+            or 'desconto inicial' in (frete.get('para') or '').lower(),
+            frete,
+        )
+        self.assertFalse(created.json().get('historicoRevisoes'))
 
     def test_status_enviada_somente_pelo_sistema(self):
         self._auth(self.admin)
@@ -1340,6 +1515,341 @@ class ClienteComercialTests(TestCase):
                 self.api.get(f'/api/comercial/propostas/{proposta_id}/', **HEADERS).json()['status'],
                 'enviada',
             )
+
+    def _proposta_armazenagem_enviada(self):
+        self._auth(self.admin)
+        cliente = self.api.post(
+            '/api/comercial/clientes/',
+            {**PAYLOAD, 'email': 'compras@empresa.com'},
+            format='json',
+            **HEADERS,
+        )
+        proposta = self.api.post(
+            '/api/comercial/propostas/',
+            {'tipo': 'armazenagem', 'clienteId': cliente.json()['id'], 'status': 'rascunho'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(proposta.status_code, 201, proposta.content)
+        proposta_id = proposta.json()['id']
+        self._marcar_proposta_enviada(proposta_id)
+        return proposta_id
+
+    def test_situacao_expirada_e_revisao_pendente_com_filtro(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.comercial.models import PropostaComercial
+
+        expirada_id = self._proposta_armazenagem_enviada()
+        PropostaComercial.objects.filter(pk=expirada_id).update(
+            validade='10 dias',
+            data_proposta=timezone.localdate() - timedelta(days=11),
+        )
+        cliente_id = PropostaComercial.objects.get(pk=expirada_id).cliente_id
+
+        def nova_enviada():
+            resp = self.api.post(
+                '/api/comercial/propostas/',
+                {'tipo': 'armazenagem', 'clienteId': cliente_id, 'status': 'rascunho'},
+                format='json',
+                **HEADERS,
+            )
+            self.assertEqual(resp.status_code, 201, resp.content)
+            self._marcar_proposta_enviada(resp.json()['id'])
+            return resp.json()['id']
+
+        vigente_id = nova_enviada()
+        PropostaComercial.objects.filter(pk=vigente_id).update(
+            validade='10 dias',
+            data_proposta=timezone.localdate() - timedelta(days=10),
+        )
+        pendente_id = nova_enviada()
+        PropostaComercial.objects.filter(pk=pendente_id).update(
+            validade='10 dias',
+            data_proposta=timezone.localdate() - timedelta(days=30),
+            modo_envio='revisao',
+        )
+
+        def ids_do_filtro(situacao):
+            resp = self.api.get(f'/api/comercial/propostas/?status={situacao}', **HEADERS)
+            self.assertEqual(resp.status_code, 200, resp.content)
+            return {item['id']: item['situacao'] for item in resp.json()['results']}
+
+        self.assertEqual(ids_do_filtro('expirada'), {str(expirada_id): 'expirada'})
+        self.assertEqual(ids_do_filtro('enviada'), {str(vigente_id): 'enviada'})
+        self.assertEqual(ids_do_filtro('revisao_pendente'), {str(pendente_id): 'revisao_pendente'})
+        ordenado = self.api.get(
+            '/api/comercial/propostas/?status=enviada&ordering=vencimento_asc', **HEADERS,
+        )
+        self.assertEqual(ordenado.status_code, 200, ordenado.content)
+
+        PropostaComercial.objects.filter(pk=expirada_id).update(status='aprovada')
+        self.assertEqual(ids_do_filtro('expirada'), {})
+        self.assertIn(str(expirada_id), ids_do_filtro('aprovada'))
+
+    def test_validade_em_meses_calcula_vencimento_e_filtro(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.comercial.models import PropostaComercial, normalizar_opcao_validade, validade_texto_em_dias
+
+        casos = {
+            '1 dia': 1, '30 dias': 30, '1 mês': 30, '1 mes': 30, '3 meses': 90,
+            '1 ano': 365, '2 anos': 730, 'Indeterminada': None, '': None,
+        }
+        for texto, dias in casos.items():
+            self.assertEqual(validade_texto_em_dias(texto), dias, texto)
+        self.assertEqual(normalizar_opcao_validade('1 mes'), '1 mês')
+        self.assertEqual(normalizar_opcao_validade('2 ANO'), '2 anos')
+        self.assertIsNone(normalizar_opcao_validade('11 anos'))
+
+        vencida_id = self._proposta_armazenagem_enviada()
+        hoje = timezone.localdate()
+        PropostaComercial.objects.filter(pk=vencida_id).update(validade='1 mês', data_proposta=hoje - timedelta(days=31))
+        cliente_id = PropostaComercial.objects.get(pk=vencida_id).cliente_id
+        vigente = PropostaComercial.objects.create(
+            tipo='armazenagem', cliente_id=cliente_id, status='enviada',
+            validade='1 mês', data_proposta=hoje - timedelta(days=29),
+        )
+        self.assertEqual(PropostaComercial.objects.get(pk=vencida_id).data_vencimento(), hoje - timedelta(days=1))
+
+        def ids(query):
+            resp = self.api.get(f'/api/comercial/propostas/?{query}', **HEADERS)
+            self.assertEqual(resp.status_code, 200, resp.content)
+            return [str(item['id']) for item in resp.json()['results']]
+
+        self.assertEqual(ids('status=expirada'), [str(vencida_id)])
+        self.assertEqual(ids('status=enviada'), [str(vigente.pk)])
+        self.assertEqual(ids('ordering=vencimento_asc'), [str(vencida_id), str(vigente.pk)])
+
+        PropostaComercial.objects.filter(pk=vencida_id).update(validade='1 ano', data_proposta=hoje - timedelta(days=366))
+        PropostaComercial.objects.filter(pk=vigente.pk).update(validade='1 ano', data_proposta=hoje - timedelta(days=364))
+        self.assertEqual(ids('status=expirada'), [str(vencida_id)])
+        self.assertEqual(ids('status=enviada'), [str(vigente.pk)])
+
+    def test_lista_clientes_filtra_por_cliente(self):
+        from apps.comercial.models import PropostaComercial
+
+        cliente_id = PropostaComercial.objects.get(pk=self._proposta_armazenagem_enviada()).cliente_id
+
+        def ids(query):
+            resp = self.api.get(f'/api/comercial/clientes/?{query}', **HEADERS)
+            self.assertEqual(resp.status_code, 200, resp.content)
+            return [str(item['id']) for item in resp.json()['results']]
+
+        self.assertEqual(ids(f'cliente={cliente_id}'), [str(cliente_id)])
+        self.assertEqual(ids(f'cliente={cliente_id + 999}'), [])
+        self.assertEqual(ids('cliente=abc'), [])
+
+    def test_parametros_padroniza_e_rejeita_formato_invalido(self):
+        from apps.comercial.models import normalizar_opcao_faturamento, normalizar_opcao_vigencia
+
+        self.assertEqual(normalizar_opcao_vigencia('1 ANO'), '1 ano')
+        self.assertEqual(normalizar_opcao_vigencia('18 mes'), '18 meses')
+        self.assertEqual(normalizar_opcao_vigencia('indeterminado'), 'Indeterminada')
+        self.assertIsNone(normalizar_opcao_vigencia('um ano e meio'))
+        self.assertEqual(normalizar_opcao_faturamento('mensal/45 ddl'), 'Mensal / 45 DDL')
+        self.assertEqual(normalizar_opcao_faturamento('quinzenal'), 'Quinzenal')
+        self.assertEqual(normalizar_opcao_faturamento('30ddl'), '30 DDL')
+        self.assertIsNone(normalizar_opcao_faturamento('a combinar'))
+        self.assertIsNone(normalizar_opcao_faturamento('0 DDL'))
+
+        self._auth(self.admin)
+        resp = self.api.put('/api/comercial/parametros/', {
+            'validades': ['20 DIAS', '2 mes'],
+            'validadePadrao': '2 meses',
+            'vigencias': ['2 anos', 'indeterminada'],
+            'vigenciaPadrao': '2 anos',
+            'prazosFaturamento': ['mensal / 45 ddl', '30 ddl'],
+            'faturamentoPadrao': '30 DDL',
+        }, format='json', **HEADERS)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        body = resp.json()
+        self.assertEqual(body['validades'], ['20 dias', '2 meses'])
+        self.assertEqual(body['vigencias'], ['2 anos', 'Indeterminada'])
+        self.assertEqual(body['prazosFaturamento'], ['Mensal / 45 DDL', '30 DDL'])
+        self.assertEqual(body['faturamentoPadrao'], '30 DDL')
+
+        for payload in (
+            {'validades': ['3 semanas']},
+            {'vigencias': ['até o fim da obra']},
+            {'prazosFaturamento': ['A combinar']},
+            {'faturamentoPadrao': 'Anual'},
+        ):
+            resp = self.api.put('/api/comercial/parametros/', payload, format='json', **HEADERS)
+            self.assertEqual(resp.status_code, 400, payload)
+            self.assertIn('Use o formato', resp.json()['detail'])
+        self.assertEqual(self.api.get('/api/comercial/parametros/', **HEADERS).json()['vigencias'], ['2 anos', 'Indeterminada'])
+
+    def test_filtro_servico_por_operacao(self):
+        from apps.comercial.models import PropostaComercial
+
+        armazenagem_id = self._proposta_armazenagem_enviada()
+        cliente_id = PropostaComercial.objects.get(pk=armazenagem_id).cliente_id
+        operacoes = {}
+        for operacao, flag in (
+            ('transferencia', 'inclui_transferencia'),
+            ('distribuicao', 'inclui_distribuicao'),
+            ('portuaria', 'inclui_op_portuaria'),
+        ):
+            proposta = PropostaComercial.objects.create(
+                tipo='transporte_rodoviario', cliente_id=cliente_id, **{flag: True},
+            )
+            operacoes[operacao] = str(proposta.pk)
+
+        def ids(tipo):
+            resp = self.api.get(f'/api/comercial/propostas/?tipo={tipo}', **HEADERS)
+            self.assertEqual(resp.status_code, 200, resp.content)
+            return {str(item['id']) for item in resp.json()['results']}
+
+        for operacao, proposta_id in operacoes.items():
+            self.assertEqual(ids(operacao), {proposta_id})
+        self.assertEqual(ids('armazenagem'), {str(armazenagem_id)})
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user', side_effect=ValueError('Gmail fora'))
+    def test_falha_no_gmail_nao_marca_revisao_como_enviada(self, _mock_send):
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        proposta_id = self._proposta_armazenagem_enviada()
+        alterada = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'validade': '45 dias'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(alterada.json()['modoEnvio'], 'revisao')
+        response = self.api.post(
+            f'/api/comercial/propostas/{proposta_id}/enviar-email/',
+            {'pdfBase64': PDF_BASE64},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        atual = self.api.get(f'/api/comercial/propostas/{proposta_id}/', **HEADERS).json()
+        self.assertEqual(atual['modoEnvio'], 'revisao')
+        self.assertEqual(atual['revisao'], '01')
+
+    def test_mudanca_de_conteudo_abre_revisao_e_desfazer_fecha(self):
+        proposta_id = self._proposta_armazenagem_enviada()
+        original = self.api.get(f'/api/comercial/propostas/{proposta_id}/', **HEADERS).json()['validade']
+        alterada = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'validade': '45 dias'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(alterada.json()['revisao'], '01')
+        self.assertEqual(alterada.json()['modoEnvio'], 'revisao')
+        self.assertNotIn('baseConteudo', str(alterada.json()['historicoRevisoes']))
+
+        desfeita = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'validade': original},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(desfeita.json()['revisao'], '')
+        self.assertEqual(desfeita.json()['modoEnvio'], '')
+        self.assertEqual(desfeita.json()['historicoRevisoes'], [])
+
+    def test_trilha_de_revisao_inclui_cabecalho_e_generalidades(self):
+        proposta_id = self._proposta_armazenagem_enviada()
+        original = self.api.get(f'/api/comercial/propostas/{proposta_id}/', **HEADERS).json()
+        condicoes = [{'rotulo': 'PRAZO DE PAGAMENTO', 'valor': '120 DDL', 'tipo': 'armazenagem'}]
+        self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'validade': '45 dias'},
+            format='json',
+            **HEADERS,
+        )
+        alterada = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'condicoes': condicoes},
+            format='json',
+            **HEADERS,
+        ).json()
+        self.assertEqual(alterada['revisao'], '01')
+        alteracoes = alterada['historicoRevisoes'][-1]['alteracoes']
+        self.assertIn(
+            {'campo': 'Validade da proposta', 'de': original['validade'], 'para': '45 dias'},
+            alteracoes,
+        )
+        self.assertIn(
+            {'campo': 'Observações · PRAZO DE PAGAMENTO', 'de': '—', 'para': '120 DDL'},
+            alteracoes,
+        )
+
+    def test_aceita_pode_voltar_para_enviada(self):
+        proposta_id = self._proposta_armazenagem_enviada()
+        aceita = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'status': 'aprovada'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(aceita.json()['status'], 'aprovada')
+        voltou = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'status': 'enviada'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(voltou.json()['status'], 'enviada')
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+    def test_revisao_de_proposta_aceita_volta_para_enviada_ao_enviar(self, _mock_send):
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        proposta_id = self._proposta_armazenagem_enviada()
+        self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'status': 'aprovada'},
+            format='json',
+            **HEADERS,
+        )
+        alterada = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'validade': '45 dias'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(alterada.json()['status'], 'aprovada')
+        self.assertEqual(alterada.json()['modoEnvio'], 'revisao')
+        response = self.api.post(
+            f'/api/comercial/propostas/{proposta_id}/enviar-email/',
+            {'pdfBase64': PDF_BASE64, 'revisoes': ['01']},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        atual = self.api.get(f'/api/comercial/propostas/{proposta_id}/', **HEADERS).json()
+        self.assertEqual(atual['status'], 'enviada')
+        self.assertEqual(atual['modoEnvio'], '')
+        self.assertEqual(atual['revisao'], '01')
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+    def test_envio_recusa_pdf_com_revisao_desatualizada(self, mock_send):
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        proposta_id = self._proposta_armazenagem_enviada()
+        self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'validade': '45 dias'},
+            format='json',
+            **HEADERS,
+        )
+        response = self.api.post(
+            '/api/comercial/propostas/enviar-email-lote/',
+            {'ids': [proposta_id], 'revisoes': [''], 'pdf': [self._pdf_upload()]},
+            format='multipart',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn('revisão', response.json()['detail'])
+        mock_send.assert_not_called()
 
     def test_enviar_email_exige_destinatario(self):
         self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
@@ -2668,6 +3178,209 @@ class ClienteComercialTests(TestCase):
         self.assertIn('São Paulo', body['cidadeOrigem'])
 
 
+@patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+class RevisaoPorTipoOperacaoTests(TestCase):
+    """Ciclo completo por operação: envio → edições (Rev. 01) → envio → edição (Rev. 02)."""
+
+    def setUp(self):
+        self.api = APIClient()
+        self.admin = User.objects.create_user(
+            username='comercial.rev',
+            password='test123',
+            name='Admin Revisão',
+            role_id='1',
+            status='ativo',
+            environments=['Comercial'],
+            google_email='miguel.ribeiro@transcamila.com.br',
+        )
+        self.api.force_authenticate(user=self.admin)
+        cliente = self.api.post(
+            '/api/comercial/clientes/',
+            {**PAYLOAD, 'email': 'compras@empresa.com'},
+            format='json',
+            **HEADERS,
+        )
+        self.cliente_id = cliente.json()['id']
+        tabela = self.api.post(
+            '/api/comercial/tabela-frete/',
+            {'nome': 'Tabela Dist', 'tipo': 'distribuicao', 'clienteIds': [self.cliente_id]},
+            format='json',
+            **HEADERS,
+        )
+        self.api.post(f'/api/comercial/tabela-frete/{tabela.json()["id"]}/publicar/', **HEADERS)
+
+    def _url(self, proposta_id):
+        return f'/api/comercial/propostas/{proposta_id}/'
+
+    def _patch(self, proposta_id, dados):
+        resp = self.api.patch(self._url(proposta_id), dados, format='json', **HEADERS)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        return resp.json()
+
+    def _enviar(self, proposta_id, revisao):
+        pdf = SimpleUploadedFile('p.pdf', base64.b64decode(PDF_BASE64), content_type='application/pdf')
+        resp = self.api.post(
+            '/api/comercial/propostas/enviar-email-lote/',
+            {'ids': [proposta_id], 'revisoes': [revisao], 'pdf': [pdf]},
+            format='multipart',
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        return self.api.get(self._url(proposta_id), **HEADERS).json()
+
+    @staticmethod
+    def _campos(entrada):
+        return {alt['campo']: alt for alt in entrada['alteracoes']}
+
+    def _ciclo(self, criacao, tipo_generalidade, mudanca_valor, conferir_valor, preparar=None):
+        condicoes = [{'rotulo': 'PRAZO DE PAGAMENTO', 'valor': '30 DDL', 'tipo': tipo_generalidade}]
+        created = self.api.post(
+            '/api/comercial/propostas/',
+            {'clienteId': self.cliente_id, 'status': 'rascunho', 'validade': '30 dias',
+             'condicoes': condicoes, **criacao},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        proposta = created.json()
+        pid = proposta['id']
+        if preparar:
+            proposta = self._patch(pid, preparar(proposta))
+            self.assertEqual(proposta['revisao'], '', 'rascunho não abre revisão')
+
+        # Envio original.
+        enviada = self._enviar(pid, '')
+        self.assertEqual((enviada['status'], enviada['revisao'], enviada['modoEnvio']), ('enviada', '', ''))
+        self.assertEqual(enviada['situacao'], 'enviada')
+        self.assertEqual(enviada['historicoRevisoes'], [])
+        ajustes_enviados = enviada['ajustesIniciais']
+
+        # Salvar o formulário inteiro sem mudar nada (payload igual ao da tela) não abre revisão.
+        campos_formulario = (
+            'tipo', 'clienteId', 'status', 'titulo', 'subtitulo', 'revisao', 'dataProposta',
+            'propostaReferente', 'responsavel', 'reajuste', 'att', 'validade', 'vigencia', 'faturamento',
+            'localEmissao', 'valorEstimado', 'observacoes', 'incluiTransferencia', 'incluiDistribuicao',
+            'incluiArmazenagem', 'incluiOpPortuaria', 'margensVeiculo', 'condicoes', 'linhas',
+        )
+        formulario = {chave: enviada[chave] for chave in campos_formulario if chave in enviada}
+        if enviada.get('incluiArmazenagem'):
+            formulario['tabelaArmazenagem'] = enviada['tabelaArmazenagem']
+        igual = self._patch(pid, formulario)
+        self.assertEqual((igual['revisao'], igual['modoEnvio'], igual['historicoRevisoes']), ('', '', []))
+
+        # Rev. 01: cabeçalho (duas edições), generalidade e valor da operação.
+        self._patch(pid, {'validade': '45 dias'})
+        self._patch(pid, {'validade': '50 dias'})
+        self._patch(pid, {'condicoes': [{**condicoes[0], 'valor': '60 DDL'}]})
+        rev1 = self._patch(pid, mudanca_valor(enviada))
+        self.assertEqual((rev1['status'], rev1['revisao'], rev1['modoEnvio']), ('enviada', '01', 'revisao'))
+        self.assertEqual(rev1['situacao'], 'revisao_pendente')
+        self.assertEqual(len(rev1['historicoRevisoes']), 1)
+        campos = self._campos(rev1['historicoRevisoes'][0])
+        self.assertEqual(
+            (campos['Validade da proposta']['de'], campos['Validade da proposta']['para']),
+            ('30 dias', '50 dias'),
+        )
+        secao = 'Observações' if tipo_generalidade == 'armazenagem' else 'Generalidades'
+        generalidade = campos[f'{secao} · PRAZO DE PAGAMENTO']
+        self.assertEqual((generalidade['de'], generalidade['para']), ('30 DDL', '60 DDL'))
+        conferir_valor(campos)
+        self.assertEqual(rev1['ajustesIniciais'], ajustes_enviados)
+
+        # Envio da Rev. 01.
+        enviada1 = self._enviar(pid, '01')
+        self.assertEqual((enviada1['status'], enviada1['revisao'], enviada1['modoEnvio']), ('enviada', '01', ''))
+        self.assertTrue(enviada1['historicoRevisoes'][0].get('enviado'))
+        self.assertEqual(self._campos(enviada1['historicoRevisoes'][0]).keys(), campos.keys())
+
+        # Rev. 02: só cabeçalho; a Rev. 01 continua com as próprias linhas.
+        rev2 = self._patch(pid, {'validade': '60 dias'})
+        self.assertEqual((rev2['revisao'], rev2['modoEnvio']), ('02', 'revisao'))
+        self.assertEqual(len(rev2['historicoRevisoes']), 2)
+        self.assertEqual(self._campos(rev2['historicoRevisoes'][0]), campos)
+        self.assertEqual(
+            rev2['historicoRevisoes'][1]['alteracoes'],
+            [{'campo': 'Validade da proposta', 'de': '50 dias', 'para': '60 dias'}],
+        )
+        self.assertEqual(rev2['ajustesIniciais'], ajustes_enviados)
+
+        # Desfazer a Rev. 02 fecha a revisão sem tocar a Rev. 01.
+        desfeita = self._patch(pid, {'validade': '50 dias'})
+        self.assertEqual((desfeita['revisao'], desfeita['modoEnvio']), ('01', ''))
+        self.assertEqual(len(desfeita['historicoRevisoes']), 1)
+        return rev2
+
+    def test_transferencia(self, _mock):
+        linha = {'origem': 'Ibiporã-PR', 'entrega': 'Rondonópolis-MT', 'veiculo': 'Carreta',
+                 'veiculoKey': 'de14001', 'km': '100', 'tarifaFrete': '1000.00', 'prazoDias': '3 dias úteis'}
+
+        def conferir(campos):
+            frete = campos['Trecho 1 (Ibiporã-PR → Rondonópolis-MT) · Frete']
+            self.assertEqual((frete['de'], frete['para']), ('R$ 1.000,00', 'R$ 950,00 (desconto de 5%)'))
+
+        self._ciclo(
+            {'tipo': 'transporte_rodoviario', 'incluiTransferencia': True, 'linhas': [linha]},
+            'frete',
+            lambda _p: {'linhas': [{**linha, 'tarifaFrete': '950.00'}]},
+            conferir,
+        )
+
+    def test_logistica_retroportuaria(self, _mock):
+        linha = {'origem': 'Paranaguá-PR', 'entrega': 'Curitiba-PR', 'veiculo': 'Carreta',
+                 'veiculoKey': 'de14001', 'km': '90', 'tarifaFrete': '1200.00', 'retiradaCtnt': '200.00',
+                 'desovaCtnt': '150.00', 'modalidade': 'op_portuaria', 'prazoDias': '2 dias úteis'}
+
+        def conferir(campos):
+            retirada = campos['Trecho 1 (Paranaguá-PR → Curitiba-PR) · Retirada CTNT']
+            self.assertEqual((retirada['de'], retirada['para']), ('R$ 200,00', 'R$ 250,00'))
+
+        self._ciclo(
+            {'tipo': 'transporte_rodoviario', 'incluiOpPortuaria': True, 'linhas': [linha]},
+            'op_portuaria',
+            lambda _p: {'linhas': [{**linha, 'retiradaCtnt': '250.00'}]},
+            conferir,
+        )
+
+    def test_distribuicao(self, _mock):
+        def conferir(campos):
+            linhas = [alt for campo, alt in campos.items() if campo.startswith('Distribuição ·')]
+            self.assertEqual(len(linhas), 1, campos)
+            self.assertEqual(
+                linhas[0]['para'],
+                'Aumento de 11,1% em relação à versão anterior, em todas as faixas de km',
+            )
+
+        rev2 = self._ciclo(
+            {'tipo': 'transporte_rodoviario', 'incluiDistribuicao': True,
+             'margensVeiculo': [{'bandaKey': 'de9000', 'rotulo': 'Truck', 'margem': '0.40'}]},
+            'distribuicao',
+            lambda _p: {'margensVeiculo': [{'bandaKey': 'de9000', 'rotulo': 'Truck', 'margem': '0.46'}]},
+            conferir,
+        )
+        iniciais = [alt for alt in rev2['ajustesIniciais'] if alt['campo'].startswith('Distribuição ·')]
+        self.assertEqual(len(iniciais), 1, rev2['ajustesIniciais'])
+        self.assertIn('inicial', iniciais[0]['para'])
+
+    def test_armazenagem(self, _mock):
+        def com_valores(proposta, valor_minimo):
+            tabela = proposta['tabelaArmazenagem']
+            itens = [{**item, 'valor': 'R$ 1.000,00'} for item in tabela['itens']]
+            itens[0]['valor'] = valor_minimo
+            return {'tabelaArmazenagem': {**tabela, 'itens': itens}}
+
+        def conferir(campos):
+            item = next(alt for campo, alt in campos.items() if campo.startswith('Armazenagem · FATURAMENTO MÍNIMO'))
+            self.assertEqual(item['para'], 'R$ 12.000,00')
+
+        self._ciclo(
+            {'tipo': 'armazenagem'},
+            'armazenagem',
+            lambda p: com_valores(p, 'R$ 12.000,00'),
+            conferir,
+            preparar=lambda p: com_valores(p, 'R$ 10.000,00'),
+        )
+
+
 class PropostaComercialDraftTests(TestCase):
     def setUp(self):
         self.api = APIClient()
@@ -2917,6 +3630,14 @@ class HomologacaoProdutosComercialTests(TestCase):
             **HEADERS,
         )
         self.assertEqual(aprovado.status_code, 200, aprovado.content)
+        bloqueado = self.api.post(
+            f'/api/comercial/clientes/{cliente_id}/homologar/',
+            {'decisao': 'reprovado', 'justificativa': 'Tentativa de reprovar depois de homologado.'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(bloqueado.status_code, 400, bloqueado.content)
+        self.assertIn('composição de produtos for alterada', bloqueado.json()['detail'])
         self._auth(self.produtos)
         extra = self.api.post(
             '/api/comercial/produtos/',

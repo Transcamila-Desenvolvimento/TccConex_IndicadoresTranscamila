@@ -97,7 +97,7 @@ const DashboardLayout: React.FC = () => {
     if (location.pathname.startsWith('/frota/cadastros')) {
       setIsCadastrosFrotaSubmenuOpen(true);
     }
-    if (location.pathname.startsWith('/comercial/cadastros')) {
+    if (location.pathname.startsWith('/comercial/cadastros') || location.pathname.startsWith('/comercial/parametros/prazos')) {
       setIsCadastrosComercialSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/admin')) {
@@ -497,10 +497,17 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-icms-ufs')
       },
       {
-        title: "Parâmetros",
-        path: "Comercial / Parâmetros",
-        icon: <i className="bi bi-sliders search-item-icon" aria-hidden="true" />,
-        action: () => navigate('/comercial/parametros'),
+        title: "Prazos e validades",
+        path: "Comercial / Cadastros / Prazos e validades",
+        icon: <i className="bi bi-calendar3 search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/comercial/parametros/prazos'),
+        show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-parametros')
+      },
+      {
+        title: "Personalizar",
+        path: "Comercial / Personalizar",
+        icon: <i className="bi bi-brush search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/comercial/parametros/logos'),
         show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-parametros')
       },
       {
@@ -572,6 +579,7 @@ const DashboardLayout: React.FC = () => {
     '/comercial/cadastros/generalidades',
     '/comercial/cadastros/icms-ufs',
     '/comercial/cadastros/produtos',
+    '/comercial/parametros/prazos',
   ];
 
   // Get Breadcrumb text based on active route and environment
@@ -603,7 +611,10 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/comercial/cadastros/generalidades')) return `${env} / Cadastros / Generalidades`;
     if (path.startsWith('/comercial/cadastros/icms-ufs')) return `${env} / Cadastros / ICMS por UF`;
     if (path.startsWith('/comercial/cadastros/produtos')) return `${env} / Cadastros / Composição de produtos`;
-    if (path.startsWith('/comercial/parametros') || path.startsWith('/comercial/cadastros/parametros')) return `${env} / Parâmetros`;
+    if (path.startsWith('/comercial/parametros/logos')) return `${env} / Personalizar`;
+    if (path.startsWith('/comercial/parametros/prazos') || path.startsWith('/comercial/parametros') || path.startsWith('/comercial/cadastros/parametros')) {
+      return `${env} / Cadastros / Prazos e validades`;
+    }
     if (path.startsWith('/comercial/propostas')) return `${env} / Propostas comerciais`;
     if (path.startsWith('/comercial/validacao-clientes')) return `${env} / Validação clientes`;
     if (path.startsWith('/comercial')) return env;
@@ -1349,7 +1360,7 @@ const DashboardLayout: React.FC = () => {
                   </div>
                 </Link>
                 )}
-                {(canAba('Comercial', 'cadastro-clientes') || canAba('Comercial', 'cadastro-tabela-frete') || canAba('Comercial', 'cadastro-generalidades') || canAba('Comercial', 'cadastro-icms-ufs') || canAba('Comercial', 'cadastro-produtos')) && (
+                {(canAba('Comercial', 'cadastro-clientes') || canAba('Comercial', 'cadastro-tabela-frete') || canAba('Comercial', 'cadastro-generalidades') || canAba('Comercial', 'cadastro-icms-ufs') || canAba('Comercial', 'cadastro-produtos') || canAba('Comercial', 'cadastro-parametros')) && (
                 <div className={`nav-group-wrapper${isCadastrosComercialSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-comercial-cadastros">
                   <button
                     type="button"
@@ -1367,7 +1378,7 @@ const DashboardLayout: React.FC = () => {
                     className="submenu-container"
                     style={{
                       display: isSidebarCollapsed ? undefined : 'block',
-                      maxHeight: isSidebarCollapsed ? undefined : (isCadastrosComercialSubmenuOpen ? '300px' : '0px'),
+                      maxHeight: isSidebarCollapsed ? undefined : (isCadastrosComercialSubmenuOpen ? '360px' : '0px'),
                       overflow: 'hidden',
                       transition: 'max-height 0.25s ease',
                     }}
@@ -1432,18 +1443,30 @@ const DashboardLayout: React.FC = () => {
                       </div>
                     </Link>
                     )}
+                    {canAba('Comercial', 'cadastro-parametros') && (
+                    <Link
+                      to="/comercial/parametros/prazos"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/comercial/parametros/prazos') ? 'active' : ''}`}
+                      data-tooltip="Prazos e validades"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="calendar3" sub />
+                        <span className="nav-text">Prazos e validades</span>
+                      </div>
+                    </Link>
+                    )}
                   </div>
                 </div>
                 )}
                 {canAba('Comercial', 'cadastro-parametros') && (
                 <Link
-                  to="/comercial/parametros"
-                  className={`nav-btn ${isRouteActive('/comercial/parametros') ? 'active' : ''}`}
-                  data-tooltip="Parâmetros"
+                  to="/comercial/parametros/logos"
+                  className={`nav-btn ${isRouteActive('/comercial/parametros/logos') ? 'active' : ''}`}
+                  data-tooltip="Personalizar"
                 >
                   <div className="nav-btn-left">
-                    <NavIcon name="sliders" />
-                    <span className="nav-text">Parâmetros</span>
+                    <NavIcon name="brush" />
+                    <span className="nav-text">Personalizar</span>
                   </div>
                 </Link>
                 )}

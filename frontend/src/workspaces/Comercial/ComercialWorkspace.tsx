@@ -29,8 +29,10 @@ const ComercialWorkspace: React.FC = () => {
       <Route path="cadastros/produtos" element={<AbaRoute module="Comercial" aba="cadastro-produtos" fallback={fallback}><ComercialCadastroProdutos /></AbaRoute>} />
       <Route path="propostas" element={<AbaRoute module="Comercial" aba="propostas-comerciais" fallback={fallback}><ComercialPropostas /></AbaRoute>} />
       <Route path="validacao-clientes" element={<AbaRoute module="Comercial" aba="validacao-clientes" fallback={fallback}><ComercialValidacaoClientes /></AbaRoute>} />
-      <Route path="parametros" element={<AbaRoute module="Comercial" aba="cadastro-parametros" fallback={fallback}><ComercialCadastroParametros /></AbaRoute>} />
-      <Route path="cadastros/parametros" element={<Navigate to="/comercial/parametros" replace />} />
+      <Route path="parametros" element={<Navigate to="/comercial/parametros/prazos" replace />} />
+      <Route path="parametros/prazos" element={<AbaRoute module="Comercial" aba="cadastro-parametros" fallback={fallback}><ComercialCadastroParametros secao="prazos" /></AbaRoute>} />
+      <Route path="parametros/logos" element={<AbaRoute module="Comercial" aba="cadastro-parametros" fallback={fallback}><ComercialCadastroParametros secao="logos" /></AbaRoute>} />
+      <Route path="cadastros/parametros" element={<Navigate to="/comercial/parametros/prazos" replace />} />
       <Route path="*" element={<Navigate to={fallback} replace />} />
     </Routes>
   );

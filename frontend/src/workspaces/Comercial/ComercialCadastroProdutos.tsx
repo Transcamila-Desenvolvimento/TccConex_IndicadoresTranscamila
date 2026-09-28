@@ -185,6 +185,10 @@ const ComercialCadastroProdutos: React.FC = () => {
   const toggleGrupo = (id: string) => {
     setRecolhidos((prev) => ({ ...prev, [id]: !prev[id] }));
   };
+  const todosRecolhidos = grupos.length > 0 && grupos.every((grupo) => recolhidos[grupo.id]);
+  const alternarTodos = () => {
+    setRecolhidos(Object.fromEntries(grupos.map((grupo) => [grupo.id, !todosRecolhidos])));
+  };
 
   return (
     <div className="fat-list-compact" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '0 4px 4px' }}>
@@ -215,6 +219,7 @@ const ComercialCadastroProdutos: React.FC = () => {
               value={filterClienteId}
               onChange={(e) => { setFilterClienteId(e.target.value); setPage(1); }}
               aria-label="Filtrar por cliente"
+              style={{ width: '100%' }}
             >
               <option value="">Cliente: Todos</option>
               {clientes.map((cliente) => (
@@ -224,9 +229,6 @@ const ComercialCadastroProdutos: React.FC = () => {
               ))}
             </select>
           </div>
-        </div>
-        <div className="reports-filter-right">
-          <span className="reports-records-count"><strong>{totalCount}</strong> Produto{totalCount === 1 ? '' : 's'}</span>
         </div>
       </div>
 
@@ -251,7 +253,19 @@ const ComercialCadastroProdutos: React.FC = () => {
               </colgroup>
               <thead>
                 <tr>
-                  <th aria-label="Expandir" />
+                  <th>
+                    {grupos.length > 0 ? (
+                      <button
+                        type="button"
+                        className="btn-icon comercial-grupo-toggle comercial-grupo-toggle-all"
+                        title={todosRecolhidos ? 'Expandir tudo' : 'Recolher tudo'}
+                        aria-label={todosRecolhidos ? 'Expandir tudo' : 'Recolher tudo'}
+                        onClick={alternarTodos}
+                      >
+                        <i className={`bi ${todosRecolhidos ? 'bi-chevron-bar-expand' : 'bi-chevron-bar-contract'}`} />
+                      </button>
+                    ) : null}
+                  </th>
                   <th>Cliente / Produto</th>
                   <th>Classe</th>
                   <th>ONU</th>

@@ -511,6 +511,18 @@ STATUS_PROPOSTA_CHOICES = [
     (STATUS_PROPOSTA_RECUSADA, 'Recusada'),
 ]
 
+# Situação exibida na listagem: status + revisão pendente de envio + vencimento.
+SITUACAO_PROPOSTA_REVISAO_PENDENTE = 'revisao_pendente'
+SITUACAO_PROPOSTA_EXPIRADA = 'expirada'
+SITUACOES_PROPOSTA = {
+    STATUS_PROPOSTA_RASCUNHO,
+    STATUS_PROPOSTA_ENVIADA,
+    STATUS_PROPOSTA_APROVADA,
+    STATUS_PROPOSTA_RECUSADA,
+    SITUACAO_PROPOSTA_REVISAO_PENDENTE,
+    SITUACAO_PROPOSTA_EXPIRADA,
+}
+
 
 TIPO_GENERALIDADE_FRETE = 'frete'
 TIPO_GENERALIDADE_DISTRIBUICAO = 'distribuicao'
@@ -717,6 +729,11 @@ class PropostaComercial(models.Model):
     margens_veiculo = models.JSONField(default=list, blank=True, verbose_name='Margens da proposta')
     tabela_distribuicao = models.JSONField(default=dict, blank=True, verbose_name='Snapshot da tabela de distribuição')
     historico_revisoes = models.JSONField(default=list, blank=True, verbose_name='Trilha de revisões')
+    ajustes_iniciais = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Ajustes iniciais congelados no primeiro envio',
+    )
     modo_envio = models.CharField(max_length=20, blank=True, default='', verbose_name='Próximo envio')
     ano = models.PositiveIntegerField(null=True, blank=True, db_index=True, verbose_name='Ano da numeração')
     numero = models.PositiveIntegerField(null=True, blank=True, verbose_name='Número da proposta')
@@ -807,14 +824,7 @@ class PropostaComercial(models.Model):
         return self.titulo or f'Proposta {self.pk}'
 
     def validade_em_dias(self):
-        match = re.search(r'(\d+)', self.validade or '')
-        if not match:
-            return None
-        texto = (self.validade or '').lower()
-        dias = int(match.group(1))
-        if 'mes' in texto:
-            return dias * 30
-        return dias
+        return validade_texto_em_dias(self.validade)
 
     def data_base_vigencia(self):
         if self.data_proposta:
@@ -829,6 +839,17 @@ class PropostaComercial(models.Model):
         if not base or dias is None:
             return None
         return base + timedelta(days=dias)
+
+    def situacao(self, hoje=None):
+        if self.status == STATUS_PROPOSTA_RASCUNHO:
+            return STATUS_PROPOSTA_RASCUNHO
+        if self.modo_envio == 'revisao':
+            return SITUACAO_PROPOSTA_REVISAO_PENDENTE
+        if self.status == STATUS_PROPOSTA_ENVIADA:
+            vencimento = self.data_vencimento()
+            if vencimento and vencimento < (hoje or timezone.localdate()):
+                return SITUACAO_PROPOSTA_EXPIRADA
+        return self.status
 
 
 class PropostaComercialDraft(models.Model):
@@ -1288,19 +1309,108 @@ VALIDADE_PROPOSTA_DEFAULT = '30 dias'
 VIGENCIA_CONTRATO_DEFAULT = '12 meses'
 FATURAMENTO_PROPOSTA_DEFAULT = 'Semanal / 30 DDL'
 
+_VALIDADE_OPCAO_RE = re.compile(
+    r'^\s*(\d+)\s*(dias?|meses?|m[eê]s|anos?)\s*$',
+    re.IGNORECASE,
+)
 
-def _lista_opcoes(raw, padrao):
+
+def normalizar_opcao_validade(texto: str) -> str | None:
+    """Aceita só 'N dia(s)', 'N mês/meses' ou 'N ano(s)' — formato usado no cálculo do vencimento."""
+    match = _VALIDADE_OPCAO_RE.match(str(texto or '').strip())
+    if not match:
+        return None
+    quantidade = int(match.group(1))
+    unidade = match.group(2).lower()
+    if quantidade <= 0 or validade_texto_em_dias(f'{quantidade} {unidade}') > 3650:
+        return None
+    if unidade.startswith('ano'):
+        return f'{quantidade} {"ano" if quantidade == 1 else "anos"}'
+    if unidade.startswith('mes') or 'ê' in unidade:
+        return f'{quantidade} {"mês" if quantidade == 1 else "meses"}'
+    return f'{quantidade} {"dia" if quantidade == 1 else "dias"}'
+
+
+_VIGENCIA_OPCAO_RE = re.compile(r'^\s*(\d+)\s*(meses|m[eê]s|anos?)\s*$', re.IGNORECASE)
+_FATURAMENTO_OPCAO_RE = re.compile(
+    r'^\s*(semanal|quinzenal|mensal)?\s*(?:/?\s*(\d+)\s*ddl)?\s*$',
+    re.IGNORECASE,
+)
+VIGENCIA_INDETERMINADA = 'Indeterminada'
+
+
+def normalizar_opcao_vigencia(texto: str) -> str | None:
+    """'N mês/meses', 'N ano/anos' ou 'Indeterminada'."""
+    bruto = str(texto or '').strip()
+    if bruto.lower().startswith('indeterminad'):
+        return VIGENCIA_INDETERMINADA
+    match = _VIGENCIA_OPCAO_RE.match(bruto)
+    if not match:
+        return None
+    quantidade = int(match.group(1))
+    if quantidade <= 0 or quantidade > 600:
+        return None
+    if match.group(2).lower().startswith('ano'):
+        return f'{quantidade} {"ano" if quantidade == 1 else "anos"}'
+    return f'{quantidade} {"mês" if quantidade == 1 else "meses"}'
+
+
+def normalizar_opcao_faturamento(texto: str) -> str | None:
+    """'Semanal', 'Semanal / 30 DDL' ou '30 DDL' (periodicidade e/ou prazo em dias)."""
+    match = _FATURAMENTO_OPCAO_RE.match(str(texto or ''))
+    if not match or not (match.group(1) or match.group(2)):
+        return None
+    periodicidade = (match.group(1) or '').capitalize()
+    ddl = int(match.group(2)) if match.group(2) else None
+    if ddl is not None and (ddl <= 0 or ddl > 365):
+        return None
+    if periodicidade and ddl:
+        return f'{periodicidade} / {ddl} DDL'
+    return periodicidade or f'{ddl} DDL'
+
+
+def validade_texto_em_dias(texto) -> int | None:
+    """'30 dias' → 30; '3 meses' → 30 por mês; '1 ano' → 365 por ano. None se fora do formato aceito."""
+    match = _VALIDADE_OPCAO_RE.match(str(texto or '').strip())
+    if not match:
+        return None
+    quantidade = int(match.group(1))
+    unidade = match.group(2).lower()
+    if unidade.startswith('d'):
+        return quantidade
+    if unidade.startswith('ano'):
+        return quantidade * 365
+    return quantidade * 30
+
+
+FORMATO_OPCAO_PARAMETRO = {
+    'validade': (normalizar_opcao_validade, 'Validade', '"30 dias", "3 meses" ou "1 ano"'),
+    'vigencia': (normalizar_opcao_vigencia, 'Vigência', '"12 meses", "2 anos" ou "Indeterminada"'),
+    'faturamento': (normalizar_opcao_faturamento, 'Prazo de faturamento', '"Semanal / 30 DDL", "Mensal" ou "30 DDL"'),
+}
+
+
+def normalizar_opcao_parametro(tipo: str, texto) -> str:
+    """Normaliza uma opção do cadastro; ValueError com mensagem pronta se fora do formato."""
+    normalizar, rotulo, formato = FORMATO_OPCAO_PARAMETRO[tipo]
+    normalizado = normalizar(texto)
+    if not normalizado:
+        raise ValueError(f'{rotulo} inválida: "{str(texto or "").strip()}". Use o formato {formato}.')
+    return normalizado
+
+
+def lista_opcoes_parametro(tipo: str, raw, padrao):
+    base = list(padrao)
     if not isinstance(raw, list):
-        return list(padrao)
+        return base
     limpas = []
-    vistas = set()
     for item in raw:
-        texto = str(item or '').strip()
-        if not texto or texto in vistas:
+        if not str(item or '').strip():
             continue
-        vistas.add(texto)
-        limpas.append(texto[:120])
-    return limpas or list(padrao)
+        normalizado = normalizar_opcao_parametro(tipo, item)
+        if normalizado not in limpas:
+            limpas.append(normalizado)
+    return limpas or base
 
 
 def ensure_parametros_comercial():

@@ -29,6 +29,9 @@ from .models import (
     SITUACAO_CLIENTE,
     SITUACAO_INATIVO,
     SITUACAO_POTENCIAL,
+    SITUACAO_PROPOSTA_EXPIRADA,
+    SITUACAO_PROPOSTA_REVISAO_PENDENTE,
+    SITUACOES_PROPOSTA,
     STATUS_PROPOSTA_APROVADA,
     STATUS_PROPOSTA_ENVIADA,
     STATUS_PROPOSTA_RASCUNHO,
@@ -51,7 +54,8 @@ from .models import (
     ensure_generalidades,
     ensure_matriz_icms,
     ensure_parametros_comercial,
-    _lista_opcoes,
+    lista_opcoes_parametro,
+    normalizar_opcao_parametro,
     aplicar_padrao_generalidades,
     gravar_catalogo_generalidades,
     normalizar_homologacao,
@@ -69,6 +73,7 @@ from .proposta_email_service import (
     read_proposta_pdfs,
     request_email_list,
     request_proposta_ids,
+    request_revisoes_pdf,
     send_proposta_comercial_email,
     send_propostas_comerciais_email,
     validar_envio_conjunto,
@@ -89,25 +94,46 @@ _PROPOSTA_ORDERING_DEFAULT = 'data_criacao_desc'
 
 
 def _annotate_proposta_vencimento(qs):
-    numero = Replace(
-        Replace(
-            Replace(
-                Replace(Lower('validade'), Value(' dias'), Value('')),
-                Value(' dia'), Value(''),
-            ),
-            Value(' meses'), Value(''),
-        ),
-        Value(' mes'), Value(''),
-    )
-    dias_base = Cast(NullIf(numero, Value('')), IntegerField())
+    """Espelha PropostaComercial.data_vencimento() (validade_texto_em_dias) em SQL."""
+    numero = Lower('validade')
+    for sufixo in (' dias', ' dia', ' meses', ' mês', ' mes', ' anos', ' ano'):
+        numero = Replace(numero, Value(sufixo), Value(''))
+    quantidade = Cast(NullIf(numero, Value('')), IntegerField())
+    # Só converte textos no formato aceito: evita erro de cast no PostgreSQL com dado legado.
     dias = Case(
-        When(validade__icontains='mes', then=dias_base * Value(30)),
-        default=dias_base,
+        When(validade__iregex=r'^[0-9]+ anos?$', then=quantidade * Value(365)),
+        When(validade__iregex=r'^[0-9]+ (meses|mês|mes)$', then=quantidade * Value(30)),
+        When(validade__iregex=r'^[0-9]+ dias?$', then=quantidade),
+        default=None,
         output_field=IntegerField(),
     )
     base = Coalesce('data_proposta', TruncDate('data_criacao'))
     offset = ExpressionWrapper(dias * Value(timedelta(days=1)), output_field=DurationField())
     return qs.annotate(_vencimento=ExpressionWrapper(base + offset, output_field=DateField()))
+
+
+_PROPOSTA_OPERACAO_FLAG = {
+    'transferencia': 'inclui_transferencia',
+    'distribuicao': 'inclui_distribuicao',
+    'portuaria': 'inclui_op_portuaria',
+}
+
+
+def _filtrar_proposta_por_situacao(qs, situacao):
+    """Espelha PropostaComercial.situacao() em SQL."""
+    if situacao == STATUS_PROPOSTA_RASCUNHO:
+        return qs.filter(status=STATUS_PROPOSTA_RASCUNHO)
+    revisao_pendente = Q(modo_envio='revisao') & ~Q(status=STATUS_PROPOSTA_RASCUNHO)
+    if situacao == SITUACAO_PROPOSTA_REVISAO_PENDENTE:
+        return qs.filter(revisao_pendente)
+    qs = qs.exclude(revisao_pendente)
+    if situacao not in {STATUS_PROPOSTA_ENVIADA, SITUACAO_PROPOSTA_EXPIRADA}:
+        return qs.filter(status=situacao)
+    qs = _annotate_proposta_vencimento(qs.filter(status=STATUS_PROPOSTA_ENVIADA))
+    hoje = timezone.localdate()
+    if situacao == SITUACAO_PROPOSTA_EXPIRADA:
+        return qs.filter(_vencimento__lt=hoje)
+    return qs.filter(Q(_vencimento__isnull=True) | Q(_vencimento__gte=hoje))
 
 
 _MESES_PT = ('Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez')
@@ -296,6 +322,9 @@ class ClienteComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             if digits:
                 query |= Q(cnpj_digits__icontains=digits)
             qs = qs.filter(query)
+        cliente = (self.request.query_params.get('cliente') or '').strip()
+        if cliente:
+            qs = qs.filter(pk=cliente) if cliente.isdigit() else qs.none()
         situacao = (self.request.query_params.get('situacao') or '').strip().lower()
         if situacao in {SITUACAO_POTENCIAL, SITUACAO_CLIENTE, SITUACAO_INATIVO}:
             qs = qs.filter(situacao=situacao)
@@ -631,12 +660,15 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         tipos_validos = {c[0] for c in TIPO_PROPOSTA_CHOICES}
         if tipo in tipos_validos:
             qs = qs.filter(tipo=tipo)
+        elif tipo in _PROPOSTA_OPERACAO_FLAG:
+            qs = qs.filter(tipo=TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO, **{_PROPOSTA_OPERACAO_FLAG[tipo]: True})
         status_filtro = (self.request.query_params.get('status') or '').strip().lower()
-        if status_filtro:
-            qs = qs.filter(status=status_filtro)
+        if status_filtro in SITUACOES_PROPOSTA:
+            qs = _filtrar_proposta_por_situacao(qs, status_filtro)
         ordering = (self.request.query_params.get('ordering') or _PROPOSTA_ORDERING_DEFAULT).strip()
         if ordering in {'vencimento_asc', 'vencimento_desc'}:
-            qs = _annotate_proposta_vencimento(qs)
+            if '_vencimento' not in qs.query.annotations:
+                qs = _annotate_proposta_vencimento(qs)
             vencimento = (
                 F('_vencimento').asc(nulls_last=True)
                 if ordering == 'vencimento_asc'
@@ -815,6 +847,7 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 to_emails=request_email_list(request.data, 'to', 'email'),
                 cc_emails=request_email_list(request.data, 'cc', 'emailCopia'),
                 pdf_bytes=read_proposta_pdf(request),
+                revisoes_pdf=request_revisoes_pdf(request.data),
             )
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -859,6 +892,7 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 list(zip(propostas, pdfs)),
                 to_emails=request_email_list(request.data, 'to', 'email'),
                 cc_emails=request_email_list(request.data, 'cc', 'emailCopia'),
+                revisoes_pdf=request_revisoes_pdf(request.data),
             )
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -1413,41 +1447,32 @@ class ParametrosComercialView(ModuleScopedViewMixin, APIView):
         registro = ensure_parametros_comercial()
         data = request.data if isinstance(request.data, dict) else {}
 
-        if 'validades' in data:
-            registro.validades = _lista_opcoes(data.get('validades'), VALIDADES_PROPOSTA_PADRAO)
-        if 'vigencias' in data:
-            registro.vigencias = _lista_opcoes(data.get('vigencias'), VIGENCIAS_CONTRATO_PADRAO)
-        if 'prazosFaturamento' in data or 'prazos_faturamento' in data:
-            registro.prazos_faturamento = _lista_opcoes(
-                data.get('prazosFaturamento', data.get('prazos_faturamento')),
-                PRAZOS_FATURAMENTO_PADRAO,
-            )
-
-        validade_padrao = str(data.get('validadePadrao') or data.get('validade_padrao') or '').strip()
-        if validade_padrao:
-            if validade_padrao not in registro.validades:
-                registro.validades = [*registro.validades, validade_padrao]
-            registro.validade_padrao = validade_padrao[:80]
-        elif registro.validade_padrao not in registro.validades:
-            registro.validade_padrao = registro.validades[0] if registro.validades else VALIDADE_PROPOSTA_DEFAULT
-
-        vigencia_padrao = str(data.get('vigenciaPadrao') or data.get('vigencia_padrao') or '').strip()
-        if vigencia_padrao:
-            if vigencia_padrao not in registro.vigencias:
-                registro.vigencias = [*registro.vigencias, vigencia_padrao]
-            registro.vigencia_padrao = vigencia_padrao[:80]
-        elif registro.vigencia_padrao not in registro.vigencias:
-            registro.vigencia_padrao = registro.vigencias[0] if registro.vigencias else VIGENCIA_CONTRATO_DEFAULT
-
-        faturamento_padrao = str(data.get('faturamentoPadrao') or data.get('faturamento_padrao') or '').strip()
-        if faturamento_padrao:
-            if faturamento_padrao not in registro.prazos_faturamento:
-                registro.prazos_faturamento = [*registro.prazos_faturamento, faturamento_padrao]
-            registro.faturamento_padrao = faturamento_padrao[:120]
-        elif registro.faturamento_padrao not in registro.prazos_faturamento:
-            registro.faturamento_padrao = (
-                registro.prazos_faturamento[0] if registro.prazos_faturamento else FATURAMENTO_PROPOSTA_DEFAULT
-            )
+        listas = (
+            # (tipo, campo lista, campo padrão, chaves lista, chaves padrão, lista padrão, padrão default)
+            ('validade', 'validades', 'validade_padrao', ('validades',), ('validadePadrao', 'validade_padrao'),
+             VALIDADES_PROPOSTA_PADRAO, VALIDADE_PROPOSTA_DEFAULT),
+            ('vigencia', 'vigencias', 'vigencia_padrao', ('vigencias',), ('vigenciaPadrao', 'vigencia_padrao'),
+             VIGENCIAS_CONTRATO_PADRAO, VIGENCIA_CONTRATO_DEFAULT),
+            ('faturamento', 'prazos_faturamento', 'faturamento_padrao', ('prazosFaturamento', 'prazos_faturamento'),
+             ('faturamentoPadrao', 'faturamento_padrao'), PRAZOS_FATURAMENTO_PADRAO, FATURAMENTO_PROPOSTA_DEFAULT),
+        )
+        try:
+            for tipo, campo_lista, campo_padrao, chaves_lista, chaves_padrao, lista_padrao, default in listas:
+                chave = next((c for c in chaves_lista if c in data), None)
+                if chave:
+                    setattr(registro, campo_lista, lista_opcoes_parametro(tipo, data.get(chave), lista_padrao))
+                opcoes = list(getattr(registro, campo_lista) or [])
+                padrao = next((str(data.get(c) or '').strip() for c in chaves_padrao if data.get(c)), '')
+                if padrao:
+                    padrao = normalizar_opcao_parametro(tipo, padrao)
+                    if padrao not in opcoes:
+                        opcoes.append(padrao)
+                        setattr(registro, campo_lista, opcoes)
+                    setattr(registro, campo_padrao, padrao)
+                elif getattr(registro, campo_padrao) not in opcoes:
+                    setattr(registro, campo_padrao, opcoes[0] if opcoes else default)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             if 'logoPdfUrl' in data or 'logo_pdf_url' in data:

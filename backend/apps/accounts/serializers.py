@@ -50,7 +50,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'name', 'cargo', 'roleId', 'status',
+            'id', 'username', 'name', 'cargo', 'telefone', 'roleId', 'status',
             'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'lastLogin',
             'googleEmail', 'googleLinkedAt', 'googlePicture', 'mustChangePassword',
         ]
@@ -88,7 +88,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'cargo', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
+        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
         read_only_fields = ['id']
 
     def validate_username(self, value):
@@ -98,6 +98,9 @@ class CreateUserSerializer(serializers.ModelSerializer):
 
     def validate_cargo(self, value):
         return str(value or '').strip()[:120]
+
+    def validate_telefone(self, value):
+        return str(value or '').strip()[:30]
 
     def create(self, validated_data):
         password = validated_data.pop('password')
@@ -119,11 +122,14 @@ class UpdateUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'cargo', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
+        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
         read_only_fields = ['id', 'username']
 
     def validate_cargo(self, value):
         return str(value or '').strip()[:120]
+
+    def validate_telefone(self, value):
+        return str(value or '').strip()[:30]
 
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)

@@ -25,6 +25,8 @@ import type {
   PropostaComercialFormDraft,
   PropostaComercialOrdering,
   PropostaComercialPayload,
+  PropostaComercialServicoFiltro,
+  PropostaComercialSituacao,
   PropostaComercialStatus,
   PropostaComercialTipo,
   PropostaCondicaoComercial,
@@ -36,6 +38,8 @@ import type {
 import {
   cloneTabelaArmazenagem,
   CONDICOES_FRETE_PADRAO,
+  PROPOSTA_COMERCIAL_SERVICO_FILTRO_LABEL,
+  PROPOSTA_COMERCIAL_SITUACAO_LABEL,
   PROPOSTA_COMERCIAL_STATUS_LABEL,
   PROPOSTA_COMERCIAL_TIPO_LABEL,
   marcarCondicoesTipo,
@@ -510,11 +514,32 @@ const optionsWithCurrent = (options: string[], current: string) => (
   current && !options.includes(current) ? [current, ...options] : options
 );
 
-const STATUS_BADGE_CLASS: Record<PropostaComercialStatus, string> = {
+const SITUACAO_BADGE_CLASS: Record<PropostaComercialSituacao, string> = {
   rascunho: 'is-rascunho',
   enviada: 'is-enviada',
   aprovada: 'is-aprovada',
   recusada: 'is-recusada',
+  revisao_pendente: 'is-revisao-pendente',
+  expirada: 'is-expirada',
+};
+
+const SITUACAO_FILTRO_ORDEM: PropostaComercialSituacao[] = [
+  'rascunho',
+  'enviada',
+  'revisao_pendente',
+  'expirada',
+  'aprovada',
+  'recusada',
+];
+
+const situacaoTitulo = (proposta: PropostaComercial, situacao: PropostaComercialSituacao) => {
+  if (situacao === 'revisao_pendente') {
+    return `Rev. ${proposta.revisao} alterada e ainda não enviada ao cliente (situação: ${PROPOSTA_COMERCIAL_STATUS_LABEL[proposta.status]}).`;
+  }
+  if (situacao === 'expirada') {
+    return `Validade encerrada em ${formatDateBr(proposta.dataVencimento)} sem resposta do cliente.`;
+  }
+  return undefined;
 };
 
 const IncludeField: React.FC<{
@@ -538,8 +563,8 @@ const ComercialPropostas: React.FC = () => {
   const { user } = useAuth();
   const canManage = userHasFuncao(user, 'Comercial', 'gerenciar-propostas');
   const [search, setSearch] = useState('');
-  const [filterTipo, setFilterTipo] = useState<'todos' | PropostaComercialTipo>('todos');
-  const [filterStatus, setFilterStatus] = useState<'todos' | PropostaComercialStatus>('todos');
+  const [filterTipo, setFilterTipo] = useState<'todos' | PropostaComercialServicoFiltro>('todos');
+  const [filterStatus, setFilterStatus] = useState<'todos' | PropostaComercialSituacao>('todos');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [ordering, setOrdering] = useState<PropostaComercialOrdering>('data_criacao_desc');
@@ -1103,6 +1128,9 @@ const ComercialPropostas: React.FC = () => {
     historicoRevisoes: editingId
       ? (propostas.find((item) => item.id === editingId)?.historicoRevisoes ?? [])
       : [],
+    ajustesIniciais: editingId
+      ? (propostas.find((item) => item.id === editingId)?.ajustesIniciais ?? [])
+      : [],
     modoEnvio: editingId
       ? (propostas.find((item) => item.id === editingId)?.modoEnvio ?? '')
       : '',
@@ -1222,6 +1250,10 @@ const ComercialPropostas: React.FC = () => {
   const jaEnviada = Boolean(editingId) && form.status !== 'rascunho';
   const canEdit = canManage;
   const canEditSituacao = canManage && form.status !== 'rascunho';
+  const propostaEmEdicao = editingId ? propostas.find((item) => item.id === editingId) : undefined;
+  const revisaoPendente = Boolean(propostaEmEdicao)
+    && propostaEmEdicao?.status !== 'rascunho'
+    && propostaEmEdicao?.modoEnvio === 'revisao';
   const canSave = canManage
     && (canEdit || canEditSituacao)
     && Boolean(form.clienteId)
@@ -1329,19 +1361,19 @@ const ComercialPropostas: React.FC = () => {
             />
           </div>
           <div className="reports-select-wrapper" style={{ minWidth: '160px' }}>
-            <select value={filterTipo} onChange={(e) => { setFilterTipo(e.target.value as 'todos' | PropostaComercialTipo); goToPage(1); }}>
+            <select value={filterTipo} onChange={(e) => { setFilterTipo(e.target.value as 'todos' | PropostaComercialServicoFiltro); goToPage(1); }}>
               <option value="todos">Serviço: Todos</option>
-              <option value="transporte_rodoviario">Transporte rodoviário</option>
-              <option value="armazenagem">Armazenagem</option>
+              {(Object.keys(PROPOSTA_COMERCIAL_SERVICO_FILTRO_LABEL) as PropostaComercialServicoFiltro[]).map((servico) => (
+                <option key={servico} value={servico}>{PROPOSTA_COMERCIAL_SERVICO_FILTRO_LABEL[servico]}</option>
+              ))}
             </select>
           </div>
           <div className="reports-select-wrapper" style={{ minWidth: '160px' }}>
-            <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value as 'todos' | PropostaComercialStatus); goToPage(1); }}>
+            <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value as 'todos' | PropostaComercialSituacao); goToPage(1); }}>
               <option value="todos">Status: Todos</option>
-              <option value="rascunho">Rascunho</option>
-              <option value="enviada">Enviada</option>
-              <option value="aprovada">Aceita</option>
-              <option value="recusada">Recusada</option>
+              {SITUACAO_FILTRO_ORDEM.map((situacao) => (
+                <option key={situacao} value={situacao}>{PROPOSTA_COMERCIAL_SITUACAO_LABEL[situacao]}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -1441,9 +1473,17 @@ const ComercialPropostas: React.FC = () => {
                       <td>{proposta.validade || '—'}</td>
                       <td>{proposta.vigencia || '—'}</td>
                       <td>
-                        <span className={`proposta-status-badge ${STATUS_BADGE_CLASS[proposta.status]}`}>
-                          {PROPOSTA_COMERCIAL_STATUS_LABEL[proposta.status]}
-                        </span>
+                        {(() => {
+                          const situacao = proposta.situacao ?? proposta.status;
+                          return (
+                            <span
+                              className={`proposta-status-badge ${SITUACAO_BADGE_CLASS[situacao]}`}
+                              title={situacaoTitulo(proposta, situacao)}
+                            >
+                              {PROPOSTA_COMERCIAL_SITUACAO_LABEL[situacao]}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td>{formatDateBr(proposta.dataVencimento)}</td>
                     </tr>
@@ -1786,6 +1826,11 @@ const ComercialPropostas: React.FC = () => {
                         </>
                       )}
                     </select>
+                    {revisaoPendente ? (
+                      <small className="proposta-revisao-pendente-hint">
+                        Rev. {propostaEmEdicao?.revisao} ainda não enviada ao cliente.
+                      </small>
+                    ) : null}
                   </IncludeField>
                 </div>
 

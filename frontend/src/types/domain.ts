@@ -6,6 +6,8 @@ export interface User {
   name: string;
   /** Cargo operacional (opcional). */
   cargo: string;
+  /** Telefone de contato (opcional) — assinatura do e-mail comercial. */
+  telefone: string;
   roleId: string;
   status: string;
   lastLogin: string | null;
@@ -2258,6 +2260,7 @@ export interface ClienteComercialQueryParams extends ListQueryParams {
   fila?: 'validacao';
   comProdutos?: boolean;
   pendencia?: 'impeditivo';
+  clienteId?: string;
 }
 
 export interface ProdutoComercialClienteVinculo {
@@ -2319,6 +2322,16 @@ export const PROPOSTA_COMERCIAL_TIPO_LABEL: Record<PropostaComercialTipo, string
   armazenagem: 'Armazenagem',
 };
 
+/** Filtro "Serviço" da listagem: operações do transporte rodoviário + armazenagem. */
+export type PropostaComercialServicoFiltro = 'transferencia' | 'distribuicao' | 'portuaria' | 'armazenagem';
+
+export const PROPOSTA_COMERCIAL_SERVICO_FILTRO_LABEL: Record<PropostaComercialServicoFiltro, string> = {
+  transferencia: 'Transferência',
+  distribuicao: 'Distribuição',
+  portuaria: 'Logística Retroportuária',
+  armazenagem: 'Armazenagem',
+};
+
 export function clientePropostaKey(proposta: { clienteId?: string | null; clienteNome?: string | null }) {
   return (proposta.clienteId || '').trim() || (proposta.clienteNome || '').trim().toLowerCase();
 }
@@ -2352,6 +2365,15 @@ export const PROPOSTA_COMERCIAL_STATUS_LABEL: Record<PropostaComercialStatus, st
   enviada: 'Enviada',
   aprovada: 'Aceita',
   recusada: 'Recusada',
+};
+
+/** Situação exibida na listagem (calculada no backend): status + revisão pendente + vencimento. */
+export type PropostaComercialSituacao = PropostaComercialStatus | 'revisao_pendente' | 'expirada';
+
+export const PROPOSTA_COMERCIAL_SITUACAO_LABEL: Record<PropostaComercialSituacao, string> = {
+  ...PROPOSTA_COMERCIAL_STATUS_LABEL,
+  revisao_pendente: 'Revisão não enviada',
+  expirada: 'Expirada',
 };
 
 export interface ClienteComercialHistoricoProposta {
@@ -2471,6 +2493,12 @@ export interface PropostaMargemVeiculo {
   margem: string;
 }
 
+export interface PropostaHistoricoAlteracao {
+  campo: string;
+  de: string;
+  para: string;
+}
+
 export interface PropostaHistoricoRevisao {
   tipo: string;
   revisao: string;
@@ -2479,7 +2507,7 @@ export interface PropostaHistoricoRevisao {
   resumo?: string;
   enviado?: boolean;
   dataEnvio?: string;
-  alteracoes?: Array<{ campo: string; de: string; para: string }>;
+  alteracoes?: PropostaHistoricoAlteracao[];
 }
 
 export function rotuloNumeroProposta(numero?: string | null, revisao?: string | null) {
@@ -2759,6 +2787,8 @@ export interface PropostaComercial {
   margensVeiculo?: PropostaMargemVeiculo[];
   tabelaDistribuicao?: PropostaTabelaDistribuicaoSnapshot | null;
   historicoRevisoes?: PropostaHistoricoRevisao[];
+  /** Frete vs tabela (margem oficial) na versão inicial — não é revisão. */
+  ajustesIniciais?: PropostaHistoricoAlteracao[];
   modoEnvio?: string;
   condicoes: PropostaCondicaoComercial[];
   tabelaArmazenagem?: TabelaArmazenagem;
@@ -2766,6 +2796,7 @@ export interface PropostaComercial {
   dataCriacao?: string;
   dataAtualizacao?: string;
   dataVencimento?: string | null;
+  situacao?: PropostaComercialSituacao;
 }
 
 export interface PropostaComercialPayload {
@@ -2806,8 +2837,8 @@ export type PropostaComercialOrdering =
   | 'vencimento_desc';
 
 export interface PropostaComercialQueryParams extends ListQueryParams {
-  tipo?: PropostaComercialTipo;
-  status?: PropostaComercialStatus;
+  tipo?: PropostaComercialServicoFiltro;
+  status?: PropostaComercialSituacao;
   ordering?: PropostaComercialOrdering;
 }
 

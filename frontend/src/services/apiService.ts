@@ -96,6 +96,7 @@ function normalizeUser(raw: any): User {
     username: raw.username,
     name: raw.name,
     cargo: typeof raw.cargo === 'string' ? raw.cargo : '',
+    telefone: typeof raw.telefone === 'string' ? raw.telefone : '',
     roleId: raw.roleId,
     status: raw.status,
     lastLogin: raw.lastLogin ?? null,
@@ -307,6 +308,13 @@ function normalizePropostaComercial(raw: any): PropostaComercial {
     margensVeiculo: Array.isArray(raw.margensVeiculo) ? raw.margensVeiculo : [],
     tabelaDistribuicao: raw.tabelaDistribuicao && typeof raw.tabelaDistribuicao === 'object' ? raw.tabelaDistribuicao : null,
     historicoRevisoes: Array.isArray(raw.historicoRevisoes) ? raw.historicoRevisoes : [],
+    ajustesIniciais: Array.isArray(raw.ajustesIniciais)
+      ? raw.ajustesIniciais.map((item: any) => ({
+          campo: String(item?.campo ?? ''),
+          de: String(item?.de ?? ''),
+          para: String(item?.para ?? ''),
+        })).filter((item: { campo: string }) => item.campo)
+      : [],
     modoEnvio: raw.modoEnvio ?? '',
     condicoes,
     tabelaArmazenagem: cloneTabelaArmazenagem(raw.tabelaArmazenagem),
@@ -314,6 +322,7 @@ function normalizePropostaComercial(raw: any): PropostaComercial {
     dataCriacao: raw.dataCriacao,
     dataAtualizacao: raw.dataAtualizacao,
     dataVencimento: raw.dataVencimento ?? null,
+    situacao: raw.situacao,
   };
 }
 
@@ -2482,6 +2491,7 @@ export const apiService = {
         fila: params.fila || undefined,
         com_produtos: params.comProdutos ? '1' : undefined,
         pendencia: params.pendencia || undefined,
+        cliente: params.clienteId || undefined,
         ativos: params.ativos ? '1' : undefined,
       },
     });
@@ -2756,14 +2766,19 @@ export const apiService = {
 
   async enviarEmailPropostasComerciais(
     ids: string[],
-    payload: { to?: string[]; cc?: string[]; pdfs: Blob[] },
+    payload: { to?: string[]; cc?: string[]; pdfs: Blob[]; revisoes?: string[] },
   ): Promise<{ success: boolean; message: string; to: string[]; cc: string[] }> {
     const form = new FormData();
     ids.forEach((id) => form.append('ids', id));
     (payload.to ?? []).forEach((email) => form.append('to', email));
     (payload.cc ?? []).forEach((email) => form.append('cc', email));
+    (payload.revisoes ?? []).forEach((revisao) => form.append('revisoes', revisao));
     payload.pdfs.forEach((pdf, index) => form.append('pdf', pdf, `Proposta_comercial_${index + 1}.pdf`));
-    const { data } = await api.post('/api/comercial/propostas/enviar-email-lote/', form);
+    const { data } = await api.post('/api/comercial/propostas/enviar-email-lote/', form, {
+      timeout: 180_000,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    });
     return data;
   },
 

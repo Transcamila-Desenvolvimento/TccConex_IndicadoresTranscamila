@@ -299,6 +299,37 @@ class UserManagementPaginationTests(TestCase):
         self.assertEqual(response.data['count'], 1)
         self.assertEqual(response.data['results'][0]['username'], 'oper_01')
 
+    def test_create_and_update_user_telefone_opcional(self):
+        create = self.client.post(
+            '/api/auth/users/',
+            {
+                'username': 'oper_fone',
+                'name': 'Operador Telefone',
+                'password': 'senha123',
+                'roleId': '2',
+                'status': 'ativo',
+                'cargo': 'Analista Comercial',
+                'telefone': '(43) 99999-1234',
+                'environments': ['Comercial'],
+                'filiais': {'Comercial': ['Ibiporã (Matriz)']},
+            },
+            format='json',
+            **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(create.status_code, 201, create.content)
+        self.assertEqual(create.data['telefone'], '(43) 99999-1234')
+        self.assertEqual(create.data['cargo'], 'Analista Comercial')
+        user_id = create.data['id']
+
+        update = self.client.patch(
+            f'/api/auth/users/{user_id}/',
+            {'telefone': ''},
+            format='json',
+            **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(update.status_code, 200, update.content)
+        self.assertEqual(update.data['telefone'], '')
+
 
 class UserManagementEnvironmentRulesTests(TestCase):
     def setUp(self):

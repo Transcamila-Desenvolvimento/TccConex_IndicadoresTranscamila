@@ -14488,6 +14488,20 @@ textarea.form-input {
   color: #fff;
 }
 
+.proposta-status-badge.is-revisao-pendente,
+.proposta-status-badge.is-expirada {
+  background: #f5a524;
+  border-color: #f5a524;
+  color: #fff;
+}
+
+.proposta-revisao-pendente-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: #b7791f;
+}
+
 .comercial-cliente-situacao-badge.is-expirada {
   background: #94a3b8;
   border-color: #94a3b8;
@@ -14695,24 +14709,92 @@ textarea.form-input {
 }
 
 .comercial-homologacao-timeline {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
+  padding: 4px 0 4px 2px;
 }
 
 .comercial-hist-item {
-  padding: 8px 10px;
-  border: 1px solid #d8dee6;
-  border-radius: 0;
-  background: #fff;
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 14px;
+  padding-bottom: 20px;
+}
+
+.comercial-hist-item:last-child {
+  padding-bottom: 0;
+}
+
+.comercial-hist-item::before {
+  content: '';
+  position: absolute;
+  top: 30px;
+  bottom: 2px;
+  left: 13px;
+  width: 2px;
+  background: #e2e8f0;
+}
+
+.comercial-hist-item:last-child::before {
+  display: none;
+}
+
+.comercial-hist-dot {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 13px;
+  box-shadow: 0 0 0 4px #fff;
+}
+
+.comercial-hist-item.is-homologado .comercial-hist-dot {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.comercial-hist-item.is-reprovado .comercial-hist-dot {
+  background: #fde8e8;
+  color: #c24141;
+}
+
+.comercial-hist-item.is-pendente_validacao .comercial-hist-dot {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.comercial-hist-body {
+  min-width: 0;
+  padding-top: 4px;
 }
 
 .comercial-hist-top {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   min-width: 0;
+}
+
+.comercial-hist-titulo {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0f2744;
+}
+
+.comercial-hist-meta {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 .comercial-hist-data {
@@ -14730,7 +14812,7 @@ textarea.form-input {
 }
 
 .comercial-hist-just {
-  margin: 8px 0 0;
+  margin: 4px 0 0;
   font-size: 13px;
   line-height: 1.4;
   color: #475569;
@@ -14747,9 +14829,10 @@ textarea.form-input {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid #eef1f5;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f8fafc;
 }
 
 .comercial-hist-change {
@@ -14884,21 +14967,12 @@ textarea.form-input {
   margin-top: 0;
 }
 
-.comercial-validacao-table tbody tr.comercial-validacao-row {
-  cursor: pointer;
-}
-
-.comercial-validacao-table tbody tr.comercial-validacao-row.is-selected td {
-  background: #e8f4fb !important;
-}
-
+.comercial-validacao-table .col-check { width: 40px; }
 .comercial-validacao-table .col-nome { width: 28%; }
 .comercial-validacao-table .col-cnpj { width: 160px; }
 .comercial-validacao-table .col-produtos { width: 130px; }
 .comercial-validacao-table .col-pendencia { width: 32%; }
 .comercial-validacao-table .col-status { width: 128px; }
-.comercial-validacao-table .col-acoes { width: 44px; }
-
 .comercial-validacao-table td.col-nome,
 .comercial-validacao-table td.col-pendencia {
   overflow: hidden;
@@ -15188,6 +15262,17 @@ textarea.form-input {
   height: 28px;
 }
 
+.comercial-grupo-toggle.comercial-grupo-toggle-all {
+  border-color: transparent;
+  background: transparent;
+  color: #94a3b8;
+}
+
+.comercial-grupo-toggle.comercial-grupo-toggle-all:hover {
+  color: #118CC4;
+  background: #f1f5f9;
+}
+
 .comercial-produtos-acoes {
   display: flex;
   gap: 4px;
@@ -15321,18 +15406,18 @@ textarea.form-input {
 .comercial-propostas-table {
   table-layout: fixed;
   width: 100%;
-  min-width: 1080px;
+  min-width: 1180px;
 }
 
 .comercial-propostas-table .col-check { width: 44px; }
-.comercial-propostas-table .col-num { width: 92px; }
-.comercial-propostas-table .col-date { width: 120px; }
-.comercial-propostas-table .col-cliente { width: 22%; }
-.comercial-propostas-table .col-servico { width: 18%; }
-.comercial-propostas-table .col-validade { width: 12%; }
-.comercial-propostas-table .col-vigencia { width: 13%; }
-.comercial-propostas-table .col-status { width: 96px; }
-.comercial-propostas-table .col-venc { width: 112px; }
+.comercial-propostas-table .col-num { width: 140px; }
+.comercial-propostas-table .col-date { width: 128px; }
+.comercial-propostas-table .col-cliente { width: 20%; }
+.comercial-propostas-table .col-servico { width: 22%; }
+.comercial-propostas-table .col-validade { width: 11%; }
+.comercial-propostas-table .col-vigencia { width: 11%; }
+.comercial-propostas-table .col-status { width: 176px; }
+.comercial-propostas-table .col-venc { width: 116px; }
 
 .comercial-propostas-table td {
   padding: 11px 14px;
@@ -17600,9 +17685,18 @@ textarea.form-input {
   gap: 10px;
 }
 
+.comercial-param-page-kicker {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
 .comercial-param-page-accent {
   width: 6px;
-  height: 22px;
+  height: 28px;
   background-color: #118CC4;
   flex-shrink: 0;
 }
@@ -17642,10 +17736,11 @@ textarea.form-input {
 }
 
 .comercial-param-row--listas {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   flex: 1;
   min-height: 0;
-  align-items: stretch;
+  align-content: start;
+  overflow: auto;
 }
 
 .comercial-param-row--logos {
@@ -17658,15 +17753,72 @@ textarea.form-input {
   flex-direction: column;
   gap: 10px;
   min-height: 0;
-  height: 100%;
-  padding: 12px 14px;
+  padding: 0;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
+  overflow: hidden;
 }
 
 .comercial-param-card--logo {
   height: auto;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.comercial-param-accordion-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: none;
+  background: #f8fafc;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.comercial-param-accordion-toggle:hover {
+  background: #f1f5f9;
+}
+
+.comercial-param-accordion.is-open .comercial-param-accordion-toggle {
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.comercial-param-accordion-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.comercial-param-accordion-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.comercial-param-accordion-desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.comercial-param-accordion-toggle > .bi {
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.comercial-param-accordion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 14px;
 }
 
 .comercial-param-card-head {
@@ -17694,8 +17846,7 @@ textarea.form-input {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  flex: 1;
-  min-height: 0;
+  max-height: min(42vh, 360px);
   overflow: auto;
 }
 
@@ -17780,10 +17931,37 @@ textarea.form-input {
   font-size: 13px;
 }
 
-.comercial-param-add input:focus {
+.comercial-param-add input:focus,
+.comercial-param-add select:focus {
   outline: none;
   border-color: #118CC4;
   box-shadow: 0 0 0 2px rgba(17, 140, 196, 0.15);
+}
+
+.comercial-param-add input[type='number'] {
+  flex: 0 0 110px;
+}
+
+.comercial-param-add select {
+  flex: 0 0 170px;
+  height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.comercial-param-add-preview {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.comercial-param-add-preview strong {
+  color: #0f2744;
+  font-weight: 600;
 }
 
 .comercial-param-logo {
@@ -17823,14 +18001,8 @@ textarea.form-input {
     overflow: auto;
   }
 
-  .comercial-param-row--listas,
   .comercial-param-row--logos {
     grid-template-columns: 1fr;
-  }
-
-  .comercial-param-card {
-    height: auto;
-    max-height: 360px;
   }
 
   .comercial-param-card--logo {

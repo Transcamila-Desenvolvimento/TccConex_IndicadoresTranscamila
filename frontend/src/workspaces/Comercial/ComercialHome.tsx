@@ -112,18 +112,37 @@ const ComercialHome: React.FC = () => {
               type="button"
               className="quick-access-card"
               style={{ width: '100%', textAlign: 'left' }}
-              onClick={() => navigate('/comercial/parametros')}
+              onClick={() => navigate('/comercial/parametros/prazos')}
             >
               <div className="card-header-row">
                 <div className="card-icon-wrapper">
-                  <i className="bi bi-sliders" aria-hidden="true" />
+                  <i className="bi bi-calendar3" aria-hidden="true" />
+                </div>
+                <span className="card-badge" style={{ background: 'rgba(17, 140, 196, 0.08)', color: '#118CC4' }}>
+                  Cadastros
+                </span>
+              </div>
+              <h4>Prazos e validades</h4>
+              <p>Validades, vigências e prazos de faturamento das propostas.</p>
+            </button>
+            )}
+            {canParametros && (
+            <button
+              type="button"
+              className="quick-access-card"
+              style={{ width: '100%', textAlign: 'left' }}
+              onClick={() => navigate('/comercial/parametros/logos')}
+            >
+              <div className="card-header-row">
+                <div className="card-icon-wrapper">
+                  <i className="bi bi-brush" aria-hidden="true" />
                 </div>
                 <span className="card-badge" style={{ background: 'rgba(17, 140, 196, 0.08)', color: '#118CC4' }}>
                   Configurações
                 </span>
               </div>
-              <h4>Parâmetros</h4>
-              <p>Logos da proposta, validades, vigências e prazos de faturamento.</p>
+              <h4>Personalizar</h4>
+              <p>Logos do PDF e do e-mail da proposta comercial.</p>
             </button>
             )}
             {canProdutos && (

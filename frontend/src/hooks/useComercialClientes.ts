@@ -282,8 +282,13 @@ export function useDeletePropostaComercial() {
 export function useEnviarEmailPropostaComercial() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ ids, to, cc, pdfs }: { ids: string[]; to?: string[]; cc?: string[]; pdfs: Blob[] }) =>
-      apiService.enviarEmailPropostasComerciais(ids, { to, cc, pdfs }),
+    mutationFn: ({ ids, to, cc, pdfs, revisoes }: {
+      ids: string[];
+      to?: string[];
+      cc?: string[];
+      pdfs: Blob[];
+      revisoes?: string[];
+    }) => apiService.enviarEmailPropostasComerciais(ids, { to, cc, pdfs, revisoes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: COMERCIAL_PROPOSTAS_KEY });
       queryClient.invalidateQueries({ queryKey: COMERCIAL_CLIENTES_KEY });

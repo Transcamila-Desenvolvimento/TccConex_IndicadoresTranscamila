@@ -332,6 +332,10 @@ def decidir_homologacao(cliente, usuario, decisao: str, justificativa=''):
     texto = (justificativa or '').strip()
     if cliente.compatibilidade == status:
         raise ValidationError({'detail': 'Esta decisão já está registrada para o cliente.'})
+    if cliente.compatibilidade == COMPATIBILIDADE_HOMOLOGADO:
+        raise ValidationError({
+            'detail': 'Cliente já homologado. Uma nova análise só é aberta quando a composição de produtos for alterada.',
+        })
     if status == COMPATIBILIDADE_REPROVADO and len(texto) < 15:
         raise ValidationError({
             'justificativa': ['Informe o motivo da reprovação com pelo menos 15 caracteres.'],

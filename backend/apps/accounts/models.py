@@ -20,6 +20,8 @@ class CustomUser(AbstractUser):
     name = models.CharField(max_length=255, blank=True)
     # Cargo / função operacional (opcional)
     cargo = models.CharField(max_length=120, blank=True, default='')
+    # Telefone de contato (opcional) — usado na assinatura do e-mail comercial
+    telefone = models.CharField(max_length=30, blank=True, default='')
 
     # roleId: '1' = Admin, '2' = Operador
     role_id = models.CharField(max_length=10, default='2')

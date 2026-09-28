@@ -38,6 +38,7 @@ from .models import (
     cliente_tem_tabela_distribuicao_vigente,
     default_condicoes,
     erro_valores_tabela_armazenagem,
+    normalizar_opcao_validade,
     gravar_catalogo_generalidades,
     nome_base_tabela_frete,
     normalizar_homologacao,
@@ -891,12 +892,14 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
     tabelaArmazenagem = serializers.JSONField(source='tabela_armazenagem', required=False)
     margensVeiculo = serializers.JSONField(source='margens_veiculo', required=False)
     tabelaDistribuicao = serializers.JSONField(source='tabela_distribuicao', required=False, read_only=True)
-    historicoRevisoes = serializers.JSONField(source='historico_revisoes', required=False, read_only=True)
+    historicoRevisoes = serializers.SerializerMethodField()
     modoEnvio = serializers.CharField(source='modo_envio', required=False, allow_blank=True, max_length=20)
     linhas = PropostaFreteLinhaSerializer(many=True, required=False)
     dataCriacao = serializers.DateTimeField(source='data_criacao', read_only=True)
     dataAtualizacao = serializers.DateTimeField(source='data_atualizacao', read_only=True)
     dataVencimento = serializers.SerializerMethodField()
+    situacao = serializers.SerializerMethodField()
+    ajustesIniciais = serializers.SerializerMethodField()
     numeroIdentificacao = serializers.CharField(source='numero_identificacao', read_only=True)
     numero = serializers.IntegerField(read_only=True)
     ano = serializers.IntegerField(read_only=True)
@@ -938,6 +941,8 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             'dataCriacao',
             'dataAtualizacao',
             'dataVencimento',
+            'situacao',
+            'ajustesIniciais',
             'numeroIdentificacao',
             'numero',
             'ano',
@@ -1022,6 +1027,17 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
         if value in {'frete', 'transporte_container'}:
             return TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO
         return value
+
+    def validate_validade(self, value):
+        texto = str(value or '').strip()
+        if not texto:
+            return texto
+        normalizado = normalizar_opcao_validade(texto)
+        if not normalizado:
+            raise serializers.ValidationError(
+                'Validade inválida. Use o formato "30 dias", "3 meses" ou "1 ano".'
+            )
+        return normalizado
 
     def validate(self, attrs):
         tipo = attrs.get('tipo') or (self.instance.tipo if self.instance else TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO)
@@ -1240,9 +1256,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             return validated_data
         novo = validated_data.get('status')
         atual = instance.status
-        if novo == STATUS_PROPOSTA_ENVIADA and atual != STATUS_PROPOSTA_ENVIADA:
-            validated_data.pop('status', None)
-            return validated_data
+        # Aceita/Recusada podem voltar a Enviada (já foi ao cliente); de Rascunho só pelo e-mail.
         if atual == STATUS_PROPOSTA_RASCUNHO and novo != STATUS_PROPOSTA_RASCUNHO:
             validated_data.pop('status', None)
             return validated_data
@@ -1285,10 +1299,13 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         from .proposta_tarifas import (
+            conteudo_proposta,
             diff_proposta,
+            entrada_historico_revisao,
             proxima_revisao,
             registrar_historico,
             resumo_alteracoes,
+            revisao_anterior,
             snapshot_proposta,
         )
         linhas_data = validated_data.pop('linhas', None)
@@ -1301,6 +1318,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
         revisao_antes = (instance.revisao or '').strip()
         valor = validated_data.get('valor_estimado', instance.valor_estimado)
         antes = snapshot_proposta(instance)
+        conteudo_antes = conteudo_proposta(instance)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -1311,9 +1329,12 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
         if condicoes_enviadas:
             self._sync_catalogo_generalidades(instance)
         depois = snapshot_proposta(instance)
+        conteudo_depois = conteudo_proposta(instance)
         alteracoes = diff_proposta(antes, depois)
-        if alteracoes and instance.status != STATUS_PROPOSTA_RASCUNHO:
-            if modo_antes != 'revisao':
+        conteudo_mudou = conteudo_antes != conteudo_depois
+        if (alteracoes or conteudo_mudou) and instance.status != STATUS_PROPOSTA_RASCUNHO:
+            abrindo = modo_antes != 'revisao'
+            if abrindo:
                 instance.revisao = proxima_revisao(revisao_antes)
             instance.modo_envio = 'revisao'
             request = self.context.get('request')
@@ -1325,6 +1346,20 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
                 resumo_alteracoes(alteracoes),
                 alteracoes,
             )
+            entrada = entrada_historico_revisao(instance)
+            if entrada is not None and abrindo:
+                # Conteúdo da versão que o cliente tem, para saber se a revisão voltou a ser igual.
+                entrada['baseConteudo'] = conteudo_antes
+            base = (entrada or {}).get('baseConteudo')
+            sem_valores = not (entrada or {}).get('alteracoes')
+            sem_conteudo = (base == conteudo_depois) if base is not None else not conteudo_mudou
+            if sem_valores and sem_conteudo:
+                # Tudo voltou ao que foi enviado: descarta a revisão pendente.
+                instance.historico_revisoes = [
+                    item for item in (instance.historico_revisoes or []) if item is not entrada
+                ]
+                instance.revisao = revisao_anterior(instance.revisao)
+                instance.modo_envio = ''
             instance.save(update_fields=['revisao', 'modo_envio', 'historico_revisoes', 'data_atualizacao'])
         return instance
 
@@ -1365,6 +1400,36 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
     def get_dataVencimento(self, instance):
         value = instance.data_vencimento()
         return value.isoformat() if value else None
+
+    def get_situacao(self, instance):
+        return instance.situacao()
+
+    def get_ajustesIniciais(self, instance):
+        from .proposta_tarifas import ajustes_iniciais_proposta
+        return ajustes_iniciais_proposta(instance)
+
+    def get_historicoRevisoes(self, instance):
+        from .proposta_tarifas import consolidar_alteracoes, conteudo_proposta, diff_conteudo_revisao
+        itens = [item for item in (instance.historico_revisoes or []) if isinstance(item, dict)]
+        conteudo_atual = None
+        historico = []
+        for indice, item in enumerate(itens):
+            publico = {chave: valor for chave, valor in item.items() if chave != 'baseConteudo'}
+            valores = consolidar_alteracoes(item.get('alteracoes') or [])
+            base = item.get('baseConteudo')
+            if base is None:
+                publico['alteracoes'] = valores
+            else:
+                # A versão seguinte é a base da próxima revisão; na última, o estado atual.
+                proxima = next((i.get('baseConteudo') for i in itens[indice + 1:] if i.get('baseConteudo')), None)
+                if proxima is None:
+                    if conteudo_atual is None:
+                        conteudo_atual = conteudo_proposta(instance)
+                    proxima = conteudo_atual
+                cabecalho, distribuicao, generalidades = diff_conteudo_revisao(base, proxima)
+                publico['alteracoes'] = cabecalho + distribuicao + valores + generalidades
+            historico.append(publico)
+        return historico
 
     def get_clienteEmail(self, instance):
         return (getattr(instance.cliente, 'email', None) or '').strip().lower()

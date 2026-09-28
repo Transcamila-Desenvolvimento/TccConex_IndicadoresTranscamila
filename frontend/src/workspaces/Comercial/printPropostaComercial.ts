@@ -43,6 +43,8 @@ async function resolveLogoPdfUrl(): Promise<string> {
 let activeLogoPdfUrl = '';
 /** Cargo do assinante na geração do PDF. */
 let activeAssinaturaCargo = '';
+/** PDF mais leve para e-mail (evita ECONNRESET no proxy/Gmail). */
+let activePdfCompact = false;
 
 const logoPdfUrlAtual = () => activeLogoPdfUrl || logoPdfFallbackUrl();
 
@@ -151,14 +153,55 @@ const buildDestinosTable = (proposta: PropostaComercial, modalidade: 'transferen
 const alteracaoVisivelNoPdf = (campo: string) => {
   const rotulo = (campo || '').trim().toLowerCase();
   if (!rotulo || rotulo === 'valor estimado') return false;
-  return rotulo.startsWith('trecho') || rotulo.startsWith('margem');
+  // Trechos (frete com % de aumento/desconto) e distribuição por veículo. Margem não entra.
+  return rotulo.startsWith('trecho') || rotulo.startsWith('distribuição');
+};
+
+// Entradas antigas da trilha podem conter margem/valor estimado — ficam fora do PDF.
+const alteracaoRevisaoVisivelNoPdf = (campo: string) => {
+  const rotulo = (campo || '').trim().toLowerCase();
+  return Boolean(rotulo) && rotulo !== 'valor estimado' && !rotulo.startsWith('margem');
+};
+
+const buildListaAlteracoesHtml = (alts: Array<{ campo: string; de: string; para: string }>) => (
+  alts.map((alt) => (alt.de ? `
+    <li>
+      <span class="rev-campo">${escapeHtml(alt.campo)}</span>
+      <span class="rev-de">${escapeHtml(alt.de)}</span>
+      <span class="rev-seta">→</span>
+      <span class="rev-para">${escapeHtml(alt.para)}</span>
+    </li>
+  ` : `
+    <li class="rev-resumo">
+      <span class="rev-campo">${escapeHtml(alt.campo)}</span>
+      <span class="rev-para">${escapeHtml(alt.para)}</span>
+    </li>
+  `)).join('')
+);
+
+const buildAjustesIniciais = (proposta: PropostaComercial) => {
+  const alts = (proposta.ajustesIniciais ?? []).filter((alt) => alteracaoVisivelNoPdf(alt.campo));
+  if (!alts.length) return '';
+  return `
+    <section class="block rev-trilha">
+      <h2>Ajustes iniciais</h2>
+      <p class="rev-intro">${
+        (proposta.revisao || '').trim()
+          ? 'Diferença da versão original desta proposta em relação à tabela de frete padrão.'
+          : 'Diferença em relação à tabela de frete padrão nesta proposta.'
+      }</p>
+      <article class="rev-bloco">
+        <ul class="rev-lista">${buildListaAlteracoesHtml(alts)}</ul>
+      </article>
+    </section>
+  `;
 };
 
 const buildHistoricoRevisoes = (proposta: PropostaComercial) => {
   const itens = (proposta.historicoRevisoes ?? [])
     .map((item) => ({
       ...item,
-      alteracoes: (item.alteracoes ?? []).filter((alt) => alteracaoVisivelNoPdf(alt.campo)),
+      alteracoes: (item.alteracoes ?? []).filter((alt) => alteracaoRevisaoVisivelNoPdf(alt.campo)),
     }))
     .filter((item) => (item.alteracoes?.length ?? 0) > 0);
   if (!itens.length) return '';
@@ -172,30 +215,67 @@ const buildHistoricoRevisoes = (proposta: PropostaComercial) => {
       item.data ? formatDateBr(item.data) : '',
       item.usuario || '',
     ].filter(Boolean).join(' · ');
-    const alts = (item.alteracoes ?? []).map((alt) => `
-      <li>
-        <span class="rev-campo">${escapeHtml(alt.campo)}</span>
-        <span class="rev-de">${escapeHtml(alt.de)}</span>
-        <span class="rev-seta">→</span>
-        <span class="rev-para">${escapeHtml(alt.para)}</span>
-      </li>
-    `).join('');
     return `
       <article class="rev-bloco">
         <header class="rev-cabecalho">${meta}</header>
-        <ul class="rev-lista">${alts}</ul>
+        <ul class="rev-lista">${buildListaAlteracoesHtml(item.alteracoes ?? [])}</ul>
       </article>
     `;
   }).join('');
 
   return `
     <section class="block rev-trilha">
-      <h2>Revisão de valores</h2>
-      <p class="rev-intro">Trilha das alterações de valores entre revisões desta proposta.</p>
+      <h2>Revisões</h2>
+      <p class="rev-intro">Trilha das alterações entre revisões desta proposta.</p>
       ${blocos}
     </section>
   `;
 };
+
+const revisoesCss = `
+    .rev-trilha { margin-top: 8px; }
+    .rev-intro {
+      margin: 0 0 10px;
+      font-size: 10px;
+      color: #64748b;
+    }
+    .rev-bloco {
+      margin: 0 0 10px;
+      padding: 8px 10px;
+      border: 1px solid #e2e8f0;
+      border-left: 3px solid #1179b9;
+      border-radius: 4px;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .rev-cabecalho {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #0f2744;
+    }
+    .rev-lista {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .rev-lista li {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 6px;
+      align-items: baseline;
+      padding: 3px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 10px;
+      color: #334155;
+    }
+    .rev-lista li:last-child { border-bottom: 0; }
+    .rev-lista li.rev-resumo { grid-template-columns: minmax(0, 1.4fr) minmax(0, 2fr); }
+    .rev-campo { font-weight: 500; color: #0f2744; }
+    .rev-de { color: #94a3b8; text-decoration: line-through; }
+    .rev-seta { color: #1179b9; font-weight: 600; }
+    .rev-para { color: #0f2744; font-weight: 600; }
+`;
 
 const buildArmazenagemTable = (proposta: PropostaComercial) => {
   if (!propostaIncluiArmazenagem(proposta)) return '';
@@ -402,6 +482,7 @@ const buildArmazenagemDocumentoHtml = (
       font-weight: 600;
       margin-right: 6px;
     }
+    ${revisoesCss}
     ${assinaturaCss('88mm')}
   </style>
 </head>
@@ -424,6 +505,8 @@ const buildArmazenagemDocumentoHtml = (
   ${opcoes.includeCondicoes
     ? buildArmazenagemObservacoes(opcoes.obsPagina ?? observacoesArmazenagem(proposta))
     : ''}
+  ${opcoes.includeAssinatura ? buildAjustesIniciais(proposta) : ''}
+  ${opcoes.includeAssinatura ? buildHistoricoRevisoes(proposta) : ''}
   ${opcoes.includeAssinatura ? buildAssinaturaHtml(proposta) : ''}
 </body>
 </html>`;
@@ -717,6 +800,7 @@ const buildHtml = (
         : '';
   const closingHtml = `
   ${opcoes.includeCondicoes ? buildCondicoesTable(proposta, secao, 3, opcoes.condicoesPagina) : ''}
+  ${opcoes.includeAssinatura ? buildAjustesIniciais(proposta) : ''}
   ${opcoes.includeAssinatura ? buildHistoricoRevisoes(proposta) : ''}
   ${opcoes.includeAssinatura && proposta.observacoes.trim()
     ? `<section class="block"><h2>Observações</h2><div class="obs">${escapeHtml(proposta.observacoes.trim())}</div></section>`
@@ -934,47 +1018,7 @@ const buildHtml = (
       color: #333;
       font-size: 12px;
     }
-    .rev-trilha { margin-top: 8px; }
-    .rev-intro {
-      margin: 0 0 10px;
-      font-size: 10px;
-      color: #64748b;
-    }
-    .rev-bloco {
-      margin: 0 0 10px;
-      padding: 8px 10px;
-      border: 1px solid #e2e8f0;
-      border-left: 3px solid #1179b9;
-      border-radius: 4px;
-      break-inside: avoid;
-      page-break-inside: avoid;
-    }
-    .rev-cabecalho {
-      margin: 0 0 6px;
-      font-size: 11px;
-      font-weight: 600;
-      color: #0f2744;
-    }
-    .rev-lista {
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .rev-lista li {
-      display: grid;
-      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto minmax(0, 1fr);
-      gap: 6px;
-      align-items: baseline;
-      padding: 3px 0;
-      border-bottom: 1px solid #f1f5f9;
-      font-size: 10px;
-      color: #334155;
-    }
-    .rev-lista li:last-child { border-bottom: 0; }
-    .rev-campo { font-weight: 500; color: #0f2744; }
-    .rev-de { color: #94a3b8; text-decoration: line-through; }
-    .rev-seta { color: #1179b9; font-weight: 600; }
-    .rev-para { color: #0f2744; font-weight: 600; }
+    ${revisoesCss}
     ${assinaturaCss(isPortrait ? '88mm' : '160mm')}
   </style>
 </head>
@@ -1047,6 +1091,79 @@ const applyRunningFooters = (pdf: jsPDF, footer: RunningFooter) => {
   }
 };
 
+const encodeCanvasJpeg = (source: HTMLCanvasElement, quality: number) => (
+  source.toDataURL('image/jpeg', quality)
+);
+
+/** Reduz o canvas à resolução real da folha antes do JPEG (evita PDF gigante). */
+const resampleCanvasToPdfSize = (
+  source: HTMLCanvasElement,
+  targetWidthMm: number,
+  targetHeightMm: number,
+  pageWidthMm: number,
+) => {
+  const pxPorMm = source.width / pageWidthMm;
+  const outW = Math.max(1, Math.round(targetWidthMm * pxPorMm));
+  const outH = Math.max(1, Math.round(targetHeightMm * pxPorMm));
+  if (outW >= source.width && outH >= source.height) {
+    return source;
+  }
+  const out = document.createElement('canvas');
+  out.width = outW;
+  out.height = outH;
+  const ctx = out.getContext('2d');
+  if (!ctx) return source;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, outW, outH);
+  ctx.drawImage(source, 0, 0, outW, outH);
+  return out;
+};
+
+const stampCanvasSlices = (
+  pdf: jsPDF,
+  canvas: HTMLCanvasElement,
+  orientation: 'portrait' | 'landscape',
+  imgWidth: number,
+  pageHeight: number,
+  jpegQuality: number,
+) => {
+  // Recorta por página. Embutir a imagem inteira (mesmo com fit/scale) no
+  // fechamento com revisão/ajustes explodia o anexo e derrubava o e-mail.
+  const pxPorMm = canvas.width / imgWidth;
+  const pageHeightPx = Math.max(1, Math.floor(pageHeight * pxPorMm));
+  let srcY = 0;
+  let pageIndex = 0;
+  while (srcY < canvas.height - 1) {
+    const sliceHeightPx = Math.min(pageHeightPx, canvas.height - srcY);
+    const slice = document.createElement('canvas');
+    slice.width = canvas.width;
+    slice.height = sliceHeightPx;
+    const ctx = slice.getContext('2d');
+    if (!ctx) break;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, slice.width, slice.height);
+    ctx.drawImage(
+      canvas,
+      0,
+      srcY,
+      canvas.width,
+      sliceHeightPx,
+      0,
+      0,
+      canvas.width,
+      sliceHeightPx,
+    );
+    const sliceMm = (sliceHeightPx * imgWidth) / canvas.width;
+    const imgData = encodeCanvasJpeg(slice, jpegQuality);
+    if (pageIndex > 0) {
+      pdf.addPage('a4', orientation);
+    }
+    pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, sliceMm);
+    srcY += sliceHeightPx;
+    pageIndex += 1;
+  }
+};
+
 const stampCanvas = (
   pdf: jsPDF,
   canvas: HTMLCanvasElement,
@@ -1061,26 +1178,29 @@ const stampCanvas = (
   const pageHeight = pdf.internal.pageSize.getHeight();
   const imgWidth = pageWidth;
   const imgHeight = (canvas.height * imgWidth) / canvas.width;
-  // JPEG compacto: PNG em scale 2 estoura o Gmail/proxy (ECONNRESET / falha no envio).
-  const imgData = canvas.toDataURL('image/jpeg', 0.82);
+  const jpegQuality = activePdfCompact ? 0.72 : 0.82;
   const overflowMm = 4;
+  const cabeNaFolha = imgHeight <= pageHeight + overflowMm;
 
-  if (fitOnePage || imgHeight <= pageHeight + overflowMm) {
-    const scale = imgHeight > pageHeight ? pageHeight / imgHeight : 1;
-    pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth * scale, imgHeight * scale);
+  if (cabeNaFolha) {
+    const imgData = encodeCanvasJpeg(canvas, jpegQuality);
+    pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
     return;
   }
 
-  let heightLeft = imgHeight;
-  let position = 0;
-  pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-  heightLeft -= pageHeight;
-  while (heightLeft > overflowMm) {
-    position -= pageHeight;
-    pdf.addPage('a4', orientation);
-    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
+  // Fechamento com revisão costumava forçar 1 folha: o JPEG continuava na
+  // resolução do canvas alto e o e-mail falhava. Paginar em fatias.
+  if (!fitOnePage || imgHeight > pageHeight * 1.15) {
+    stampCanvasSlices(pdf, canvas, orientation, imgWidth, pageHeight, jpegQuality);
+    return;
   }
+
+  const scale = pageHeight / imgHeight;
+  const drawnW = imgWidth * scale;
+  const drawnH = imgHeight * scale;
+  const prepared = resampleCanvasToPdfSize(canvas, drawnW, drawnH, pageWidth);
+  const imgData = encodeCanvasJpeg(prepared, jpegQuality);
+  pdf.addImage(imgData, 'JPEG', 0, 0, drawnW, drawnH);
 };
 
 const pageMetrics = (_secao?: PrintSecao) => (
@@ -1113,7 +1233,7 @@ const captureHtml = async (html: string, pageWidthPx: number) => {
   const { iframe, frameDocument, contentHeight } = await renderHtmlFrame(html, pageWidthPx);
   try {
     const canvas = await html2canvas(frameDocument.body, {
-      scale: 1.5,
+      scale: activePdfCompact ? 1.25 : 1.5,
       useCORS: true,
       backgroundColor: '#ffffff',
       width: pageWidthPx,
@@ -1581,10 +1701,11 @@ const generateArmazenagemPdfBlob = async (
 export async function generatePropostaComercialPdfBlob(
   proposta: PropostaComercial,
   cliente?: ClienteComercial | null,
-  opcoes?: { cargo?: string },
+  opcoes?: { cargo?: string; compact?: boolean },
 ): Promise<Blob> {
   activeLogoPdfUrl = await resolveLogoPdfUrl();
   activeAssinaturaCargo = (opcoes?.cargo || '').trim();
+  activePdfCompact = Boolean(opcoes?.compact);
   try {
     if (
       propostaIncluiArmazenagem(proposta)
@@ -1617,6 +1738,7 @@ export async function generatePropostaComercialPdfBlob(
   } finally {
     activeLogoPdfUrl = '';
     activeAssinaturaCargo = '';
+    activePdfCompact = false;
   }
 }
 

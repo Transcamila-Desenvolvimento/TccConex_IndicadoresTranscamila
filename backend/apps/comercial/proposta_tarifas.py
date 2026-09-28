@@ -11,6 +11,8 @@ from django.utils import timezone
 from .icms_uf import resolver_aliquota_simulador
 from .models import (
     STATUS_TABELA_PUBLICADA,
+    TIPO_GENERALIDADE_ARMAZENAGEM,
+    TIPO_GENERALIDADE_CHOICES,
     TIPO_TABELA_DISTRIBUICAO,
     TabelaFrete,
     ensure_matriz_icms,
@@ -182,8 +184,9 @@ def _item_veiculo(config, veiculo_key):
 
 def _pct_fator(fator) -> str:
     valor = (Decimal(str(fator or '0')) * Decimal('100')).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
-    texto = f'{valor:.4f}'.rstrip('0').rstrip('.')
-    return texto.replace('.', ',') + '%'
+    inteiro, decimais = f'{valor:.4f}'.split('.')
+    decimais = decimais.rstrip('0').ljust(2, '0')
+    return f'{inteiro},{decimais}%'
 
 
 def calcular_trecho(*, cliente_id, origem, destino, veiculo_key, km, margens=None):
@@ -304,6 +307,62 @@ def assunto_envio_propostas(propostas) -> str:
     return f'{prefixo}Proposta comercial nº {rotulo_revisao(proposta)} — Transcamila Cargas e Armazéns Gerais Ltda.'
 
 
+def _valor_txt_para_decimal(texto):
+    """'R$ 14.013,77 (aumento de 1,4%)' → Decimal('14013.77')."""
+    bruto = str(texto or '').split('(', 1)[0]
+    bruto = bruto.replace('R$', '').replace(' ', '').strip()
+    if not bruto or bruto == '—':
+        return None
+    if ',' in bruto:
+        bruto = bruto.replace('.', '').replace(',', '.')
+    try:
+        return Decimal(bruto)
+    except Exception:
+        return None
+
+
+def _sem_variacao(texto) -> str:
+    return str(texto or '').split(' (', 1)[0].strip()
+
+
+def consolidar_alteracoes(alteracoes) -> list:
+    """
+    Várias edições dentro da mesma revisão viram uma linha por campo:
+    valor que o cliente viu por último → valor atual (sem degraus intermediários).
+    """
+    ordem: list[str] = []
+    por_campo: dict[str, dict] = {}
+    for alt in alteracoes or []:
+        if not isinstance(alt, dict):
+            continue
+        campo = alt.get('campo') or ''
+        if campo in por_campo:
+            por_campo[campo]['para'] = alt.get('para')
+        else:
+            ordem.append(campo)
+            por_campo[campo] = {**alt}
+
+    resultado = []
+    for campo in ordem:
+        alt = por_campo[campo]
+        de_txt = _sem_variacao(alt.get('de'))
+        para_txt = _sem_variacao(alt.get('para'))
+        if de_txt == para_txt:
+            continue
+        # Trecho incluído e removido antes de enviar: nunca existiu para o cliente.
+        if de_txt == '—' and para_txt == 'removido':
+            continue
+        if campo.endswith('· Frete'):
+            de_num = _valor_txt_para_decimal(de_txt)
+            para_num = _valor_txt_para_decimal(para_txt)
+            if de_num is not None and para_num is not None:
+                if de_num == para_num:
+                    continue
+                alt['de'], alt['para'] = _fmt_frete_revisao(de_num, para_num)
+        resultado.append(alt)
+    return resultado
+
+
 def registrar_historico(proposta, tipo, usuario=None, resumo='', alteracoes=None):
     historico = list(proposta.historico_revisoes or [])
     nome = ''
@@ -316,16 +375,10 @@ def registrar_historico(proposta, tipo, usuario=None, resumo='', alteracoes=None
     revisao = (proposta.revisao or '').strip()
     novas = list(alteracoes or [])
 
-    # Consolida na mesma revisão: acumula alterações em vez de criar entradas repetidas.
+    # Mesma revisão (ainda não enviada): uma linha por campo, do valor enviado ao atual.
     for item in reversed(historico):
         if item.get('tipo') == tipo and (item.get('revisao') or '') == revisao:
-            existentes = list(item.get('alteracoes') or [])
-            chaves = {(alt.get('campo'), alt.get('de'), alt.get('para')) for alt in existentes}
-            for alt in novas:
-                chave = (alt.get('campo'), alt.get('de'), alt.get('para'))
-                if chave not in chaves:
-                    existentes.append(alt)
-                    chaves.add(chave)
+            existentes = consolidar_alteracoes(list(item.get('alteracoes') or []) + novas)
             item['alteracoes'] = existentes[:60]
             if resumo:
                 item['resumo'] = resumo
@@ -429,6 +482,204 @@ def _fmt_money_auditoria(valor) -> str:
     return f'{sinal}R$ {".".join(grupos)},{frac}'
 
 
+def _money_decimal(valor):
+    if valor is None:
+        return None
+    if isinstance(valor, Decimal):
+        return valor
+    texto = str(valor).strip().replace(',', '.')
+    if not texto:
+        return None
+    try:
+        return Decimal(texto)
+    except Exception:
+        return None
+
+
+def _fmt_variacao_frete(de, para) -> str | None:
+    """Rótulo de variação: aumento/desconto com % em formato brasileiro."""
+    de_num = _money_decimal(de)
+    para_num = _money_decimal(para)
+    if de_num is None or para_num is None:
+        return None
+    if de_num == 0:
+        return None
+    if de_num == para_num:
+        return None
+    delta = ((para_num - de_num) / abs(de_num)) * Decimal('100')
+    pct = abs(delta).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
+    texto = f'{pct}'.replace('.', ',').rstrip('0').rstrip(',')
+    if delta > 0:
+        return f'aumento de {texto}%'
+    return f'desconto de {texto}%'
+
+
+def _fmt_frete_revisao(de, para) -> tuple[str, str]:
+    """de = valor anterior; para = valor atual + variação %."""
+    de_txt = _fmt_money_auditoria(de)
+    para_txt = _fmt_money_auditoria(para)
+    variacao = _fmt_variacao_frete(de, para)
+    if variacao:
+        return de_txt, f'{para_txt} ({variacao})'
+    return de_txt, para_txt
+
+
+def _fmt_frete_inicial(de, para) -> tuple[str, str]:
+    de_txt, para_txt = _fmt_frete_revisao(de, para)
+    return (
+        de_txt,
+        para_txt
+        .replace('(aumento de ', '(aumento inicial de ')
+        .replace('(desconto de ', '(desconto inicial de '),
+    )
+
+
+def _fretes_originais_da_trilha(proposta) -> dict:
+    """Frete de cada trecho na versão original: o primeiro 'de' registrado na trilha."""
+    originais: dict[str, str] = {}
+    for item in proposta.historico_revisoes or []:
+        if not isinstance(item, dict):
+            continue
+        for alt in item.get('alteracoes') or []:
+            campo = (alt or {}).get('campo') or ''
+            if campo.endswith('· Frete') and campo not in originais:
+                originais[campo] = alt.get('de') or ''
+    return originais
+
+
+def _margens_originais_da_trilha(proposta):
+    """Margens efetivas da versão original: base guardada na primeira revisão."""
+    for item in proposta.historico_revisoes or []:
+        if isinstance(item, dict) and isinstance(item.get('baseConteudo'), dict):
+            return item['baseConteudo'].get('margens')
+    return None
+
+
+def ajustes_iniciais_proposta(proposta) -> list:
+    """
+    Ajustes da versão original em relação à tabela. Fixos depois do primeiro envio:
+    revisões posteriores não os alteram.
+    """
+    congelados = list(getattr(proposta, 'ajustes_iniciais', None) or [])
+    if congelados:
+        return congelados
+    if not (getattr(proposta, 'revisao', None) or '').strip():
+        return ajustes_iniciais_distribuicao(proposta) + ajustes_iniciais_frete(proposta)
+    # Proposta revisada antes do congelamento existir: reconstrói com os valores originais da trilha.
+    return (
+        ajustes_iniciais_distribuicao(proposta, margens_originais=_margens_originais_da_trilha(proposta))
+        + ajustes_iniciais_frete(proposta, fretes_originais=_fretes_originais_da_trilha(proposta))
+    )
+
+
+def _preco_relativo_margem(margem):
+    """Tarifa da distribuição = ANTT / (1 − margem): mesmo fator em todas as faixas de km."""
+    m = _margem_decimal(margem)
+    if m is None:
+        return None
+    m = min(max(m, Decimal('0')), Decimal('0.99'))
+    return Decimal('1') / (Decimal('1') - m)
+
+
+def variacao_margem_distribuicao(margem_de, margem_para) -> str | None:
+    """'desconto de 2,8%' / 'aumento de 1,5%' no preço, ou None se não muda."""
+    return _fmt_variacao_frete(_preco_relativo_margem(margem_de), _preco_relativo_margem(margem_para))
+
+
+def _margens_padrao_cliente(cliente_id) -> list:
+    tabela = tabela_distribuicao_do_cliente(cliente_id) if cliente_id else None
+    base_config = (tabela.config if tabela else None) or preset_config_oficial_distribuicao()
+    return [
+        item
+        for item in normalizar_veiculos_tarifa(base_config.get('veiculosTarifa') or VEICULOS_TARIFA_MODELO_OFICIAL)
+        if item.get('bandaKey')
+    ]
+
+
+def linha_distribuicao(rotulo, variacao, referencia) -> dict:
+    """Linha resumida por veículo (o PDF mostra sem 'de' riscado)."""
+    return {
+        'campo': f'Distribuição · {rotulo}',
+        'de': '',
+        'para': f'{variacao[:1].upper()}{variacao[1:]} {referencia}, em todas as faixas de km',
+    }
+
+
+def ajustes_iniciais_distribuicao(proposta, margens_originais=None) -> list:
+    """Desconto/aumento inicial por veículo em relação à margem da tabela do cliente."""
+    if not getattr(proposta, 'inclui_distribuicao', False):
+        return []
+    cliente_id = getattr(proposta, 'cliente_id', None)
+    if not cliente_id:
+        return []
+    efetivas = margens_originais if margens_originais is not None else _margens_efetivas_auditoria(proposta)
+    mapa = {str(item.get('bandaKey')): item.get('margem') for item in efetivas or [] if isinstance(item, dict)}
+    alteracoes = []
+    for item in _margens_padrao_cliente(cliente_id):
+        chave = str(item['bandaKey'])
+        if chave not in mapa:
+            continue
+        variacao = variacao_margem_distribuicao(item.get('margem'), mapa[chave])
+        if variacao:
+            variacao = variacao.replace(' de ', ' inicial de ', 1)
+            alteracoes.append(linha_distribuicao(item.get('rotulo') or chave, variacao, 'sobre a tabela padrão'))
+    return alteracoes
+
+
+def ajustes_iniciais_frete(proposta, fretes_originais: dict | None = None) -> list:
+    """Diferença tabela (margem oficial) × frete da proposta."""
+    cliente_id = getattr(proposta, 'cliente_id', None)
+    margens = list(getattr(proposta, 'margens_veiculo', None) or [])
+    if not cliente_id or not margens:
+        return []
+    if not normalizar_margens_proposta(cliente_id, margens):
+        return []
+
+    alteracoes = []
+    linhas = list(proposta.linhas.all().order_by('ordem', 'pk'))
+    for indice, linha in enumerate(linhas, start=1):
+        modalidade = (getattr(linha, 'modalidade', None) or 'transferencia').strip() or 'transferencia'
+        if modalidade not in ('transferencia', 'op_portuaria'):
+            continue
+        veiculo_key = (getattr(linha, 'veiculo_key', None) or '').strip()
+        if not veiculo_key or linha.km in (None, ''):
+            continue
+        base = calcular_trecho(
+            cliente_id=cliente_id,
+            origem=linha.origem or '',
+            destino=linha.entrega or '',
+            veiculo_key=veiculo_key,
+            km=linha.km,
+            margens=None,
+        )
+        if base.get('erro'):
+            continue
+        prefixo = _rotulo_trecho(
+            {'origem': linha.origem or '', 'entrega': linha.entrega or ''},
+            indice,
+        )
+        campo = f'{prefixo} · Frete'
+        tarifa_tabela = base.get('tarifaFrete')
+        tarifa_atual = linha.tarifa_frete
+        if fretes_originais and campo in fretes_originais:
+            original = _valor_txt_para_decimal(fretes_originais[campo])
+            if original is None:
+                # Trecho incluído numa revisão: não fazia parte da versão original.
+                continue
+            tarifa_atual = original
+        de_num = _money_decimal(tarifa_tabela)
+        para_num = _money_decimal(tarifa_atual)
+        if de_num is None or para_num is None or de_num == para_num:
+            continue
+        de_txt, para_txt = _fmt_frete_inicial(tarifa_tabela, tarifa_atual)
+        alteracoes.append({
+            'campo': campo,
+            'de': de_txt,
+            'para': para_txt,
+        })
+    return alteracoes[:60]
+
+
 def _linha_snapshot(linha) -> dict:
     return {
         'origem': linha.origem or '',
@@ -496,6 +747,137 @@ def snapshot_proposta(proposta) -> dict:
     }
 
 
+CAMPOS_CONTEUDO_PDF = (
+    'validade',
+    'vigencia',
+    'faturamento',
+    'reajuste',
+    'observacoes',
+    'local_emissao',
+    'inclui_transferencia',
+    'inclui_distribuicao',
+    'inclui_armazenagem',
+    'inclui_op_portuaria',
+)
+
+
+def conteudo_proposta(proposta) -> dict:
+    """
+    O que muda o PDF do cliente mas não aparece na trilha de valores
+    (generalidades, prazos comerciais, margens da distribuição).
+    """
+    campos = {}
+    for chave in CAMPOS_CONTEUDO_PDF:
+        valor = getattr(proposta, chave, None)
+        campos[chave] = valor if isinstance(valor, bool) else str(valor or '').strip()
+    return {
+        'campos': campos,
+        'condicoes': [
+            {
+                'rotulo': str(item.get('rotulo') or '').strip(),
+                'valor': str(item.get('valor') or '').strip(),
+                'tipo': str(item.get('tipo') or '').strip(),
+            }
+            for item in (proposta.condicoes or [])
+            if isinstance(item, dict)
+        ],
+        'margens': _margens_efetivas_auditoria(proposta),
+    }
+
+
+ROTULOS_CABECALHO_REVISAO = (
+    ('validade', 'Validade da proposta'),
+    ('vigencia', 'Vigência do contrato'),
+    ('faturamento', 'Faturamento'),
+    ('reajuste', 'Reajuste'),
+    ('local_emissao', 'Local de emissão'),
+    ('observacoes', 'Observações'),
+)
+
+_ROTULO_TIPO_GENERALIDADE = dict(TIPO_GENERALIDADE_CHOICES)
+
+
+def _diff_margens_distribuicao(base, atual) -> list:
+    campos_atual = (atual or {}).get('campos') or {}
+    if not campos_atual.get('inclui_distribuicao'):
+        return []
+    anteriores = {
+        str(item.get('bandaKey')): item.get('margem')
+        for item in (base or {}).get('margens') or []
+        if isinstance(item, dict)
+    }
+    alteracoes = []
+    for item in (atual or {}).get('margens') or []:
+        if not isinstance(item, dict):
+            continue
+        chave = str(item.get('bandaKey'))
+        if chave not in anteriores:
+            continue
+        variacao = variacao_margem_distribuicao(anteriores[chave], item.get('margem'))
+        if variacao:
+            alteracoes.append(linha_distribuicao(item.get('rotulo') or chave, variacao, 'em relação à versão anterior'))
+    return alteracoes
+
+
+def diff_conteudo_revisao(base, atual) -> tuple[list, list, list]:
+    """
+    Cabeçalho, preços da distribuição e generalidades entre a versão enviada
+    (baseConteudo) e a seguinte. Retorna (cabecalho, distribuicao, generalidades).
+    """
+    campos_base = (base or {}).get('campos') or {}
+    campos_atual = (atual or {}).get('campos') or {}
+    cabecalho = []
+    for chave, rotulo in ROTULOS_CABECALHO_REVISAO:
+        if chave not in campos_base:
+            continue
+        de = str(campos_base.get(chave) or '').strip()
+        para = str(campos_atual.get(chave) or '').strip()
+        if de != para:
+            cabecalho.append({'campo': rotulo, 'de': de or '—', 'para': para or '—'})
+
+    def _indexar(conteudo):
+        indice = {}
+        for item in (conteudo or {}).get('condicoes') or []:
+            rotulo = str(item.get('rotulo') or '').strip()
+            if rotulo:
+                indice[(str(item.get('tipo') or '').strip(), rotulo)] = str(item.get('valor') or '').strip()
+        return indice
+
+    cond_base = _indexar(base)
+    cond_atual = _indexar(atual)
+    chaves = list(cond_base) + [chave for chave in cond_atual if chave not in cond_base]
+    tipos_por_rotulo: dict[str, set] = {}
+    for tipo, rotulo in chaves:
+        tipos_por_rotulo.setdefault(rotulo, set()).add(tipo)
+    generalidades = []
+    for tipo, rotulo in chaves:
+        de = cond_base.get((tipo, rotulo), '')
+        para = cond_atual.get((tipo, rotulo), '')
+        if de == para:
+            continue
+        nome = rotulo
+        if len(tipos_por_rotulo[rotulo]) > 1 and tipo:
+            nome = f'{rotulo} ({_ROTULO_TIPO_GENERALIDADE.get(tipo, tipo)})'
+        secao = 'Observações' if tipo == TIPO_GENERALIDADE_ARMAZENAGEM else 'Generalidades'
+        generalidades.append({'campo': f'{secao} · {nome}', 'de': de or '—', 'para': para or '—'})
+    return cabecalho, _diff_margens_distribuicao(base, atual), generalidades
+
+
+def revisao_anterior(atual: str) -> str:
+    texto = ''.join(ch for ch in str(atual or '') if ch.isdigit())
+    if not texto or int(texto) <= 1:
+        return ''
+    return f'{int(texto) - 1:02d}'
+
+
+def entrada_historico_revisao(proposta, tipo='revisao'):
+    revisao = (proposta.revisao or '').strip()
+    for item in reversed(list(proposta.historico_revisoes or [])):
+        if isinstance(item, dict) and item.get('tipo') == tipo and (item.get('revisao') or '') == revisao:
+            return item
+    return None
+
+
 def _push_alt(alteracoes, campo, de, para):
     de_txt = _fmt_auditoria(de)
     para_txt = _fmt_auditoria(para)
@@ -543,6 +925,16 @@ def diff_proposta(antes, depois) -> list:
         for chave, rotulo in LINHA_AUDITORIA:
             de = linhas_antes[indice].get(chave)
             para = linhas_depois[indice].get(chave)
+            if chave == 'tarifa_frete':
+                de_txt, para_txt = _fmt_frete_revisao(de, para)
+                if de_txt == para_txt:
+                    continue
+                alteracoes.append({
+                    'campo': f'{prefixo} · Frete',
+                    'de': de_txt,
+                    'para': para_txt,
+                })
+                continue
             if chave in LINHA_AUDITORIA_DINHEIRO:
                 de_txt = _fmt_money_auditoria(de)
                 para_txt = _fmt_money_auditoria(para)
@@ -561,24 +953,7 @@ def diff_proposta(antes, depois) -> list:
                     para,
                 )
 
-    margens_antes = {(item.get('bandaKey') or item.get('rotulo')): item for item in (antes or {}).get('margens') or []}
-    margens_depois = {(item.get('bandaKey') or item.get('rotulo')): item for item in (depois or {}).get('margens') or []}
-    for chave in sorted(set(margens_antes) | set(margens_depois), key=lambda item: str(item or '')):
-        antigo = margens_antes.get(chave) or {}
-        novo = margens_depois.get(chave) or {}
-        rotulo = novo.get('rotulo') or antigo.get('rotulo') or chave
-        de_num = _margem_decimal(antigo.get('margem'))
-        para_num = _margem_decimal(novo.get('margem'))
-        if de_num is None and para_num is None:
-            continue
-        if de_num is not None and para_num is not None and de_num == para_num:
-            continue
-        _push_alt(
-            alteracoes,
-            f'Margem {rotulo}',
-            _fmt_margem_pct(de_num) if de_num is not None else '—',
-            _fmt_margem_pct(para_num) if para_num is not None else '—',
-        )
+    # Margem comercial não entra na trilha do cliente — o efeito aparece no % do frete.
 
     arm_antes = {item.get('rotulo'): item.get('valor') for item in (antes or {}).get('armazenagem') or []}
     arm_depois = {item.get('rotulo'): item.get('valor') for item in (depois or {}).get('armazenagem') or []}

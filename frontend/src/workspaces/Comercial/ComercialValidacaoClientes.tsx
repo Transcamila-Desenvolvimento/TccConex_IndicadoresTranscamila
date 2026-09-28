@@ -40,6 +40,13 @@ const statusHistorico = (status: string): ClienteComercialCompatibilidade => {
   return 'pendente_validacao';
 };
 
+const MARCO_HISTORICO: Record<ClienteComercialCompatibilidade, { titulo: string; icone: string }> = {
+  homologado: { titulo: 'Homologado', icone: 'bi-check-lg' },
+  reprovado: { titulo: 'Reprovado', icone: 'bi-x-lg' },
+  pendente_validacao: { titulo: 'Composição alterada', icone: 'bi-arrow-repeat' },
+  nao_analisado: { titulo: 'Aguardando análise', icone: 'bi-hourglass-split' },
+};
+
 const labelClasse = (value: string) =>
   CLIENTE_COMERCIAL_CLASSE_RISCO_OPTIONS.find((item) => item.value === value)?.label || value || '—';
 
@@ -187,9 +194,14 @@ const ComercialValidacaoClientes: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [filtro, setFiltro] = useState<FiltroValidacao>('todos');
+  const [filterClienteId, setFilterClienteId] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [fila, setFila] = useState<ClienteComercial[]>([]);
+  const [filaPos, setFilaPos] = useState(0);
   const [selected, setSelected] = useState<ClienteComercial | null>(null);
   const [justificativa, setJustificativa] = useState('');
-  const [historicoAberto, setHistoricoAberto] = useState(false);
+  const [historicoCliente, setHistoricoCliente] = useState<ClienteComercial | null>(null);
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const clienteLinkId = (searchParams.get('cliente') || '').trim() || null;
   const clienteLinkQuery = useClienteComercial(clienteLinkId);
 
@@ -200,10 +212,13 @@ const ComercialValidacaoClientes: React.FC = () => {
     fila: filtro === 'pendente' ? 'validacao' : undefined,
     homologacao: filtro === 'homologado' || filtro === 'reprovado' ? filtro : undefined,
     comProdutos: true,
+    clienteId: filterClienteId || undefined,
   });
+  const clientesFiltroQuery = useClientesComercial({ page: 1, pageSize: 100, comProdutos: true });
+  const clientesFiltro = clientesFiltroQuery.data?.results ?? [];
   const { canShowEmpty } = useAsyncQueryState(clientesQuery);
   const clientes = clientesQuery.data?.results ?? [];
-  const historicoQuery = useHomologacaoHistoricoCliente(selected?.id ?? null);
+  const historicoQuery = useHomologacaoHistoricoCliente(historicoCliente?.id ?? null);
   const homologar = useHomologarClienteComercial();
   const totalCount = clientesQuery.data?.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -218,24 +233,69 @@ const ComercialValidacaoClientes: React.FC = () => {
   const abrir = (cliente: ClienteComercial) => {
     setSelected(cliente);
     setJustificativa('');
-    setHistoricoAberto(false);
   };
 
-  const fechar = () => {
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest('.reports-dropdown-wrapper')) {
+        setIsActionsMenuOpen(false);
+      }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
+
+  const isAllSelected = clientes.length > 0 && clientes.every((cliente) => selectedIds.includes(cliente.id));
+  const temProximo = filaPos + 1 < fila.length;
+
+  const handleSelectRow = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => (checked ? [...prev, id] : prev.filter((item) => item !== id)));
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedIds(checked ? clientes.map((cliente) => cliente.id) : []);
+  };
+
+  const homologarSelecionados = () => {
+    const lista = clientes.filter((cliente) => selectedIds.includes(cliente.id));
+    setIsActionsMenuOpen(false);
+    if (!lista.length) return;
+    setFila(lista);
+    setFilaPos(0);
+    abrir(lista[0]);
+  };
+
+  const abrirHistorico = () => {
+    const cliente = clientes.find((item) => selectedIds.includes(item.id));
+    setIsActionsMenuOpen(false);
+    if (cliente) setHistoricoCliente(cliente);
+  };
+
+  const encerrar = () => {
     setSelected(null);
     setJustificativa('');
-    setHistoricoAberto(false);
+    setFila([]);
+    setFilaPos(0);
+    setSelectedIds([]);
     if (searchParams.get('cliente')) {
       searchParams.delete('cliente');
       setSearchParams(searchParams, { replace: true });
     }
   };
 
+  const fechar = () => {
+    if (temProximo) {
+      setFilaPos(filaPos + 1);
+      abrir(fila[filaPos + 1]);
+      return;
+    }
+    encerrar();
+  };
+
   useEffect(() => {
     if (!clienteLinkQuery.data) return;
     setSelected(clienteLinkQuery.data);
     setJustificativa('');
-    setHistoricoAberto(false);
   }, [clienteLinkQuery.data]);
 
   const decidir = (decisao: 'homologado' | 'reprovado') => {
@@ -263,29 +323,81 @@ const ComercialValidacaoClientes: React.FC = () => {
           <div style={{ width: '6px', height: '22px', backgroundColor: '#118CC4' }} />
           <h1 className="view-page-title">Validação clientes</h1>
         </div>
+        <div className="reports-dropdown-wrapper">
+          <button
+            type="button"
+            className="reports-action-btn secondary"
+            disabled={selectedIds.length === 0}
+            onClick={() => setIsActionsMenuOpen((open) => !open)}
+          >
+            <span>Ações{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}</span>
+            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div className={`reports-dropdown-menu ${isActionsMenuOpen ? 'show' : ''}`}>
+            <span className="reports-dropdown-item" onClick={homologarSelecionados}>
+              <span className="reports-dropdown-item-left">
+                <i className="bi bi-clipboard-check" />
+                {canValidate ? 'Homologar' : 'Visualizar homologação'}
+              </span>
+            </span>
+            {selectedIds.length === 1 && (
+              <span className="reports-dropdown-item" onClick={abrirHistorico}>
+                <span className="reports-dropdown-item-left">
+                  <i className="bi bi-clock-history" />
+                  Histórico
+                </span>
+              </span>
+            )}
+          </div>
+        </div>
       </header>
 
       <div className="reports-filters-bar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '16px', flexShrink: 0 }}>
-        <div className="reports-search-wrapper" style={{ minWidth: '240px', flex: 1 }}>
-          <input
-            type="text"
-            placeholder="Cliente, CNPJ, município ou e-mail..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          />
+        <div className="reports-filter-left" style={{ display: 'flex', gap: '10px', flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="reports-search-wrapper" style={{ minWidth: '240px' }}>
+            <svg className="search-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.637 10.637z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Cliente, CNPJ, município ou e-mail..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
+          </div>
+          <div className="reports-select-wrapper" style={{ minWidth: '220px' }}>
+            <select
+              value={filterClienteId}
+              onChange={(e) => { setFilterClienteId(e.target.value); setPage(1); }}
+              aria-label="Filtrar por cliente"
+              style={{ width: '100%' }}
+            >
+              <option value="">Cliente: Todos</option>
+              {clientesFiltro.map((cliente) => (
+                <option key={cliente.id} value={cliente.id}>
+                  {cliente.nomeFantasia || cliente.razaoSocial}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="reports-select-wrapper" style={{ minWidth: '160px' }}>
+            <select
+              value={filtro}
+              onChange={(e) => { setFiltro(e.target.value as FiltroValidacao); setPage(1); }}
+              aria-label="Filtrar por homologação"
+            >
+              <option value="todos">Homologação: Todos</option>
+              <option value="pendente">Pendentes</option>
+              <option value="homologado">Aprovados</option>
+              <option value="reprovado">Reprovados</option>
+            </select>
+          </div>
         </div>
-        <select
-          className="form-input"
-          style={{ width: 'auto', minWidth: '220px' }}
-          value={filtro}
-          onChange={(e) => { setFiltro(e.target.value as FiltroValidacao); setPage(1); }}
-        >
-          <option value="todos">Todos</option>
-          <option value="pendente">Pendentes</option>
-          <option value="homologado">Aprovados</option>
-          <option value="reprovado">Reprovados</option>
-        </select>
-        <span className="reports-records-count"><strong>{totalCount}</strong> registro{totalCount === 1 ? '' : 's'}</span>
+        <div className="reports-filter-right">
+          <span className="reports-records-count"><strong>{totalCount}</strong> Cliente{totalCount === 1 ? '' : 's'}</span>
+        </div>
       </div>
 
       <QueryDataPanel
@@ -299,21 +411,23 @@ const ComercialValidacaoClientes: React.FC = () => {
           <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
             <table className="erp-table reports-table comercial-browse-table comercial-validacao-table">
               <colgroup>
+                <col className="col-check" />
                 <col className="col-nome" />
                 <col className="col-cnpj" />
                 <col className="col-produtos" />
                 <col className="col-pendencia" />
                 <col className="col-status" />
-                <col className="col-acoes" />
               </colgroup>
               <thead>
                 <tr>
+                  <th className="checkbox-cell">
+                    <input type="checkbox" checked={isAllSelected} onChange={(e) => handleSelectAll(e.target.checked)} style={{ borderRadius: '4px' }} />
+                  </th>
                   <th>Cliente</th>
                   <th>CNPJ</th>
                   <th>Produtos</th>
                   <th>Pendência</th>
                   <th>Homologação</th>
-                  <th aria-label="Analisar" />
                 </tr>
               </thead>
               <tbody>
@@ -324,21 +438,20 @@ const ComercialValidacaoClientes: React.FC = () => {
                     </td>
                   </tr>
                 ) : clientes.map((cliente) => (
-                    <tr
-                      key={cliente.id}
-                      className="comercial-validacao-row"
-                      onClick={() => abrir(cliente)}
-                    >
+                    <tr key={cliente.id}>
+                      <td className="checkbox-cell">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(cliente.id)}
+                          onChange={(e) => handleSelectRow(cliente.id, e.target.checked)}
+                          style={{ borderRadius: '4px' }}
+                        />
+                      </td>
                       <td className="col-nome"><strong>{cliente.razaoSocial}</strong></td>
                       <td>{cliente.cnpj || '—'}</td>
                       <td>{resumoProdutos(cliente)}</td>
                       <td className="col-pendencia" title={resumoPendencia(cliente)}>{resumoPendencia(cliente)}</td>
                       <td><ComercialHomologacaoBadge status={cliente.compatibilidade} /></td>
-                      <td className="col-acoes">
-                        <button type="button" className="btn-icon" title="Analisar" onClick={(e) => { e.stopPropagation(); abrir(cliente); }}>
-                          <i className="bi bi-clipboard-check" />
-                        </button>
-                      </td>
                     </tr>
                 ))}
               </tbody>
@@ -371,16 +484,19 @@ const ComercialValidacaoClientes: React.FC = () => {
       </QueryDataPanel>
 
       {selected && (
-        <div className="search-backdrop" style={{ display: 'flex', alignItems: 'center', padding: '24px 16px' }} onClick={(e) => { if (e.target === e.currentTarget) fechar(); }}>
+        <div className="search-backdrop" style={{ display: 'flex', alignItems: 'center', padding: '24px 16px' }} onClick={(e) => { if (e.target === e.currentTarget) encerrar(); }}>
           <div className="modal-card cliente-cadastro-modal comercial-homologacao-modal" role="dialog" aria-modal="true">
             <div className="modal-header">
               <div className="comercial-homologacao-titulo">
                 <h2>{revalidacao ? 'Revalidação da composição' : 'Homologação de produtos'}</h2>
-                <p>{selected.razaoSocial}</p>
+                <p>
+                  {selected.razaoSocial}
+                  {fila.length > 1 ? <span className="muted"> · {filaPos + 1} de {fila.length}</span> : null}
+                </p>
               </div>
               <div className="comercial-homologacao-header-side">
                 <ComercialHomologacaoBadge status={selected.compatibilidade} />
-                <button type="button" className="btn-icon" onClick={fechar} aria-label="Fechar"><i className="bi bi-x-lg" /></button>
+                <button type="button" className="btn-icon" onClick={encerrar} aria-label="Fechar"><i className="bi bi-x-lg" /></button>
               </div>
             </div>
             <div className="modal-body">
@@ -412,60 +528,14 @@ const ComercialValidacaoClientes: React.FC = () => {
                 </>
               )}
 
-              {historicoQuery.data && historicoQuery.data.length > 0 ? (
-                <div className="cliente-cadastro-fold" style={{ marginTop: 16 }}>
-                  <button
-                    type="button"
-                    className="cliente-cadastro-fold-trigger"
-                    aria-expanded={historicoAberto}
-                    onClick={() => setHistoricoAberto((aberto) => !aberto)}
-                  >
-                    <i className={`bi ${historicoAberto ? 'bi-chevron-down' : 'bi-chevron-right'}`} aria-hidden />
-                    <span className="admin-form-section-title" style={{ margin: 0 }}>Histórico</span>
-                    <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>
-                      {historicoQuery.data.length} evento{historicoQuery.data.length === 1 ? '' : 's'}
-                    </span>
-                  </button>
-                  {historicoAberto ? (
-                    <div className="comercial-homologacao-timeline">
-                      {historicoQuery.data.map((evento, indice) => {
-                        const alteracoes = alteracoesDoEvento(historicoQuery.data, indice);
-                        return (
-                          <article key={evento.id} className="comercial-hist-item">
-                            <div className="comercial-hist-top">
-                              <ComercialHomologacaoBadge status={statusHistorico(evento.status)} />
-                              <span className="comercial-hist-data">{formatDateTime(evento.dataCriacao)}</span>
-                              <span className="comercial-hist-user">{evento.usuarioNome || 'Sistema'}</span>
-                            </div>
-                            {evento.justificativa ? (
-                              <p className="comercial-hist-just">{evento.justificativa}</p>
-                            ) : null}
-                            {alteracoes.length > 0 ? (
-                              <div className="comercial-hist-changes">
-                                {alteracoes.map((item) => (
-                                  <div key={`${evento.id}-${item.tipo}-${item.nome}`} className="comercial-hist-change">
-                                    <span className={`comercial-hist-tag is-${item.tipo}`}>
-                                      {HOMOLOGACAO_ALTERACAO_LABEL[item.tipo]}
-                                    </span>
-                                    <span className="comercial-hist-change-nome">{item.nome}</span>
-                                    {item.tipo === 'alterado' && item.detalhe ? (
-                                      <span className="comercial-hist-change-detalhe">{item.detalhe}</span>
-                                    ) : null}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : null}
-                          </article>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
 
             <div className="comercial-homologacao-form">
-              {canValidate ? (
+              {jaHomologado ? (
+                <p className="muted" style={{ margin: 0, fontSize: 12.5 }}>
+                  Cliente homologado. Uma nova análise só é aberta quando a composição de produtos for alterada.
+                </p>
+              ) : canValidate ? (
                 <label className="comercial-homologacao-justificativa">
                   Justificativa
                   <textarea
@@ -473,15 +543,13 @@ const ComercialValidacaoClientes: React.FC = () => {
                     rows={2}
                     value={justificativa}
                     onChange={(e) => setJustificativa(e.target.value)}
-                    placeholder={jaHomologado
-                      ? 'Obrigatória para reprovar (mín. 15 caracteres).'
-                      : 'Obrigatória na reprovação (mín. 15 caracteres). Recomendada na aprovação.'}
+                    placeholder="Obrigatória na reprovação (mín. 15 caracteres). Recomendada na aprovação."
                   />
                 </label>
               ) : null}
               <div className="comercial-homologacao-acoes">
-                <button type="button" className="reports-action-btn secondary" onClick={fechar}>Fechar</button>
-                {canValidate && !jaReprovado ? (
+                <button type="button" className="reports-action-btn secondary" onClick={fechar}>{temProximo ? 'Próximo' : 'Fechar'}</button>
+                {canValidate && !jaReprovado && !jaHomologado ? (
                   <button type="button" className="reports-action-btn secondary" disabled={homologar.isPending} onClick={() => decidir('reprovado')}>Reprovar</button>
                 ) : null}
                 {canValidate && !jaHomologado ? (
@@ -495,6 +563,82 @@ const ComercialValidacaoClientes: React.FC = () => {
                     {homologar.isPending ? 'Registrando...' : 'Aprovar'}
                   </button>
                 ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historicoCliente && (
+        <div className="search-backdrop" style={{ display: 'flex', alignItems: 'center', padding: '24px 16px' }} onClick={(e) => { if (e.target === e.currentTarget) setHistoricoCliente(null); }}>
+          <div className="modal-card cliente-cadastro-modal comercial-homologacao-modal" role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <div className="comercial-homologacao-titulo">
+                <h2>Histórico de homologação</h2>
+                <p>{historicoCliente.razaoSocial}</p>
+              </div>
+              <div className="comercial-homologacao-header-side">
+                <ComercialHomologacaoBadge status={historicoCliente.compatibilidade} />
+                <button type="button" className="btn-icon" onClick={() => setHistoricoCliente(null)} aria-label="Fechar"><i className="bi bi-x-lg" /></button>
+              </div>
+            </div>
+            <div className="modal-body">
+              <QueryDataPanel
+                query={historicoQuery}
+                loadingMessage="Carregando histórico..."
+                errorMessage="Não foi possível carregar o histórico."
+              >
+                {historicoQuery.data && historicoQuery.data.length > 0 ? (
+                  <div className="comercial-homologacao-timeline">
+                    {historicoQuery.data.map((evento, indice) => {
+                      const alteracoesEvento = alteracoesDoEvento(historicoQuery.data, indice);
+                      const status = statusHistorico(evento.status);
+                      const marco = MARCO_HISTORICO[status];
+                      return (
+                        <article key={evento.id} className={`comercial-hist-item is-${status}`}>
+                          <span className="comercial-hist-dot" aria-hidden="true">
+                            <i className={`bi ${marco.icone}`} />
+                          </span>
+                          <div className="comercial-hist-body">
+                          <div className="comercial-hist-top">
+                            <span className="comercial-hist-titulo">{marco.titulo}</span>
+                            <span className="comercial-hist-meta">
+                              <span>{formatDateTime(evento.dataCriacao)}</span>
+                              <span>·</span>
+                              <span>{evento.usuarioNome || 'Sistema'}</span>
+                            </span>
+                          </div>
+                          {evento.justificativa ? (
+                            <p className="comercial-hist-just">{evento.justificativa}</p>
+                          ) : null}
+                          {alteracoesEvento.length > 0 ? (
+                            <div className="comercial-hist-changes">
+                              {alteracoesEvento.map((item) => (
+                                <div key={`${evento.id}-${item.tipo}-${item.nome}`} className="comercial-hist-change">
+                                  <span className={`comercial-hist-tag is-${item.tipo}`}>
+                                    {HOMOLOGACAO_ALTERACAO_LABEL[item.tipo]}
+                                  </span>
+                                  <span className="comercial-hist-change-nome">{item.nome}</span>
+                                  {item.tipo === 'alterado' && item.detalhe ? (
+                                    <span className="comercial-hist-change-detalhe">{item.detalhe}</span>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="muted" style={{ margin: 0 }}>Nenhum evento de homologação registrado.</p>
+                )}
+              </QueryDataPanel>
+            </div>
+            <div className="comercial-homologacao-form">
+              <div className="comercial-homologacao-acoes">
+                <button type="button" className="reports-action-btn secondary" onClick={() => setHistoricoCliente(null)}>Fechar</button>
               </div>
             </div>
           </div>

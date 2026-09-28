@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
@@ -35,6 +35,28 @@ const emptyForm = (): FormState => ({
   logoEmailUrl: null,
 });
 
+type Unidade = { value: string; singular: string; plural: string; max: number };
+
+const UNIDADES_VALIDADE: Unidade[] = [
+  { value: 'dias', singular: 'dia', plural: 'dias', max: 3650 },
+  { value: 'meses', singular: 'mês', plural: 'meses', max: 120 },
+  { value: 'anos', singular: 'ano', plural: 'anos', max: 10 },
+];
+
+const UNIDADES_VIGENCIA: Unidade[] = [
+  { value: 'meses', singular: 'mês', plural: 'meses', max: 600 },
+  { value: 'anos', singular: 'ano', plural: 'anos', max: 50 },
+];
+
+const VIGENCIA_INDETERMINADA = 'Indeterminada';
+const PERIODICIDADES_FATURAMENTO = ['Semanal', 'Quinzenal', 'Mensal'];
+const DDL_MAX = 365;
+
+const inteiroValido = (valor: string, max: number): number | null => {
+  const numero = Number(valor);
+  return Number.isInteger(numero) && numero > 0 && numero <= max ? numero : null;
+};
+
 const fromApi = (data: ParametrosComercial): FormState => ({
   validades: [...(data.validades ?? [])],
   validadePadrao: data.validadePadrao || '',
@@ -55,14 +77,133 @@ const readFileAsDataUrl = (file: File): Promise<string> => (
   })
 );
 
+function AddPreview({ texto }: { texto: string | null }) {
+  return (
+    <span className="comercial-param-add-preview">
+      {texto ? <>Será cadastrado: <strong>{texto}</strong></> : 'Preencha os campos'}
+    </span>
+  );
+}
+
+function AddButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className="reports-action-btn secondary" disabled={disabled} onClick={onClick}>
+      Adicionar
+    </button>
+  );
+}
+
+type QuantidadeAddProps = {
+  unidades: Unidade[];
+  opcaoFixa?: string;
+  onAdd: (valor: string) => void;
+};
+
+function QuantidadeAdd({ unidades, opcaoFixa, onAdd }: QuantidadeAddProps) {
+  const [quantidade, setQuantidade] = useState('');
+  const [unidadeValue, setUnidadeValue] = useState(unidades[0].value);
+  const fixa = opcaoFixa !== undefined && unidadeValue === opcaoFixa;
+  const unidade = unidades.find((item) => item.value === unidadeValue) ?? unidades[0];
+  const numero = fixa ? null : inteiroValido(quantidade, unidade.max);
+  const texto = fixa
+    ? opcaoFixa
+    : numero
+      ? `${numero} ${numero === 1 ? unidade.singular : unidade.plural}`
+      : null;
+
+  const handleAdd = () => {
+    if (!texto) return;
+    onAdd(texto);
+    setQuantidade('');
+  };
+
+  return (
+    <div className="comercial-param-add">
+      <input
+        type="number"
+        min={1}
+        max={unidade.max}
+        step={1}
+        value={fixa ? '' : quantidade}
+        disabled={fixa}
+        placeholder="Qtd."
+        aria-label="Quantidade"
+        onChange={(e) => setQuantidade(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAdd();
+          }
+        }}
+      />
+      <select value={unidadeValue} aria-label="Unidade" onChange={(e) => setUnidadeValue(e.target.value)}>
+        {unidades.map((item) => (
+          <option key={item.value} value={item.value}>{item.plural}</option>
+        ))}
+        {opcaoFixa !== undefined ? <option value={opcaoFixa}>{opcaoFixa}</option> : null}
+      </select>
+      <AddPreview texto={texto} />
+      <AddButton disabled={!texto} onClick={handleAdd} />
+    </div>
+  );
+}
+
+function FaturamentoAdd({ onAdd }: { onAdd: (valor: string) => void }) {
+  const [periodicidade, setPeriodicidade] = useState('');
+  const [ddl, setDdl] = useState('');
+  const ddlNumero = ddl.trim() ? inteiroValido(ddl, DDL_MAX) : null;
+  const ddlInvalido = ddl.trim() !== '' && ddlNumero === null;
+  const texto = ddlInvalido
+    ? null
+    : periodicidade && ddlNumero
+      ? `${periodicidade} / ${ddlNumero} DDL`
+      : periodicidade || (ddlNumero ? `${ddlNumero} DDL` : null);
+
+  const handleAdd = () => {
+    if (!texto) return;
+    onAdd(texto);
+    setPeriodicidade('');
+    setDdl('');
+  };
+
+  return (
+    <div className="comercial-param-add">
+      <select value={periodicidade} aria-label="Periodicidade" onChange={(e) => setPeriodicidade(e.target.value)}>
+        <option value="">Sem periodicidade</option>
+        {PERIODICIDADES_FATURAMENTO.map((item) => (
+          <option key={item} value={item}>{item}</option>
+        ))}
+      </select>
+      <input
+        type="number"
+        min={1}
+        max={DDL_MAX}
+        step={1}
+        value={ddl}
+        placeholder="DDL"
+        aria-label="Dias de prazo (DDL)"
+        onChange={(e) => setDdl(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAdd();
+          }
+        }}
+      />
+      <AddPreview texto={texto} />
+      <AddButton disabled={!texto} onClick={handleAdd} />
+    </div>
+  );
+}
+
 type ListaEditorProps = {
   titulo: string;
   descricao: string;
   items: string[];
   padrao: string;
   canManage: boolean;
-  novoLabel: string;
-  onAdd: (valor: string) => void;
+  adicionar: React.ReactNode;
+  defaultOpen?: boolean;
   onRemove: (valor: string) => void;
   onPadrao: (valor: string) => void;
 };
@@ -73,77 +214,60 @@ function ListaEditor({
   items,
   padrao,
   canManage,
-  novoLabel,
-  onAdd,
+  adicionar,
+  defaultOpen = false,
   onRemove,
   onPadrao,
 }: ListaEditorProps) {
-  const [novo, setNovo] = useState('');
-
-  const handleAdd = () => {
-    const valor = novo.trim();
-    if (!valor) return;
-    onAdd(valor);
-    setNovo('');
-  };
+  const [aberta, setAberta] = useState(defaultOpen);
+  const painelId = useId();
 
   return (
-    <section className="comercial-param-card">
-      <header className="comercial-param-card-head">
-        <h2>{titulo}</h2>
-        <p>{descricao}</p>
-      </header>
-      <ul className="comercial-param-list">
-        {items.map((item) => (
-          <li key={item} className={item === padrao ? 'is-padrao' : undefined}>
-            <label className="comercial-param-option">
-              <input
-                type="radio"
-                name={`padrao-${titulo}`}
-                checked={item === padrao}
-                disabled={!canManage}
-                onChange={() => onPadrao(item)}
-              />
-              <span>{item}</span>
-              {item === padrao ? <em>padrão</em> : null}
-            </label>
-            {canManage ? (
-              <button
-                type="button"
-                className="comercial-param-remove"
-                title={`Remover ${item}`}
-                disabled={items.length <= 1}
-                onClick={() => onRemove(item)}
-              >
-                <i className="bi bi-trash" aria-hidden />
-              </button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      {canManage ? (
-        <div className="comercial-param-add">
-          <input
-            type="text"
-            value={novo}
-            maxLength={120}
-            placeholder={novoLabel}
-            onChange={(e) => setNovo(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleAdd();
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="reports-action-btn secondary"
-            disabled={!novo.trim()}
-            onClick={handleAdd}
-          >
-            Adicionar
-          </button>
+    <section className={`comercial-param-card comercial-param-accordion${aberta ? ' is-open' : ''}`}>
+      <button
+        type="button"
+        className="comercial-param-accordion-toggle"
+        aria-expanded={aberta}
+        aria-controls={painelId}
+        onClick={() => setAberta((atual) => !atual)}
+      >
+        <span className="comercial-param-accordion-copy">
+          <span className="comercial-param-accordion-title">{titulo}</span>
+          <span className="comercial-param-accordion-desc">{descricao}</span>
+        </span>
+        <i className={`bi ${aberta ? 'bi-chevron-up' : 'bi-chevron-down'}`} aria-hidden="true" />
+      </button>
+      {aberta ? (
+        <div id={painelId} className="comercial-param-accordion-body">
+          <ul className="comercial-param-list">
+            {items.map((item) => (
+              <li key={item} className={item === padrao ? 'is-padrao' : undefined}>
+                <label className="comercial-param-option">
+                  <input
+                    type="radio"
+                    name={`padrao-${titulo}`}
+                    checked={item === padrao}
+                    disabled={!canManage}
+                    onChange={() => onPadrao(item)}
+                  />
+                  <span>{item}</span>
+                  {item === padrao ? <em>padrão</em> : null}
+                </label>
+                {canManage ? (
+                  <button
+                    type="button"
+                    className="comercial-param-remove"
+                    title={`Remover ${item}`}
+                    disabled={items.length <= 1}
+                    onClick={() => onRemove(item)}
+                  >
+                    <i className="bi bi-trash" aria-hidden />
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          {canManage ? adicionar : null}
         </div>
       ) : null}
     </section>
@@ -227,7 +351,7 @@ function LogoField({ label, hint, value, canManage, onChange }: LogoFieldProps) 
   );
 }
 
-const ComercialCadastroParametros: React.FC = () => {
+export default function ComercialCadastroParametros({ secao }: { secao: 'prazos' | 'logos' }) {
   const { user } = useAuth();
   const canManage = userHasFuncao(user, 'Comercial', 'gerenciar-parametros');
   const parametrosQuery = useComercialParametros();
@@ -244,10 +368,31 @@ const ComercialCadastroParametros: React.FC = () => {
     }
   }, [parametrosQuery.data]);
 
-  const isDirty = useMemo(
-    () => JSON.stringify(form) !== JSON.stringify(baseline),
-    [form, baseline],
-  );
+  const isDirty = useMemo(() => {
+    if (secao === 'prazos') {
+      return (
+        JSON.stringify({
+          validades: form.validades,
+          validadePadrao: form.validadePadrao,
+          vigencias: form.vigencias,
+          vigenciaPadrao: form.vigenciaPadrao,
+          prazosFaturamento: form.prazosFaturamento,
+          faturamentoPadrao: form.faturamentoPadrao,
+        }) !== JSON.stringify({
+          validades: baseline.validades,
+          validadePadrao: baseline.validadePadrao,
+          vigencias: baseline.vigencias,
+          vigenciaPadrao: baseline.vigenciaPadrao,
+          prazosFaturamento: baseline.prazosFaturamento,
+          faturamentoPadrao: baseline.faturamentoPadrao,
+        })
+      );
+    }
+    return (
+      form.logoPdfUrl !== baseline.logoPdfUrl
+      || form.logoEmailUrl !== baseline.logoEmailUrl
+    );
+  }, [form, baseline, secao]);
 
   const updateLista = (key: ListaKey, items: string[]) => {
     setForm((current) => {
@@ -264,10 +409,10 @@ const ComercialCadastroParametros: React.FC = () => {
     });
   };
 
-  const addItem = (key: ListaKey, valor: string) => {
+  const addItem = (key: ListaKey, texto: string) => {
     setForm((current) => {
-      if (current[key].includes(valor)) return current;
-      return { ...current, [key]: [...current[key], valor] };
+      if (current[key].includes(texto)) return current;
+      return { ...current, [key]: [...current[key], texto] };
     });
   };
 
@@ -312,23 +457,30 @@ const ComercialCadastroParametros: React.FC = () => {
     });
   };
 
+  const titulo = secao === 'prazos' ? 'Prazos e validades' : 'Personalizar';
+
   return (
     <div className="fat-list-compact comercial-param-page">
       <header className="view-header comercial-param-page-header">
         <div className="comercial-param-page-title">
           <div className="comercial-param-page-accent" />
-          <h1 className="view-page-title">Parâmetros</h1>
+          <div>
+            <p className="comercial-param-page-kicker">{secao === 'prazos' ? 'Cadastros' : 'Configurações'}</p>
+            <h1 className="view-page-title">{titulo}</h1>
+          </div>
         </div>
         {canManage ? (
           <div className="comercial-param-page-actions">
-            <button
-              type="button"
-              className="reports-action-btn secondary"
-              disabled={restaurarParametros.isPending || saveParametros.isPending}
-              onClick={handleRestaurar}
-            >
-              {restaurarParametros.isPending ? 'Restaurando...' : 'Restaurar listas'}
-            </button>
+            {secao === 'prazos' ? (
+              <button
+                type="button"
+                className="reports-action-btn secondary"
+                disabled={restaurarParametros.isPending || saveParametros.isPending}
+                onClick={handleRestaurar}
+              >
+                {restaurarParametros.isPending ? 'Restaurando...' : 'Restaurar listas'}
+              </button>
+            ) : null}
             <button
               type="button"
               className="reports-action-btn primary"
@@ -350,62 +502,67 @@ const ComercialCadastroParametros: React.FC = () => {
         errorMessage="Não foi possível carregar os parâmetros do Comercial."
       >
         <form className="comercial-param-layout" onSubmit={handleSave}>
-          <div className="comercial-param-row comercial-param-row--listas">
-            <ListaEditor
-              titulo="Validades"
-              descricao="Opções e padrão das novas propostas."
-              items={form.validades}
-              padrao={form.validadePadrao}
-              canManage={canManage}
-              novoLabel="Ex.: 20 dias"
-              onAdd={(valor) => addItem('validades', valor)}
-              onRemove={(valor) => removeItem('validades', valor)}
-              onPadrao={(valor) => setForm((current) => ({ ...current, validadePadrao: valor }))}
-            />
-            <ListaEditor
-              titulo="Vigência do contrato"
-              descricao="Opções de vigência contratual."
-              items={form.vigencias}
-              padrao={form.vigenciaPadrao}
-              canManage={canManage}
-              novoLabel="Ex.: 18 meses"
-              onAdd={(valor) => addItem('vigencias', valor)}
-              onRemove={(valor) => removeItem('vigencias', valor)}
-              onPadrao={(valor) => setForm((current) => ({ ...current, vigenciaPadrao: valor }))}
-            />
-            <ListaEditor
-              titulo="Prazos de faturamento"
-              descricao="Opções de prazo / DDL."
-              items={form.prazosFaturamento}
-              padrao={form.faturamentoPadrao}
-              canManage={canManage}
-              novoLabel="Ex.: Mensal / 45 DDL"
-              onAdd={(valor) => addItem('prazosFaturamento', valor)}
-              onRemove={(valor) => removeItem('prazosFaturamento', valor)}
-              onPadrao={(valor) => setForm((current) => ({ ...current, faturamentoPadrao: valor }))}
-            />
-          </div>
-
-          <div className="comercial-param-row comercial-param-row--logos">
-            <LogoField
-              label="Logo do PDF"
-              hint="Usada no rodapé/assinatura do PDF da proposta."
-              value={form.logoPdfUrl}
-              canManage={canManage}
-              onChange={(url) => setForm((current) => ({ ...current, logoPdfUrl: url }))}
-            />
-            <LogoField
-              label="Logo do e-mail"
-              hint="Embutida no e-mail. Se vazia, usa a do PDF ou a padrão."
-              value={form.logoEmailUrl}
-              canManage={canManage}
-              onChange={(url) => setForm((current) => ({ ...current, logoEmailUrl: url }))}
-            />
-          </div>
+          {secao === 'prazos' ? (
+            <div className="comercial-param-row comercial-param-row--listas">
+              <ListaEditor
+                titulo="Validades"
+                descricao="Opções e padrão das novas propostas."
+                items={form.validades}
+                padrao={form.validadePadrao}
+                canManage={canManage}
+                adicionar={(
+                  <QuantidadeAdd unidades={UNIDADES_VALIDADE} onAdd={(valor) => addItem('validades', valor)} />
+                )}
+                onRemove={(valor) => removeItem('validades', valor)}
+                onPadrao={(valor) => setForm((current) => ({ ...current, validadePadrao: valor }))}
+              />
+              <ListaEditor
+                titulo="Vigência do contrato"
+                descricao="Opções de vigência contratual."
+                items={form.vigencias}
+                padrao={form.vigenciaPadrao}
+                canManage={canManage}
+                adicionar={(
+                  <QuantidadeAdd
+                    unidades={UNIDADES_VIGENCIA}
+                    opcaoFixa={VIGENCIA_INDETERMINADA}
+                    onAdd={(valor) => addItem('vigencias', valor)}
+                  />
+                )}
+                onRemove={(valor) => removeItem('vigencias', valor)}
+                onPadrao={(valor) => setForm((current) => ({ ...current, vigenciaPadrao: valor }))}
+              />
+              <ListaEditor
+                titulo="Prazos de faturamento"
+                descricao="Opções de prazo / DDL."
+                items={form.prazosFaturamento}
+                padrao={form.faturamentoPadrao}
+                canManage={canManage}
+                adicionar={<FaturamentoAdd onAdd={(valor) => addItem('prazosFaturamento', valor)} />}
+                onRemove={(valor) => removeItem('prazosFaturamento', valor)}
+                onPadrao={(valor) => setForm((current) => ({ ...current, faturamentoPadrao: valor }))}
+              />
+            </div>
+          ) : (
+            <div className="comercial-param-row comercial-param-row--logos">
+              <LogoField
+                label="Logo do PDF"
+                hint="Usada no rodapé/assinatura do PDF da proposta."
+                value={form.logoPdfUrl}
+                canManage={canManage}
+                onChange={(url) => setForm((current) => ({ ...current, logoPdfUrl: url }))}
+              />
+              <LogoField
+                label="Logo do e-mail"
+                hint="Embutida no e-mail. Se vazia, usa a do PDF ou a padrão."
+                value={form.logoEmailUrl}
+                canManage={canManage}
+                onChange={(url) => setForm((current) => ({ ...current, logoEmailUrl: url }))}
+              />
+            </div>
+          )}
         </form>
       </QueryDataPanel>
     </div>
   );
-};
-
-export default ComercialCadastroParametros;
+}

@@ -279,6 +279,7 @@ def _build_context(proposta, user) -> dict:
         'saudacao': _saudacao(proposta),
         'enviado_por': _usuario_display(user),
         'enviado_por_cargo': (getattr(user, 'cargo', None) or '').strip(),
+        'enviado_por_telefone': (getattr(user, 'telefone', None) or '').strip(),
         'ref_date': timezone.localtime(),
         'logo_cid': LOGO_CID if _logo_png_bytes() else '',
     }
@@ -291,13 +292,25 @@ def send_proposta_comercial_email(
     to_emails: list[str] | None = None,
     cc_emails: list[str] | None = None,
     pdf_bytes: bytes | None = None,
+    revisoes_pdf: list[str] | None = None,
 ) -> dict:
     return send_propostas_comerciais_email(
         user,
         [(proposta, pdf_bytes)],
         to_emails=to_emails,
         cc_emails=cc_emails,
+        revisoes_pdf=revisoes_pdf,
     )
+
+
+def request_revisoes_pdf(data) -> list[str] | None:
+    """Revisão com que cada PDF foi gerado na tela (mesma ordem de ids)."""
+    if hasattr(data, 'getlist') and 'revisoes' in data:
+        return [str(item or '').strip() for item in data.getlist('revisoes')]
+    value = data.get('revisoes') if hasattr(data, 'get') else None
+    if isinstance(value, list):
+        return [str(item or '').strip() for item in value]
+    return None
 
 
 def send_propostas_comerciais_email(
@@ -306,6 +319,7 @@ def send_propostas_comerciais_email(
     *,
     to_emails: list[str] | None = None,
     cc_emails: list[str] | None = None,
+    revisoes_pdf: list[str] | None = None,
 ) -> dict:
     google_from = _google_email(user)
     if not google_from:
@@ -318,6 +332,13 @@ def send_propostas_comerciais_email(
     validar_envio_conjunto(propostas)
     if any(not pdf for pdf in pdfs) or len(pdfs) != len(propostas):
         raise ValueError('Não foi possível receber o PDF da proposta gerado na tela. Tente novamente.')
+    if revisoes_pdf is not None and len(revisoes_pdf) == len(propostas):
+        for item, rev_pdf in zip(propostas, revisoes_pdf):
+            if (rev_pdf or '').strip() != (item.revisao or '').strip():
+                raise ValueError(
+                    f'A proposta {item.numero_identificacao or ""} foi alterada depois que a tela carregou '
+                    '(o PDF sairia com a revisão errada). Atualize a lista e envie de novo.'
+                )
 
     proposta = propostas[0]
     cliente_email = (getattr(proposta.cliente, 'email', None) or '').strip().lower()
@@ -360,11 +381,22 @@ def send_propostas_comerciais_email(
         logo.add_header('Content-ID', f'<{LOGO_CID}>')
         logo.add_header('Content-Disposition', 'inline', filename=f'logo-proposta.{subtype if subtype != "jpeg" else "jpg"}')
         email_obj.attach(logo)
-    for item, pdf, ctx in zip(propostas, pdfs, contextos):
+    for pdf, ctx in zip(pdfs, contextos):
         email_obj.attach(proposta_pdf_filename(ctx['numero'], cliente_nome), pdf, 'application/pdf')
-        if item.status == STATUS_PROPOSTA_RASCUNHO:
-            item.status = STATUS_PROPOSTA_ENVIADA
+
+    # Só marca como enviada depois do Gmail aceitar; falha no envio mantém a revisão pendente.
+    send_gmail_as_user(user, email_obj)
+
+    from .proposta_tarifas import ajustes_iniciais_proposta
+
+    for item in propostas:
+        if not item.ajustes_iniciais:
+            # Primeiro envio fixa a comparação com a tabela; revisões não a recalculam.
+            item.ajustes_iniciais = ajustes_iniciais_proposta(item)
         modo = getattr(item, 'modo_envio', '') or ''
+        # Nova revisão enviada substitui a resposta anterior do cliente (aceite/recusa era da versão antiga).
+        if item.status == STATUS_PROPOSTA_RASCUNHO or modo:
+            item.status = STATUS_PROPOSTA_ENVIADA
         if modo:
             marcar_envio_historico(
                 item,
@@ -373,9 +405,9 @@ def send_propostas_comerciais_email(
                 'Errata enviada ao cliente' if modo == 'errata' else 'Revisão enviada ao cliente',
             )
             item.modo_envio = ''
-        item.save(update_fields=['status', 'modo_envio', 'historico_revisoes', 'data_atualizacao'])
-
-    send_gmail_as_user(user, email_obj)
+        item.save(update_fields=[
+            'status', 'modo_envio', 'historico_revisoes', 'ajustes_iniciais', 'data_atualizacao',
+        ])
 
     return {
         'to': destinarios,
