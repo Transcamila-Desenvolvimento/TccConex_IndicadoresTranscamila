@@ -53,6 +53,7 @@ import type {
   VeiculoComercial, VeiculoComercialPayload,
   RotaDistanciaPayload, RotaDistanciaResult, EnderecoSugestao, GoogleMapsConfigComercial,
   ProdutoComercial, ProdutoComercialPayload, ProdutoComercialLotePayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
+  Notificacao, PushNotificacoesConfig, PushInscricaoPayload,
 } from '../types/domain';
 import {
   cloneTabelaArmazenagem,
@@ -1194,6 +1195,46 @@ export const apiService = {
   }): Promise<User> {
     const { data } = await api.post('/api/auth/profile/change-password/', payload);
     return normalizeUser(data);
+  },
+
+  async getNotificacoes(params: { page?: number; pageSize?: number } = {}): Promise<PaginatedResponse<Notificacao>> {
+    const { data } = await api.get('/api/notificacoes/', {
+      params: { page: params.page ?? 1, page_size: params.pageSize ?? 20 },
+    });
+    return {
+      results: data.results ?? [],
+      count: data.count ?? 0,
+      next: data.next ?? null,
+      previous: data.previous ?? null,
+    };
+  },
+
+  async getNotificacoesNaoLidas(): Promise<number> {
+    const { data } = await api.get('/api/notificacoes/nao-lidas/');
+    return Number(data.total ?? 0);
+  },
+
+  async marcarNotificacaoLida(id: string): Promise<Notificacao> {
+    const { data } = await api.post(`/api/notificacoes/${id}/lida/`);
+    return data;
+  },
+
+  async marcarTodasNotificacoesLidas(): Promise<number> {
+    const { data } = await api.post('/api/notificacoes/marcar-todas-lidas/');
+    return Number(data.atualizadas ?? 0);
+  },
+
+  async getPushNotificacoesConfig(): Promise<PushNotificacoesConfig> {
+    const { data } = await api.get('/api/notificacoes/push/config/');
+    return { habilitado: Boolean(data.habilitado), publicKey: String(data.publicKey ?? '') };
+  },
+
+  async inscreverPushNotificacoes(payload: PushInscricaoPayload): Promise<void> {
+    await api.post('/api/notificacoes/push/inscrever/', payload);
+  },
+
+  async cancelarPushNotificacoes(endpoint: string): Promise<void> {
+    await api.post('/api/notificacoes/push/cancelar/', { endpoint });
   },
 
   async getRoles(): Promise<Role[]> {
@@ -2654,6 +2695,11 @@ export const apiService = {
       },
     });
     return paginatedFromResponse(data, normalizePropostaComercial);
+  },
+
+  async getPropostaComercial(id: string): Promise<PropostaComercial> {
+    const { data } = await api.get(`/api/comercial/propostas/${id}/`);
+    return normalizePropostaComercial(data);
   },
 
   async getPropostaComercialDraft(): Promise<PropostaComercialFormDraft> {

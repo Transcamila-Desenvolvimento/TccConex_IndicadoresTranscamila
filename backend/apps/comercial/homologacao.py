@@ -276,8 +276,11 @@ def _salvar_status(cliente, status, usuario=None, justificativa='', evento=None)
     _registrar_evento(cliente, evento_final, usuario, justificativa)
     if evento_final in {COMPATIBILIDADE_PENDENTE_VALIDACAO, HomologacaoProdutoEvento.EVENTO_REABERTO}:
         from .homologacao_email_service import notificar_homologacao_pendente
+        from .homologacao_notificacao import notificar_homologacao_cliente
 
-        notificar_homologacao_pendente(cliente.pk, getattr(usuario, 'pk', None))
+        cliente_id, usuario_id = cliente.pk, getattr(usuario, 'pk', None)
+        notificar_homologacao_pendente(cliente_id, usuario_id)
+        transaction.on_commit(lambda: notificar_homologacao_cliente(cliente_id, usuario_id))
 
 
 @transaction.atomic

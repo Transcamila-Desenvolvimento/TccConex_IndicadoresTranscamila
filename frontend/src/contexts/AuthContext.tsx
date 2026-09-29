@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { User } from '../types/domain';
 import { apiService } from '../services/apiService';
+import { endpointDoNavegador } from '../services/webPush';
 import { ACTIVE_ENVIRONMENTS, environmentRequiresFilial } from '../constants/environments';
 import { branchesForModule } from '../constants/filiais';
 import { AUTH_PROFILE_QUERY_KEY, useAuthProfile, useLogin } from '../hooks/useAuthProfile';
@@ -69,6 +70,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    void desvincularPushDoUsuario().finally(encerrarSessao);
+  };
+
+  // A inscrição do navegador continua; no próximo login ela é vinculada ao novo usuário.
+  const desvincularPushDoUsuario = async () => {
+    try {
+      const endpoint = await endpointDoNavegador();
+      if (endpoint) await apiService.cancelarPushNotificacoes(endpoint);
+    } catch {
+      // Sem rede/sessão expirada: o servidor já descarta inscrições inválidas.
+    }
+  };
+
+  const encerrarSessao = () => {
     apiService.clearToken();
     setSessionActive(false);
     queryClient.setQueryData(AUTH_PROFILE_QUERY_KEY, null);

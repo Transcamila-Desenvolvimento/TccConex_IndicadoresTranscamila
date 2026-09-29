@@ -11,7 +11,9 @@ import LoginPage from '../pages/LoginPage';
 import SelectionPage from '../pages/SelectionPage';
 import ChangePasswordPage from '../pages/ChangePasswordPage';
 import GoogleCallbackPage from '../pages/GoogleCallbackPage';
+import AbrirNotificacaoPage from '../pages/AbrirNotificacaoPage';
 import DashboardLayout from '../layouts/DashboardLayout';
+import NotificacaoSwListener from '../components/NotificacaoSwListener';
 
 import PageLoader from '../components/PageLoader';
 
@@ -120,8 +122,17 @@ const DashboardIndexRedirect: React.FC = () => {
 const AppRoutes: React.FC = () => {
   return (
     <Router>
+      <NotificacaoSwListener />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/notificacao/:id"
+          element={
+            <ProtectedRoute>
+              <AbrirNotificacaoPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/change-password"
           element={

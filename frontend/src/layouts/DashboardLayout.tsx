@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from '../components/UserAvatar';
+import NotificacoesBell from '../components/NotificacoesBell';
 import { environmentRequiresFilial, isAdminEnvironment } from '../constants/environments';
 import { getAllowedIndicadores } from '../constants/indicadores';
 import { userCanSeeAba } from '../constants/abas';
@@ -1504,6 +1505,7 @@ const DashboardLayout: React.FC = () => {
                 <span>{selectedFilial}</span>
               </div>
             )}
+            <NotificacoesBell />
           <div 
             className="header-user" 
             id="btn-header-user" 

@@ -4172,3 +4172,45 @@ class HomologacaoProdutosComercialTests(TestCase):
         self.assertEqual(cliente.json()['compatibilidade'], 'pendente_validacao')
         self.assertEqual(cliente.json()['produtosCount'], 3)
 
+    def test_pendente_gera_aviso_no_sininho_para_quem_optou(self):
+        from apps.notificacoes.models import Notificacao
+
+        sem_google = self._usuario_notificacao('homolog.sino', google_email=None)
+        cliente_id = self._cliente()
+        with self.captureOnCommitCallbacks(execute=True):
+            self._vincular_produto(cliente_id)
+        avisos = Notificacao.objects.filter(tipo='comercial.homologacao.pendente')
+        self.assertEqual(list(avisos.values_list('usuario_id', flat=True)), [sem_google.pk])
+        aviso = avisos.get()
+        self.assertIn('Homologação pendente', aviso.titulo)
+        self.assertEqual(aviso.link, f'/comercial/validacao-clientes?cliente={cliente_id}')
+        self.assertEqual(aviso.ambiente, 'Comercial')
+
+    def test_composicao_alterada_gera_aviso_e_nao_avisa_quem_alterou(self):
+        from apps.notificacoes.models import Notificacao
+
+        destinatario = self._usuario_notificacao('homolog.revalida', google_email=None)
+        self.produtos.funcoes = {
+            **(self.produtos.funcoes or {}),
+            'Comercial': [*((self.produtos.funcoes or {}).get('Comercial') or []), 'receber-email-homologacao'],
+        }
+        self.produtos.save(update_fields=['funcoes'])
+        cliente_id = self._cliente()
+        with self.captureOnCommitCallbacks(execute=True):
+            self._vincular_produto(cliente_id)
+        self._auth(self.validador)
+        aprovado = self.api.post(
+            f'/api/comercial/clientes/{cliente_id}/homologar/',
+            {'decisao': 'homologado', 'justificativa': 'Composição conferida.'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(aprovado.status_code, 200, aprovado.content)
+        with self.captureOnCommitCallbacks(execute=True):
+            self._vincular_produto(cliente_id, 'Ureia agricola')
+        alterada = Notificacao.objects.filter(tipo='comercial.homologacao.composicao_alterada')
+        self.assertEqual(list(alterada.values_list('usuario_id', flat=True)), [destinatario.pk])
+        aviso = alterada.get()
+        self.assertIn('Composição de produtos alterada', aviso.titulo)
+        self.assertIn('1 alteração(ões)', aviso.mensagem)
+

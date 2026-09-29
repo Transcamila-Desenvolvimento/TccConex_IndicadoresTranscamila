@@ -161,6 +161,28 @@ export interface PaginatedResponse<T> {
   previous: string | null;
 }
 
+export interface Notificacao {
+  id: string;
+  ambiente: string;
+  tipo: string;
+  titulo: string;
+  mensagem: string;
+  link: string;
+  lida: boolean;
+  lidaEm: string | null;
+  criadaEm: string;
+}
+
+export interface PushNotificacoesConfig {
+  habilitado: boolean;
+  publicKey: string;
+}
+
+export interface PushInscricaoPayload {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}
+
 export interface ListQueryParams {
   page?: number;
   pageSize?: number;

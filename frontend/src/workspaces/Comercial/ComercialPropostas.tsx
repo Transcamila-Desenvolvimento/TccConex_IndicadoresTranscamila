@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
@@ -13,6 +14,7 @@ import {
   useCreatePropostaComercial,
   useDeletePropostaComercial,
   useDeletePropostaComercialDraft,
+  usePropostaComercial,
   usePropostaComercialDraft,
   usePropostasComerciais,
   useSavePropostaComercialDraft,
@@ -582,6 +584,9 @@ const ComercialPropostas: React.FC = () => {
   const [draftUnavailable, setDraftUnavailable] = useState(false);
   const skipNextDraftSave = useRef(true);
   const suppressDraftSave = useRef(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const propostaLinkId = (searchParams.get('proposta') || '').trim() || null;
+  const propostaLinkQuery = usePropostaComercial(propostaLinkId);
 
   const propostasQuery = usePropostasComerciais({
     page,
@@ -805,6 +810,15 @@ const ComercialPropostas: React.FC = () => {
     }, 500);
     return () => window.clearTimeout(timer);
   }, [abaOperacao, canManage, createProposta.isPending, deleteDraft.isPending, draftHydrated, draftUnavailable, editingId, form, isModalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!propostaLinkId || clientesQuery.isLoading) return;
+    if (!propostaLinkQuery.data && !propostaLinkQuery.isError) return;
+    if (propostaLinkQuery.data) startEdit(propostaLinkQuery.data);
+    const next = new URLSearchParams(searchParams);
+    next.delete('proposta');
+    setSearchParams(next, { replace: true });
+  }, [propostaLinkId, propostaLinkQuery.data, propostaLinkQuery.isError, clientesQuery.isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const goToPage = (nextPage: number) => {
     setPage(nextPage);

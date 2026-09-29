@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'apps.logistica',
     'apps.frota',
     'apps.comercial',
+    'apps.notificacoes',
 ]
 
 MIDDLEWARE = [
@@ -329,4 +330,20 @@ GOOGLE_OAUTH_REDIRECT_URI = os.environ.get(
 )
 GOOGLE_OAUTH_HD = os.environ.get('GOOGLE_OAUTH_HD', 'transcamila.com.br')
 GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY', '')
+# Conta de serviço do app "TccConex ERP" no Google Chat: conteúdo JSON da chave ou caminho do arquivo.
+# Vazio = notificações só no sininho do ERP.
+GOOGLE_CHAT_SERVICE_ACCOUNT_JSON = os.environ.get('GOOGLE_CHAT_SERVICE_ACCOUNT_JSON', '')
+
+# Web Push (avisos no canto do Windows/navegador). Par de chaves VAPID gerado uma vez;
+# sem as duas chaves os avisos ficam só no sininho.
+WEBPUSH_VAPID_PUBLIC_KEY = os.environ.get('WEBPUSH_VAPID_PUBLIC_KEY', '')
+WEBPUSH_VAPID_PRIVATE_KEY = os.environ.get('WEBPUSH_VAPID_PRIVATE_KEY', '')
+WEBPUSH_VAPID_SUBJECT = os.environ.get('WEBPUSH_VAPID_SUBJECT', f'mailto:{DEFAULT_FROM_EMAIL}')
+
+# Reciclagem dos avisos (apps/notificacoes/reciclagem.py).
+NOTIFICACOES_RETER_LIDAS_DIAS = int(os.environ.get('NOTIFICACOES_RETER_LIDAS_DIAS', '30'))
+NOTIFICACOES_RETER_DIAS = int(os.environ.get('NOTIFICACOES_RETER_DIAS', '90'))
+NOTIFICACOES_MAX_POR_USUARIO = int(os.environ.get('NOTIFICACOES_MAX_POR_USUARIO', '200'))
+NOTIFICACOES_PUSH_RETER_DIAS = int(os.environ.get('NOTIFICACOES_PUSH_RETER_DIAS', '90'))
+NOTIFICACOES_RECICLAGEM_INTERVALO_HORAS = int(os.environ.get('NOTIFICACOES_RECICLAGEM_INTERVALO_HORAS', '24'))
 

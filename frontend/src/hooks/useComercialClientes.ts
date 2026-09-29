@@ -133,6 +133,14 @@ export function usePropostasComerciais(params: PropostaComercialQueryParams) {
   });
 }
 
+export function usePropostaComercial(id: string | null) {
+  return useQuery({
+    queryKey: [...COMERCIAL_PROPOSTAS_KEY, 'detail', id],
+    queryFn: () => apiService.getPropostaComercial(id as string),
+    enabled: Boolean(id),
+  });
+}
+
 export function usePropostasComerciaisDashboard(clienteId?: string | null, enabled = true) {
   return useQuery({
     queryKey: [...COMERCIAL_PROPOSTAS_KEY, 'dashboard', clienteId || 'todos'],

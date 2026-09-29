@@ -703,6 +703,10 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         proposta = serializer.save(emitido_por=self.request.user)
         record_audit(self.request.user, 'comercial.proposta.criada', f'Proposta "{proposta.titulo}" cadastrada.')
+        from .proposta_notificacao import notificar_proposta_criada
+
+        proposta_id, autor_id = proposta.pk, self.request.user.pk
+        transaction.on_commit(lambda: notificar_proposta_criada(proposta_id, autor_id))
 
     def perform_update(self, serializer):
         proposta = serializer.save()
