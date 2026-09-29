@@ -1282,6 +1282,8 @@ class ClienteComercialTests(TestCase):
             {
                 'cc': ['diretor@transcamila.com.br', 'miguel.ribeiro@transcamila.com.br'],
                 'pdfBase64': PDF_BASE64,
+                'observacao': 'Valores para pagamento à vista\n<b>Frete</b> sem seguro',
+                'confirmacaoLeitura': True,
             },
             format='json',
             **HEADERS,
@@ -1289,6 +1291,11 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         mock_send.assert_called_once()
         _user, email_obj = mock_send.call_args.args
+        self.assertIn('OBS:</strong> Valores para pagamento à vista<br>&lt;b&gt;Frete&lt;/b&gt; sem seguro', email_obj.body)
+        self.assertEqual(
+            email_obj.message()['Disposition-Notification-To'],
+            'miguel.ribeiro@transcamila.com.br',
+        )
         self.assertEqual(email_obj.to, ['compras@empresa.com'])
         self.assertEqual(email_obj.cc, ['diretor@transcamila.com.br'])
         self.assertIn('miguel.ribeiro@transcamila.com.br', email_obj.from_email)
@@ -1364,6 +1371,7 @@ class ClienteComercialTests(TestCase):
         pdfs = [item[0] for item in email_obj.attachments if isinstance(item, tuple) and str(item[0]).endswith('.pdf')]
         self.assertEqual(len(pdfs), 2)
         self.assertIn('Propostas comerciais nº', email_obj.subject)
+        self.assertIsNone(email_obj.message()['Disposition-Notification-To'])
         self.assertEqual(self.api.get(f'/api/comercial/propostas/{frete.json()["id"]}/', **HEADERS).json()['status'], 'enviada')
         self.assertEqual(self.api.get(f'/api/comercial/propostas/{armazem.json()["id"]}/', **HEADERS).json()['status'], 'enviada')
 

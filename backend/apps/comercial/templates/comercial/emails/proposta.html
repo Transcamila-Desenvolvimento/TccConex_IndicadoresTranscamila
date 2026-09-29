@@ -47,6 +47,9 @@
               <p style="margin:0 0 18px;">
                 Encaminhamos as propostas comerciais nº&nbsp;<strong style="color:#0f2744;">{{ numero }}</strong>, elaboradas para <strong style="color:#0f2744;">{{ cliente_nome }}</strong>, referentes aos serviços abaixo.
               </p>
+              {% if observacao %}
+              <p style="margin:0 0 18px;"><strong style="color:#0f2744;">OBS:</strong> {{ observacao|linebreaksbr }}</p>
+              {% endif %}
               <p style="margin:0;">
                 Os documentos integrais seguem em anexo, em PDF, para análise e arquivo.
               </p>
@@ -54,6 +57,9 @@
               <p style="margin:0 0 18px;">
                 Encaminhamos a proposta comercial nº&nbsp;<strong style="color:#0f2744;">{{ numero }}</strong>, referente a <strong style="color:#0f2744;">{{ servico }}</strong>, elaborada para <strong style="color:#0f2744;">{{ cliente_nome }}</strong>.
               </p>
+              {% if observacao %}
+              <p style="margin:0 0 18px;"><strong style="color:#0f2744;">OBS:</strong> {{ observacao|linebreaksbr }}</p>
+              {% endif %}
               <p style="margin:0;">
                 O documento integral segue em anexo, em PDF, para análise e arquivo.
               </p>

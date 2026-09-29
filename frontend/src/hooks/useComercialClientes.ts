@@ -282,13 +282,15 @@ export function useDeletePropostaComercial() {
 export function useEnviarEmailPropostaComercial() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ ids, to, cc, pdfs, revisoes }: {
+    mutationFn: ({ ids, ...payload }: {
       ids: string[];
       to?: string[];
       cc?: string[];
       pdfs: Blob[];
       revisoes?: string[];
-    }) => apiService.enviarEmailPropostasComerciais(ids, { to, cc, pdfs, revisoes }),
+      observacao?: string;
+      confirmacaoLeitura?: boolean;
+    }) => apiService.enviarEmailPropostasComerciais(ids, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: COMERCIAL_PROPOSTAS_KEY });
       queryClient.invalidateQueries({ queryKey: COMERCIAL_CLIENTES_KEY });

@@ -35,6 +35,8 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
     destinoInicial ? [{ email: destinoInicial }] : [],
   );
   const [ccTags, setCcTags] = useState<EmailTagValue[]>([]);
+  const [observacao, setObservacao] = useState('');
+  const [confirmacaoLeitura, setConfirmacaoLeitura] = useState(true);
   const [success, setSuccess] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -52,13 +54,15 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
 
   if (!proposta) return null;
 
+  // Só falha de transporte (sem resposta ou proxy 502/504); erro devolvido pelo backend deve aparecer como veio.
   const isErroRede = (err: unknown) => {
-    const msg = getComercialErrorMessage(err);
-    const axiosErr = err as { code?: string; response?: unknown };
+    const axiosErr = err as { code?: string; response?: { status?: number } };
     return (
       !axiosErr.response
       || axiosErr.code === 'ERR_NETWORK'
-      || /ECONNRESET|timeout|Network Error|status code 50[245]/i.test(msg)
+      || axiosErr.code === 'ECONNABORTED'
+      || axiosErr.response.status === 502
+      || axiosErr.response.status === 504
     );
   };
 
@@ -92,6 +96,8 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
       revisoes: propostas.map((item) => item.revisao || ''),
       to,
       cc: ccTags.map((tag) => tag.email).filter((email) => email.toLowerCase() !== googleEmailNorm),
+      observacao,
+      confirmacaoLeitura,
     };
 
     setGeneratingPdf(true);
@@ -205,6 +211,41 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
               disabled={busy}
               placeholder="Outros destinatários em cópia (opcional)..."
             />
+            <div className="form-group">
+              <label htmlFor="proposta-email-observacao">
+                Observação <small style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(opcional)</small>
+              </label>
+              <textarea
+                id="proposta-email-observacao"
+                className="form-input"
+                rows={3}
+                maxLength={2000}
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+                disabled={busy}
+                placeholder="Aparece no corpo do e-mail como OBS:, logo após a apresentação da proposta..."
+                style={{ resize: 'vertical', minHeight: 72 }}
+              />
+            </div>
+            <label
+              htmlFor="proposta-email-confirmacao"
+              style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: '13px', color: '#334155', cursor: busy ? 'default' : 'pointer' }}
+            >
+              <input
+                type="checkbox"
+                id="proposta-email-confirmacao"
+                checked={confirmacaoLeitura}
+                onChange={(e) => setConfirmacaoLeitura(e.target.checked)}
+                disabled={busy}
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                Solicitar confirmação de leitura
+                <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '11.5px', lineHeight: 1.4 }}>
+                  O cliente decide se confirma; a confirmação chega no seu Gmail. Gmail pessoal costuma ignorar o pedido.
+                </small>
+              </span>
+            </label>
             {errorMsg ? (
               <p style={{ margin: 0, fontSize: '12.5px', color: '#b91c1c' }}>{errorMsg}</p>
             ) : null}

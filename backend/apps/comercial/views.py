@@ -73,6 +73,8 @@ from .proposta_email_service import (
     read_proposta_pdf,
     read_proposta_pdfs,
     request_email_list,
+    request_confirmacao_leitura,
+    request_observacao,
     request_proposta_ids,
     request_revisoes_pdf,
     send_proposta_comercial_email,
@@ -850,6 +852,8 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 cc_emails=request_email_list(request.data, 'cc', 'emailCopia'),
                 pdf_bytes=read_proposta_pdf(request),
                 revisoes_pdf=request_revisoes_pdf(request.data),
+                observacao=request_observacao(request.data),
+                confirmacao_leitura=request_confirmacao_leitura(request.data),
             )
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -895,6 +899,8 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 to_emails=request_email_list(request.data, 'to', 'email'),
                 cc_emails=request_email_list(request.data, 'cc', 'emailCopia'),
                 revisoes_pdf=request_revisoes_pdf(request.data),
+                observacao=request_observacao(request.data),
+                confirmacao_leitura=request_confirmacao_leitura(request.data),
             )
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)

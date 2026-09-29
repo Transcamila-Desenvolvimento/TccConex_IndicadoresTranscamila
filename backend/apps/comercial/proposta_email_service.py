@@ -293,6 +293,8 @@ def send_proposta_comercial_email(
     cc_emails: list[str] | None = None,
     pdf_bytes: bytes | None = None,
     revisoes_pdf: list[str] | None = None,
+    observacao: str = '',
+    confirmacao_leitura: bool = False,
 ) -> dict:
     return send_propostas_comerciais_email(
         user,
@@ -300,7 +302,25 @@ def send_proposta_comercial_email(
         to_emails=to_emails,
         cc_emails=cc_emails,
         revisoes_pdf=revisoes_pdf,
+        observacao=observacao,
+        confirmacao_leitura=confirmacao_leitura,
     )
+
+
+OBSERVACAO_EMAIL_MAX = 2000
+
+
+def request_observacao(data) -> str:
+    """Observação livre digitada no envio; aparece no corpo do e-mail."""
+    value = data.get('observacao') if hasattr(data, 'get') else ''
+    return str(value or '').strip()[:OBSERVACAO_EMAIL_MAX]
+
+
+def request_confirmacao_leitura(data) -> bool:
+    value = data.get('confirmacaoLeitura') if hasattr(data, 'get') else None
+    if isinstance(value, bool):
+        return value
+    return str(value or '').strip().lower() in {'1', 'true', 'sim', 'on'}
 
 
 def request_revisoes_pdf(data) -> list[str] | None:
@@ -320,6 +340,8 @@ def send_propostas_comerciais_email(
     to_emails: list[str] | None = None,
     cc_emails: list[str] | None = None,
     revisoes_pdf: list[str] | None = None,
+    observacao: str = '',
+    confirmacao_leitura: bool = False,
 ) -> dict:
     google_from = _google_email(user)
     if not google_from:
@@ -360,6 +382,7 @@ def send_propostas_comerciais_email(
     context['servico'] = _juntar_lista(servicos)
     context['plural'] = len(propostas) > 1
     context['itens'] = contextos
+    context['observacao'] = (observacao or '').strip()
     html_body = render_to_string('comercial/emails/proposta.html', context)
     cliente_nome = context['cliente_nome']
     remetente = f'{_usuario_display(user)} <{google_from}>'
@@ -372,6 +395,8 @@ def send_propostas_comerciais_email(
         from_email=remetente,
         to=destinarios,
         cc=cc,
+        # O cliente de e-mail do destinatário decide se envia a confirmação (Gmail pessoal costuma ignorar).
+        headers={'Disposition-Notification-To': google_from} if confirmacao_leitura else None,
     )
     email_obj.content_subtype = 'html'
     logo_bytes = _logo_png_bytes()

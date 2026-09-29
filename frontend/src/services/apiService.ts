@@ -2776,13 +2776,22 @@ export const apiService = {
 
   async enviarEmailPropostasComerciais(
     ids: string[],
-    payload: { to?: string[]; cc?: string[]; pdfs: Blob[]; revisoes?: string[] },
+    payload: {
+      to?: string[];
+      cc?: string[];
+      pdfs: Blob[];
+      revisoes?: string[];
+      observacao?: string;
+      confirmacaoLeitura?: boolean;
+    },
   ): Promise<{ success: boolean; message: string; to: string[]; cc: string[] }> {
     const form = new FormData();
     ids.forEach((id) => form.append('ids', id));
     (payload.to ?? []).forEach((email) => form.append('to', email));
     (payload.cc ?? []).forEach((email) => form.append('cc', email));
     (payload.revisoes ?? []).forEach((revisao) => form.append('revisoes', revisao));
+    if (payload.observacao?.trim()) form.append('observacao', payload.observacao.trim());
+    if (payload.confirmacaoLeitura) form.append('confirmacaoLeitura', 'true');
     payload.pdfs.forEach((pdf, index) => form.append('pdf', pdf, `Proposta_comercial_${index + 1}.pdf`));
     const { data } = await api.post('/api/comercial/propostas/enviar-email-lote/', form, {
       timeout: 180_000,
