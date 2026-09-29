@@ -2543,6 +2543,7 @@ export const apiService = {
     return {
       comProdutos: Number(data.comProdutos ?? 0),
       pendentes: Number(data.pendentes ?? 0),
+      semProdutos: Number(data.semProdutos ?? 0),
       comImpeditivo: Number(data.comImpeditivo ?? 0),
       homologados: Number(data.homologados ?? 0),
       reprovados: Number(data.reprovados ?? 0),

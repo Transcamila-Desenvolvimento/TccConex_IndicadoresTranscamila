@@ -2167,6 +2167,7 @@ export interface ClienteComercialHomologacaoResumo {
 export interface ClienteComercialValidacaoResumo {
   comProdutos: number;
   pendentes: number;
+  semProdutos: number;
   comImpeditivo: number;
   homologados: number;
   reprovados: number;

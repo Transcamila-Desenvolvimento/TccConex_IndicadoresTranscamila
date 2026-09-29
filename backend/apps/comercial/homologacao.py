@@ -96,7 +96,7 @@ def analisar_homologacao_produtos(cliente):
                 pendencias.append(f'{item["nome"]}: informe o nº ONU com 4 dígitos para carga perigosa.')
 
     if not itens:
-        resumo = 'Sem produto vinculado'
+        resumo = 'Incluir composição de produtos'
     elif bloqueados:
         partes = []
         if fispq_pendente:

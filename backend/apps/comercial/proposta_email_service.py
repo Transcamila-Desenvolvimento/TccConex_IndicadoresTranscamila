@@ -364,11 +364,10 @@ def send_propostas_comerciais_email(
 
     proposta = propostas[0]
     cliente_email = (getattr(proposta.cliente, 'email', None) or '').strip().lower()
+    # Quem envia pode tirar o e-mail cadastrado do cliente; ele só entra se nenhum destinatário vier.
     destinarios = parse_emails(to_emails)
     if not destinarios and cliente_email:
         destinarios = [cliente_email]
-    if cliente_email and cliente_email not in destinarios:
-        destinarios.insert(0, cliente_email)
     if not destinarios:
         raise ValueError('Cadastre o e-mail do cliente ou informe um destinatário para enviar a proposta.')
 

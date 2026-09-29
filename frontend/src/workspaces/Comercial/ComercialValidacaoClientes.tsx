@@ -199,6 +199,9 @@ const resumoProdutos = (cliente: ClienteComercial) => {
 const resumoPendencia = (cliente: ClienteComercial) =>
   cliente.homologacaoResumo?.resumoPendencia || '—';
 
+const semProdutos = (cliente: ClienteComercial) =>
+  (cliente.homologacaoResumo?.produtosVinculados ?? cliente.produtosCount ?? cliente.produtos.length) === 0;
+
 const ComercialValidacaoClientes: React.FC = () => {
   const { user } = useAuth();
   const canValidate = userHasFuncao(user, 'Comercial', 'validar-clientes');
@@ -224,10 +227,9 @@ const ComercialValidacaoClientes: React.FC = () => {
     search: search.trim() || undefined,
     fila: filtro === 'pendente' ? 'validacao' : undefined,
     homologacao: filtro === 'homologado' || filtro === 'reprovado' ? filtro : undefined,
-    comProdutos: true,
     clienteId: filterClienteId || undefined,
   });
-  const clientesFiltroQuery = useClientesComercial({ page: 1, pageSize: 100, comProdutos: true });
+  const clientesFiltroQuery = useClientesComercial({ page: 1, pageSize: 100 });
   const clientesFiltro = clientesFiltroQuery.data?.results ?? [];
   const { canShowEmpty } = useAsyncQueryState(clientesQuery);
   const clientes = clientesQuery.data?.results ?? [];
@@ -464,8 +466,17 @@ const ComercialValidacaoClientes: React.FC = () => {
                       </td>
                       <td className="col-nome"><strong>{cliente.razaoSocial}</strong></td>
                       <td>{cliente.cnpj || '—'}</td>
-                      <td>{resumoProdutos(cliente)}</td>
-                      <td className="col-pendencia" title={resumoPendencia(cliente)}>{resumoPendencia(cliente)}</td>
+                      <td>
+                        {semProdutos(cliente) ? <span className="muted">Nenhum</span> : resumoProdutos(cliente)}
+                      </td>
+                      <td className="col-pendencia" title={resumoPendencia(cliente)}>
+                        {semProdutos(cliente) ? (
+                          <span className="comercial-pendencia-chip is-alerta">
+                            <i className="bi bi-exclamation-triangle" aria-hidden="true" style={{ marginRight: 5 }} />
+                            {resumoPendencia(cliente)}
+                          </span>
+                        ) : resumoPendencia(cliente)}
+                      </td>
                       <td><ComercialHomologacaoBadge status={cliente.compatibilidade} /></td>
                       <td className="col-desde" title={formatDateTime(cliente.homologacaoDesde)}>
                         {(() => {
@@ -547,7 +558,12 @@ const ComercialValidacaoClientes: React.FC = () => {
                 <>
                   <h5 className="admin-form-section-title">Composição de produtos</h5>
                   {selected.produtos.length === 0 ? (
-                    <p className="muted" style={{ margin: 0 }}>Nenhum produto vinculado.</p>
+                    <div className="comercial-dossie-alerta is-bloqueado">
+                      <strong>Composição de produtos pendente</strong>
+                      <p style={{ margin: '4px 0 0' }}>
+                        Inclua os produtos deste cliente em Cadastros › Composição de produtos para liberar a homologação.
+                      </p>
+                    </div>
                   ) : (
                     <ProdutosHomologacaoTable produtos={selected.produtos} />
                   )}
@@ -583,7 +599,7 @@ const ComercialValidacaoClientes: React.FC = () => {
                     type="button"
                     className="reports-action-btn primary"
                     disabled={homologar.isPending || !podeHomologar}
-                    title={!podeHomologar ? 'Regularize o nº ONU da carga perigosa antes de aprovar.' : undefined}
+                    title={!podeHomologar ? (analise?.pendencias?.[0] || 'Regularize as pendências antes de aprovar.') : undefined}
                     onClick={() => decidir('homologado')}
                   >
                     {homologar.isPending ? 'Registrando...' : 'Aprovar'}

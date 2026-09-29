@@ -342,10 +342,8 @@ class ClienteComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             qs = qs.filter(compatibilidade=normalizar_homologacao(raw_homologacao))
         fila = (self.request.query_params.get('fila') or '').strip().lower()
         if fila in {'validacao', 'pendente'}:
-            qs = qs.filter(
-                compatibilidade__in=['pendente_validacao', 'nao_analisado'],
-                produtos_count__gte=1,
-            )
+            # Sem produto também entra: a pendência é incluir a composição de produtos.
+            qs = qs.filter(compatibilidade__in=['pendente_validacao', 'nao_analisado'])
         com_produtos = (self.request.query_params.get('com_produtos') or '').strip().lower()
         if com_produtos in {'1', 'true', 'sim'}:
             qs = qs.filter(produtos_count__gte=1)
@@ -372,11 +370,12 @@ class ClienteComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             if digits:
                 query |= Q(cnpj_digits__icontains=digits)
             qs = qs.filter(query)
-        qs = qs.filter(produtos_count__gte=1)
         pendentes = qs.filter(compatibilidade__in=['pendente_validacao', 'nao_analisado'])
+        qs = qs.filter(produtos_count__gte=1)
         return Response({
             'comProdutos': qs.count(),
             'pendentes': pendentes.count(),
+            'semProdutos': pendentes.filter(produtos_count=0).count(),
             'comImpeditivo': pendentes.filter(q_produto_com_impeditivo()).distinct().count(),
             'homologados': qs.filter(compatibilidade='homologado').count(),
             'reprovados': qs.filter(compatibilidade='reprovado').count(),

@@ -543,11 +543,15 @@ class ClienteComercialSerializer(serializers.ModelSerializer):
         return _usuario_nome(instance.homologado_por)
 
     def get_homologacaoDesde(self, instance):
-        """Data em que o cliente entrou no status de homologação atual (último evento registrado)."""
+        """Data em que o cliente entrou no status de homologação atual (último evento registrado).
+
+        Sem evento, o cliente está pendente desde o cadastro.
+        """
         datas = [evento.data_criacao for evento in instance.homologacao_eventos.all() if evento.data_criacao]
-        if not datas:
+        desde = max(datas) if datas else instance.data_criacao
+        if not desde:
             return None
-        return serializers.DateTimeField().to_representation(max(datas))
+        return serializers.DateTimeField().to_representation(desde)
 
     def get_produtosCount(self, instance):
         count = getattr(instance, 'produtos_count', None)

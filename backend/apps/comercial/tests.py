@@ -1793,7 +1793,10 @@ class ClienteComercialTests(TestCase):
             self.assertEqual(resp.status_code, 200, resp.content)
             return resp.json()['results'][0]['homologacaoDesde']
 
-        self.assertIsNone(desde())
+        from apps.comercial.models import ClienteComercial
+
+        cadastro = ClienteComercial.objects.get(pk=cliente_id).data_criacao
+        self.assertEqual(desde()[:19], timezone.localtime(cadastro).isoformat()[:19])
         antigo = HomologacaoProdutoEvento.objects.create(cliente_id=cliente_id, status='pendente_validacao')
         recente = HomologacaoProdutoEvento.objects.create(cliente_id=cliente_id, status='homologado')
         HomologacaoProdutoEvento.objects.filter(pk=antigo.pk).update(data_criacao=timezone.now() - timedelta(days=5))
@@ -2055,6 +2058,33 @@ class ClienteComercialTests(TestCase):
         _user, email_obj = mock_send.call_args.args
         self.assertEqual(email_obj.to, ['compras@empresa.com'])
         self.assertEqual(email_obj.cc, ['diretor@transcamila.com.br'])
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+    def test_enviar_email_sem_email_do_cliente_quando_removido_do_para(self, mock_send):
+        self.admin.google_email = 'adm.ibi@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        self._auth(self.admin)
+        cliente = self.api.post(
+            '/api/comercial/clientes/',
+            {**PAYLOAD, 'email': 'compras@empresa.com', 'cnpj': '00.000.000/0002-72'},
+            format='json',
+            **HEADERS,
+        )
+        proposta = self.api.post(
+            '/api/comercial/propostas/',
+            {'tipo': 'armazenagem', 'clienteId': cliente.json()['id'], 'status': 'rascunho'},
+            format='json',
+            **HEADERS,
+        )
+        response = self.api.post(
+            f'/api/comercial/propostas/{proposta.json()["id"]}/enviar-email/',
+            {'to': ['digitalmidia@transcamila.com.br'], 'pdfBase64': PDF_BASE64},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        _user, email_obj = mock_send.call_args.args
+        self.assertEqual(email_obj.to, ['digitalmidia@transcamila.com.br'])
 
     def test_aceitar_proposta_promove_potencial_para_cliente(self):
         self._auth(self.admin)
@@ -3900,7 +3930,7 @@ class HomologacaoProdutosComercialTests(TestCase):
         self.assertEqual(ok.status_code, 200, ok.content)
         self.assertEqual(ok.json()['compatibilidade'], 'reprovado')
 
-    def test_fila_validacao_omite_cliente_sem_produto(self):
+    def test_fila_validacao_inclui_cliente_sem_produto_como_pendente(self):
         sem_produto = self._cliente()
         self._auth(self.admin)
         outro = self.api.post(
@@ -3924,7 +3954,12 @@ class HomologacaoProdutosComercialTests(TestCase):
         self.assertEqual(fila.status_code, 200, fila.content)
         ids = {item['id'] for item in fila.json()['results']}
         self.assertIn(com_produto, ids)
-        self.assertNotIn(sem_produto, ids)
+        self.assertIn(sem_produto, ids)
+        item = next(row for row in fila.json()['results'] if row['id'] == sem_produto)
+        self.assertEqual(item['homologacaoResumo']['resumoPendencia'], 'Incluir composição de produtos')
+        self.assertFalse(item['homologacaoResumo']['aptoHomologar'])
+        resumo = self.api.get('/api/comercial/clientes/validacao-resumo/', **HEADERS).json()
+        self.assertGreaterEqual(resumo['semProdutos'], 1)
         todos = self.api.get('/api/comercial/clientes/?com_produtos=1&page_size=100', **HEADERS)
         self.assertEqual(todos.status_code, 200, todos.content)
         ids_produtos = {item['id'] for item in todos.json()['results']}
