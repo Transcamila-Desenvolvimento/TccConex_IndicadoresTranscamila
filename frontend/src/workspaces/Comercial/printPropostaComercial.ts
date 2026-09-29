@@ -1,7 +1,6 @@
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import logoIndicadores from '../../assets/Logo_Indicadores.png';
-import { apiService } from '../../services/apiService';
+import logoIndicadores from '../../assets/Logo_Indicadores.png';import { apiService } from '../../services/apiService';
 import type {
   ClienteComercial,
   PropostaComercial,
@@ -41,8 +40,11 @@ async function resolveLogoPdfUrl(): Promise<string> {
 
 /** Logo ativa durante a geração do PDF (definida em generatePropostaComercialPdfBlob). */
 let activeLogoPdfUrl = '';
-/** Cargo do assinante na geração do PDF. */
-let activeAssinaturaCargo = '';
+type AssinaturaPdf = { cargo?: string; telefone?: string; email?: string };
+
+const SITE_TRANSCAMILA = 'www.transcamila.com.br';
+/** Dados do assinante (usuário que gera o PDF). */
+let activeAssinatura: AssinaturaPdf = {};
 /** PDF mais leve para e-mail (evita ECONNRESET no proxy/Gmail). */
 let activePdfCompact = false;
 
@@ -665,12 +667,22 @@ const secoesDaProposta = (proposta: PropostaComercial): PrintSecao[] => {
 };
 
 const buildAssinaturaHtml = (proposta: PropostaComercial) => {
-  const cargo = (activeAssinaturaCargo || '').trim();
+  const cargo = (activeAssinatura.cargo || '').trim();
+  const telefone = (activeAssinatura.telefone || '').trim();
+  const email = (activeAssinatura.email || '').trim();
+  const [primeiroNome, ...sobrenomes] = (proposta.responsavel || '').trim().split(/\s+/).filter(Boolean);
+  const nome = primeiroNome
+    ? `<strong>${escapeHtml(primeiroNome)}</strong>${sobrenomes.length ? ` ${escapeHtml(sobrenomes.join(' '))}` : ''}`
+    : '—';
   return `
   <div class="assinatura">
-    <span class="sign-line"></span>
-    <p class="sign-name">${dash(proposta.responsavel)}</p>
+    <p class="sign-name">${nome}</p>
     ${cargo ? `<p class="sign-cargo">${escapeHtml(cargo)}</p>` : ''}
+    ${telefone ? `<p class="sign-fone">${escapeHtml(telefone)}</p>` : ''}
+    <div class="sign-contatos">
+      ${email ? `<p>${escapeHtml(email)}</p>` : ''}
+      <p>${SITE_TRANSCAMILA}</p>
+    </div>
   </div>
   <div class="page-footer">
     <svg class="page-ornament" viewBox="0 0 400 140" preserveAspectRatio="xMaxYMax meet" aria-hidden="true">
@@ -747,26 +759,43 @@ const brandCss = (logoHeightPx: number) => `
 const assinaturaCss = (ornamentMaxWidth: string) => `
     .assinatura {
       margin-top: 12mm;
+      font-family: "Segoe UI", Arial, sans-serif;
       break-inside: avoid;
       page-break-inside: avoid;
     }
-    .sign-line {
-      display: block;
-      width: 62mm;
-      height: 1px;
-      background: #4a4a4a;
-      margin-bottom: 6px;
-    }
     .sign-name {
       margin: 0;
-      font-size: 12px;
-      color: #333;
+      font-size: 20px;
+      font-weight: 400;
+      color: #192c4d;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .sign-name strong {
+      font-weight: 700;
     }
     .sign-cargo {
       margin: 2px 0 0;
-      font-size: 10.5px;
-      color: #64748b;
-      line-height: 1.25;
+      font-size: 14px;
+      color: #1ba1d6;
+      line-height: 1.3;
+    }
+    .sign-fone {
+      margin: 12px 0 0;
+      font-size: 12.5px;
+      color: #192c4d;
+      line-height: 1.3;
+    }
+    .sign-contatos {
+      margin-top: 10px;
+      padding-left: 4px;
+      border-left: 1px solid #192c4d;
+    }
+    .sign-contatos p {
+      margin: 0;
+      font-size: 12.5px;
+      color: #1ba1d6;
+      line-height: 1.4;
     }
     .page-footer {
       margin-top: 10mm;
@@ -1701,10 +1730,10 @@ const generateArmazenagemPdfBlob = async (
 export async function generatePropostaComercialPdfBlob(
   proposta: PropostaComercial,
   cliente?: ClienteComercial | null,
-  opcoes?: { cargo?: string; compact?: boolean },
+  opcoes?: AssinaturaPdf & { compact?: boolean },
 ): Promise<Blob> {
   activeLogoPdfUrl = await resolveLogoPdfUrl();
-  activeAssinaturaCargo = (opcoes?.cargo || '').trim();
+  activeAssinatura = { cargo: opcoes?.cargo, telefone: opcoes?.telefone, email: opcoes?.email };
   activePdfCompact = Boolean(opcoes?.compact);
   try {
     if (
@@ -1737,7 +1766,7 @@ export async function generatePropostaComercialPdfBlob(
     return pdf!.output('blob');
   } finally {
     activeLogoPdfUrl = '';
-    activeAssinaturaCargo = '';
+    activeAssinatura = {};
     activePdfCompact = false;
   }
 }
@@ -1745,7 +1774,7 @@ export async function generatePropostaComercialPdfBlob(
 export async function printPropostaComercial(
   proposta: PropostaComercial,
   cliente?: ClienteComercial | null,
-  opcoes?: { cargo?: string },
+  opcoes?: AssinaturaPdf,
 ) {
   try {
     const blob = await generatePropostaComercialPdfBlob(proposta, cliente, opcoes);

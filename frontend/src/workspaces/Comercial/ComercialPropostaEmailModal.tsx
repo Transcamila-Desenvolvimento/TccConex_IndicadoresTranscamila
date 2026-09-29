@@ -70,6 +70,8 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
     for (const item of propostas) {
       pdfs.push(await generatePropostaComercialPdfBlob(item, clienteFor(item), {
         cargo: user?.cargo,
+        telefone: user?.telefone,
+        email: user?.googleEmail ?? undefined,
         compact,
       }));
     }

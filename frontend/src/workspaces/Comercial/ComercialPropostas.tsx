@@ -1162,7 +1162,11 @@ const ComercialPropostas: React.FC = () => {
   });
 
   const handlePrint = (proposta: PropostaComercial) => {
-    void printPropostaComercial(proposta, clienteDaProposta(proposta), { cargo: user?.cargo });
+    void printPropostaComercial(proposta, clienteDaProposta(proposta), {
+      cargo: user?.cargo,
+      telefone: user?.telefone,
+      email: user?.googleEmail ?? undefined,
+    });
   };
 
   const handleSelectAll = (checked: boolean) => {
