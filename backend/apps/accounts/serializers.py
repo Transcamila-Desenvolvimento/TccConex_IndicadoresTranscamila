@@ -100,7 +100,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
         return str(value or '').strip()[:120]
 
     def validate_telefone(self, value):
-        return str(value or '').strip()[:30]
+        return str(value or '').strip()[:80]
 
     def create(self, validated_data):
         password = validated_data.pop('password')
@@ -129,7 +129,7 @@ class UpdateUserSerializer(serializers.ModelSerializer):
         return str(value or '').strip()[:120]
 
     def validate_telefone(self, value):
-        return str(value or '').strip()[:30]
+        return str(value or '').strip()[:80]
 
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)

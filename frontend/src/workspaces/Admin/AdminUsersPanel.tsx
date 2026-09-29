@@ -758,7 +758,7 @@ const AdminUsersPanel: React.FC = () => {
                       type="tel"
                       id="admin-user-telefone"
                       placeholder="Ex: (43) 99999-9999"
-                      maxLength={30}
+                      maxLength={80}
                       value={telefone}
                       onChange={(e) => setTelefone(e.target.value)}
                       autoComplete="tel"
