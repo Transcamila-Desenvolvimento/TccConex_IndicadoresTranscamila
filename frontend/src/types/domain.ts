@@ -2758,6 +2758,13 @@ export function separarCondicoesProposta(
   return marcarCondicoesTipo(filtradas, tipo);
 }
 
+export interface PropostaEmissor {
+  nome: string;
+  cargo: string;
+  telefone: string;
+  email: string;
+}
+
 export interface PropostaComercial {
   id: string;
   numeroIdentificacao: string;
@@ -2791,6 +2798,8 @@ export interface PropostaComercial {
   historicoRevisoes?: PropostaHistoricoRevisao[];
   /** Frete vs tabela (margem oficial) na versão inicial — não é revisão. */
   ajustesIniciais?: PropostaHistoricoAlteracao[];
+  /** Usuário que emitiu a proposta — assina o PDF. */
+  emissor?: PropostaEmissor | null;
   modoEnvio?: string;
   condicoes: PropostaCondicaoComercial[];
   tabelaArmazenagem?: TabelaArmazenagem;

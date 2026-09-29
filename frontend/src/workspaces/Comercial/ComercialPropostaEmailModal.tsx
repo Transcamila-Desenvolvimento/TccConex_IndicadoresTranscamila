@@ -68,12 +68,7 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
   const gerarPdfs = async (compact: boolean) => {
     const pdfs: Blob[] = [];
     for (const item of propostas) {
-      pdfs.push(await generatePropostaComercialPdfBlob(item, clienteFor(item), {
-        cargo: user?.cargo,
-        telefone: user?.telefone,
-        email: user?.googleEmail ?? undefined,
-        compact,
-      }));
+      pdfs.push(await generatePropostaComercialPdfBlob(item, clienteFor(item), { compact }));
     }
     return pdfs;
   };

@@ -40,11 +40,14 @@ async function resolveLogoPdfUrl(): Promise<string> {
 
 /** Logo ativa durante a geração do PDF (definida em generatePropostaComercialPdfBlob). */
 let activeLogoPdfUrl = '';
-type AssinaturaPdf = { cargo?: string; telefone?: string; email?: string };
+type AssinaturaPdf = { nome?: string; cargo?: string; telefone?: string; email?: string };
 
 const SITE_TRANSCAMILA = 'www.transcamila.com.br';
-/** Dados do assinante (usuário que gera o PDF). */
+/** Quem emitiu a proposta (não quem está imprimindo/enviando). */
 let activeAssinatura: AssinaturaPdf = {};
+
+const assinaturaDoEmissor = (proposta: PropostaComercial): AssinaturaPdf =>
+  proposta.emissor ?? { nome: proposta.responsavel };
 /** PDF mais leve para e-mail (evita ECONNRESET no proxy/Gmail). */
 let activePdfCompact = false;
 
@@ -483,7 +486,7 @@ const buildArmazenagemDocumentoHtml = (
     ? buildArmazenagemObservacoes(opcoes.obsPagina ?? observacoesArmazenagem(proposta))
     : ''}
   ${opcoes.includeAssinatura ? buildHistoricoRevisoes(proposta) : ''}
-  ${opcoes.includeAssinatura ? buildAssinaturaHtml(proposta) : ''}
+  ${opcoes.includeAssinatura ? buildAssinaturaHtml() : ''}
 </body>
 </html>`;
 };
@@ -640,11 +643,11 @@ const secoesDaProposta = (proposta: PropostaComercial): PrintSecao[] => {
   return secoes;
 };
 
-const buildAssinaturaHtml = (proposta: PropostaComercial) => {
+const buildAssinaturaHtml = () => {
   const cargo = (activeAssinatura.cargo || '').trim();
   const telefone = (activeAssinatura.telefone || '').trim();
   const email = (activeAssinatura.email || '').trim();
-  const [primeiroNome, ...sobrenomes] = (proposta.responsavel || '').trim().split(/\s+/).filter(Boolean);
+  const [primeiroNome, ...sobrenomes] = (activeAssinatura.nome || '').trim().split(/\s+/).filter(Boolean);
   const nome = primeiroNome
     ? `<strong>${escapeHtml(primeiroNome)}</strong>${sobrenomes.length ? ` ${escapeHtml(sobrenomes.join(' '))}` : ''}`
     : '—';
@@ -807,7 +810,7 @@ const buildHtml = (
   ${opcoes.includeAssinatura && proposta.observacoes.trim()
     ? `<section class="block"><h2>Observações</h2><div class="obs">${escapeHtml(proposta.observacoes.trim())}</div></section>`
     : ''}
-  ${opcoes.includeAssinatura ? buildAssinaturaHtml(proposta) : ''}
+  ${opcoes.includeAssinatura ? buildAssinaturaHtml() : ''}
 `;
 
   return `<!DOCTYPE html>
@@ -1703,10 +1706,10 @@ const generateArmazenagemPdfBlob = async (
 export async function generatePropostaComercialPdfBlob(
   proposta: PropostaComercial,
   cliente?: ClienteComercial | null,
-  opcoes?: AssinaturaPdf & { compact?: boolean },
+  opcoes?: { compact?: boolean },
 ): Promise<Blob> {
   activeLogoPdfUrl = await resolveLogoPdfUrl();
-  activeAssinatura = { cargo: opcoes?.cargo, telefone: opcoes?.telefone, email: opcoes?.email };
+  activeAssinatura = assinaturaDoEmissor(proposta);
   activePdfCompact = Boolean(opcoes?.compact);
   try {
     if (
@@ -1747,10 +1750,9 @@ export async function generatePropostaComercialPdfBlob(
 export async function printPropostaComercial(
   proposta: PropostaComercial,
   cliente?: ClienteComercial | null,
-  opcoes?: AssinaturaPdf,
 ) {
   try {
-    const blob = await generatePropostaComercialPdfBlob(proposta, cliente, opcoes);
+    const blob = await generatePropostaComercialPdfBlob(proposta, cliente);
     const url = URL.createObjectURL(blob);
     document.getElementById('proposta-pdf-print-frame')?.remove();
     const iframe = document.createElement('iframe');

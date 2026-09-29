@@ -1162,11 +1162,7 @@ const ComercialPropostas: React.FC = () => {
   });
 
   const handlePrint = (proposta: PropostaComercial) => {
-    void printPropostaComercial(proposta, clienteDaProposta(proposta), {
-      cargo: user?.cargo,
-      telefone: user?.telefone,
-      email: user?.googleEmail ?? undefined,
-    });
+    void printPropostaComercial(proposta, clienteDaProposta(proposta));
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -1585,6 +1581,7 @@ const ComercialPropostas: React.FC = () => {
                         titulo: snapshot.titulo || salvo?.titulo || '',
                         dataCriacao: salvo?.dataCriacao ?? snapshot.dataCriacao,
                         dataVencimento: salvo?.dataVencimento ?? snapshot.dataVencimento,
+                        emissor: salvo?.emissor ?? null,
                       });
                     }}
                   >

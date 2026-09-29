@@ -633,7 +633,7 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     permission_module = 'Comercial'
     permission_requires_filial = False
     serializer_class = PropostaComercialSerializer
-    queryset = PropostaComercial.objects.select_related('cliente').prefetch_related('linhas').all()
+    queryset = PropostaComercial.objects.select_related('cliente', 'emitido_por').prefetch_related('linhas').all()
     pagination_class = ClienteComercialPagination
     http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
 
@@ -700,7 +700,7 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
     def perform_create(self, serializer):
-        proposta = serializer.save()
+        proposta = serializer.save(emitido_por=self.request.user)
         record_audit(self.request.user, 'comercial.proposta.criada', f'Proposta "{proposta.titulo}" cadastrada.')
 
     def perform_update(self, serializer):

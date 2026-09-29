@@ -701,6 +701,14 @@ class PropostaComercial(models.Model):
     data_proposta = models.DateField(null=True, blank=True, verbose_name='Data da proposta')
     proposta_referente = models.CharField(max_length=200, blank=True, default='')
     responsavel = models.CharField(max_length=150, blank=True, default='', verbose_name='Responsável')
+    emitido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='propostas_comerciais_emitidas',
+        verbose_name='Emitida por',
+    )
     reajuste = models.CharField(max_length=200, blank=True, default='Anual com base no índice INCT')
     cliente_nome = models.CharField(max_length=200, blank=True, default='', verbose_name='Cliente (proposta)')
     att = models.CharField(max_length=150, blank=True, default='', verbose_name='Responsável do cliente')

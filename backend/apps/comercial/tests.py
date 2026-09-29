@@ -3609,6 +3609,42 @@ class PropostaComercialDraftTests(TestCase):
         self.assertTrue(got.json()['hasDraft'])
         self.assertEqual(got.json()['form']['clienteId'], cliente.json()['id'])
 
+    def test_assinatura_vem_de_quem_emitiu_e_nao_do_usuario_logado(self):
+        self.outro.cargo = 'Gerente Comercial'
+        self.outro.telefone = '(43) 99999-0000'
+        self.outro.google_email = 'outro@transcamila.com.br'
+        self.outro.save()
+        self.admin.cargo = 'Analista de Marketing'
+        self.admin.save()
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self.assertEqual(cliente.status_code, 201, cliente.content)
+
+        self._auth(self.outro)
+        criada = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'armazenagem',
+                'clienteId': cliente.json()['id'],
+                'titulo': 'Proposta do Outro',
+                'responsavel': 'Admin Draft',
+                'status': 'rascunho',
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(criada.status_code, 201, criada.content)
+
+        self._auth(self.admin)
+        resp = self.api.get(f"/api/comercial/propostas/{criada.json()['id']}/", **HEADERS)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()['emissor'], {
+            'nome': 'Outro Draft',
+            'cargo': 'Gerente Comercial',
+            'telefone': '(43) 99999-0000',
+            'email': 'outro@transcamila.com.br',
+        })
+
     def test_draft_isolado_por_usuario(self):
         self._auth(self.admin)
         self.api.put(

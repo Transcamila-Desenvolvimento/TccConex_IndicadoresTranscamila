@@ -317,6 +317,14 @@ function normalizePropostaComercial(raw: any): PropostaComercial {
           para: String(item?.para ?? ''),
         })).filter((item: { campo: string }) => item.campo)
       : [],
+    emissor: raw.emissor && typeof raw.emissor === 'object'
+      ? {
+          nome: String(raw.emissor.nome ?? ''),
+          cargo: String(raw.emissor.cargo ?? ''),
+          telefone: String(raw.emissor.telefone ?? ''),
+          email: String(raw.emissor.email ?? ''),
+        }
+      : null,
     modoEnvio: raw.modoEnvio ?? '',
     condicoes,
     tabelaArmazenagem: cloneTabelaArmazenagem(raw.tabelaArmazenagem),

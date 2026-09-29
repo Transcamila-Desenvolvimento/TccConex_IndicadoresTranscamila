@@ -1013,6 +1013,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
     dataVencimento = serializers.SerializerMethodField()
     situacao = serializers.SerializerMethodField()
     ajustesIniciais = serializers.SerializerMethodField()
+    emissor = serializers.SerializerMethodField()
     numeroIdentificacao = serializers.CharField(source='numero_identificacao', read_only=True)
     numero = serializers.IntegerField(read_only=True)
     ano = serializers.IntegerField(read_only=True)
@@ -1056,6 +1057,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             'dataVencimento',
             'situacao',
             'ajustesIniciais',
+            'emissor',
             'numeroIdentificacao',
             'numero',
             'ano',
@@ -1520,6 +1522,17 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
     def get_ajustesIniciais(self, instance):
         from .proposta_tarifas import ajustes_iniciais_proposta
         return ajustes_iniciais_proposta(instance)
+
+    def get_emissor(self, instance):
+        usuario = instance.emitido_por
+        if usuario is None:
+            return None
+        return {
+            'nome': (usuario.name or usuario.get_full_name() or usuario.username or '').strip(),
+            'cargo': (usuario.cargo or '').strip(),
+            'telefone': (usuario.telefone or '').strip(),
+            'email': (usuario.google_email or usuario.email or '').strip(),
+        }
 
     def get_historicoRevisoes(self, instance):
         from .proposta_tarifas import consolidar_alteracoes, conteudo_proposta, diff_conteudo_revisao
