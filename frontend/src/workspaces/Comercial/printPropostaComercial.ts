@@ -130,7 +130,7 @@ const buildDestinosTable = (proposta: PropostaComercial, modalidade: 'transferen
 
   return `
     <section class="block">
-      <h2>${portuaria ? 'Logística Retroportuária de Contêiner' : 'Transferência'}</h2>
+      <h2>${portuaria ? 'Logística Retroportuária/Rodoviária' : 'Transferência'}</h2>
       <table class="destinos">
         <thead>
           <tr>
@@ -150,13 +150,6 @@ const buildDestinosTable = (proposta: PropostaComercial, modalidade: 'transferen
       </table>
     </section>
   `;
-};
-
-const alteracaoVisivelNoPdf = (campo: string) => {
-  const rotulo = (campo || '').trim().toLowerCase();
-  if (!rotulo || rotulo === 'valor estimado') return false;
-  // Trechos (frete com % de aumento/desconto) e distribuição por veículo. Margem não entra.
-  return rotulo.startsWith('trecho') || rotulo.startsWith('distribuição');
 };
 
 // Entradas antigas da trilha podem conter margem/valor estimado — ficam fora do PDF.
@@ -180,24 +173,6 @@ const buildListaAlteracoesHtml = (alts: Array<{ campo: string; de: string; para:
     </li>
   `)).join('')
 );
-
-const buildAjustesIniciais = (proposta: PropostaComercial) => {
-  const alts = (proposta.ajustesIniciais ?? []).filter((alt) => alteracaoVisivelNoPdf(alt.campo));
-  if (!alts.length) return '';
-  return `
-    <section class="block rev-trilha">
-      <h2>Ajustes iniciais</h2>
-      <p class="rev-intro">${
-        (proposta.revisao || '').trim()
-          ? 'Diferença da versão original desta proposta em relação à tabela de frete padrão.'
-          : 'Diferença em relação à tabela de frete padrão nesta proposta.'
-      }</p>
-      <article class="rev-bloco">
-        <ul class="rev-lista">${buildListaAlteracoesHtml(alts)}</ul>
-      </article>
-    </section>
-  `;
-};
 
 const buildHistoricoRevisoes = (proposta: PropostaComercial) => {
   const itens = (proposta.historicoRevisoes ?? [])
@@ -507,7 +482,6 @@ const buildArmazenagemDocumentoHtml = (
   ${opcoes.includeCondicoes
     ? buildArmazenagemObservacoes(opcoes.obsPagina ?? observacoesArmazenagem(proposta))
     : ''}
-  ${opcoes.includeAssinatura ? buildAjustesIniciais(proposta) : ''}
   ${opcoes.includeAssinatura ? buildHistoricoRevisoes(proposta) : ''}
   ${opcoes.includeAssinatura ? buildAssinaturaHtml(proposta) : ''}
 </body>
@@ -823,13 +797,12 @@ const buildHtml = (
   const tituloSecao = secao === 'distribuicao'
     ? 'Distribuição'
     : secao === 'portuaria'
-      ? 'Logística Retroportuária de Contêiner'
+      ? 'Logística Retroportuária/Rodoviária'
       : secao === 'transferencia'
         ? 'Transferência'
         : '';
   const closingHtml = `
   ${opcoes.includeCondicoes ? buildCondicoesTable(proposta, secao, 3, opcoes.condicoesPagina) : ''}
-  ${opcoes.includeAssinatura ? buildAjustesIniciais(proposta) : ''}
   ${opcoes.includeAssinatura ? buildHistoricoRevisoes(proposta) : ''}
   ${opcoes.includeAssinatura && proposta.observacoes.trim()
     ? `<section class="block"><h2>Observações</h2><div class="obs">${escapeHtml(proposta.observacoes.trim())}</div></section>`

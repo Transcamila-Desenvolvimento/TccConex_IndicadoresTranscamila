@@ -116,14 +116,14 @@ const ComercialHome: React.FC = () => {
             >
               <div className="card-header-row">
                 <div className="card-icon-wrapper">
-                  <i className="bi bi-calendar3" aria-hidden="true" />
+                  <i className="bi bi-sliders2" aria-hidden="true" />
                 </div>
                 <span className="card-badge" style={{ background: 'rgba(17, 140, 196, 0.08)', color: '#118CC4' }}>
                   Cadastros
                 </span>
               </div>
-              <h4>Prazos e validades</h4>
-              <p>Validades, vigências e prazos de faturamento das propostas.</p>
+              <h4>Parâmetros</h4>
+              <p>Validades, vigências, prazos de faturamento e tipos de veículo.</p>
             </button>
             )}
             {canParametros && (

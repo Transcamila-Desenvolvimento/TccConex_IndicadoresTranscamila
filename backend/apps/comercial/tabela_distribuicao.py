@@ -405,8 +405,74 @@ def normalizar_veiculos_tarifa(items):
         }
         if consulta_key and consulta_key != banda_key:
             registro['anttConsultaBandaKey'] = consulta_key
+        veiculo_id = str(item.get('veiculoId') or '').strip()
+        if veiculo_id:
+            registro['veiculoId'] = veiculo_id
+        capacidade = item.get('capacidadeKg')
+        if capacidade not in (None, ''):
+            try:
+                registro['capacidadeKg'] = int(capacidade)
+            except (TypeError, ValueError):
+                pass
         normalizados.append(registro)
     return normalizados
+
+
+def sincronizar_bandas_veiculos(config):
+    """Cada veículo da tabela sem coluna própria ganha uma banda R$/veículo (removida junto com o veículo)."""
+    veiculos = config.get('veiculosTarifa') or []
+    chaves_veiculos = {item['bandaKey'] for item in veiculos}
+    bandas = [
+        banda for banda in config.get('bandas') or []
+        if not banda.get('veiculoAuto') or banda.get('key') in chaves_veiculos
+    ]
+    existentes = {banda.get('key') for banda in bandas}
+    rotulos = {item['bandaKey']: item.get('rotulo') or item['bandaKey'] for item in veiculos}
+    for banda in bandas:
+        if banda.get('veiculoAuto'):
+            banda['rotulo'] = rotulos.get(banda['key'], banda.get('rotulo'))
+    for item in veiculos:
+        if item['bandaKey'] in existentes:
+            continue
+        bandas.append({
+            'key': item['bandaKey'],
+            'rotulo': item.get('rotulo') or item['bandaKey'],
+            'unidade': 'veiculo',
+            'calculo': 'veiculo_antt',
+            'veiculoAuto': True,
+        })
+    config['bandas'] = bandas
+    limites_manuais = config.get('limitesPesoBanda') and not config.get('limitesPesoBandaAuto')
+    if not limites_manuais:
+        if any(banda.get('veiculoAuto') for banda in bandas):
+            config['limitesPesoBanda'] = _limites_peso_com_veiculos(bandas, veiculos)
+            config['limitesPesoBandaAuto'] = True
+        else:
+            config.pop('limitesPesoBanda', None)
+            config.pop('limitesPesoBandaAuto', None)
+    return config
+
+
+def _limites_peso_com_veiculos(bandas, veiculos):
+    """Bandas de peso fixas mantêm o limite padrão; veículos são ordenados pela capacidade (o maior fica sem teto)."""
+    padrao = dict(PESO_BANDA_LIMITES)
+    capacidade_legado = {**padrao, 'acima26001': 32000}
+    capacidades = {}
+    for item in veiculos:
+        capacidade = item.get('capacidadeKg') or capacidade_legado.get(item['bandaKey'])
+        capacidades[item['bandaKey']] = capacidade
+    limites = [
+        [banda['key'], padrao[banda['key']]]
+        for banda in bandas
+        if banda['key'] not in capacidades and padrao.get(banda['key']) is not None
+    ]
+    por_veiculo = sorted(
+        (banda['key'] for banda in bandas if banda['key'] in capacidades),
+        key=lambda key: (capacidades[key] is None, capacidades[key] or 0),
+    )
+    for index, key in enumerate(por_veiculo):
+        limites.append([key, None if index == len(por_veiculo) - 1 else capacidades[key]])
+    return limites
 
 
 def merge_config(raw):
@@ -457,6 +523,8 @@ def merge_config(raw):
         config['faixasKmExplicitas'] = raw['faixasKmExplicitas']
     if isinstance(raw.get('limitesPesoBanda'), list) and raw['limitesPesoBanda']:
         config['limitesPesoBanda'] = raw['limitesPesoBanda']
+        if raw.get('limitesPesoBandaAuto'):
+            config['limitesPesoBandaAuto'] = True
     if isinstance(raw.get('selecaoBanda'), dict):
         config['selecaoBanda'] = raw['selecaoBanda']
     config['colunasExtras'] = normalizar_colunas_extras(
@@ -464,6 +532,7 @@ def merge_config(raw):
     )
     if isinstance(raw.get('veiculosTarifa'), list):
         config['veiculosTarifa'] = normalizar_veiculos_tarifa(raw.get('veiculosTarifa'))
+    sincronizar_bandas_veiculos(config)
     if raw.get('anttFonte') not in (None,):
         config['anttFonte'] = str(raw.get('anttFonte') or '')[:240]
     if raw.get('anttFonteData') not in (None,):
@@ -568,6 +637,12 @@ def _config_para_referencia_k(config, indice_veiculos, bandas):
     derivado['modoTarifa'] = MODO_TARIFA_LINEAR
     derivado['tarifaFixa'] = str(fixo)
     derivado['tarifaPorKm'] = str(por_km)
+    banda_ref = next((b for b in bandas if b.get('key') == escolhido.get('bandaKey')), None)
+    if banda_ref and (banda_ref.get('calculo') or 'multiplicador') == 'multiplicador':
+        # K é R$/veículo; as bandas multiplicadoras são relativas à coluna principal (K = fator × principal).
+        fator_ref = _dec(banda_ref.get('fator'), '1')
+        if fator_ref > 0:
+            derivado['_fatorReferenciaVeiculo'] = str(fator_ref)
     return derivado
 
 
@@ -576,7 +651,7 @@ def _item_antt_consulta(item, indice):
     if chave and chave in indice:
         return indice[chave]
     rotulo = (item.get('rotulo') or '').lower()
-    if '6' in rotulo:
+    if item.get('bandaKey') == 'de14001' and '6' in rotulo:
         for outro in indice.values():
             if outro.get('bandaKey') == item.get('bandaKey'):
                 continue
@@ -627,6 +702,11 @@ def _tarifa_coluna_principal(km_ate, primeira_ate, config, bandas):
         return referencia_k / divisor
     if calculo == 'referencia':
         return referencia_k
+    fator_ref = config.get('_fatorReferenciaVeiculo')
+    if fator_ref:
+        # Planilha oficial: E = ROUND(K; 2) / divisor, com K já arredondado.
+        principal = referencia_k.quantize(TWO, rounding=ROUND_HALF_UP) / _dec(fator_ref, '1')
+        return principal * _dec(primeira.get('fator', '1'))
     return referencia_k * _dec(primeira.get('fator', '1'))
 
 

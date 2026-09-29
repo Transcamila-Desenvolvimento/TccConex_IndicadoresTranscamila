@@ -45,6 +45,7 @@ from .models import (
     TIPO_TABELA_DISTRIBUICAO,
     TabelaFrete,
     TabelaFreteLinha,
+    VeiculoComercial,
     FATURAMENTO_PROPOSTA_DEFAULT,
     PRAZOS_FATURAMENTO_PADRAO,
     VALIDADE_PROPOSTA_DEFAULT,
@@ -88,6 +89,7 @@ from .serializers import (
     PropostaComercialSerializer,
     TabelaFreteLinhaSerializer,
     TabelaFreteSerializer,
+    VeiculoComercialSerializer,
 )
 
 _PROPOSTA_ORDERING_DEFAULT = 'data_criacao_desc'
@@ -1418,6 +1420,51 @@ def _decode_logo_data_url(raw) -> tuple[bytes | None, str]:
     if len(data) > 2 * 1024 * 1024:
         raise ValueError('A logo deve ter no máximo 2 MB.')
     return data, tipo[:40]
+
+
+class VeiculoComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+    permission_module = 'Comercial'
+    permission_requires_filial = False
+    serializer_class = VeiculoComercialSerializer
+    queryset = VeiculoComercial.objects.all()
+    pagination_class = None
+    http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        qs = super().get_queryset().prefetch_related('rotulos_cliente__cliente')
+        ativo = (self.request.query_params.get('ativo') or '').strip().lower()
+        if ativo in {'true', '1'}:
+            qs = qs.filter(ativo=True)
+        return qs
+
+    def _negar_sem_permissao(self, request):
+        return _funcao_required_response(request, 'gerenciar-parametros', _GERENCIAR_PARAMETROS_DETAIL)
+
+    def create(self, request, *args, **kwargs):
+        return self._negar_sem_permissao(request) or super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        return self._negar_sem_permissao(request) or super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        denied = self._negar_sem_permissao(request)
+        if denied:
+            return denied
+        veiculo = self.get_object()
+        em_uso = [
+            tabela.nome
+            for tabela in TabelaFrete.objects.exclude(status=STATUS_TABELA_ARQUIVADA).only('nome', 'config')
+            if any(
+                isinstance(item, dict) and item.get('bandaKey') == veiculo.codigo
+                for item in ((tabela.config or {}).get('veiculosTarifa') or [])
+            )
+        ]
+        if em_uso:
+            return Response(
+                {'detail': f'Veículo em uso nas tabelas: {", ".join(em_uso[:5])}. Desative-o em vez de excluir.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 class ParametrosComercialView(ModuleScopedViewMixin, APIView):

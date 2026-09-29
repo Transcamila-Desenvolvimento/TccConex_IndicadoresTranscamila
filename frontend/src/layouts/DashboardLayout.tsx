@@ -497,9 +497,9 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-icms-ufs')
       },
       {
-        title: "Prazos e validades",
-        path: "Comercial / Cadastros / Prazos e validades",
-        icon: <i className="bi bi-calendar3 search-item-icon" aria-hidden="true" />,
+        title: "Parâmetros",
+        path: "Comercial / Cadastros / Parâmetros",
+        icon: <i className="bi bi-sliders2 search-item-icon" aria-hidden="true" />,
         action: () => navigate('/comercial/parametros/prazos'),
         show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'cadastro-parametros')
       },
@@ -613,7 +613,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/comercial/cadastros/produtos')) return `${env} / Cadastros / Composição de produtos`;
     if (path.startsWith('/comercial/parametros/logos')) return `${env} / Personalizar`;
     if (path.startsWith('/comercial/parametros/prazos') || path.startsWith('/comercial/parametros') || path.startsWith('/comercial/cadastros/parametros')) {
-      return `${env} / Cadastros / Prazos e validades`;
+      return `${env} / Cadastros / Parâmetros`;
     }
     if (path.startsWith('/comercial/propostas')) return `${env} / Propostas comerciais`;
     if (path.startsWith('/comercial/validacao-clientes')) return `${env} / Validação clientes`;
@@ -1447,11 +1447,11 @@ const DashboardLayout: React.FC = () => {
                     <Link
                       to="/comercial/parametros/prazos"
                       className={`nav-btn sub-nav-btn ${isRouteActive('/comercial/parametros/prazos') ? 'active' : ''}`}
-                      data-tooltip="Prazos e validades"
+                      data-tooltip="Parâmetros"
                     >
                       <div className="nav-btn-left">
-                        <NavIcon name="calendar3" sub />
-                        <span className="nav-text">Prazos e validades</span>
+                        <NavIcon name="sliders2" sub />
+                        <span className="nav-text">Parâmetros</span>
                       </div>
                     </Link>
                     )}

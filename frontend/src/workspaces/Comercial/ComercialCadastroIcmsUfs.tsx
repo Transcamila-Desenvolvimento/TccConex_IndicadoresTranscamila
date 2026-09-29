@@ -19,6 +19,11 @@ type UfPanelProps = {
   onUpdate: (uf: string, valor: string) => void;
 };
 
+const formatAliquota = (valor: number | undefined) => {
+  if (valor == null) return '—';
+  return valor === 0 ? 'Isento' : `${valor}%`;
+};
+
 function UfPanel({ uf, valor, isOpen, canManage, onToggle, onUpdate }: UfPanelProps) {
   return (
     <section className={`icms-uf-origem${isOpen ? ' is-open' : ''}`}>
@@ -32,14 +37,14 @@ function UfPanel({ uf, valor, isOpen, canManage, onToggle, onUpdate }: UfPanelPr
           <i className={`bi ${isOpen ? 'bi-chevron-down' : 'bi-chevron-right'}`} aria-hidden />
           <span className="tabela-frete-fold-title">{uf}</span>
           <span className="icms-uf-item-meta">
-            {valor != null ? `${valor}%` : '—'}
+            {formatAliquota(valor)}
           </span>
         </button>
       </div>
       {isOpen ? (
         <div className="icms-uf-origem-body">
           <label className="icms-uf-aliquota-field">
-            <span>Alíquota ICMS (%)</span>
+            <span>Alíquota interna ICMS (%) — use 0 para isento</span>
             {canManage ? (
               <input
                 className="icms-uf-aliquota-input"
@@ -52,7 +57,7 @@ function UfPanel({ uf, valor, isOpen, canManage, onToggle, onUpdate }: UfPanelPr
                 aria-label={`Alíquota ICMS de ${uf}`}
               />
             ) : (
-              <strong>{valor != null ? `${valor}%` : '—'}</strong>
+              <strong>{formatAliquota(valor)}</strong>
             )}
           </label>
         </div>
@@ -175,7 +180,8 @@ const ComercialCadastroIcmsUfs: React.FC = () => {
       </header>
 
       <p className="tabela-frete-hint" style={{ marginBottom: 12 }}>
-        Configure o percentual de ICMS de cada UF. Expanda a região e depois o estado para editar a alíquota.
+        Alíquota aplicada quando origem e destino ficam no mesmo estado (ex.: Paranaguá → Ibiporã usa a de PR).
+        Use 0 para estados com isenção no transporte interno. Entre estados diferentes o sistema aplica 7% ou 12% conforme a legislação.
       </p>
 
       <QueryDataPanel

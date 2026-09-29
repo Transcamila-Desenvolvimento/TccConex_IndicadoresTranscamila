@@ -139,13 +139,37 @@ def tabela_distribuicao_do_cliente(cliente_id):
     )
 
 
+def rotulos_veiculo_cliente(cliente_id):
+    """bandaKey (código do veículo no catálogo) -> nome do veículo como o cliente o conhece."""
+    if not cliente_id:
+        return {}
+    from .models import VeiculoRotuloCliente
+
+    return dict(
+        VeiculoRotuloCliente.objects.filter(cliente_id=cliente_id).values_list('veiculo__codigo', 'rotulo')
+    )
+
+
+def _aplicar_rotulos_cliente(faixas, veiculos, rotulos):
+    if not rotulos:
+        return
+    for faixa in faixas:
+        for tarifa in faixa.get('tarifas') or []:
+            if tarifa.get('key') in rotulos:
+                tarifa['rotulo'] = rotulos[tarifa['key']]
+    for item in veiculos:
+        if item.get('bandaKey') in rotulos:
+            item['rotulo'] = rotulos[item['bandaKey']]
+
+
 def snapshot_distribuicao(cliente_id, margens=None, tabela=None):
     tabela = tabela or tabela_distribuicao_do_cliente(cliente_id)
     if not tabela:
         return None
     config = aplicar_margens_config(tabela.config, margens)
     faixas = faixas_comerciais(gerar_faixas_distribuicao(config))
-    veiculos = config.get('veiculosTarifa') or []
+    veiculos = deepcopy(config.get('veiculosTarifa') or [])
+    _aplicar_rotulos_cliente(faixas, veiculos, rotulos_veiculo_cliente(cliente_id))
     return {
         'tabelaId': str(tabela.pk),
         'nome': tabela.nome,
@@ -200,6 +224,9 @@ def calcular_trecho(*, cliente_id, origem, destino, veiculo_key, km, margens=Non
     config = merge_config(config)
     if not config.get('veiculosTarifa'):
         config['veiculosTarifa'] = deepcopy(VEICULOS_TARIFA_MODELO_OFICIAL)
+    rotulos_cliente = rotulos_veiculo_cliente(cliente_id)
+    chave_por_rotulo = {rotulo.strip().lower(): chave for chave, rotulo in rotulos_cliente.items()}
+    veiculo_key = chave_por_rotulo.get(str(veiculo_key or '').strip().lower(), veiculo_key)
     item = _item_veiculo(config, veiculo_key)
     if not item:
         return {'erro': 'Informe o tipo de veículo da tabela de frete.'}
@@ -246,7 +273,7 @@ def calcular_trecho(*, cliente_id, origem, destino, veiculo_key, km, margens=Non
         icms_txt = f'{aliquota}%'
 
     return {
-        'veiculo': item.get('rotulo') or item.get('bandaKey'),
+        'veiculo': rotulos_cliente.get(item.get('bandaKey')) or item.get('rotulo') or item.get('bandaKey'),
         'veiculoKey': item.get('bandaKey'),
         'km': km_int,
         'kmFaixaAte': int(faixa['kmAte']) if faixa and faixa.get('kmAte') is not None else km_int,

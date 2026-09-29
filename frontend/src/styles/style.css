@@ -14971,8 +14971,11 @@ textarea.form-input {
 .comercial-validacao-table .col-nome { width: 28%; }
 .comercial-validacao-table .col-cnpj { width: 160px; }
 .comercial-validacao-table .col-produtos { width: 130px; }
-.comercial-validacao-table .col-pendencia { width: 32%; }
+.comercial-validacao-table .col-pendencia { width: 26%; }
 .comercial-validacao-table .col-status { width: 128px; }
+.comercial-validacao-table .col-desde { width: 150px; }
+.comercial-validacao-table td.col-desde { white-space: nowrap; }
+.comercial-desde-tempo { color: #64748b; }
 .comercial-validacao-table td.col-nome,
 .comercial-validacao-table td.col-pendencia {
   overflow: hidden;
@@ -15574,6 +15577,17 @@ textarea.form-input {
   background: #fff;
   overflow: visible;
   flex-shrink: 0;
+}
+
+.proposta-destinos-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.proposta-destinos-head-actions .proposta-secao-add:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 
 .proposta-destinos-head {
@@ -17964,6 +17978,193 @@ textarea.form-input {
   font-weight: 600;
 }
 
+.comercial-veiculos-table td,
+.comercial-veiculos-table th {
+  white-space: nowrap;
+}
+
+.comercial-veiculos-table.tabela-frete-mini thead th {
+  background: transparent;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 6px 12px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.comercial-veiculos-table.tabela-frete-mini td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.comercial-veiculos-table.tabela-frete-mini tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.comercial-veiculos-table.tabela-frete-mini tbody tr:hover td {
+  background: #f8fafc;
+}
+
+.comercial-veiculos-table .info-tip {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.comercial-veiculos-col-nome { width: 24%; }
+.comercial-veiculos-col-valor { width: 18%; }
+.comercial-veiculos-col-acoes { width: 84px; }
+
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  color: #118cc4;
+  cursor: help;
+  vertical-align: middle;
+  outline: none;
+}
+
+.info-tip .bi {
+  font-size: 12px;
+}
+
+.info-tip-balao {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  z-index: 30;
+  width: 240px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #0f2744;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: normal;
+  text-align: left;
+  box-shadow: 0 6px 18px rgba(15, 39, 68, 0.25);
+  transform: translateX(-50%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.info-tip:hover .info-tip-balao,
+.info-tip:focus .info-tip-balao {
+  opacity: 1;
+  visibility: visible;
+}
+
+.comercial-veiculos-table tr.is-inativo td {
+  color: #94a3b8;
+}
+
+.comercial-veiculo-inativo {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.comercial-veiculos-table td.comercial-veiculo-rotulos-cell {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #475569;
+}
+
+.comercial-veiculos-table.tabela-frete-mini td.comercial-veiculo-acoes {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.comercial-veiculo-acoes .btn-icon + .btn-icon {
+  margin-left: 4px;
+}
+
+.comercial-veiculo-modal {
+  width: min(640px, 100%);
+}
+
+.comercial-veiculo-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.comercial-veiculo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: #475569;
+}
+
+.comercial-veiculo-field.is-nome {
+  grid-column: 1 / -1;
+}
+
+.comercial-veiculo-field input,
+.comercial-veiculo-rotulo-row input,
+.comercial-veiculo-rotulo-row select {
+  height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.comercial-veiculo-ativo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  font-size: 13px;
+}
+
+.comercial-veiculo-rotulos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.comercial-veiculo-rotulos > .reports-action-btn {
+  align-self: flex-start;
+}
+
+.comercial-veiculo-rotulos-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.comercial-veiculo-rotulos-head strong {
+  color: #0f2744;
+  font-size: 14px;
+}
+
+.comercial-veiculo-rotulos-head span,
+.comercial-veiculo-rotulos-vazio {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.comercial-veiculo-rotulo-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .comercial-param-logo {
   display: flex;
   flex-direction: column;
@@ -18885,6 +19086,95 @@ textarea.form-input {
 .tabela-frete-bandas-col-calculo { width: 28%; }
 .tabela-frete-bandas-col-fator { width: 16%; }
 .tabela-frete-bandas-col-acoes { width: 48px; }
+.tabela-frete-antt-col-veiculo { width: 36%; }
+.tabela-frete-antt-col-valor { width: 19%; }
+.tabela-frete-antt-col-margem { width: 18%; }
+
+.tabela-frete-antt-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tabela-frete-antt-table.tabela-frete-mini {
+  margin: 0;
+}
+
+.tabela-frete-antt-table.tabela-frete-mini thead th {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.tabela-frete-antt-table.tabela-frete-mini td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.tabela-frete-antt-table.tabela-frete-mini tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tabela-frete-antt-table.tabela-frete-mini td select,
+.tabela-frete-antt-table.tabela-frete-mini td input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.tabela-frete-antt-table select:focus,
+.tabela-frete-antt-table input:focus {
+  outline: none;
+  border-color: #118cc4;
+  box-shadow: 0 0 0 2px rgba(17, 140, 196, 0.15);
+}
+
+.tabela-frete-antt-table input:disabled,
+.tabela-frete-antt-table select:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.tabela-frete-antt-table td.tabela-frete-antt-valor {
+  font-size: 13px;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabela-frete-antt-margem {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.tabela-frete-antt-table.tabela-frete-mini td .tabela-frete-antt-margem input {
+  padding-left: 10px;
+  padding-right: 28px;
+  text-align: right;
+}
+
+.tabela-frete-antt-margem span {
+  position: absolute;
+  right: 10px;
+  font-size: 13px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.tabela-frete-antt-table td.tabela-frete-antt-acoes {
+  text-align: center;
+}
 
 .tabela-frete-bandas-table th,
 .tabela-frete-bandas-table td {

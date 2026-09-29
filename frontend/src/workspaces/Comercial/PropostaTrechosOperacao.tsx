@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ComercialEnderecoAutocomplete from './ComercialEnderecoAutocomplete';
 import { useCalcularTrechoProposta } from '../../hooks/useComercialClientes';
 import type { PropostaMargemVeiculo } from '../../types/domain';
@@ -140,6 +140,70 @@ export default function PropostaTrechosOperacao({
     )));
   };
 
+  const [recalculando, setRecalculando] = useState(false);
+
+  /** Recalcula frete, GRIS/ADV, ICMS e prazo de todos os trechos com km e veículo. */
+  const recalcularTodos = async (isCancelled: () => boolean = () => false) => {
+    const atuais = linhasRef.current.length ? linhasRef.current : [emptyLinha(modalidade)];
+    const elegiveis = atuais
+      .map((linha, index) => ({ linha, index }))
+      .filter(({ linha }) => (
+        Boolean((linha.km ?? '').trim() && (linha.veiculoKey || linha.veiculo))
+      ));
+    if (!elegiveis.length) return 0;
+
+    let working = [...atuais];
+    for (const { linha, index } of elegiveis) {
+      try {
+        const res = await calcularRef.current.mutateAsync({
+          clienteId,
+          origem: linha.origem,
+          destino: linha.entrega,
+          veiculoKey: linha.veiculoKey || linha.veiculo,
+          km: linha.km || '',
+          margensVeiculo: margensRef.current,
+        });
+        if (isCancelled()) return 0;
+        working = working.map((item, i) => (
+          i === index
+            ? {
+                ...item,
+                veiculo: res.veiculo || item.veiculo,
+                veiculoKey: res.veiculoKey || item.veiculoKey,
+                tarifaFrete: res.tarifaFrete != null && String(res.tarifaFrete).trim()
+                  ? formatMoneyInput(String(res.tarifaFrete))
+                  : item.tarifaFrete,
+                gris: res.gris || item.gris,
+                adValorem: res.grisAdvUnificado ? (res.gris || item.gris) : (res.adValorem || item.adValorem),
+                icms: res.icms || item.icms,
+                prazoDias: res.prazoDias || item.prazoDias,
+              }
+            : item
+        ));
+      } catch {
+        /* ignora trecho que falhou no recálculo */
+      }
+    }
+    if (!isCancelled()) onChangeRef.current(working);
+    return elegiveis.length;
+  };
+
+  const handleRecalcular = async () => {
+    if (!clienteId || recalculando) return;
+    const confirmado = window.confirm(
+      'Recalcular frete, GRIS/ADV, ICMS e prazo de todos os trechos com a tabela de frete e os cadastros atuais?\n\n'
+      + 'Valores digitados manualmente nessas colunas serão substituídos. Pedágio, retirada e desova são mantidos.',
+    );
+    if (!confirmado) return;
+    setRecalculando(true);
+    try {
+      const total = await recalcularTodos();
+      if (!total) alert('Nenhum trecho com km e veículo preenchidos para recalcular.');
+    } finally {
+      setRecalculando(false);
+    }
+  };
+
   useEffect(() => {
     if (prevMargensKey.current === margensKey) return;
     prevMargensKey.current = margensKey;
@@ -148,49 +212,7 @@ export default function PropostaTrechosOperacao({
     if (margemTimer.current) window.clearTimeout(margemTimer.current);
     let cancelled = false;
     margemTimer.current = window.setTimeout(() => {
-      void (async () => {
-        const atuais = linhasRef.current.length ? linhasRef.current : [emptyLinha(modalidade)];
-        const elegiveis = atuais
-          .map((linha, index) => ({ linha, index }))
-          .filter(({ linha }) => (
-            Boolean((linha.km ?? '').trim() && (linha.veiculoKey || linha.veiculo))
-          ));
-        if (!elegiveis.length) return;
-
-        let working = [...atuais];
-        for (const { linha, index } of elegiveis) {
-          try {
-            const res = await calcularRef.current.mutateAsync({
-              clienteId,
-              origem: linha.origem,
-              destino: linha.entrega,
-              veiculoKey: linha.veiculoKey || linha.veiculo,
-              km: linha.km || '',
-              margensVeiculo: margensRef.current,
-            });
-            if (cancelled) return;
-            working = working.map((item, i) => (
-              i === index
-                ? {
-                    ...item,
-                    veiculo: res.veiculo || item.veiculo,
-                    veiculoKey: res.veiculoKey || item.veiculoKey,
-                    tarifaFrete: res.tarifaFrete != null && String(res.tarifaFrete).trim()
-                      ? formatMoneyInput(String(res.tarifaFrete))
-                      : item.tarifaFrete,
-                    gris: res.gris || item.gris,
-                    adValorem: res.grisAdvUnificado ? (res.gris || item.gris) : (res.adValorem || item.adValorem),
-                    icms: res.icms || item.icms,
-                    prazoDias: res.prazoDias || item.prazoDias,
-                  }
-                : item
-            ));
-          } catch {
-            /* ignora trecho que falhou no recálculo */
-          }
-        }
-        if (!cancelled) onChangeRef.current(working);
-      })();
+      void recalcularTodos(() => cancelled);
     }, 350);
 
     return () => {
@@ -245,16 +267,30 @@ export default function PropostaTrechosOperacao({
     <section className="proposta-destinos-card">
       <div className="proposta-destinos-head">
         <h4>{titulo}</h4>
-        {canEdit ? (
-          <button
-            type="button"
-            className="proposta-secao-add"
-            onClick={() => onChange([...lista, emptyLinha(modalidade)])}
-          >
-            <i className="bi bi-plus-lg" aria-hidden="true" />
-            Adicionar
-          </button>
-        ) : null}
+        <div className="proposta-destinos-head-actions">
+          {canEditValores && clienteId ? (
+            <button
+              type="button"
+              className="proposta-secao-add"
+              disabled={recalculando}
+              title="Atualiza frete, GRIS/ADV, ICMS e prazo com a tabela de frete e os cadastros atuais"
+              onClick={() => { void handleRecalcular(); }}
+            >
+              <i className={`bi ${recalculando ? 'bi-hourglass-split' : 'bi-arrow-repeat'}`} aria-hidden="true" />
+              {recalculando ? 'Recalculando...' : 'Recalcular'}
+            </button>
+          ) : null}
+          {canEdit ? (
+            <button
+              type="button"
+              className="proposta-secao-add"
+              onClick={() => onChange([...lista, emptyLinha(modalidade)])}
+            >
+              <i className="bi bi-plus-lg" aria-hidden="true" />
+              Adicionar
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="table-container proposta-destinos-wrap">
         <table className={`erp-table reports-table comercial-browse-table proposta-destinos-table${portuaria ? ' proposta-destinos-table--portuaria' : ''}`}>

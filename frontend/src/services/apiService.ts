@@ -50,6 +50,7 @@ import type {
   TabelaFreteQueryParams, TabelaFreteRevisaoHistorico, TabelaFreteSimulacaoResult, TabelaFreteSimulacaoIcms, TabelaFreteConfig, TabelaFreteFaixa,
   IcmsUfConfig, IcmsUfAliquotas,
   ParametrosComercial, ParametrosComercialPayload,
+  VeiculoComercial, VeiculoComercialPayload,
   RotaDistanciaPayload, RotaDistanciaResult, EnderecoSugestao, GoogleMapsConfigComercial,
   ProdutoComercial, ProdutoComercialPayload, ProdutoComercialLotePayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
 } from '../types/domain';
@@ -155,6 +156,7 @@ function normalizeClienteComercial(raw: any): ClienteComercial {
     homologadoEm: raw.homologadoEm ?? null,
     homologacaoJustificativa: raw.homologacaoJustificativa ?? '',
     homologacaoRevisao: Number(raw.homologacaoRevisao ?? 0),
+    homologacaoDesde: raw.homologacaoDesde ?? null,
     produtosCount: Number(raw.produtosCount ?? 0),
     previsaoVolumes: raw.previsaoVolumes ?? '',
     tiposEmbalagens: raw.tiposEmbalagens ?? '',
@@ -3046,6 +3048,27 @@ export const apiService = {
   async saveParametrosComercial(payload: ParametrosComercialPayload): Promise<ParametrosComercial> {
     const { data } = await api.put('/api/comercial/parametros/', payload);
     return normalizeParametrosComercial(data);
+  },
+
+  async getVeiculosComercial(params: { ativo?: boolean } = {}): Promise<VeiculoComercial[]> {
+    const { data } = await api.get('/api/comercial/veiculos/', {
+      params: params.ativo ? { ativo: 'true' } : undefined,
+    });
+    return Array.isArray(data) ? data : [];
+  },
+
+  async createVeiculoComercial(payload: VeiculoComercialPayload): Promise<VeiculoComercial> {
+    const { data } = await api.post('/api/comercial/veiculos/', payload);
+    return data;
+  },
+
+  async updateVeiculoComercial(id: string, payload: VeiculoComercialPayload): Promise<VeiculoComercial> {
+    const { data } = await api.patch(`/api/comercial/veiculos/${id}/`, payload);
+    return data;
+  },
+
+  async deleteVeiculoComercial(id: string): Promise<void> {
+    await api.delete(`/api/comercial/veiculos/${id}/`);
   },
 
   async restaurarParametrosComercial(): Promise<ParametrosComercial> {

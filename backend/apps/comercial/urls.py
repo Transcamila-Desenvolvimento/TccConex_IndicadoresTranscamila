@@ -16,6 +16,7 @@ from .views import (
     RotaDistanciaView,
     TabelaFreteViewSet,
     TabelaFreteLinhaViewSet,
+    VeiculoComercialViewSet,
 )
 
 router = DefaultRouter()
@@ -24,6 +25,7 @@ router.register('produtos', ProdutoComercialViewSet, basename='comercial-produto
 router.register('propostas', PropostaComercialViewSet, basename='comercial-propostas')
 router.register('tabela-frete', TabelaFreteViewSet, basename='comercial-tabela-frete')
 router.register('tabela-frete-linhas', TabelaFreteLinhaViewSet, basename='comercial-tabela-frete-linhas')
+router.register('veiculos', VeiculoComercialViewSet, basename='comercial-veiculos')
 
 urlpatterns = [
     path('summary/', ComercialSummaryView.as_view(), name='comercial-summary'),

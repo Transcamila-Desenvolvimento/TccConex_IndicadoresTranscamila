@@ -32,7 +32,9 @@ import type {
   TabelaFretePrazoRegra,
   TabelaFreteStatus,
   TabelaFreteVeiculoTarifa,
+  VeiculoComercial,
 } from '../../types/domain';
+import { useVeiculosComercial } from '../../hooks/useVeiculosComercial';
 import ComercialTabelaFreteSimulador from './ComercialTabelaFreteSimulador';
 import ComercialTabelaFreteStatusBadge from './ComercialTabelaFreteStatusBadge';
 import ComercialTabelaFreteHistoricoRevisoesPanel from './ComercialTabelaFreteHistoricoRevisoesPanel';
@@ -60,6 +62,7 @@ const CALCULO_BANDA_LABEL: Record<TabelaFreteBandaCalculo, string> = {
   referencia: 'K (referência)',
   mult_anterior: 'Anterior × valor',
   mult_referencia: 'K × valor',
+  veiculo_antt: 'ANTT do veículo',
 };
 
 const CALCULO_BANDA_OPTIONS: TabelaFreteBandaCalculo[] = [
@@ -87,10 +90,10 @@ const CALCULO_COLUNA_OPTIONS: TabelaFreteColunaCalculo[] = [
 ];
 
 const rotuloColunaAntt = (item?: TabelaFreteVeiculoTarifa | null) => {
-  const rotulo = (item?.rotulo || '').toLowerCase();
-  if (rotulo.includes('7')) return 'ANTT - 7 eixos';
-  if (rotulo.includes('6')) return 'ANTT - 6 eixos';
-  return 'ANTT';
+  if (!item) return 'ANTT';
+  if (item.bandaKey === 'acima26001') return 'ANTT - 7 eixos';
+  if (item.bandaKey === 'de14001') return 'ANTT - 6 eixos';
+  return item.rotulo ? `ANTT - ${item.rotulo}` : 'ANTT';
 };
 
 const itemConsultaAntt = (
@@ -102,27 +105,33 @@ const itemConsultaAntt = (
     const outro = veiculos.find((veiculo) => veiculo.bandaKey === item.anttConsultaBandaKey);
     if (outro) return outro;
   }
-  const rotulo = (item.rotulo || '').toLowerCase();
-  if (rotulo.includes('6')) {
-    const sete = veiculos.find((veiculo) => (veiculo.rotulo || '').toLowerCase().includes('7'));
+  if (item.bandaKey === 'de14001') {
+    const sete = veiculos.find((veiculo) => veiculo.bandaKey === 'acima26001');
     if (sete) return sete;
   }
   return item;
 };
 
-const TIPOS_VEICULO_ANTT: Array<Pick<TabelaFreteVeiculoTarifa, 'bandaKey' | 'rotulo' | 'anttConsultaBandaKey'>> = [
-  { bandaKey: 'de9000', rotulo: 'Truck' },
-  { bandaKey: 'de14001', rotulo: 'Carreta 6 eixos', anttConsultaBandaKey: 'acima26001' },
-  { bandaKey: 'acima26001', rotulo: 'Carreta 7 eixos' },
-];
+const veiculoTarifaDoCatalogo = (veiculo: VeiculoComercial): Partial<TabelaFreteVeiculoTarifa> => ({
+  bandaKey: veiculo.codigo,
+  rotulo: veiculo.nome,
+  veiculoId: veiculo.id,
+  capacidadeKg: veiculo.capacidadeKg,
+  anttFixo: semZerosDecimais(veiculo.anttFixo),
+  anttPorKm: semZerosDecimais(veiculo.anttPorKm),
+  anttConsultaBandaKey: veiculo.codigo === 'de14001' ? 'acima26001' : undefined,
+});
 
-const ANTT_FONTE_MODELO = 'Resolução ANTT nº 6.084/2026 — 17/07/2026';
-const ANTT_DATA_MODELO = '2026-07-17';
-const VEICULOS_ANTT_MODELO: TabelaFreteVeiculoTarifa[] = [
-  { ...TIPOS_VEICULO_ANTT[0], anttFixo: '642.55', anttPorKm: '5.4821', margem: '0.33' },
-  { ...TIPOS_VEICULO_ANTT[1], anttFixo: '777.73', anttPorKm: '7.7758', margem: '0.25' },
-  { ...TIPOS_VEICULO_ANTT[2], anttFixo: '942.48', anttPorKm: '8.5321', margem: '0.25' },
-];
+const formatAntt = (valor: string | null | undefined, casas: number) => {
+  const numero = Number(valor);
+  if (valor == null || valor === '' || Number.isNaN(numero)) return '—';
+  return numero.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+};
+
+function semZerosDecimais(valor?: string | null) {
+  const texto = (valor ?? '').trim();
+  return /^-?\d+\.\d*0+$/.test(texto) ? texto.replace(/0+$/, '').replace(/\.$/, '') : texto;
+}
 
 type FreteForm = {
   origem: string;
@@ -186,12 +195,13 @@ const PercentFatorInput: React.FC<{
   disabled?: boolean;
   fator?: string | null;
   onFatorChange: (fator: string) => void;
-}> = ({ disabled, fator, onFatorChange }) => {
+  placeholder?: string;
+}> = ({ disabled, fator, onFatorChange, placeholder = '0,15' }) => {
   const [rascunho, setRascunho] = useState<string | null>(null);
   return (
     <input
       disabled={disabled}
-      placeholder="0,15"
+      placeholder={placeholder}
       value={rascunho ?? fatorToPercentualInput(fator)}
       onChange={(e) => {
         setRascunho(e.target.value);
@@ -242,6 +252,7 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
   const [regrasOpen, setRegrasOpen] = useState(false);
   const [bandasOpen, setBandasOpen] = useState(false);
   const [anttOpen, setAnttOpen] = useState(false);
+  const veiculosCatalogoQuery = useVeiculosComercial({ ativo: true, enabled: anttOpen });
   const [colunasOpen, setColunasOpen] = useState(false);
   const [acoesOpen, setAcoesOpen] = useState(false);
   const [linhaModal, setLinhaModal] = useState(false);
@@ -364,40 +375,46 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
     setConfig({ ...config, veiculosTarifa: lista });
   };
 
+  const catalogoVeiculos = veiculosCatalogoQuery.data ?? [];
+  const catalogoPorCodigo = new Map(catalogoVeiculos.map((veiculo) => [veiculo.codigo, veiculo]));
+  const bandasUsadas = new Set(veiculosTarifa.map((item) => item.bandaKey));
+  const proximoCatalogo = catalogoVeiculos.find((veiculo) => !bandasUsadas.has(veiculo.codigo));
+
+  const temLinhaEmBranco = veiculosTarifa.some((item) => !item.bandaKey);
+
   const addVeiculoTarifa = () => {
-    if (!config) return;
-    const usadas = new Set(veiculosTarifa.map((item) => item.bandaKey));
-    const proximo = TIPOS_VEICULO_ANTT.find((tipo) => !usadas.has(tipo.bandaKey));
-    if (!proximo) return;
+    if (!config || !proximoCatalogo || temLinhaEmBranco) return;
     setConfig({
       ...config,
       veiculosTarifa: [
         ...veiculosTarifa,
-        {
-          bandaKey: proximo.bandaKey,
-          rotulo: proximo.rotulo,
-          anttConsultaBandaKey: proximo.anttConsultaBandaKey,
-          anttFixo: '',
-          anttPorKm: '',
-          margem: '0.33',
-        },
+        { bandaKey: '', rotulo: '', anttFixo: '', anttPorKm: '', margem: '' },
       ],
     });
   };
 
+  useEffect(() => {
+    if (!anttOpen || !canEditTarifa || !config || !veiculosCatalogoQuery.data) return;
+    const catalogo = new Map(veiculosCatalogoQuery.data.map((veiculo) => [veiculo.codigo, veiculo]));
+    let mudou = false;
+    const sincronizados = (config.veiculosTarifa ?? []).map((item) => {
+      const veiculo = catalogo.get(item.bandaKey);
+      if (!veiculo) return item;
+      const doCatalogo = veiculoTarifaDoCatalogo(veiculo);
+      if (
+        item.anttFixo === doCatalogo.anttFixo
+        && item.anttPorKm === doCatalogo.anttPorKm
+        && item.rotulo === doCatalogo.rotulo
+      ) return item;
+      mudou = true;
+      return { ...item, ...doCatalogo };
+    });
+    if (mudou) setConfig({ ...config, veiculosTarifa: sincronizados });
+  }, [anttOpen, canEditTarifa, config, veiculosCatalogoQuery.data]);
+
   const removeVeiculoTarifa = (index: number) => {
     if (!config) return;
     setConfig({ ...config, veiculosTarifa: veiculosTarifa.filter((_, i) => i !== index) });
-  };
-
-  const aplicarModeloAntt = () => {
-    if (!config) return;
-    setConfig({
-      ...config,
-      anttFonte: ANTT_FONTE_MODELO,
-      anttFonteData: ANTT_DATA_MODELO,
-      veiculosTarifa: VEICULOS_ANTT_MODELO.map((item) => ({ ...item })),
-    });
   };
 
   const setColunaExtra = (index: number, patch: Partial<TabelaFreteColunaExtra>) => {
@@ -1184,34 +1201,40 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                       const calculo = (banda.calculo || 'multiplicador') as TabelaFreteBandaCalculo;
                       const usaFator = calculo === 'multiplicador';
                       const usaValor = calculo !== 'multiplicador' && calculo !== 'referencia';
+                      const editavel = canEditTarifa && !banda.veiculoAuto;
                       return (
                         <tr key={banda.key || `banda-${index}`}>
                           <td>
                             <input
-                              disabled={!canEditTarifa}
+                              disabled={!editavel}
                               value={banda.rotulo}
+                              title={banda.veiculoAuto ? 'Coluna gerenciada pelos veículos da ANTT' : undefined}
                               onChange={(e) => setBanda(index, { rotulo: e.target.value })}
                             />
                           </td>
                           <td>
-                            <select disabled={!canEditTarifa} value={banda.unidade} onChange={(e) => setBanda(index, { unidade: e.target.value })}>
+                            <select disabled={!editavel} value={banda.unidade} onChange={(e) => setBanda(index, { unidade: e.target.value })}>
                               <option value="ton">ton</option>
                               <option value="veiculo">veículo</option>
                             </select>
                           </td>
                           <td>
-                            <select
-                              disabled={!canEditTarifa}
-                              value={calculo}
-                              onChange={(e) => setBanda(index, { calculo: e.target.value as TabelaFreteBandaCalculo })}
-                            >
-                              {CALCULO_BANDA_OPTIONS.map((opcao) => (
-                                <option key={opcao} value={opcao}>{CALCULO_BANDA_LABEL[opcao]}</option>
-                              ))}
-                            </select>
+                            {banda.veiculoAuto ? (
+                              <span className="muted">{CALCULO_BANDA_LABEL.veiculo_antt}</span>
+                            ) : (
+                              <select
+                                disabled={!canEditTarifa}
+                                value={calculo}
+                                onChange={(e) => setBanda(index, { calculo: e.target.value as TabelaFreteBandaCalculo })}
+                              >
+                                {CALCULO_BANDA_OPTIONS.map((opcao) => (
+                                  <option key={opcao} value={opcao}>{CALCULO_BANDA_LABEL[opcao]}</option>
+                                ))}
+                              </select>
+                            )}
                           </td>
                           <td>
-                            {calculo === 'referencia' ? (
+                            {calculo === 'referencia' || banda.veiculoAuto ? (
                               <span className="muted">—</span>
                             ) : (
                               <input
@@ -1225,7 +1248,7 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                           </td>
                           {canManage ? (
                             <td>
-                              <button type="button" className="btn-icon" title="Remover" disabled={!canEditTarifa || config.bandas.length <= 1} onClick={() => removeBanda(index)}>
+                              <button type="button" className="btn-icon" title="Remover" disabled={!editavel || config.bandas.length <= 1} onClick={() => removeBanda(index)}>
                                 <i className="bi bi-trash" />
                               </button>
                             </td>
@@ -1272,36 +1295,24 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
             </div>
             <div className="modal-body">
               <p className="tabela-frete-hint">
-                Igual à caixa de referência da planilha: <strong>Truck</strong>, <strong>Carreta 6</strong> e <strong>Carreta 7</strong>
-                com CC, CCD e margem. A tarifa do cliente é <strong>ANTT ÷ (1 − margem)</strong>.
-                Cada tipo já preenche a coluna certa da grade (9–14 t, 14–26 t e acima de 26 t). ANTT e margem não vão na proposta.
+                Escolha o veículo e ajuste a margem. CC e CCD vêm de <strong>Parâmetros comerciais → Tipos de veículo</strong>.
+                Tarifa do cliente = <strong>ANTT ÷ (1 − margem)</strong>.
               </p>
-              <div className="tabela-frete-params-row" style={{ marginBottom: 12 }}>
-                <ParamsField label="Fonte da tabela ANTT" size="modo">
-                  <input
-                    disabled={!canEditTarifa}
-                    value={config.anttFonte ?? ''}
-                    placeholder="Ex.: Resolução ANTT nº 6.084/2026"
-                    onChange={(e) => setConfig({ ...config, anttFonte: e.target.value })}
-                  />
-                </ParamsField>
-                <ParamsField label="Data da fonte" size="km">
-                  <input
-                    type="date"
-                    disabled={!canEditTarifa}
-                    value={config.anttFonteData ?? ''}
-                    onChange={(e) => setConfig({ ...config, anttFonteData: e.target.value })}
-                  />
-                </ParamsField>
-              </div>
-              <div className="table-container tabela-frete-bandas-wrap">
-                <table className="data-table tabela-frete-mini tabela-frete-bandas-table">
+              <div className="table-container tabela-frete-antt-wrap">
+                <table className="data-table tabela-frete-mini tabela-frete-antt-table">
+                  <colgroup>
+                    <col className="tabela-frete-antt-col-veiculo" />
+                    <col className="tabela-frete-antt-col-valor" />
+                    <col className="tabela-frete-antt-col-valor" />
+                    <col className="tabela-frete-antt-col-margem" />
+                    {canManage ? <col className="tabela-frete-bandas-col-acoes" /> : null}
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>Tipo de veículo</th>
+                      <th>Veículo</th>
                       <th>CC ANTT (R$)</th>
                       <th>CCD ANTT (R$/km)</th>
-                      <th>Margem ERP %</th>
+                      <th>Margem</th>
                       {canManage ? <th aria-label="Ações" /> : null}
                     </tr>
                   </thead>
@@ -1309,7 +1320,7 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                     {veiculosTarifa.length === 0 ? (
                       <tr>
                         <td colSpan={canManage ? 5 : 4} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '16px' }}>
-                          Nenhum tipo de veículo. Carregue o modelo oficial ou adicione Truck, Carreta 6 ou Carreta 7.
+                          Nenhum veículo nesta tabela. Use “Adicionar veículo” para incluir um tipo do catálogo.
                         </td>
                       </tr>
                     ) : veiculosTarifa.map((item, index) => (
@@ -1317,56 +1328,43 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                         <td>
                           <select
                             disabled={!canEditTarifa}
-                            value={TIPOS_VEICULO_ANTT.some((tipo) => tipo.bandaKey === item.bandaKey) ? item.bandaKey : ''}
+                            value={item.bandaKey}
                             onChange={(e) => {
-                              const tipo = TIPOS_VEICULO_ANTT.find((opcao) => opcao.bandaKey === e.target.value);
-                              if (!tipo) return;
-                              setVeiculoTarifa(index, {
-                                bandaKey: tipo.bandaKey,
-                                rotulo: tipo.rotulo,
-                                anttConsultaBandaKey: tipo.anttConsultaBandaKey,
-                              });
+                              const veiculo = catalogoPorCodigo.get(e.target.value);
+                              if (!veiculo) return;
+                              setVeiculoTarifa(index, veiculoTarifaDoCatalogo(veiculo));
                             }}
                           >
-                            {!TIPOS_VEICULO_ANTT.some((tipo) => tipo.bandaKey === item.bandaKey) ? (
-                              <option value="">Selecione</option>
+                            {!item.bandaKey ? <option value="" disabled>Selecione o veículo</option> : null}
+                            {item.bandaKey && !catalogoPorCodigo.has(item.bandaKey) ? (
+                              <option value={item.bandaKey}>{item.rotulo || item.bandaKey}</option>
                             ) : null}
-                            {TIPOS_VEICULO_ANTT.map((tipo) => (
+                            {catalogoVeiculos.map((veiculo) => (
                               <option
-                                key={tipo.bandaKey}
-                                value={tipo.bandaKey}
-                                disabled={veiculosTarifa.some((outro, outroIndex) => outroIndex !== index && outro.bandaKey === tipo.bandaKey)}
+                                key={veiculo.codigo}
+                                value={veiculo.codigo}
+                                disabled={veiculosTarifa.some((outro, outroIndex) => outroIndex !== index && outro.bandaKey === veiculo.codigo)}
                               >
-                                {tipo.rotulo}
+                                {veiculo.nome}
                               </option>
                             ))}
                           </select>
                         </td>
+                        <td className="tabela-frete-antt-valor">{item.bandaKey ? formatAntt(item.anttFixo, 2) : '—'}</td>
+                        <td className="tabela-frete-antt-valor">{item.bandaKey ? formatAntt(item.anttPorKm, 4) : '—'}</td>
                         <td>
-                          <input
-                            disabled={!canEditTarifa}
-                            inputMode="decimal"
-                            value={item.anttFixo}
-                            onChange={(e) => setVeiculoTarifa(index, { anttFixo: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            disabled={!canEditTarifa}
-                            inputMode="decimal"
-                            value={item.anttPorKm}
-                            onChange={(e) => setVeiculoTarifa(index, { anttPorKm: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <PercentFatorInput
-                            disabled={!canEditTarifa}
-                            fator={item.margem}
-                            onFatorChange={(valor) => setVeiculoTarifa(index, { margem: valor })}
-                          />
+                          <div className="tabela-frete-antt-margem">
+                            <PercentFatorInput
+                              disabled={!canEditTarifa || !item.bandaKey}
+                              fator={item.margem}
+                              placeholder="33"
+                              onFatorChange={(valor) => setVeiculoTarifa(index, { margem: valor })}
+                            />
+                            <span aria-hidden="true">%</span>
+                          </div>
                         </td>
                         {canManage ? (
-                          <td>
+                          <td className="tabela-frete-antt-acoes">
                             <button type="button" className="btn-icon" title="Remover" disabled={!canEditTarifa} onClick={() => removeVeiculoTarifa(index)}>
                               <i className="bi bi-trash" />
                             </button>
@@ -1381,8 +1379,15 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
             <div className="modal-footer tabela-frete-bandas-footer">
               {canManage && canEditTarifa ? (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button type="button" className="reports-action-btn secondary" onClick={addVeiculoTarifa} disabled={veiculosTarifa.length >= TIPOS_VEICULO_ANTT.length}>Adicionar veículo</button>
-                  <button type="button" className="reports-action-btn secondary" onClick={aplicarModeloAntt}>Carregar modelo oficial</button>
+                  <button
+                    type="button"
+                    className="reports-action-btn secondary"
+                    onClick={addVeiculoTarifa}
+                    disabled={!proximoCatalogo || temLinhaEmBranco}
+                    title={proximoCatalogo ? undefined : 'Todos os veículos ativos do catálogo já estão na tabela'}
+                  >
+                    Adicionar veículo
+                  </button>
                 </div>
               ) : <span />}
               <div className="tabela-frete-bandas-footer-actions">

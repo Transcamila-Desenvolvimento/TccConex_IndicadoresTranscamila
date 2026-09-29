@@ -9,6 +9,7 @@ import {
   useSaveComercialParametros,
 } from '../../hooks/useComercialClientes';
 import type { ParametrosComercial } from '../../types/domain';
+import ComercialVeiculosCatalogo from './ComercialVeiculosCatalogo';
 
 type ListaKey = 'validades' | 'vigencias' | 'prazosFaturamento';
 type PadraoKey = 'validadePadrao' | 'vigenciaPadrao' | 'faturamentoPadrao';
@@ -457,7 +458,7 @@ export default function ComercialCadastroParametros({ secao }: { secao: 'prazos'
     });
   };
 
-  const titulo = secao === 'prazos' ? 'Prazos e validades' : 'Personalizar';
+  const titulo = secao === 'prazos' ? 'Parâmetros' : 'Personalizar';
 
   return (
     <div className="fat-list-compact comercial-param-page">
@@ -542,6 +543,7 @@ export default function ComercialCadastroParametros({ secao }: { secao: 'prazos'
                 onRemove={(valor) => removeItem('prazosFaturamento', valor)}
                 onPadrao={(valor) => setForm((current) => ({ ...current, faturamentoPadrao: valor }))}
               />
+              <ComercialVeiculosCatalogo canManage={canManage} />
             </div>
           ) : (
             <div className="comercial-param-row comercial-param-row--logos">

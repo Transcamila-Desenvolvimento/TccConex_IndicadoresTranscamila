@@ -1291,6 +1291,47 @@ class ParametrosComercial(models.Model):
         return 'Parâmetros do Comercial'
 
 
+class VeiculoComercial(models.Model):
+    """Catálogo global de tipos de veículo (CC/CCD ANTT) usado pelas tabelas de frete."""
+
+    nome = models.CharField(max_length=80)
+    codigo = models.CharField(max_length=60, unique=True)
+    antt_fixo = models.DecimalField(max_digits=12, decimal_places=4, default=0, verbose_name='CC ANTT (R$)')
+    antt_por_km = models.DecimalField(max_digits=12, decimal_places=4, default=0, verbose_name='CCD ANTT (R$/km)')
+    capacidade_kg = models.PositiveIntegerField(null=True, blank=True)
+    ativo = models.BooleanField(default=True)
+    ordem = models.PositiveIntegerField(default=0)
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_atualizacao = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['ordem', 'capacidade_kg', 'nome']
+        verbose_name = 'Tipo de veículo'
+        verbose_name_plural = 'Tipos de veículo'
+
+    def __str__(self):
+        return self.nome
+
+
+class VeiculoRotuloCliente(models.Model):
+    """Nome do veículo como o cliente o conhece (proposta e PDF)."""
+
+    veiculo = models.ForeignKey(VeiculoComercial, on_delete=models.CASCADE, related_name='rotulos_cliente')
+    cliente = models.ForeignKey(ClienteComercial, on_delete=models.CASCADE, related_name='rotulos_veiculo')
+    rotulo = models.CharField(max_length=80)
+
+    class Meta:
+        ordering = ['cliente__razao_social']
+        constraints = [
+            models.UniqueConstraint(fields=['veiculo', 'cliente'], name='uniq_rotulo_veiculo_cliente'),
+        ]
+        verbose_name = 'Rótulo de veículo por cliente'
+        verbose_name_plural = 'Rótulos de veículo por cliente'
+
+    def __str__(self):
+        return f'{self.veiculo} — {self.rotulo}'
+
+
 VALIDADES_PROPOSTA_PADRAO = ['5 dias', '7 dias', '15 dias', '30 dias', '45 dias', '60 dias']
 VIGENCIAS_CONTRATO_PADRAO = ['3 meses', '6 meses', '12 meses', '24 meses', '36 meses', 'Indeterminada']
 PRAZOS_FATURAMENTO_PADRAO = [

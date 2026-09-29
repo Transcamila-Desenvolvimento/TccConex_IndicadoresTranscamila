@@ -35,6 +35,19 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
+const formatDesde = (value?: string | null) => {
+  if (!value) return { data: '—', tempo: '' };
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { data: value, tempo: '' };
+  const inicio = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const hoje = new Date();
+  const dias = Math.max(0, Math.round((new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()).getTime() - inicio.getTime()) / 86_400_000));
+  return {
+    data: date.toLocaleDateString('pt-BR'),
+    tempo: dias === 0 ? 'hoje' : dias === 1 ? 'há 1 dia' : `há ${dias} dias`,
+  };
+};
+
 const statusHistorico = (status: string): ClienteComercialCompatibilidade => {
   if (status === 'homologado' || status === 'reprovado') return status;
   return 'pendente_validacao';
@@ -417,6 +430,7 @@ const ComercialValidacaoClientes: React.FC = () => {
                 <col className="col-produtos" />
                 <col className="col-pendencia" />
                 <col className="col-status" />
+                <col className="col-desde" />
               </colgroup>
               <thead>
                 <tr>
@@ -428,12 +442,13 @@ const ComercialValidacaoClientes: React.FC = () => {
                   <th>Produtos</th>
                   <th>Pendência</th>
                   <th>Homologação</th>
+                  <th>Desde</th>
                 </tr>
               </thead>
               <tbody>
                 {canShowEmpty && clientes.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="comercial-browse-empty">
+                    <td colSpan={7} className="comercial-browse-empty">
                       Não há registros a serem exibidos.
                     </td>
                   </tr>
@@ -452,6 +467,17 @@ const ComercialValidacaoClientes: React.FC = () => {
                       <td>{resumoProdutos(cliente)}</td>
                       <td className="col-pendencia" title={resumoPendencia(cliente)}>{resumoPendencia(cliente)}</td>
                       <td><ComercialHomologacaoBadge status={cliente.compatibilidade} /></td>
+                      <td className="col-desde" title={formatDateTime(cliente.homologacaoDesde)}>
+                        {(() => {
+                          const desde = formatDesde(cliente.homologacaoDesde);
+                          return (
+                            <>
+                              {desde.data}
+                              {desde.tempo ? <span className="comercial-desde-tempo"> · {desde.tempo}</span> : null}
+                            </>
+                          );
+                        })()}
+                      </td>
                     </tr>
                 ))}
               </tbody>

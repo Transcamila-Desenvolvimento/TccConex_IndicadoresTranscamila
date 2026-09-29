@@ -1644,6 +1644,154 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(ids(f'cliente={cliente_id + 999}'), [])
         self.assertEqual(ids('cliente=abc'), [])
 
+    def _cliente_id(self):
+        self._auth(self.admin)
+        resp = self.api.post('/api/comercial/clientes/', {**PAYLOAD, 'email': 'frota@empresa.com'}, format='json', **HEADERS)
+        self.assertEqual(resp.status_code, 201, resp.content)
+        return resp.json()['id']
+
+    def test_catalogo_veiculos_crud_com_rotulo_por_cliente(self):
+        cliente_id = self._cliente_id()
+        lista = self.api.get('/api/comercial/veiculos/', **HEADERS)
+        self.assertEqual(lista.status_code, 200, lista.content)
+        self.assertEqual(
+            {item['codigo'] for item in lista.json()},
+            {'de9000', 'de14001', 'acima26001'},
+        )
+        criado = self.api.post(
+            '/api/comercial/veiculos/',
+            {
+                'nome': 'Bitrem 9 eixos',
+                'anttFixo': '1200.50',
+                'anttPorKm': '10.1234',
+                'capacidadeKg': 37000,
+                'rotulosCliente': [{'clienteId': cliente_id, 'rotulo': 'Bitrem graneleiro'}],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(criado.status_code, 201, criado.content)
+        body = criado.json()
+        self.assertEqual(body['codigo'], 'veic-bitrem-9-eixos')
+        self.assertEqual(body['rotulosCliente'][0]['rotulo'], 'Bitrem graneleiro')
+
+        duplicado = self.api.post(
+            '/api/comercial/veiculos/',
+            {'nome': 'bitrem 9 EIXOS', 'anttFixo': '1', 'anttPorKm': '1'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(duplicado.status_code, 400, duplicado.content)
+
+        editado = self.api.patch(
+            f'/api/comercial/veiculos/{body["id"]}/',
+            {'nome': 'Bitrem 9 eixos 37t', 'rotulosCliente': []},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(editado.status_code, 200, editado.content)
+        self.assertEqual(editado.json()['codigo'], 'veic-bitrem-9-eixos')
+        self.assertEqual(editado.json()['rotulosCliente'], [])
+
+        self._auth(self.leitura)
+        negado = self.api.post(
+            '/api/comercial/veiculos/',
+            {'nome': 'Toco', 'anttFixo': '1', 'anttPorKm': '1'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(negado.status_code, 403, negado.content)
+
+    def test_tabela_com_veiculo_do_catalogo_gera_coluna_e_limite_de_peso(self):
+        from decimal import Decimal, ROUND_HALF_UP
+
+        from apps.comercial.tabela_distribuicao import (
+            gerar_faixas_distribuicao,
+            merge_config,
+            preset_config_oficial_distribuicao,
+            simular_cotacao_distribuicao,
+        )
+
+        config = preset_config_oficial_distribuicao()
+        config['veiculosTarifa'].append({
+            'bandaKey': 'veic-bitrem', 'rotulo': 'Bitrem', 'veiculoId': '9',
+            'anttFixo': '1200', 'anttPorKm': '10', 'margem': '0.2', 'capacidadeKg': 37000,
+        })
+        merged = merge_config(config)
+        banda = next(item for item in merged['bandas'] if item['key'] == 'veic-bitrem')
+        self.assertEqual(banda['unidade'], 'veiculo')
+        self.assertEqual(banda['rotulo'], 'Bitrem')
+
+        primeira = gerar_faixas_distribuicao(merged)[0]
+        bitrem = next(item for item in primeira['tarifas'] if item['key'] == 'veic-bitrem')
+        esperado = (Decimal('50') * Decimal('10') / Decimal('0.8') + Decimal('1200') / Decimal('0.8')).quantize(
+            Decimal('0.01'), rounding=ROUND_HALF_UP,
+        )
+        self.assertEqual(bitrem['valor'], str(esperado))
+
+        self.assertEqual(simular_cotacao_distribuicao(merged, 50, 30000)['bandaPeso']['key'], 'acima26001')
+        self.assertEqual(simular_cotacao_distribuicao(merged, 50, 36000)['bandaPeso']['key'], 'veic-bitrem')
+
+        sem_bitrem = merge_config({**merged, 'veiculosTarifa': merged['veiculosTarifa'][:3]})
+        self.assertNotIn('veic-bitrem', [item['key'] for item in sem_bitrem['bandas']])
+        self.assertNotIn('limitesPesoBanda', sem_bitrem)
+
+    def test_rotulo_de_veiculo_por_cliente_na_proposta(self):
+        from apps.comercial.models import ClienteComercial, TabelaFrete, VeiculoComercial, VeiculoRotuloCliente
+        from apps.comercial.proposta_tarifas import calcular_trecho, snapshot_distribuicao
+        from apps.comercial.tabela_distribuicao import preset_config_oficial_distribuicao
+
+        cliente_id = int(self._cliente_id())
+        outro = ClienteComercial.objects.create(razao_social='Outro Cliente SA')
+        VeiculoRotuloCliente.objects.create(
+            veiculo=VeiculoComercial.objects.get(codigo='de9000'),
+            cliente_id=cliente_id,
+            rotulo='Truck toco especial',
+        )
+        tabela = TabelaFrete.objects.create(nome='Dist', tipo='distribuicao', config=preset_config_oficial_distribuicao())
+
+        snap = snapshot_distribuicao(cliente_id, tabela=tabela)
+        truck = next(item for item in snap['veiculosTarifa'] if item['bandaKey'] == 'de9000')
+        self.assertEqual(truck['rotulo'], 'Truck toco especial')
+        coluna = next(item for item in snap['faixas'][0]['tarifas'] if item['key'] == 'de9000')
+        self.assertEqual(coluna['rotulo'], 'Truck toco especial')
+
+        snap_outro = snapshot_distribuicao(outro.pk, tabela=tabela)
+        truck_outro = next(item for item in snap_outro['veiculosTarifa'] if item['bandaKey'] == 'de9000')
+        self.assertEqual(truck_outro['rotulo'], 'Truck')
+        self.assertEqual(tabela.config['veiculosTarifa'][0]['rotulo'], 'Truck')
+
+        trecho = calcular_trecho(cliente_id=cliente_id, origem='Ibiporã - PR', destino='Barueri - SP', veiculo_key='de9000', km=100)
+        self.assertEqual(trecho['veiculo'], 'Truck toco especial')
+        pelo_rotulo = calcular_trecho(
+            cliente_id=cliente_id, origem='Ibiporã - PR', destino='Barueri - SP', veiculo_key='Truck toco especial', km=100,
+        )
+        self.assertEqual(pelo_rotulo['veiculoKey'], 'de9000')
+        trecho_outro = calcular_trecho(cliente_id=outro.pk, origem='Ibiporã - PR', destino='Barueri - SP', veiculo_key='de9000', km=100)
+        self.assertEqual(trecho_outro['veiculo'], 'Truck')
+
+    def test_lista_clientes_expoe_data_do_status_de_homologacao(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.comercial.models import HomologacaoProdutoEvento, PropostaComercial
+
+        cliente_id = PropostaComercial.objects.get(pk=self._proposta_armazenagem_enviada()).cliente_id
+        HomologacaoProdutoEvento.objects.filter(cliente_id=cliente_id).delete()
+
+        def desde():
+            resp = self.api.get(f'/api/comercial/clientes/?cliente={cliente_id}', **HEADERS)
+            self.assertEqual(resp.status_code, 200, resp.content)
+            return resp.json()['results'][0]['homologacaoDesde']
+
+        self.assertIsNone(desde())
+        antigo = HomologacaoProdutoEvento.objects.create(cliente_id=cliente_id, status='pendente_validacao')
+        recente = HomologacaoProdutoEvento.objects.create(cliente_id=cliente_id, status='homologado')
+        HomologacaoProdutoEvento.objects.filter(pk=antigo.pk).update(data_criacao=timezone.now() - timedelta(days=5))
+        recente.refresh_from_db()
+        self.assertEqual(desde()[:19], timezone.localtime(recente.data_criacao).isoformat()[:19])
+
     def test_parametros_padroniza_e_rejeita_formato_invalido(self):
         from apps.comercial.models import normalizar_opcao_faturamento, normalizar_opcao_vigencia
 
@@ -2361,6 +2509,28 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(carreta7['antt'], str(antt7))
         # Margem realizada vs piso 7 eixos ≠ margem configurada sobre ANTT 6 eixos.
         self.assertNotEqual(carreta6['margem'], '0.2500')
+
+    def test_bandas_padrao_com_antt_dividem_k_por_ton_como_planilha(self):
+        from apps.comercial.tabela_distribuicao import (
+            default_config_distribuicao,
+            gerar_faixas_distribuicao,
+            preset_veiculos_antt_oficial,
+        )
+
+        config = default_config_distribuicao()
+        config.update(preset_veiculos_antt_oficial())
+        config.update({'kmInicio': 0, 'kmFim': 100})
+        primeira = gerar_faixas_distribuicao(config)[0]
+        valores = {item['key']: item['valor'] for item in primeira['tarifas']}
+        # SIMULAÇÃO!E12:K12 — R$/ton = ROUND(K/5..10; 2), K = R$/veículo truck.
+        self.assertEqual(valores['de9000'], '1368.14')
+        self.assertEqual(valores['ate499'], '273.63')
+        self.assertEqual(valores['de500'], '228.02')
+        self.assertEqual(valores['de1000'], '195.45')
+        self.assertEqual(valores['de2000'], '171.02')
+        self.assertEqual(valores['de4000'], '152.02')
+        self.assertEqual(valores['de6000'], '136.81')
+        self.assertEqual(primeira['freteMinimo'], '136.54')
 
     def test_oficial_distribuicao_bate_planilha(self):
         from decimal import Decimal, ROUND_HALF_UP

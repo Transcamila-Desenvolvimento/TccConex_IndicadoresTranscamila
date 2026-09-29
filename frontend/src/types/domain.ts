@@ -2215,6 +2215,8 @@ export interface ClienteComercial {
   homologadoEm?: string | null;
   homologacaoJustificativa?: string;
   homologacaoRevisao?: number;
+  /** Data em que o cliente entrou no status de homologação atual. */
+  homologacaoDesde?: string | null;
   produtosCount?: number;
   previsaoVolumes: string;
   tiposEmbalagens: string;
@@ -2951,7 +2953,8 @@ export type TabelaFreteBandaCalculo =
   | 'divisor'
   | 'referencia'
   | 'mult_anterior'
-  | 'mult_referencia';
+  | 'mult_referencia'
+  | 'veiculo_antt';
 
 export interface TabelaFreteBanda {
   key: string;
@@ -2960,6 +2963,8 @@ export interface TabelaFreteBanda {
   fator?: string;
   calculo?: TabelaFreteBandaCalculo;
   valor?: string;
+  /** Coluna criada automaticamente para um veículo do catálogo em `veiculosTarifa`. */
+  veiculoAuto?: boolean;
 }
 
 export interface TabelaFreteVeiculoTarifa {
@@ -2969,7 +2974,33 @@ export interface TabelaFreteVeiculoTarifa {
   anttPorKm: string;
   margem: string;
   anttConsultaBandaKey?: string;
+  /** Id do tipo de veículo no catálogo (Parâmetros comerciais). */
+  veiculoId?: string;
+  capacidadeKg?: number | null;
 }
+
+export interface VeiculoRotuloCliente {
+  clienteId: string;
+  clienteNome?: string;
+  rotulo: string;
+}
+
+/** Tipo de veículo do catálogo global. `codigo` é a chave da coluna na tabela de frete. */
+export interface VeiculoComercial {
+  id: string;
+  nome: string;
+  codigo: string;
+  anttFixo: string;
+  anttPorKm: string;
+  capacidadeKg: number | null;
+  ativo: boolean;
+  ordem: number;
+  rotulosCliente: VeiculoRotuloCliente[];
+}
+
+export type VeiculoComercialPayload = Partial<Omit<VeiculoComercial, 'id' | 'codigo' | 'rotulosCliente'>> & {
+  rotulosCliente?: Array<Pick<VeiculoRotuloCliente, 'clienteId' | 'rotulo'>>;
+};
 
 export interface TabelaFretePrazoRegra {
   ateKm: number;

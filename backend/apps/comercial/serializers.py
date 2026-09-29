@@ -35,6 +35,8 @@ from .models import (
     PropostaFreteLinha,
     TabelaFrete,
     TabelaFreteLinha,
+    VeiculoComercial,
+    VeiculoRotuloCliente,
     cliente_tem_tabela_distribuicao_vigente,
     default_condicoes,
     erro_valores_tabela_armazenagem,
@@ -85,6 +87,108 @@ def _validar_clientes_tabela_unica(clientes, instance=None):
     raise serializers.ValidationError({
         'clienteIds': f'{texto} já está vinculado a outra tabela de distribuição.',
     })
+
+
+def _codigo_veiculo(nome, instance_pk=None):
+    import re
+    import unicodedata
+
+    base = unicodedata.normalize('NFKD', nome or '').encode('ascii', 'ignore').decode('ascii').lower()
+    base = re.sub(r'[^a-z0-9]+', '-', base).strip('-')[:50] or 'veiculo'
+    codigo = f'veic-{base}'
+    sufixo = 2
+    qs = VeiculoComercial.objects.all()
+    if instance_pk:
+        qs = qs.exclude(pk=instance_pk)
+    while qs.filter(codigo=codigo).exists():
+        codigo = f'veic-{base}-{sufixo}'
+        sufixo += 1
+    return codigo
+
+
+class VeiculoRotuloClienteSerializer(serializers.Serializer):
+    clienteId = serializers.CharField()
+    clienteNome = serializers.CharField(read_only=True)
+    rotulo = serializers.CharField(max_length=80)
+
+
+class VeiculoComercialSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source='pk', read_only=True)
+    nome = serializers.CharField(max_length=80)
+    codigo = serializers.CharField(read_only=True)
+    anttFixo = serializers.DecimalField(source='antt_fixo', max_digits=12, decimal_places=4, min_value=Decimal('0'))
+    anttPorKm = serializers.DecimalField(source='antt_por_km', max_digits=12, decimal_places=4, min_value=Decimal('0'))
+    capacidadeKg = serializers.IntegerField(source='capacidade_kg', required=False, allow_null=True, min_value=1)
+    ativo = serializers.BooleanField(required=False)
+    ordem = serializers.IntegerField(required=False, min_value=0)
+    rotulosCliente = VeiculoRotuloClienteSerializer(many=True, required=False)
+
+    class Meta:
+        model = VeiculoComercial
+        fields = ['id', 'nome', 'codigo', 'anttFixo', 'anttPorKm', 'capacidadeKg', 'ativo', 'ordem', 'rotulosCliente']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['rotulosCliente'] = [
+            {
+                'clienteId': str(item.cliente_id),
+                'clienteNome': (item.cliente.nome_fantasia or item.cliente.razao_social or '').strip(),
+                'rotulo': item.rotulo,
+            }
+            for item in instance.rotulos_cliente.all()
+        ]
+        return data
+
+    def validate_nome(self, value):
+        nome = (value or '').strip()
+        if not nome:
+            raise serializers.ValidationError('Informe o nome do veículo.')
+        qs = VeiculoComercial.objects.filter(nome__iexact=nome)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('Já existe um veículo com esse nome.')
+        return nome
+
+    def validate_rotulosCliente(self, value):
+        vistos = set()
+        limpos = []
+        for item in value or []:
+            cliente_id = str(item.get('clienteId') or '').strip()
+            rotulo = (item.get('rotulo') or '').strip()
+            if not cliente_id or not rotulo:
+                continue
+            if not cliente_id.isdigit() or not ClienteComercial.objects.filter(pk=cliente_id).exists():
+                raise serializers.ValidationError('Cliente inválido no rótulo do veículo.')
+            if cliente_id in vistos:
+                raise serializers.ValidationError('Cada cliente pode ter apenas um rótulo por veículo.')
+            vistos.add(cliente_id)
+            limpos.append({'clienteId': int(cliente_id), 'rotulo': rotulo})
+        return limpos
+
+    def _gravar_rotulos(self, instance, rotulos):
+        if rotulos is None:
+            return
+        instance.rotulos_cliente.all().delete()
+        VeiculoRotuloCliente.objects.bulk_create([
+            VeiculoRotuloCliente(veiculo=instance, cliente_id=item['clienteId'], rotulo=item['rotulo'])
+            for item in rotulos
+        ])
+
+    def create(self, validated_data):
+        rotulos = validated_data.pop('rotulosCliente', None)
+        validated_data['codigo'] = _codigo_veiculo(validated_data.get('nome'))
+        if 'ordem' not in validated_data:
+            validated_data['ordem'] = (VeiculoComercial.objects.aggregate(m=Max('ordem'))['m'] or 0) + 1
+        instance = super().create(validated_data)
+        self._gravar_rotulos(instance, rotulos)
+        return instance
+
+    def update(self, instance, validated_data):
+        rotulos = validated_data.pop('rotulosCliente', None)
+        instance = super().update(instance, validated_data)
+        self._gravar_rotulos(instance, rotulos)
+        return instance
 
 
 class ClienteComercialProdutoSerializer(serializers.ModelSerializer):
@@ -337,6 +441,7 @@ class ClienteComercialSerializer(serializers.ModelSerializer):
     homologadoEm = serializers.DateTimeField(source='homologado_em', read_only=True)
     homologacaoJustificativa = serializers.CharField(source='homologacao_justificativa', read_only=True)
     homologacaoRevisao = serializers.IntegerField(source='homologacao_revisao', read_only=True)
+    homologacaoDesde = serializers.SerializerMethodField()
     produtosCount = serializers.SerializerMethodField()
     previsaoVolumes = serializers.CharField(source='previsao_volumes', required=False, allow_blank=True, max_length=200)
     tiposEmbalagens = serializers.CharField(source='tipos_embalagens', required=False, allow_blank=True, max_length=200)
@@ -374,6 +479,7 @@ class ClienteComercialSerializer(serializers.ModelSerializer):
             'homologadoEm',
             'homologacaoJustificativa',
             'homologacaoRevisao',
+            'homologacaoDesde',
             'produtosCount',
             'previsaoVolumes',
             'tiposEmbalagens',
@@ -435,6 +541,13 @@ class ClienteComercialSerializer(serializers.ModelSerializer):
 
     def get_homologadoPor(self, instance):
         return _usuario_nome(instance.homologado_por)
+
+    def get_homologacaoDesde(self, instance):
+        """Data em que o cliente entrou no status de homologação atual (último evento registrado)."""
+        datas = [evento.data_criacao for evento in instance.homologacao_eventos.all() if evento.data_criacao]
+        if not datas:
+            return None
+        return serializers.DateTimeField().to_representation(max(datas))
 
     def get_produtosCount(self, instance):
         count = getattr(instance, 'produtos_count', None)
