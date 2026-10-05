@@ -97,7 +97,7 @@ def titulo_da_conversa(pergunta: str, resposta: str) -> str:
             'Escreva somente um título curto, em português, com no máximo 6 palavras, '
             'sobre o assunto da conversa. Sem aspas, sem ponto final e sem Markdown.',
             [{'role': 'user', 'text': f'Pergunta: {pergunta[:400]}\nResposta: {resposta[:400]}'}],
-            max_tokens=32,
+            max_tokens=256,
         )
     except GeminiErro:
         return fallback
@@ -146,8 +146,10 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
         f'Você é {agente.nome}, um agente do ERP TccConex. Responda em português, de forma direta. '
         f'Instrução: {instrucao[:800]} '
         'Use somente o material enviado com a pergunta. Não invente números nem documentos. '
-        'Responda só o que foi perguntado, em poucas linhas. '
-        'Não liste outras funções, não repita o material inteiro e não acrescente amostras. '
+        'Responda só o que foi perguntado. '
+        'Não liste outras funções nem acrescente assunto que não foi pedido. '
+        'Se pedirem comparação, evolução ou vários registros, entregue a tabela inteira, '
+        'com todos os valores que estão no material. Não pare no cabeçalho. '
         'Se a pergunta usar um nome e o material trouxer o dado equivalente, '
         'responda com os valores que estão escritos e diga o nome que o documento usa. '
         'Exemplo: perguntaram diária e o texto traz piso mensal — mostre os pisos, não omita as cifras. '

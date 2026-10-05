@@ -56,6 +56,8 @@ class CamiloGeminiTests(TestCase):
         sistema = pedido['systemInstruction']['parts'][0]['text']
         self.assertIn('não consulta dados do ERP', sistema)
         self.assertIn('tabela Markdown', sistema)
+        self.assertEqual(pedido['generationConfig']['maxOutputTokens'], 8192)
+        self.assertEqual(pedido['generationConfig']['thinkingConfig']['thinkingLevel'], 'low')
         self.assertNotIn('responseMimeType', pedido['generationConfig'])
         self.assertEqual(pedido['contents'][-1]['parts'][0]['text'], 'Escreva um recado curto.')
 

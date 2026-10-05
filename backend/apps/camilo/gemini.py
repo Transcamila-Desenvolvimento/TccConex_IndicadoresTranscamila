@@ -33,7 +33,7 @@ def _alternar(mensagens: list[dict]) -> list[dict]:
     return saida
 
 
-def gerar(sistema: str, mensagens: list[dict], max_tokens: int = 2048) -> str:
+def gerar(sistema: str, mensagens: list[dict], max_tokens: int = 8192) -> str:
     chave = getattr(settings, 'GEMINI_API_KEY', '')
     if not chave:
         raise GeminiErro(
@@ -52,7 +52,12 @@ def gerar(sistema: str, mensagens: list[dict], max_tokens: int = 2048) -> str:
             {'role': item['role'], 'parts': [{'text': item['text']}]}
             for item in conteudo
         ],
-        'generationConfig': {'maxOutputTokens': max_tokens},
+        # O teto vale para o raciocínio e para o texto visível. No 3.8 Flash o
+        # padrão pensa o bastante para cortar a resposta no meio da tabela.
+        'generationConfig': {
+            'maxOutputTokens': max_tokens,
+            'thinkingConfig': {'thinkingLevel': 'low'},
+        },
     }).encode('utf-8')
     pedido = urllib.request.Request(
         url,

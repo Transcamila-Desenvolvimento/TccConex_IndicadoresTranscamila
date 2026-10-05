@@ -15,6 +15,7 @@ export function useArrasteLista(ativo: boolean) {
   const linha = useRef<HTMLSpanElement>(null);
   const origem = useRef<number | null>(null);
   const antesDeRef = useRef<number | null>(null);
+  const arrastando = useRef(false);
 
   const pintar = (topo: number | null, esquerda: number, largura: number) => {
     const el = linha.current;
@@ -30,6 +31,7 @@ export function useArrasteLista(ativo: boolean) {
   };
 
   const limpar = () => {
+    arrastando.current = false;
     origem.current = null;
     antesDeRef.current = null;
     pintar(null, 0, 0);
@@ -48,18 +50,20 @@ export function useArrasteLista(ativo: boolean) {
       }
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData('text/plain', String(index));
+      arrastando.current = true;
       origem.current = index;
       antesDeRef.current = null;
     },
-    onDragEnd: () => {
-      window.setTimeout(limpar, 0);
+    onDragEnd: (event: DragEvent<HTMLButtonElement>) => {
+      event.currentTarget.blur();
+      limpar();
     },
   });
 
   const propsLinha = (index: number, mover: (de: number, antesDe: number) => void) => ({
     onDragOver: (event: DragEvent<HTMLTableRowElement>) => {
       const de = origem.current;
-      if (!ativo || de === null) return;
+      if (!ativo || !arrastando.current || de === null) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
       const rect = event.currentTarget.getBoundingClientRect();
@@ -85,6 +89,7 @@ export function useArrasteLista(ativo: boolean) {
       event.preventDefault();
       const de = origem.current ?? Number(event.dataTransfer.getData('text/plain'));
       const antesDe = antesDeRef.current;
+      limpar();
       if (!ativo || Number.isNaN(de) || antesDe === null) return;
       mover(de, antesDe);
     },
