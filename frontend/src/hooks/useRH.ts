@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { apiService } from '../services/apiService';
 import type { ColaboradorPJ, CargoMapping, RHMovimentacaoOrdering } from '../types/domain';
@@ -30,6 +30,7 @@ export const RH_KEYS = {
   cargos: ['rh', 'cargos'] as const,
   colaboradores: ['rh', 'colaboradores'] as const,
   historicoSalarial: ['rh', 'historico-salarial'] as const,
+  documentos: ['rh', 'documentos'] as const,
 };
 
 function invalidateRHData(queryClient: ReturnType<typeof useQueryClient>) {
@@ -311,5 +312,85 @@ export function useSalvarJustificativaAlteracao() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: RH_KEYS.dashboard });
     },
+  });
+}
+
+export function useRHDriveStatus(enabled = true) {
+  return useQuery({
+    queryKey: ['rh', 'drive', 'status'],
+    queryFn: () => apiService.getRHDriveStatus(),
+    staleTime: 60_000,
+    enabled,
+  });
+}
+
+export function useRHDriveBrowse(folderId: string, enabled = true, driveId?: string | null) {
+  return useInfiniteQuery({
+    queryKey: ['rh', 'drive', 'browse', folderId, driveId ?? null],
+    queryFn: ({ pageParam }) =>
+      apiService.browseRHDrive({
+        folderId,
+        pageToken: pageParam,
+        driveId: driveId ?? undefined,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken ?? undefined,
+    enabled: enabled && Boolean(folderId),
+  });
+}
+
+export function useDocumentosRH(params: { page: number; search: string }) {
+  return useQuery({
+    queryKey: [...RH_KEYS.documentos, params],
+    queryFn: () => apiService.getDocumentosRH(params),
+  });
+}
+
+export function useCreateDocumentoRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ titulo, driveFileId }: { titulo: string; driveFileId: string }) =>
+      apiService.createDocumentoRH(titulo, driveFileId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: RH_KEYS.documentos });
+    },
+  });
+}
+
+export function useRenomearDocumentoRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, titulo }: { id: string; titulo: string }) =>
+      apiService.renomearDocumentoRH(id, titulo),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: RH_KEYS.documentos });
+    },
+  });
+}
+
+export function useSubstituirDocumentoRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, titulo, driveFileId }: { id: string; titulo: string; driveFileId: string }) =>
+      apiService.substituirDocumentoRH(id, titulo, driveFileId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: RH_KEYS.documentos });
+    },
+  });
+}
+
+export function useDeleteDocumentoRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.deleteDocumentoRH(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: RH_KEYS.documentos });
+    },
+  });
+}
+
+export function useDownloadDocumentoRH() {
+  return useMutation({
+    mutationFn: (id: string) => apiService.downloadDocumentoRH(id),
   });
 }

@@ -8,6 +8,7 @@ from .models import (
     CargoMapping,
     ColaboradorPJ,
     ColaboradorPJHistorico,
+    DocumentoRH,
 )
 from .pj_sync_service import (
     pj_ativo_na_competencia,
@@ -165,3 +166,20 @@ class ColaboradorPJSerializer(serializers.ModelSerializer):
             'id', 'nome', 'cpf', 'salario', 'filial', 'cargo',
             'dataAdmissao', 'dataDemissao', 'dataNascimento', 'ativo', 'dataCriacao',
         ]
+
+
+class DocumentoRHSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source='pk', read_only=True)
+    nomeArquivo = serializers.CharField(source='nome_original', read_only=True)
+    linkExterno = serializers.CharField(source='link_externo', read_only=True)
+    incluidoPor = serializers.SerializerMethodField()
+    criadoEm = serializers.DateTimeField(source='criado_em', format='%d/%m/%Y %H:%M', read_only=True)
+
+    class Meta:
+        model = DocumentoRH
+        fields = ['id', 'titulo', 'nomeArquivo', 'tamanho', 'linkExterno', 'incluidoPor', 'criadoEm']
+
+    def get_incluidoPor(self, obj):
+        if not obj.incluido_por:
+            return ''
+        return obj.incluido_por.name or obj.incluido_por.username

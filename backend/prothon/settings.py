@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'apps.frota',
     'apps.comercial',
     'apps.notificacoes',
+    'apps.camilo',
 ]
 
 MIDDLEWARE = [
@@ -247,6 +248,9 @@ JWT_SETTINGS = {
     'ACCESS_TOKEN_LIFETIME_MINUTES': int(os.environ.get('ACCESS_TOKEN_LIFETIME_MINUTES', '480')),
     'ALGORITHM': 'HS256',
 }
+
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '').strip()
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-3.8-flash').strip() or 'gemini-3.8-flash'
 
 # Celery + Redis (importações assíncronas)
 USE_CELERY = os.environ.get('USE_CELERY', 'False') == 'True'

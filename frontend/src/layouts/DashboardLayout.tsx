@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from '../components/UserAvatar';
 import NotificacoesBell from '../components/NotificacoesBell';
-import { environmentRequiresFilial, isAdminEnvironment } from '../constants/environments';
+import { AGENTE_CAMILO_ENVIRONMENT, environmentRequiresFilial, isAdminEnvironment } from '../constants/environments';
 import { getAllowedIndicadores } from '../constants/indicadores';
 import { userCanSeeAba } from '../constants/abas';
 import logoExpanded from '../assets/Logo_TccConex.png';
@@ -371,6 +371,17 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'RH' && canAba('RH', 'movimentacoes')
       },
       {
+        title: "Documentos",
+        path: "RH / Documentos",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+          </svg>
+        ),
+        action: () => navigate('/rh/documentos'),
+        show: selectedEnvironment === 'RH' && canAba('RH', 'documentos')
+      },
+      {
         title: "Home SGQ",
         path: "Gestão da Qualidade (SGQ) / Home",
         icon: (
@@ -532,6 +543,13 @@ const DashboardLayout: React.FC = () => {
         action: () => navigate('/comercial/validacao-clientes'),
         show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'validacao-clientes')
       },
+      {
+        title: "Chat",
+        path: "CamiloIA / Chat",
+        icon: <i className="bi bi-chat-dots search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/agente-camilo'),
+        show: selectedEnvironment === AGENTE_CAMILO_ENVIRONMENT && canAba(AGENTE_CAMILO_ENVIRONMENT, 'home')
+      },
     ];
 
     return list.filter(f => f.show);
@@ -597,6 +615,7 @@ const DashboardLayout: React.FC = () => {
     if (path === '/') return `${env} / Painel Geral`;
     if (path.startsWith('/compras/controle-estoque')) return `${env} / Controle de estoque`;
     if (path.startsWith('/compras')) return `${env} / Home Compras`;
+    if (path.startsWith('/rh/documentos')) return `${env} / Documentos`;
     if (path.startsWith('/rh/movimentacoes')) return `${env} / Movimentações`;
     if (path.startsWith('/rh')) return env;
     if (path.startsWith('/sgq/pesquisa-satisfacao')) return `${env} / Pesquisa de Satisfação`;
@@ -619,6 +638,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/comercial/propostas')) return `${env} / Propostas comerciais`;
     if (path.startsWith('/comercial/validacao-clientes')) return `${env} / Validação clientes`;
     if (path.startsWith('/comercial')) return env;
+    if (path.startsWith('/agente-camilo')) return env;
     if (path.startsWith('/marketing/campanhas')) return `${env} / Calendario Transcamila`;
     if (path.startsWith('/marketing')) return env;
     if (path.startsWith('/admin/usuarios')) return `Administração / Controle Geral`;
@@ -646,7 +666,7 @@ const DashboardLayout: React.FC = () => {
   return (
     <div className="app-container" id="app-container" style={{ display: 'flex' }}>
       {/* Sidebar */}
-      <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`} id="sidebar">
+      <aside className={`sidebar${isSidebarCollapsed ? ' collapsed' : ''}${selectedEnvironment === AGENTE_CAMILO_ENVIRONMENT ? ' is-hidden' : ''}`} id="sidebar">
         <div className="sidebar-brand" onClick={handleChangeEnv} title="Alterar ERP / Sair">
           {selectedEnvironment === 'Indicadores' ? (
             <>
@@ -663,7 +683,7 @@ const DashboardLayout: React.FC = () => {
         
         <nav className="sidebar-nav">
           {/* General Home/Dashboard — oculto nos ambientes com home própria */}
-          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && selectedEnvironment !== 'Faturamento' && selectedEnvironment !== 'SGQ' && selectedEnvironment !== 'Marketing' && selectedEnvironment !== 'Logística' && selectedEnvironment !== 'Frota' && selectedEnvironment !== 'Comercial' && !isAdminEnvironment(selectedEnvironment) && (
+          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && selectedEnvironment !== 'Faturamento' && selectedEnvironment !== 'SGQ' && selectedEnvironment !== 'Marketing' && selectedEnvironment !== 'Logística' && selectedEnvironment !== 'Frota' && selectedEnvironment !== 'Comercial' && selectedEnvironment !== AGENTE_CAMILO_ENVIRONMENT && !isAdminEnvironment(selectedEnvironment) && (
             <Link 
               to="/" 
               className={`nav-btn ${isRouteActive('/') ? 'active' : ''}`} 
@@ -1153,6 +1173,18 @@ const DashboardLayout: React.FC = () => {
                   </div>
                 </Link>
                 )}
+                {canAba('RH', 'documentos') && (
+                <Link
+                  to="/rh/documentos"
+                  className={`nav-btn ${isRouteActive('/rh/documentos') ? 'active' : ''}`}
+                  data-tooltip="Documentos"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="file-earmark-text" />
+                    <span className="nav-text">Documentos</span>
+                  </div>
+                </Link>
+                )}
               </div>
             )}
 
@@ -1468,6 +1500,23 @@ const DashboardLayout: React.FC = () => {
                   <div className="nav-btn-left">
                     <NavIcon name="brush" />
                     <span className="nav-text">Personalizar</span>
+                  </div>
+                </Link>
+                )}
+              </div>
+            )}
+
+            {selectedEnvironment === AGENTE_CAMILO_ENVIRONMENT && (
+              <div id="sidebar-agente-camilo-group" style={{ width: '100%' }}>
+                {canAba(AGENTE_CAMILO_ENVIRONMENT, 'home') && (
+                <Link
+                  to="/agente-camilo"
+                  className={`nav-btn ${location.pathname === '/agente-camilo' || location.pathname === '/agente-camilo/' ? 'active' : ''}`}
+                  data-tooltip="Chat"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="chat-dots" />
+                    <span className="nav-text">Chat</span>
                   </div>
                 </Link>
                 )}

@@ -138,6 +138,7 @@ type LinhaForm = {
   gris: string;
   icms: string;
   prazoDias: string;
+  outrosValores: string;
 };
 
 type PropostaForm = {
@@ -163,6 +164,7 @@ type PropostaForm = {
   incluiDistribuicao: boolean;
   incluiArmazenagem: boolean;
   incluiOpPortuaria: boolean;
+  incluiSpot: boolean;
   margensVeiculo: PropostaMargemVeiculo[];
   condicoes: PropostaCondicaoComercial[];
   condicoesTransferencia: PropostaCondicaoComercial[];
@@ -171,16 +173,16 @@ type PropostaForm = {
   linhas: LinhaForm[];
 };
 
-const MENSAGEM_DESTINOS_OBRIGATORIOS = 'Preencha origem, destino, veículo, km e prazo para Transferência / Logística Retroportuária.';
+const MENSAGEM_DESTINOS_OBRIGATORIOS = 'Preencha origem, destino, veículo, km e prazo para Transferência, Spot ou Logística Retroportuária.';
 const MENSAGEM_TARIFAS_ARMAZENAGEM = 'Informe o valor de cada tarifa de armazenagem ou coloque um traço (-).';
-const MENSAGEM_OPERACAO_OBRIGATORIA = 'Selecione o tipo de operação (Transferência, Distribuição ou Logística Retroportuária).';
+const MENSAGEM_OPERACAO_OBRIGATORIA = 'Selecione o tipo de operação (Transferência, Distribuição, Logística Retroportuária ou Spot).';
 const MENSAGEM_SERVICO_OBRIGATORIO = 'Selecione o tipo de serviço.';
 
-type OperacaoTransporte = 'transferencia' | 'distribuicao' | 'portuaria';
+type OperacaoTransporte = 'transferencia' | 'distribuicao' | 'portuaria' | 'spot';
 
 type FlagsOperacao = Pick<
   PropostaForm,
-  'incluiTransferencia' | 'incluiDistribuicao' | 'incluiArmazenagem' | 'incluiOpPortuaria'
+  'incluiTransferencia' | 'incluiDistribuicao' | 'incluiArmazenagem' | 'incluiOpPortuaria' | 'incluiSpot'
 >;
 
 const flagsExclusivos = (
@@ -192,6 +194,7 @@ const flagsExclusivos = (
       incluiTransferencia: false,
       incluiDistribuicao: false,
       incluiOpPortuaria: false,
+      incluiSpot: false,
       incluiArmazenagem: true,
     };
   }
@@ -199,6 +202,7 @@ const flagsExclusivos = (
     incluiTransferencia: operacao === 'transferencia',
     incluiDistribuicao: operacao === 'distribuicao',
     incluiOpPortuaria: operacao === 'portuaria',
+    incluiSpot: operacao === 'spot',
     incluiArmazenagem: false,
   };
 };
@@ -208,6 +212,7 @@ const operacaoFromFlags = (flags: FlagsOperacao): OperacaoTransporte | null => {
   if (flags.incluiTransferencia) return 'transferencia';
   if (flags.incluiDistribuicao) return 'distribuicao';
   if (flags.incluiOpPortuaria) return 'portuaria';
+  if (flags.incluiSpot) return 'spot';
   return null;
 };
 
@@ -219,6 +224,7 @@ const normalizarFlagsExclusivos = (
     !flags.incluiTransferencia
     && !flags.incluiDistribuicao
     && !flags.incluiOpPortuaria
+    && !flags.incluiSpot
     && flags.incluiArmazenagem
   )) {
     return flagsExclusivos('armazenagem', null);
@@ -241,7 +247,7 @@ const linhaDestinoPreenchida = (linha: LinhaForm) =>
   );
 
 const destinosProntosParaSalvar = (form: PropostaForm) => {
-  if (!form.incluiTransferencia && !form.incluiOpPortuaria) return true;
+  if (!form.incluiTransferencia && !form.incluiOpPortuaria && !form.incluiSpot) return true;
   const relevantes = form.linhas.filter((linha) => !linhaDestinoVazia(linha));
   return relevantes.length > 0 && relevantes.every(linhaDestinoPreenchida);
 };
@@ -264,6 +270,7 @@ const emptyLinha = (modalidade = 'transferencia'): LinhaForm => ({
   gris: '',
   icms: '',
   prazoDias: '',
+  outrosValores: '',
 });
 
 const emptyForm = (
@@ -292,6 +299,7 @@ const emptyForm = (
   incluiDistribuicao: false,
   incluiArmazenagem: false,
   incluiOpPortuaria: false,
+  incluiSpot: false,
   margensVeiculo: [],
   condicoes: (condicoes?.length ? condicoes : CONDICOES_FRETE_PADRAO).map((item) => ({ ...item })),
   condicoesTransferencia: [],
@@ -335,6 +343,7 @@ const formFromDraft = (
     gris: linha.gris ?? '',
     icms: linha.icms ?? '',
     prazoDias: linha.prazoDias ?? '',
+    outrosValores: linha.outrosValores ?? '',
   }));
   return {
     ...fallback,
@@ -363,6 +372,7 @@ const formFromDraft = (
         incluiDistribuicao: Boolean(draftForm.incluiDistribuicao),
         incluiArmazenagem: Boolean(draftForm.incluiArmazenagem) || draftForm.tipo === 'armazenagem',
         incluiOpPortuaria: Boolean(draftForm.incluiOpPortuaria),
+        incluiSpot: Boolean(draftForm.incluiSpot),
       },
     ),
     margensVeiculo: Array.isArray(draftForm.margensVeiculo) ? draftForm.margensVeiculo : [],
@@ -382,7 +392,7 @@ const condicoesDoFormulario = (form: PropostaForm): PropostaCondicaoComercial[] 
       'distribuicao',
     ));
   }
-  if (form.incluiTransferencia) {
+  if (form.incluiTransferencia || form.incluiSpot) {
     items.push(...marcarCondicoesTipo(
       form.condicoesTransferencia.filter((item) => item.rotulo.trim() || item.valor.trim()),
       'frete',
@@ -403,16 +413,17 @@ const condicoesDoFormulario = (form: PropostaForm): PropostaCondicaoComercial[] 
   return items;
 };
 
-const primeiraAbaOperacao = (form: Pick<PropostaForm, 'incluiTransferencia' | 'incluiDistribuicao' | 'incluiArmazenagem' | 'incluiOpPortuaria'>): PropostaOperacaoAba => {
+const primeiraAbaOperacao = (form: Pick<PropostaForm, 'incluiTransferencia' | 'incluiDistribuicao' | 'incluiArmazenagem' | 'incluiOpPortuaria' | 'incluiSpot'>): PropostaOperacaoAba => {
   if (form.incluiTransferencia) return 'transferencia';
   if (form.incluiDistribuicao) return 'distribuicao';
   if (form.incluiOpPortuaria) return 'portuaria';
+  if (form.incluiSpot) return 'spot';
   if (form.incluiArmazenagem) return 'armazenagem';
   return 'transferencia';
 };
 
 const abaDoDraft = (aba?: string): PropostaOperacaoAba => (
-  aba === 'distribuicao' || aba === 'armazenagem' || aba === 'portuaria' ? aba : 'transferencia'
+  aba === 'distribuicao' || aba === 'armazenagem' || aba === 'portuaria' || aba === 'spot' ? aba : 'transferencia'
 );
 
 const linhaTotal = (linha: LinhaForm) => {
@@ -613,7 +624,7 @@ const ComercialPropostas: React.FC = () => {
   const faturamentoPadrao = parametrosQuery.data?.faturamentoPadrao || FATURAMENTO_PADRAO_FALLBACK;
   const formPadroes = { validade: validadePadrao, vigencia: vigenciaPadrao, faturamento: faturamentoPadrao };
   const generalidadesTransferencia = useComercialGeneralidades(
-    isModalOpen && form.clienteId && form.incluiTransferencia
+    isModalOpen && form.clienteId && (form.incluiTransferencia || form.incluiSpot)
       ? form.clienteId
       : null,
     'frete',
@@ -654,7 +665,7 @@ const ComercialPropostas: React.FC = () => {
   const tabelaFretePronta = !form.clienteId || tabelaDistribuicaoCliente.listQuery.isFetched;
   const podeUsarTabelaFrete = Boolean(form.clienteId) && tabelaFretePronta && temTabelaFrete;
   const MENSAGEM_TABELA_FRETE = form.clienteId
-    ? 'Vincule uma tabela de frete vigente a este cliente para criar proposta de Transferência, Distribuição ou Logística Retroportuária.'
+    ? 'Vincule uma tabela de frete vigente a este cliente para criar proposta de Transferência, Distribuição, Logística Retroportuária ou Spot.'
     : 'Selecione o cliente e vincule uma tabela de frete para habilitar as operações de transporte.';
   const selectedPropostas = useMemo(
     () => propostas.filter((item) => selectedIds.includes(item.id)),
@@ -698,7 +709,7 @@ const ComercialPropostas: React.FC = () => {
       }
     }
     if (!form.clienteId) return;
-    if (form.incluiTransferencia && generalidadesTransferencia.isSuccess) {
+    if ((form.incluiTransferencia || form.incluiSpot) && generalidadesTransferencia.isSuccess) {
       const chave = `${editingId ?? 'novo'}:${form.clienteId}:frete`;
       if (catalogoTransferenciaRef.current !== chave) {
         catalogoTransferenciaRef.current = chave;
@@ -740,6 +751,7 @@ const ComercialPropostas: React.FC = () => {
     form.incluiArmazenagem,
     form.incluiDistribuicao,
     form.incluiOpPortuaria,
+    form.incluiSpot,
     form.incluiTransferencia,
     generalidadesArmazenagem.data?.items,
     generalidadesArmazenagem.isSuccess,
@@ -853,6 +865,7 @@ const ComercialPropostas: React.FC = () => {
       incluiDistribuicao: proposta.incluiDistribuicao,
       incluiArmazenagem: propostaIncluiArmazenagem(proposta),
       incluiOpPortuaria: Boolean(proposta.incluiOpPortuaria),
+      incluiSpot: Boolean(proposta.incluiSpot),
     });
     setForm({
       tipo,
@@ -885,7 +898,7 @@ const ComercialPropostas: React.FC = () => {
         proposta.condicoes,
         flags.incluiOpPortuaria ? 'op_portuaria' : 'frete',
         [],
-        Boolean(flags.incluiTransferencia || flags.incluiOpPortuaria),
+        Boolean(flags.incluiTransferencia || flags.incluiOpPortuaria || flags.incluiSpot),
       ),
       condicoesDistribuicao: separarCondicoesProposta(
         proposta.condicoes,
@@ -913,8 +926,9 @@ const ComercialPropostas: React.FC = () => {
             gris: linha.gris,
             icms: linha.icms,
             prazoDias: linha.prazoDias,
+            outrosValores: linha.outrosValores ?? '',
           }))
-        : [emptyLinha(flags.incluiOpPortuaria ? 'op_portuaria' : 'transferencia')],
+        : [emptyLinha(flags.incluiOpPortuaria ? 'op_portuaria' : flags.incluiSpot ? 'spot' : 'transferencia')],
     });
     setAbaOperacao(primeiraAbaOperacao(flags));
     setDraftHydrated(true);
@@ -969,11 +983,17 @@ const ComercialPropostas: React.FC = () => {
     setForm((current) => {
       let linhas = current.linhas;
       if (operacao === 'transferencia') {
-        const transf = linhas.filter((linha) => (linha.modalidade || 'transferencia') !== 'op_portuaria');
+        const transf = linhas.filter((linha) => {
+          const tipo = linha.modalidade || 'transferencia';
+          return tipo !== 'op_portuaria' && tipo !== 'spot';
+        });
         linhas = transf.length ? transf.map((linha) => ({ ...linha, modalidade: 'transferencia' })) : [emptyLinha('transferencia')];
       } else if (operacao === 'portuaria') {
         const port = linhas.filter((linha) => linha.modalidade === 'op_portuaria');
         linhas = port.length ? port : [emptyLinha('op_portuaria')];
+      } else if (operacao === 'spot') {
+        const spot = linhas.filter((linha) => linha.modalidade === 'spot');
+        linhas = spot.length ? spot : [emptyLinha('spot')];
       } else {
         linhas = [emptyLinha('transferencia')];
       }
@@ -991,7 +1011,9 @@ const ComercialPropostas: React.FC = () => {
         ? 'transferencia'
         : operacao === 'distribuicao'
           ? 'distribuicao'
-          : 'portuaria',
+          : operacao === 'spot'
+            ? 'spot'
+            : 'portuaria',
     );
   };
 
@@ -1004,7 +1026,8 @@ const ComercialPropostas: React.FC = () => {
     if (form.tipo === 'transporte_rodoviario'
       && !form.incluiTransferencia
       && !form.incluiDistribuicao
-      && !form.incluiOpPortuaria) {
+      && !form.incluiOpPortuaria
+      && !form.incluiSpot) {
       alert(MENSAGEM_OPERACAO_OBRIGATORIA);
       return;
     }
@@ -1015,7 +1038,7 @@ const ComercialPropostas: React.FC = () => {
     const flags = normalizarFlagsExclusivos(form.tipo, form);
     const tipo = tipoPropostaDasOperacoes(flags);
     if (
-      (flags.incluiTransferencia || flags.incluiDistribuicao || flags.incluiOpPortuaria)
+      (flags.incluiTransferencia || flags.incluiDistribuicao || flags.incluiOpPortuaria || flags.incluiSpot)
       && !podeUsarTabelaFrete
     ) {
       alert(MENSAGEM_TABELA_FRETE);
@@ -1048,7 +1071,7 @@ const ComercialPropostas: React.FC = () => {
       vigencia: form.vigencia.trim(),
       faturamento: form.faturamento.trim(),
       localEmissao: form.localEmissao.trim(),
-      valorEstimado: (flags.incluiTransferencia || flags.incluiOpPortuaria)
+      valorEstimado: (flags.incluiTransferencia || flags.incluiOpPortuaria || flags.incluiSpot)
         ? (subtotalGeral ? subtotalGeral.toFixed(2) : moneyOrEmpty(form.valorEstimado))
         : moneyOrEmpty(form.valorEstimado),
       observacoes: form.observacoes.trim(),
@@ -1056,17 +1079,18 @@ const ComercialPropostas: React.FC = () => {
       incluiDistribuicao: flags.incluiDistribuicao,
       incluiArmazenagem: flags.incluiArmazenagem,
       incluiOpPortuaria: flags.incluiOpPortuaria,
+      incluiSpot: flags.incluiSpot,
       margensVeiculo: form.margensVeiculo,
       condicoes: condicoesDoFormulario({ ...form, ...flags }),
       tabelaArmazenagem: flags.incluiArmazenagem ? cloneTabelaArmazenagem(form.tabelaArmazenagem) : undefined,
-      linhas: (flags.incluiTransferencia || flags.incluiOpPortuaria)
+      linhas: (flags.incluiTransferencia || flags.incluiOpPortuaria || flags.incluiSpot)
         ? form.linhas.filter((linha) => !linhaDestinoVazia(linha)).map((linha, ordem) => ({
             ordem,
             origem: linha.origem.trim(),
             entrega: linha.entrega.trim(),
             veiculo: linha.veiculo.trim(),
             veiculoKey: linha.veiculoKey || '',
-            modalidade: flags.incluiOpPortuaria ? 'op_portuaria' : (linha.modalidade || 'transferencia'),
+            modalidade: flags.incluiSpot ? 'spot' : flags.incluiOpPortuaria ? 'op_portuaria' : (linha.modalidade || 'transferencia'),
             km: (linha.km || '').trim(),
             devolucaoContainer: linha.devolucaoContainer.trim(),
             observacoes: linha.observacoes.trim(),
@@ -1079,6 +1103,7 @@ const ComercialPropostas: React.FC = () => {
             gris: linha.gris.trim(),
             icms: linha.icms.trim(),
             prazoDias: linha.prazoDias.trim(),
+            outrosValores: linha.outrosValores.trim(),
           }))
         : [],
     };
@@ -1137,6 +1162,7 @@ const ComercialPropostas: React.FC = () => {
     incluiDistribuicao: form.incluiDistribuicao,
     incluiArmazenagem: form.incluiArmazenagem,
     incluiOpPortuaria: form.incluiOpPortuaria,
+    incluiSpot: form.incluiSpot,
     margensVeiculo: form.margensVeiculo,
     tabelaDistribuicao: snapshotDistribuicao,
     historicoRevisoes: editingId
@@ -1169,6 +1195,7 @@ const ComercialPropostas: React.FC = () => {
       gris: linha.gris,
       icms: linha.icms,
       prazoDias: linha.prazoDias,
+      outrosValores: linha.outrosValores,
       totalEstimado: linhaTotal(linha)?.toFixed(2) ?? null,
     })),
     dataCriacao: todayISO(),
@@ -1256,9 +1283,9 @@ const ComercialPropostas: React.FC = () => {
   );
   const destinosOk = destinosProntosParaSalvar(form);
   const armazenagemOk = !form.incluiArmazenagem || tabelaArmazenagemProntaParaSalvar(form.tabelaArmazenagem);
-  const temOperacao = form.incluiTransferencia || form.incluiDistribuicao || form.incluiArmazenagem || form.incluiOpPortuaria;
+  const temOperacao = form.incluiTransferencia || form.incluiDistribuicao || form.incluiArmazenagem || form.incluiOpPortuaria || form.incluiSpot;
   const operacaoFreteOk = !(
-    form.incluiTransferencia || form.incluiDistribuicao || form.incluiOpPortuaria
+    form.incluiTransferencia || form.incluiDistribuicao || form.incluiOpPortuaria || form.incluiSpot
   ) || podeUsarTabelaFrete;
   /** Em rascunho ou após enviada: edita tudo. Situação Enviada só pelo e-mail. */
   const jaEnviada = Boolean(editingId) && form.status !== 'rascunho';
@@ -1478,7 +1505,9 @@ const ComercialPropostas: React.FC = () => {
                                     ? ' · Distribuição'
                                     : proposta.incluiOpPortuaria
                                       ? ' · Logística Retroportuária'
-                                      : ''}
+                                      : proposta.incluiSpot
+                                        ? ' · SPOT'
+                                        : ''}
                               </span>
                             ) : null}
                           </span>
@@ -1667,6 +1696,7 @@ const ComercialPropostas: React.FC = () => {
                           incluiTransferencia: clienteId ? form.incluiTransferencia : false,
                           incluiDistribuicao: keepDistribuicao,
                           incluiOpPortuaria: clienteId ? form.incluiOpPortuaria : false,
+                          incluiSpot: clienteId ? form.incluiSpot : false,
                           incluiArmazenagem: clienteId ? form.incluiArmazenagem : false,
                           condicoesTransferencia: [],
                           condicoesDistribuicao: [],
@@ -1681,6 +1711,7 @@ const ComercialPropostas: React.FC = () => {
                             incluiDistribuicao: false,
                             incluiArmazenagem: clienteId ? form.incluiArmazenagem : false,
                             incluiOpPortuaria: clienteId ? form.incluiOpPortuaria : false,
+                            incluiSpot: clienteId ? form.incluiSpot : false,
                           }));
                         }
                       }}
@@ -1737,11 +1768,22 @@ const ComercialPropostas: React.FC = () => {
                         />
                         Logística Retroportuária
                       </label>
+                      <label className={!canEdit || (!form.incluiSpot && !podeUsarTabelaFrete) ? 'is-disabled' : undefined}>
+                        <input
+                          type="radio"
+                          name="proposta-operacao"
+                          checked={form.incluiSpot}
+                          disabled={!canEdit || (!form.incluiSpot && !podeUsarTabelaFrete)}
+                          title={podeUsarTabelaFrete ? undefined : MENSAGEM_TABELA_FRETE}
+                          onChange={() => setOperacaoTransporte('spot')}
+                        />
+                        Spot
+                      </label>
                     </div>
                     {!podeUsarTabelaFrete ? (
                       <p className="proposta-modalidades-hint">{MENSAGEM_TABELA_FRETE}</p>
                     ) : null}
-                    {(form.incluiTransferencia || form.incluiDistribuicao || form.incluiOpPortuaria) ? (
+                    {(form.incluiTransferencia || form.incluiDistribuicao || form.incluiOpPortuaria || form.incluiSpot) ? (
                       <PropostaCondicoesEspeciais
                         margensVeiculo={form.margensVeiculo}
                         veiculosTarifa={tabelaDistribuicaoCliente.tabela?.config?.veiculosTarifa}
@@ -1849,13 +1891,16 @@ const ComercialPropostas: React.FC = () => {
                   </IncludeField>
                 </div>
 
-                {(form.incluiTransferencia || form.incluiDistribuicao || form.incluiArmazenagem || form.incluiOpPortuaria) && (
+                {(form.incluiTransferencia || form.incluiDistribuicao || form.incluiArmazenagem || form.incluiOpPortuaria || form.incluiSpot) && (
                   <section className="proposta-destinos">
                     {form.incluiTransferencia ? (
                       <>
                         <PropostaTrechosOperacao
                           titulo="Trechos — Transferência"
-                          linhas={form.linhas.filter((linha) => (linha.modalidade || 'transferencia') !== 'op_portuaria')}
+                          linhas={form.linhas.filter((linha) => {
+                            const tipo = linha.modalidade || 'transferencia';
+                            return tipo !== 'op_portuaria' && tipo !== 'spot';
+                          })}
                           canEdit={canEdit}
                           clienteId={form.clienteId}
                           margensVeiculo={form.margensVeiculo}
@@ -1890,6 +1935,38 @@ const ComercialPropostas: React.FC = () => {
                           canEdit={canEdit}
                           emptyHint={form.clienteId ? 'Nenhuma generalidade de distribuição para revisar.' : 'Selecione o cliente para revisar as generalidades de distribuição.'}
                           onChange={(items) => setForm((current) => ({ ...current, condicoesDistribuicao: items }))}
+                        />
+                      </>
+                    ) : null}
+
+                    {form.incluiSpot ? (
+                      <>
+                        <PropostaTrechosOperacao
+                          titulo="Trechos — Spot"
+                          spot
+                          linhas={form.linhas.filter((linha) => linha.modalidade === 'spot')}
+                          canEdit={canEdit}
+                          clienteId={form.clienteId}
+                          margensVeiculo={form.margensVeiculo}
+                          grisAdvUnificado={
+                            isGrisAdvUnificado(tabelaDistribuicaoCliente.tabela?.config)
+                            || Boolean(snapshotDistribuicao?.grisAdvUnificado)
+                          }
+                          onChange={(linhas) => setForm((current) => ({
+                            ...current,
+                            linhas: linhas.map((linha) => ({
+                              ...linha,
+                              modalidade: 'spot',
+                              outrosValores: linha.outrosValores ?? '',
+                            })),
+                          }))}
+                        />
+                        <PropostaGeneralidadesRevisao
+                          titulo="Generalidades — Spot"
+                          items={form.condicoesTransferencia}
+                          canEdit={canEdit}
+                          emptyHint="As mesmas generalidades de transferência se aplicam ao Spot, salvo o que for ajustado aqui."
+                          onChange={(items) => setForm((current) => ({ ...current, condicoesTransferencia: items }))}
                         />
                       </>
                     ) : null}

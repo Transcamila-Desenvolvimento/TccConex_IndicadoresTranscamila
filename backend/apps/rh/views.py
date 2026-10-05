@@ -4,12 +4,12 @@ from datetime import date
 from decimal import Decimal
 from django.db import transaction
 from django.db.models import Q, Sum, Avg
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.accounts.mixins import ModuleScopedViewMixin
@@ -24,6 +24,7 @@ from .models import (
     CargoMapping,
     ColaboradorPJ,
     ColaboradorPJHistorico,
+    DocumentoRH,
 )
 from .serializers import (
     ColaboradorSerializer,
@@ -33,6 +34,7 @@ from .serializers import (
     CargoMappingSerializer,
     ColaboradorPJSerializer,
     ColaboradorPJHistoricoSerializer,
+    DocumentoRHSerializer,
 )
 from .pj_sync_service import sync_pj_nos_lotes, remove_pj_de_todos_lotes
 from .import_service import (
@@ -1077,3 +1079,185 @@ class InconsistenciaColaboradorViewSet(ModuleScopedViewMixin, viewsets.ModelView
         )
         
         return Response({'success': True, 'justificativa': inc.justificativa}, status=status.HTTP_200_OK)
+
+
+DOCUMENTO_EXTENSOES = {
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    '.png', '.jpg', '.jpeg', '.txt', '.csv',
+}
+DOCUMENTO_MAX_BYTES = 15 * 1024 * 1024
+
+
+def _aplicar_conteudo_drive(documento, dados):
+    from io import BytesIO
+
+    from apps.rh.documento_texto import extrair_texto
+
+    if documento.arquivo:
+        documento.arquivo.delete(save=False)
+        documento.arquivo = ''
+    documento.drive_file_id = dados['id']
+    documento.link_externo = dados['link']
+    documento.nome_original = dados['nome']
+    documento.tamanho = dados['tamanho']
+    documento.texto = extrair_texto(BytesIO(dados['conteudo']), dados['nome'], dados['tamanho'])
+    documento.texto_extraido = True
+
+
+def _erro_arquivo_documento(arquivo):
+    from pathlib import Path
+
+    if not arquivo:
+        return Response({'arquivo': 'Escolha o arquivo.'}, status=status.HTTP_400_BAD_REQUEST)
+    ext = Path(arquivo.name).suffix.lower()
+    if ext not in DOCUMENTO_EXTENSOES:
+        return Response({'arquivo': 'Tipo de arquivo não aceito.'}, status=status.HTTP_400_BAD_REQUEST)
+    if arquivo.size > DOCUMENTO_MAX_BYTES:
+        return Response({'arquivo': 'O arquivo passou de 15 MB.'}, status=status.HTTP_400_BAD_REQUEST)
+    return None
+
+
+class DocumentoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+    permission_module = 'RH'
+    serializer_class = DocumentoRHSerializer
+    queryset = DocumentoRH.objects.select_related('incluido_por')
+    pagination_class = RHPagination
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        user = request.user
+        if getattr(user, 'is_admin', False):
+            return
+        abas = (getattr(user, 'abas', None) or {}).get('RH') or []
+        if abas and 'documentos' not in abas:
+            self.permission_denied(request, message='Sem acesso à aba Documentos do RH.')
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        search = (self.request.query_params.get('search') or '').strip()
+        if search:
+            qs = qs.filter(Q(titulo__icontains=search) | Q(nome_original__icontains=search))
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        from pathlib import Path
+
+        titulo = str(request.data.get('titulo') or '').strip()
+        drive_id = str(request.data.get('driveFileId') or '').strip()
+        arquivo = request.FILES.get('arquivo')
+        if not titulo:
+            return Response({'titulo': 'Informe o título do documento.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(titulo) > 160:
+            return Response({'titulo': 'O título passou de 160 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
+        if drive_id:
+            from apps.rh.drive_documento import baixar_conteudo_drive
+            try:
+                dados = baixar_conteudo_drive(request.user, drive_id)
+            except ValueError as exc:
+                return Response({'arquivo': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            documento = DocumentoRH(
+                titulo=titulo,
+                nome_original=dados['nome'],
+                tamanho=dados['tamanho'],
+                incluido_por=request.user,
+            )
+            _aplicar_conteudo_drive(documento, dados)
+            documento.save()
+            record_audit(request.user, 'rh.documento.incluir', titulo)
+            return Response(DocumentoRHSerializer(documento).data, status=status.HTTP_201_CREATED)
+        erro = _erro_arquivo_documento(arquivo)
+        if erro:
+            return erro
+
+        documento = DocumentoRH.objects.create(
+            titulo=titulo,
+            arquivo=arquivo,
+            nome_original=Path(arquivo.name).name[:180],
+            tamanho=arquivo.size,
+            incluido_por=request.user,
+        )
+        from apps.rh.documento_texto import garantir_texto
+        garantir_texto(documento)
+        record_audit(request.user, 'rh.documento.incluir', titulo)
+        return Response(
+            DocumentoRHSerializer(documento).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'])
+    def substituir(self, request, pk=None):
+        from pathlib import Path
+
+        from apps.rh.documento_texto import garantir_texto
+
+        documento = self.get_object()
+        drive_id = str(request.data.get('driveFileId') or '').strip()
+        arquivo = request.FILES.get('arquivo')
+        titulo = str(request.data.get('titulo') or documento.titulo).strip()
+        if drive_id:
+            from apps.rh.drive_documento import baixar_conteudo_drive
+            if not titulo:
+                return Response({'titulo': 'Informe o título do documento.'}, status=status.HTTP_400_BAD_REQUEST)
+            if len(titulo) > 160:
+                return Response({'titulo': 'O título passou de 160 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                dados = baixar_conteudo_drive(request.user, drive_id)
+            except ValueError as exc:
+                return Response({'arquivo': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            documento.titulo = titulo
+            _aplicar_conteudo_drive(documento, dados)
+            documento.save()
+            record_audit(request.user, 'rh.documento.substituir', documento.titulo)
+            return Response(DocumentoRHSerializer(documento).data)
+        erro = _erro_arquivo_documento(arquivo)
+        if erro:
+            return erro
+        titulo = str(request.data.get('titulo') or documento.titulo).strip()
+        if not titulo:
+            return Response({'titulo': 'Informe o título do documento.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(titulo) > 160:
+            return Response({'titulo': 'O título passou de 160 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
+        if documento.arquivo:
+            documento.arquivo.delete(save=False)
+        documento.titulo = titulo
+        documento.arquivo = arquivo
+        documento.drive_file_id = ''
+        documento.link_externo = ''
+        documento.nome_original = Path(arquivo.name).name[:180]
+        documento.tamanho = arquivo.size
+        documento.texto = ''
+        documento.texto_extraido = False
+        documento.save()
+        garantir_texto(documento)
+        record_audit(request.user, 'rh.documento.substituir', documento.titulo)
+        return Response(DocumentoRHSerializer(documento).data)
+
+    @action(detail=True, methods=['post'])
+    def renomear(self, request, pk=None):
+        documento = self.get_object()
+        titulo = str(request.data.get('titulo') or '').strip()
+        if not titulo:
+            return Response({'titulo': 'Informe o título do documento.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(titulo) > 160:
+            return Response({'titulo': 'O título passou de 160 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
+        documento.titulo = titulo
+        documento.save(update_fields=['titulo'])
+        record_audit(request.user, 'rh.documento.renomear', titulo)
+        return Response(DocumentoRHSerializer(documento).data)
+
+    def perform_destroy(self, instance):
+        titulo = instance.titulo
+        if instance.arquivo:
+            instance.arquivo.delete(save=False)
+        instance.delete()
+        record_audit(self.request.user, 'rh.documento.excluir', titulo)
+
+    @action(detail=True, methods=['get'])
+    def arquivo(self, request, pk=None):
+        documento = self.get_object()
+        if not documento.arquivo:
+            return Response({'detail': 'Arquivo não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        nome = documento.nome_original or 'documento'
+        return FileResponse(documento.arquivo.open('rb'), as_attachment=True, filename=nome)

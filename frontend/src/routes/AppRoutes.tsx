@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { ADMIN_ENVIRONMENT, environmentRequiresFilial } from '../constants/environments';
+import { ADMIN_ENVIRONMENT, AGENTE_CAMILO_ENVIRONMENT, environmentRequiresFilial } from '../constants/environments';
 import { branchesForModule } from '../constants/filiais';
 import { useMinLoaderVisibility } from '../hooks/useMinLoaderVisibility';
 import { lazyWithMinDuration } from '../utils/pageLoaderTiming';
@@ -30,6 +30,7 @@ const MarketingWorkspace = lazyWithMinDuration(() => import('../workspaces/Marke
 const LogisticaWorkspace = lazyWithMinDuration(() => import('../workspaces/Logistica/LogisticaWorkspace'));
 const FrotaWorkspace = lazyWithMinDuration(() => import('../workspaces/Frota/FrotaWorkspace'));
 const ComercialWorkspace = lazyWithMinDuration(() => import('../workspaces/Comercial/ComercialWorkspace'));
+const AgenteCamiloWorkspace = lazyWithMinDuration(() => import('../workspaces/AgenteCamilo/AgenteCamiloWorkspace'));
 const SGQWorkspace = lazyWithMinDuration(() => import('../workspaces/SGQ/SGQWorkspace'));
 // Autenticado, sem bloquear quem precisa trocar a senha (usado em /change-password).
 const ProtectedRouteAllowPasswordChange: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -110,6 +111,9 @@ const DashboardIndexRedirect: React.FC = () => {
   }
   if (selectedEnvironment === 'Comercial') {
     return <Navigate to="/comercial" replace />;
+  }
+  if (selectedEnvironment === AGENTE_CAMILO_ENVIRONMENT) {
+    return <Navigate to="/agente-camilo" replace />;
   }
   
   return (
@@ -241,6 +245,12 @@ const AppRoutes: React.FC = () => {
           <Route path="comercial/*" element={
             <Suspense fallback={<PageLoader />}>
               <ComercialWorkspace />
+            </Suspense>
+          } />
+
+          <Route path="agente-camilo/*" element={
+            <Suspense fallback={<PageLoader />}>
+              <AgenteCamiloWorkspace />
             </Suspense>
           } />
 

@@ -12,10 +12,11 @@ import {
   useProdutosComercial,
   useUpdateProdutoComercial,
 } from '../../hooks/useComercialClientes';
-import type { ClienteComercialClasseRisco, ClienteComercialGrupoEmbalagem, ProdutoComercial } from '../../types/domain';
+import type { ClienteComercialClasseRisco, ClienteComercialGrupoEmbalagem, ProdutoComercial, ProdutoComercialTipo } from '../../types/domain';
 import {
   CLIENTE_COMERCIAL_CLASSE_RISCO_OPTIONS,
   CLIENTE_COMERCIAL_GRUPO_EMBALAGEM_OPTIONS,
+  PRODUTO_COMERCIAL_TIPO_OPTIONS,
   parseClienteComercialClasseRisco,
   parseClienteComercialGrupoEmbalagem,
 } from '../../types/domain';
@@ -29,6 +30,7 @@ type ProdutoLinha = {
   classeRisco: ClienteComercialClasseRisco;
   numeroOnu: string;
   grupoEmbalagem: ClienteComercialGrupoEmbalagem;
+  tipoProduto: ProdutoComercialTipo;
   fispq: string;
 };
 
@@ -39,6 +41,7 @@ const novaLinha = (): ProdutoLinha => ({
   classeRisco: 'nao_classificado',
   numeroOnu: '',
   grupoEmbalagem: 'nao_aplicavel',
+  tipoProduto: 'outros',
   fispq: '',
 });
 
@@ -49,6 +52,7 @@ const ComercialCadastroProdutos: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [filterClienteId, setFilterClienteId] = useState('');
+  const [filterTipo, setFilterTipo] = useState<ProdutoComercialTipo | ''>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [clienteId, setClienteId] = useState('');
@@ -59,6 +63,7 @@ const ComercialCadastroProdutos: React.FC = () => {
     pageSize,
     search: search.trim() || undefined,
     clienteId: filterClienteId || undefined,
+    tipoProduto: filterTipo || undefined,
   });
   const clientesQuery = useClientesComercial({ page: 1, pageSize: 100, ativos: true });
   const sugestoesQuery = useClienteProdutosSugestoesComercial(isModalOpen);
@@ -94,6 +99,7 @@ const ComercialCadastroProdutos: React.FC = () => {
       classeRisco: produto.classeRisco,
       numeroOnu: produto.numeroOnu,
       grupoEmbalagem: produto.grupoEmbalagem,
+      tipoProduto: produto.tipoProduto || 'outros',
       fispq: produto.fispq,
     }]);
     setIsModalOpen(true);
@@ -142,6 +148,7 @@ const ComercialCadastroProdutos: React.FC = () => {
           classeRisco: linha.classeRisco,
           numeroOnu: linha.numeroOnu,
           grupoEmbalagem: linha.grupoEmbalagem,
+          tipoProduto: linha.tipoProduto,
           fispq: linha.fispq,
           clienteIds: [clienteId],
         },
@@ -155,6 +162,7 @@ const ComercialCadastroProdutos: React.FC = () => {
         classeRisco: linha.classeRisco,
         numeroOnu: linha.numeroOnu,
         grupoEmbalagem: linha.grupoEmbalagem,
+        tipoProduto: linha.tipoProduto,
         fispq: linha.fispq,
       })),
     }, callbacks);
@@ -229,6 +237,19 @@ const ComercialCadastroProdutos: React.FC = () => {
               ))}
             </select>
           </div>
+          <div className="reports-select-wrapper" style={{ minWidth: '180px' }}>
+            <select
+              value={filterTipo}
+              onChange={(e) => { setFilterTipo(e.target.value as ProdutoComercialTipo | ''); setPage(1); }}
+              aria-label="Filtrar por tipo de produto"
+              style={{ width: '100%' }}
+            >
+              <option value="">Tipo: Todos</option>
+              {PRODUTO_COMERCIAL_TIPO_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -245,6 +266,7 @@ const ComercialCadastroProdutos: React.FC = () => {
               <colgroup>
                 <col className="col-expand" />
                 <col className="col-nome" />
+                <col className="col-tipo" />
                 <col className="col-classe" />
                 <col className="col-onu" />
                 <col className="col-grupo" />
@@ -267,6 +289,7 @@ const ComercialCadastroProdutos: React.FC = () => {
                     ) : null}
                   </th>
                   <th>Cliente / Produto</th>
+                  <th>Tipo</th>
                   <th>Classe</th>
                   <th>ONU</th>
                   <th>Grupo</th>
@@ -277,7 +300,7 @@ const ComercialCadastroProdutos: React.FC = () => {
               <tbody>
                 {canShowEmpty && produtos.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="comercial-browse-empty">
+                    <td colSpan={8} className="comercial-browse-empty">
                       Não há registros a serem exibidos.
                     </td>
                   </tr>
@@ -297,7 +320,7 @@ const ComercialCadastroProdutos: React.FC = () => {
                             <i className={`bi ${aberto ? 'bi-chevron-down' : 'bi-chevron-right'}`} />
                           </button>
                         </td>
-                        <td colSpan={5}>
+                        <td colSpan={6}>
                           <strong>{grupo.nome}</strong>
                           <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
                             {grupo.produtos.length} produto{grupo.produtos.length === 1 ? '' : 's'}
@@ -309,6 +332,7 @@ const ComercialCadastroProdutos: React.FC = () => {
                         <tr key={produto.id} className="comercial-grupo-produto-row">
                           <td />
                           <td className="col-nome"><strong>{produto.nome}</strong></td>
+                          <td>{PRODUTO_COMERCIAL_TIPO_OPTIONS.find((item) => item.value === produto.tipoProduto)?.label || 'Outros'}</td>
                           <td>{classeOptions.find((item) => item.value === produto.classeRisco)?.label || produto.classeRisco}</td>
                           <td>{produto.numeroOnu || '—'}</td>
                           <td>{grupoOptions.find((item) => item.value === produto.grupoEmbalagem)?.label || produto.grupoEmbalagem}</td>
@@ -426,17 +450,30 @@ const ComercialCadastroProdutos: React.FC = () => {
                       ) : null}
                     </div>
                   ) : null}
-                  <label>
-                    Nome do produto
-                    <input
-                      className="form-input"
-                      required
-                      value={linha.nome}
-                      disabled={!canManage}
-                      onChange={(e) => patchLinha(linha.key, { nome: e.target.value })}
-                    />
-                  </label>
-                  <div className="form-grid two-cols" style={{ marginTop: '14px' }}>
+                  <div className="form-grid two-cols">
+                    <label className="span-2">
+                      Nome do produto
+                      <input
+                        className="form-input"
+                        required
+                        value={linha.nome}
+                        disabled={!canManage}
+                        onChange={(e) => patchLinha(linha.key, { nome: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Tipo de produto
+                      <select
+                        className="form-input"
+                        value={linha.tipoProduto}
+                        disabled={!canManage}
+                        onChange={(e) => patchLinha(linha.key, { tipoProduto: e.target.value as ProdutoComercialTipo })}
+                      >
+                        {PRODUTO_COMERCIAL_TIPO_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
                     <label>
                       Classe de risco
                       <select
@@ -486,7 +523,7 @@ const ComercialCadastroProdutos: React.FC = () => {
                         {grupoOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>
                     </label>
-                    <label>
+                    <label className="span-2">
                       Link da FISPQ/FDS
                       <input
                         className="form-input"

@@ -7,7 +7,7 @@ INITIAL_ROLES = [
         'id': '1',
         'name': 'Administrador',
         'description': 'Acesso total a todos os módulos do ERP e administração.',
-        'permissions': ['Administração', 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial'],
+        'permissions': ['Administração', 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial', 'CamiloIA'],
     },
     {
         'id': '2',

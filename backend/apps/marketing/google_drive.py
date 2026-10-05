@@ -68,7 +68,22 @@ def is_attachable_kind(kind: str) -> bool:
     return kind in {'image', 'video', 'pdf'}
 
 
-def _mime_filter_clause() -> str:
+def _mime_filter_clause(perfil: str = 'midia') -> str:
+    if perfil == 'documentos':
+        return (
+            "mimeType = 'application/vnd.google-apps.folder' "
+            "or mimeType = 'application/pdf' "
+            "or mimeType = 'application/msword' "
+            "or mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' "
+            "or mimeType = 'application/vnd.ms-excel' "
+            "or mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' "
+            "or mimeType = 'application/vnd.ms-powerpoint' "
+            "or mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation' "
+            "or mimeType = 'text/plain' "
+            "or mimeType = 'text/csv' "
+            "or mimeType = 'image/png' "
+            "or mimeType = 'image/jpeg'"
+        )
     return (
         "mimeType = 'application/vnd.google-apps.folder' "
         "or mimeType contains 'image/' "
@@ -215,11 +230,12 @@ def browse_drive_folder(
     page_token: str | None = None,
     page_size: int = 50,
     drive_id: str | None = None,
+    perfil: str = 'midia',
 ) -> dict:
     safe_folder = (folder_id or 'root').strip() or 'root'
     safe_drive_id = (drive_id or '').strip() or None
     access_token = get_drive_access_token(user)
-    mime_filter = _mime_filter_clause()
+    mime_filter = _mime_filter_clause(perfil)
 
     if safe_folder == HOME_FOLDER_ID:
         return browse_drive_home(user, page_token=page_token, page_size=page_size)

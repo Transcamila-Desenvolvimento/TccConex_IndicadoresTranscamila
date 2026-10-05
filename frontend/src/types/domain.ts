@@ -896,6 +896,16 @@ export interface Colaborador {
   desconsiderado: boolean;
 }
 
+export interface DocumentoRH {
+  id: string;
+  titulo: string;
+  nomeArquivo: string;
+  tamanho: number;
+  linkExterno: string;
+  incluidoPor: string;
+  criadoEm: string;
+}
+
 export interface LoteMovimentacaoRH {
   id: string;
   mes: number;
@@ -2296,6 +2306,24 @@ export interface ProdutoComercialClienteVinculo {
   compatibilidade: ClienteComercialCompatibilidade;
 }
 
+export type ProdutoComercialTipo = 'fungicida' | 'herbicida' | 'inseticida' | 'acaricida' | 'fertilizante' | 'outros';
+
+export const PRODUTO_COMERCIAL_TIPO_OPTIONS: { value: ProdutoComercialTipo; label: string }[] = [
+  { value: 'fungicida', label: 'Fungicidas' },
+  { value: 'herbicida', label: 'Herbicidas' },
+  { value: 'inseticida', label: 'Inseticidas' },
+  { value: 'acaricida', label: 'Acaricidas' },
+  { value: 'fertilizante', label: 'Fertilizante' },
+  { value: 'outros', label: 'Outros' },
+];
+
+export function parseProdutoComercialTipo(value: unknown): ProdutoComercialTipo {
+  const raw = String(value ?? '').trim().toLowerCase();
+  return PRODUTO_COMERCIAL_TIPO_OPTIONS.some((item) => item.value === raw)
+    ? raw as ProdutoComercialTipo
+    : 'outros';
+}
+
 export interface ProdutoComercial {
   id: string;
   nome: string;
@@ -2303,6 +2331,7 @@ export interface ProdutoComercial {
   numeroOnu: string;
   classeRisco: ClienteComercialClasseRisco;
   grupoEmbalagem: ClienteComercialGrupoEmbalagem;
+  tipoProduto: ProdutoComercialTipo;
   ativo: boolean;
   clientes: ProdutoComercialClienteVinculo[];
   clientesCount: number;
@@ -2316,6 +2345,7 @@ export interface ProdutoComercialPayload {
   numeroOnu?: string;
   classeRisco?: ClienteComercialClasseRisco;
   grupoEmbalagem?: ClienteComercialGrupoEmbalagem;
+  tipoProduto?: ProdutoComercialTipo;
   ativo?: boolean;
   clienteIds: string[];
 }
@@ -2328,6 +2358,7 @@ export interface ProdutoComercialLotePayload {
 export interface ProdutoComercialQueryParams extends ListQueryParams {
   ativo?: boolean;
   clienteId?: string;
+  tipoProduto?: ProdutoComercialTipo | '';
 }
 
 export interface HomologacaoProdutoEvento {
@@ -2348,12 +2379,13 @@ export const PROPOSTA_COMERCIAL_TIPO_LABEL: Record<PropostaComercialTipo, string
 };
 
 /** Filtro "Serviço" da listagem: operações do transporte rodoviário + armazenagem. */
-export type PropostaComercialServicoFiltro = 'transferencia' | 'distribuicao' | 'portuaria' | 'armazenagem';
+export type PropostaComercialServicoFiltro = 'transferencia' | 'distribuicao' | 'portuaria' | 'spot' | 'armazenagem';
 
 export const PROPOSTA_COMERCIAL_SERVICO_FILTRO_LABEL: Record<PropostaComercialServicoFiltro, string> = {
   transferencia: 'Transferência',
   distribuicao: 'Distribuição',
   portuaria: 'Logística Retroportuária',
+  spot: 'Spot',
   armazenagem: 'Armazenagem',
 };
 
@@ -2439,11 +2471,12 @@ export function tiposGeneralidadeDaProposta(
   incluiDistribuicao = false,
   incluiArmazenagem = false,
   incluiOpPortuaria = false,
+  incluiSpot = false,
 ): TipoGeneralidadeComercial[] {
-  if (tipo === 'armazenagem' && !incluiTransferencia && !incluiDistribuicao && !incluiOpPortuaria) return ['armazenagem'];
+  if (tipo === 'armazenagem' && !incluiTransferencia && !incluiDistribuicao && !incluiOpPortuaria && !incluiSpot) return ['armazenagem'];
   const tipos: TipoGeneralidadeComercial[] = [];
   if (incluiDistribuicao) tipos.push('distribuicao');
-  if (incluiTransferencia) tipos.push('frete');
+  if (incluiTransferencia || incluiSpot) tipos.push('frete');
   if (incluiOpPortuaria) tipos.push('op_portuaria');
   if (incluiArmazenagem || tipo === 'armazenagem') tipos.push('armazenagem');
   return tipos;
@@ -2461,19 +2494,21 @@ export function tipoPropostaDasOperacoes(ops: {
   incluiDistribuicao: boolean;
   incluiArmazenagem: boolean;
   incluiOpPortuaria?: boolean;
+  incluiSpot?: boolean;
 }): PropostaComercialTipo {
   if (
     ops.incluiArmazenagem
     && !ops.incluiTransferencia
     && !ops.incluiDistribuicao
     && !ops.incluiOpPortuaria
+    && !ops.incluiSpot
   ) {
     return 'armazenagem';
   }
   return 'transporte_rodoviario';
 }
 
-export type PropostaOperacaoAba = 'transferencia' | 'distribuicao' | 'armazenagem' | 'portuaria';
+export type PropostaOperacaoAba = 'transferencia' | 'distribuicao' | 'armazenagem' | 'portuaria' | 'spot';
 
 export interface PropostaCondicaoComercial {
   rotulo: string;
@@ -2496,7 +2531,7 @@ export interface PropostaFreteLinha {
   entrega: string;
   veiculo: string;
   veiculoKey?: string;
-  modalidade?: 'transferencia' | 'op_portuaria' | string;
+  modalidade?: 'transferencia' | 'op_portuaria' | 'spot' | string;
   km?: string;
   devolucaoContainer: string;
   observacoes: string;
@@ -2509,6 +2544,7 @@ export interface PropostaFreteLinha {
   gris: string;
   icms: string;
   prazoDias: string;
+  outrosValores?: string;
   totalEstimado: string | null;
 }
 
@@ -2816,6 +2852,7 @@ export interface PropostaComercial {
   incluiDistribuicao: boolean;
   incluiArmazenagem: boolean;
   incluiOpPortuaria?: boolean;
+  incluiSpot?: boolean;
   margensVeiculo?: PropostaMargemVeiculo[];
   tabelaDistribuicao?: PropostaTabelaDistribuicaoSnapshot | null;
   historicoRevisoes?: PropostaHistoricoRevisao[];
@@ -2856,6 +2893,7 @@ export interface PropostaComercialPayload {
   incluiDistribuicao?: boolean;
   incluiArmazenagem?: boolean;
   incluiOpPortuaria?: boolean;
+  incluiSpot?: boolean;
   margensVeiculo?: PropostaMargemVeiculo[];
   tabelaDistribuicao?: PropostaTabelaDistribuicaoSnapshot | null;
   condicoes?: PropostaCondicaoComercial[];
@@ -2930,6 +2968,7 @@ export interface PropostaComercialFormDraft {
     incluiDistribuicao: boolean;
     incluiArmazenagem: boolean;
     incluiOpPortuaria?: boolean;
+    incluiSpot?: boolean;
     margensVeiculo?: PropostaMargemVeiculo[];
     condicoes: PropostaCondicaoComercial[];
     condicoesTransferencia: PropostaCondicaoComercial[];
@@ -2953,6 +2992,7 @@ export interface PropostaComercialFormDraft {
       gris: string;
       icms: string;
       prazoDias: string;
+      outrosValores?: string;
     }>;
   };
 }
@@ -3314,6 +3354,36 @@ export interface TabelaFreteRevisaoHistorico {
   codigo: string;
   nome: string;
   revisoes: TabelaFreteRevisaoHistoricoItem[];
+}
+
+export interface CamiloEscopo {
+  ambiente: string;
+  parte: string;
+  rotulo: string;
+}
+
+export interface CamiloParteGrupo {
+  ambiente: string;
+  partes: CamiloEscopo[];
+}
+
+export interface CamiloAgente {
+  id: string;
+  nome: string;
+  instrucao: string;
+  escopos: CamiloEscopo[];
+  criadoEm: string;
+}
+
+export interface CamiloAgentePayload {
+  nome: string;
+  instrucao: string;
+  escopos: { ambiente: string; parte: string }[];
+}
+
+export interface CamiloConsulta {
+  resposta: string;
+  fontes: Array<CamiloEscopo & { resumo: string }>;
 }
 
 

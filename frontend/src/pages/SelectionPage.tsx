@@ -7,6 +7,7 @@ import { AUTH_PROFILE_QUERY_KEY } from '../hooks/useAuthProfile';
 import {
   filterActiveEnvironments,
   ADMIN_ENVIRONMENT,
+  AGENTE_CAMILO_ENVIRONMENT,
   ACTIVE_ENVIRONMENTS,
   ENVIRONMENT_CODES,
   GLOBAL_SESSION_ENVIRONMENTS,
@@ -36,6 +37,7 @@ const ENV_META: Record<string, { code: string; color: string; text: string }> = 
   Logística: { code: ENVIRONMENT_CODES.Logística, color: ENV_BADGE_COLOR, text: 'Logística' },
   Frota: { code: ENVIRONMENT_CODES.Frota, color: ENV_BADGE_COLOR, text: 'Frota' },
   Comercial: { code: ENVIRONMENT_CODES.Comercial, color: ENV_BADGE_COLOR, text: 'Módulo Comercial' },
+  [AGENTE_CAMILO_ENVIRONMENT]: { code: ENVIRONMENT_CODES[AGENTE_CAMILO_ENVIRONMENT], color: ENV_BADGE_COLOR, text: 'CamiloIA' },
 };
 
 const formatLastLogin = (value: string | null) => {

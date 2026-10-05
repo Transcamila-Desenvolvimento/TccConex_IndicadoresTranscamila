@@ -3,7 +3,10 @@ export const ADMIN_ENVIRONMENT = 'Administração/Manutenção' as const;
 export const LEGACY_ADMIN_ENVIRONMENT = 'Administração' as const;
 
 /** Ordem canônica dos ambientes, crescente pelo código oficial (ver ENVIRONMENT_CODES). */
-export const ACTIVE_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Indicadores', 'Financeiro', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial'] as const;
+export const AGENTE_CAMILO_ENVIRONMENT = 'CamiloIA' as const;
+const LEGACY_AGENTE_CAMILO_ENVIRONMENTS = ['Agente Camilo AI', 'Só Camilo IA'] as const;
+
+export const ACTIVE_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Indicadores', 'Financeiro', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial', AGENTE_CAMILO_ENVIRONMENT] as const;
 
 /**
  * Ambientes sem filial obrigatória na sessão (visão consolidada).
@@ -26,10 +29,13 @@ export const ENVIRONMENT_CODES: Record<ActiveEnvironment, string> = {
   Logística: '08',
   Frota: '09',
   Comercial: '10',
+  [AGENTE_CAMILO_ENVIRONMENT]: '11',
 };
 
 export function normalizeEnvironment(env: string): string {
-  return env === LEGACY_ADMIN_ENVIRONMENT ? ADMIN_ENVIRONMENT : env;
+  if (env === LEGACY_ADMIN_ENVIRONMENT) return ADMIN_ENVIRONMENT;
+  if ((LEGACY_AGENTE_CAMILO_ENVIRONMENTS as readonly string[]).includes(env)) return AGENTE_CAMILO_ENVIRONMENT;
+  return env;
 }
 
 export const GLOBAL_SESSION_ENVIRONMENTS: readonly string[] = [
@@ -43,6 +49,7 @@ export const GLOBAL_SESSION_ENVIRONMENTS: readonly string[] = [
   'Logística',
   'Frota',
   'Comercial',
+  AGENTE_CAMILO_ENVIRONMENT,
 ];
 
 export function environmentRequiresFilial(env: string | null | undefined): boolean {

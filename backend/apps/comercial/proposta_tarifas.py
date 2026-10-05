@@ -469,6 +469,7 @@ LINHA_AUDITORIA = (
     ('ad_valorem', 'Ad-VL'),
     ('icms', 'ICMS'),
     ('prazo_dias', 'Prazo'),
+    ('outros_valores', 'Outros valores'),
 )
 
 LINHA_AUDITORIA_DINHEIRO = frozenset({
@@ -666,7 +667,7 @@ def ajustes_iniciais_frete(proposta, fretes_originais: dict | None = None) -> li
     linhas = list(proposta.linhas.all().order_by('ordem', 'pk'))
     for indice, linha in enumerate(linhas, start=1):
         modalidade = (getattr(linha, 'modalidade', None) or 'transferencia').strip() or 'transferencia'
-        if modalidade not in ('transferencia', 'op_portuaria'):
+        if modalidade not in ('transferencia', 'op_portuaria', 'spot'):
             continue
         veiculo_key = (getattr(linha, 'veiculo_key', None) or '').strip()
         if not veiculo_key or linha.km in (None, ''):
@@ -721,6 +722,7 @@ def _linha_snapshot(linha) -> dict:
         'ad_valorem': linha.ad_valorem or '',
         'icms': linha.icms or '',
         'prazo_dias': linha.prazo_dias or '',
+        'outros_valores': linha.outros_valores or '',
         'devolucao_container': linha.devolucao_container or '',
         'observacoes': linha.observacoes or '',
         'modalidade': linha.modalidade or 'transferencia',
@@ -785,6 +787,7 @@ CAMPOS_CONTEUDO_PDF = (
     'inclui_distribuicao',
     'inclui_armazenagem',
     'inclui_op_portuaria',
+    'inclui_spot',
 )
 
 

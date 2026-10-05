@@ -18,7 +18,7 @@ _STATUS = {
     STATUS_PROPOSTA_RECUSADA,
 }
 _FORMATOS = {'moeda', 'percentual', 'tonelada', 'quantidade'}
-_ABAS = {'transferencia', 'distribuicao', 'armazenagem', 'portuaria'}
+_ABAS = {'transferencia', 'distribuicao', 'armazenagem', 'portuaria', 'spot'}
 _MAX_LINHAS = 80
 _MAX_CONDICOES = 80
 
@@ -73,6 +73,7 @@ def _sanitize_linha(raw):
         'gris': _as_str(raw.get('gris'), 20),
         'icms': _as_str(raw.get('icms'), 40),
         'prazoDias': _as_str(raw.get('prazoDias') or raw.get('prazo_dias'), 20),
+        'outrosValores': _as_str(raw.get('outrosValores') or raw.get('outros_valores'), 240),
     }
 
 
@@ -150,7 +151,7 @@ def sanitize_draft_payload(raw):
         'km': '', 'devolucaoContainer': '',
         'observacoes': '', 'peso': '', 'tarifaFrete': '', 'pedagio': '',
         'retiradaCtnt': '', 'desovaCtnt': '',
-        'adValorem': '', 'gris': '', 'icms': '', 'prazoDias': '',
+        'adValorem': '', 'gris': '', 'icms': '', 'prazoDias': '', 'outrosValores': '',
     }]
     return {
         'abaOperacao': aba,
@@ -178,6 +179,7 @@ def sanitize_draft_payload(raw):
             'incluiArmazenagem': _as_bool(form.get('incluiArmazenagem') or form.get('inclui_armazenagem'))
             or tipo == TIPO_PROPOSTA_ARMAZENAGEM,
             'incluiOpPortuaria': _as_bool(form.get('incluiOpPortuaria') or form.get('inclui_op_portuaria')),
+            'incluiSpot': _as_bool(form.get('incluiSpot') or form.get('inclui_spot')),
             'margensVeiculo': form.get('margensVeiculo') if isinstance(form.get('margensVeiculo'), list) else [],
             'condicoes': _sanitize_lista(form.get('condicoes'), _sanitize_condicao, _MAX_CONDICOES),
             'condicoesTransferencia': _sanitize_lista(form.get('condicoesTransferencia'), _sanitize_condicao, _MAX_CONDICOES),
@@ -194,7 +196,7 @@ def has_meaningful_draft(payload):
     form = payload.get('form') if isinstance(payload.get('form'), dict) else payload
     if form.get('clienteId') or form.get('titulo') or form.get('observacoes') or form.get('propostaReferente'):
         return True
-    if form.get('incluiTransferencia') or form.get('incluiDistribuicao') or form.get('incluiArmazenagem') or form.get('incluiOpPortuaria'):
+    if form.get('incluiTransferencia') or form.get('incluiDistribuicao') or form.get('incluiArmazenagem') or form.get('incluiOpPortuaria') or form.get('incluiSpot'):
         return True
     if form.get('tipo') == TIPO_PROPOSTA_ARMAZENAGEM:
         return True

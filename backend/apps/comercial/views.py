@@ -24,6 +24,7 @@ from .models import (
     MatrizIcmsUf,
     ParametrosComercial,
     ProdutoComercial,
+    TIPO_PRODUTO_VALORES,
     PropostaComercial,
     PropostaComercialDraft,
     SITUACAO_CLIENTE,
@@ -120,6 +121,7 @@ _PROPOSTA_OPERACAO_FLAG = {
     'transferencia': 'inclui_transferencia',
     'distribuicao': 'inclui_distribuicao',
     'portuaria': 'inclui_op_portuaria',
+    'spot': 'inclui_spot',
 }
 
 
@@ -518,6 +520,9 @@ class ProdutoComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         cliente = (self.request.query_params.get('cliente') or '').strip()
         if cliente:
             qs = qs.filter(vinculos__cliente_id=cliente).distinct()
+        tipo = (self.request.query_params.get('tipo') or '').strip().lower()
+        if tipo in TIPO_PRODUTO_VALORES:
+            qs = qs.filter(tipo_produto=tipo)
         return qs
 
     def create(self, request, *args, **kwargs):

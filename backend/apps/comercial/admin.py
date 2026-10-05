@@ -82,8 +82,8 @@ class ClienteVinculoInline(admin.TabularInline):
 
 @admin.register(ProdutoComercial)
 class ProdutoComercialAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'classe_risco', 'numero_onu', 'fispq_consulta', 'ativo')
-    list_filter = ('classe_risco', 'ativo')
+    list_display = ('nome', 'tipo_produto', 'classe_risco', 'numero_onu', 'fispq_consulta', 'ativo')
+    list_filter = ('tipo_produto', 'classe_risco', 'ativo')
     search_fields = ('nome', 'numero_onu')
     inlines = [ClienteVinculoInline]
 

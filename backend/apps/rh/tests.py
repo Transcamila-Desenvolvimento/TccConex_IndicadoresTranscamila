@@ -13,6 +13,7 @@ from datetime import date
 from decimal import Decimal
 
 from apps.rh.models import (
+    DocumentoRH,
     LoteMovimentacaoRH,
     MovimentacaoColaborador,
     InconsistenciaColaborador,
@@ -678,3 +679,264 @@ class PjSyncNosLotesTests(TestCase):
         self.assertFalse(
             InconsistenciaColaborador.objects.filter(lote=self.lotes[3], cpf='999.999.999-99', tipo='salario').exists()
         )
+
+
+class DocumentoRHTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='rh_docs',
+            password='rh123',
+            role_id='2',
+            name='RH Docs',
+            environments=['RH', 'CamiloIA'],
+        )
+        self.sem_aba = User.objects.create_user(
+            username='rh_sem_docs',
+            password='rh123',
+            role_id='2',
+            name='Sem documentos',
+            environments=['RH'],
+            abas={'RH': ['home', 'movimentacoes']},
+        )
+
+    def _pdf(self, name, content):
+        return SimpleUploadedFile(name, content, content_type='application/pdf')
+
+    def test_agente_le_os_documentos_quando_a_aba_esta_liberada(self):
+        criado = self.client.post(
+            '/api/rh/documentos/',
+            {'titulo': 'Política interna', 'arquivo': self._pdf('politica.pdf', b'%PDF-1.4 teste')},
+            format='multipart',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(criado.status_code, 201, criado.data)
+        self.assertNotIn('liberadoAgente', criado.json())
+        doc_id = criado.json()['id']
+
+        outro = self.client.post(
+            '/api/rh/documentos/',
+            {'titulo': 'Folha de benefícios', 'arquivo': self._pdf('folha.pdf', b'%PDF-1.4 folha')},
+            format='multipart',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(outro.status_code, 201, outro.data)
+
+        agente = self.client.post(
+            '/api/camilo/agentes/',
+            {
+                'nome': 'Analista RH',
+                'instrucao': '',
+                'escopos': [{'ambiente': 'RH', 'parte': 'documentos'}],
+            },
+            format='json',
+            **auth_headers(self.user, 'CamiloIA'),
+        )
+        self.assertEqual(agente.status_code, 201, agente.data)
+        consulta = self.client.post(
+            f"/api/camilo/agentes/{agente.json()['id']}/consultar/",
+            {'pergunta': 'Quais documentos do RH estão cadastrados?'},
+            format='json',
+            **auth_headers(self.user, 'CamiloIA'),
+        )
+        self.assertEqual(consulta.status_code, 200, consulta.data)
+        texto = consulta.json()['resposta']
+        self.assertIn('Política interna', texto)
+        self.assertIn('Folha de benefícios', texto)
+
+        arquivo = self.client.get(
+            f'/api/rh/documentos/{doc_id}/arquivo/',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(arquivo.status_code, 200)
+
+        self.user.abas = {'RH': ['home', 'movimentacoes']}
+        self.user.save(update_fields=['abas'])
+        sem_aba = self.client.post(
+            f"/api/camilo/agentes/{agente.json()['id']}/consultar/",
+            {'pergunta': 'Quais documentos do RH estão cadastrados?'},
+            format='json',
+            **auth_headers(self.user, 'CamiloIA'),
+        )
+        self.assertEqual(sem_aba.status_code, 200, sem_aba.data)
+        self.assertNotIn('Política interna', sem_aba.json()['resposta'])
+
+    def test_sem_a_aba_nao_lista_documentos(self):
+        response = self.client.get('/api/rh/documentos/', **auth_headers(self.sem_aba, 'RH'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_agente_le_o_trecho_do_arquivo_liberado(self):
+        frase = 'A política de férias concede 30 dias corridos após 12 meses.'
+        criado = self.client.post(
+            '/api/rh/documentos/',
+            {
+                'titulo': 'Norma de férias',
+                'arquivo': SimpleUploadedFile('norma.txt', frase.encode(), content_type='text/plain'),
+            },
+            format='multipart',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(criado.status_code, 201, criado.data)
+        outro = self.client.post(
+            '/api/rh/documentos/',
+            {
+                'titulo': 'Acesso restrito',
+                'arquivo': SimpleUploadedFile(
+                    'segredo.txt',
+                    'senha secreta xyz789'.encode(),
+                    content_type='text/plain',
+                ),
+            },
+            format='multipart',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(outro.status_code, 201, outro.data)
+
+        agente = self.client.post(
+            '/api/camilo/agentes/',
+            {
+                'nome': 'Leitor RH',
+                'instrucao': '',
+                'escopos': [{'ambiente': 'RH', 'parte': 'documentos'}],
+            },
+            format='json',
+            **auth_headers(self.user, 'CamiloIA'),
+        )
+        consulta = self.client.post(
+            f"/api/camilo/agentes/{agente.json()['id']}/consultar/",
+            {'pergunta': 'Quantos dias de férias a norma concede?'},
+            format='json',
+            **auth_headers(self.user, 'CamiloIA'),
+        )
+        self.assertEqual(consulta.status_code, 200, consulta.data)
+        texto = consulta.json()['resposta']
+        self.assertIn('30 dias', texto)
+        self.assertNotIn('xyz789', texto)
+
+    def test_substitui_o_arquivo_e_o_agente_le_o_novo_texto(self):
+        criado = self.client.post(
+            '/api/rh/documentos/',
+            {
+                'titulo': 'Norma de férias',
+                'arquivo': SimpleUploadedFile(
+                    'antiga.txt',
+                    'versão antiga com 15 dias'.encode(),
+                    content_type='text/plain',
+                ),
+            },
+            format='multipart',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(criado.status_code, 201, criado.data)
+        doc_id = criado.json()['id']
+        novo = self.client.post(
+            f'/api/rh/documentos/{doc_id}/substituir/',
+            {
+                'titulo': 'Norma de férias',
+                'arquivo': SimpleUploadedFile(
+                    'nova.txt',
+                    'versão nova concede 30 dias corridos'.encode(),
+                    content_type='text/plain',
+                ),
+            },
+            format='multipart',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(novo.status_code, 200, novo.data)
+        self.assertEqual(novo.json()['nomeArquivo'], 'nova.txt')
+
+        agente = self.client.post(
+            '/api/camilo/agentes/',
+            {
+                'nome': 'Leitor RH',
+                'instrucao': '',
+                'escopos': [{'ambiente': 'RH', 'parte': 'documentos'}],
+            },
+            format='json',
+            **auth_headers(self.user, 'CamiloIA'),
+        )
+        consulta = self.client.post(
+            f"/api/camilo/agentes/{agente.json()['id']}/consultar/",
+            {'pergunta': 'Quantos dias a norma de férias concede?'},
+            format='json',
+            **auth_headers(self.user, 'CamiloIA'),
+        )
+        self.assertEqual(consulta.status_code, 200, consulta.data)
+        texto = consulta.json()['resposta']
+        self.assertIn('30 dias', texto)
+        self.assertNotIn('15 dias', texto)
+
+    def test_renomeia_o_titulo_sem_trocar_o_arquivo(self):
+        criado = self.client.post(
+            '/api/rh/documentos/',
+            {
+                'titulo': 'Faturas',
+                'arquivo': SimpleUploadedFile('faturas.txt', 'vencimento em 10 dias'.encode(), content_type='text/plain'),
+            },
+            format='multipart',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(criado.status_code, 201, criado.data)
+        doc_id = criado.json()['id']
+        renomeado = self.client.post(
+            f'/api/rh/documentos/{doc_id}/renomear/',
+            {'titulo': 'Faturas de outubro'},
+            format='json',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(renomeado.status_code, 200, renomeado.data)
+        self.assertEqual(renomeado.json()['titulo'], 'Faturas de outubro')
+        self.assertEqual(renomeado.json()['nomeArquivo'], 'faturas.txt')
+
+    def test_inclui_pelo_drive_sem_gravar_arquivo_no_servidor(self):
+        from unittest.mock import patch
+
+        conteudo = 'A política de férias concede 30 dias corridos.'.encode()
+        with patch('apps.rh.drive_documento.baixar_conteudo_drive') as baixar:
+            baixar.return_value = {
+                'id': 'drive-norma',
+                'nome': 'norma.txt',
+                'tamanho': len(conteudo),
+                'conteudo': conteudo,
+                'link': 'https://drive.google.com/file/d/drive-norma/view',
+            }
+            criado = self.client.post(
+                '/api/rh/documentos/',
+                {'titulo': 'Norma de férias', 'driveFileId': 'drive-norma'},
+                format='json',
+                **auth_headers(self.user, 'RH'),
+            )
+        self.assertEqual(criado.status_code, 201, criado.data)
+        self.assertEqual(criado.json()['linkExterno'], 'https://drive.google.com/file/d/drive-norma/view')
+        self.assertEqual(criado.json()['nomeArquivo'], 'norma.txt')
+        documento = DocumentoRH.objects.get(pk=criado.json()['id'])
+        self.assertFalse(documento.arquivo)
+        self.assertIn('30 dias', documento.texto)
+
+        agente = self.client.post(
+            '/api/camilo/agentes/',
+            {
+                'nome': 'Leitor Drive',
+                'instrucao': '',
+                'escopos': [{'ambiente': 'RH', 'parte': 'documentos'}],
+            },
+            format='json',
+            **auth_headers(self.user, 'CamiloIA'),
+        )
+        consulta = self.client.post(
+            f"/api/camilo/agentes/{agente.json()['id']}/consultar/",
+            {'pergunta': 'Quantos dias de férias a norma concede?'},
+            format='json',
+            **auth_headers(self.user, 'CamiloIA'),
+        )
+        self.assertIn('30 dias', consulta.json()['resposta'])
+
+    def test_recusa_arquivo_fora_dos_tipos(self):
+        upload = SimpleUploadedFile('virus.exe', b'MZ', content_type='application/octet-stream')
+        response = self.client.post(
+            '/api/rh/documentos/',
+            {'titulo': 'Executável', 'arquivo': upload},
+            format='multipart',
+            **auth_headers(self.user, 'RH'),
+        )
+        self.assertEqual(response.status_code, 400)

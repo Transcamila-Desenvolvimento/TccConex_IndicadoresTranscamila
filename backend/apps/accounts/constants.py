@@ -3,7 +3,10 @@
 ADMIN_ENVIRONMENT = 'Administração/Manutenção'
 LEGACY_ADMIN_ENVIRONMENT = 'Administração'
 
-ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial'})
+AGENTE_CAMILO_ENVIRONMENT = 'CamiloIA'
+LEGACY_AGENTE_CAMILO_ENVIRONMENTS = frozenset({'Agente Camilo AI', 'Só Camilo IA'})
+
+ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial', AGENTE_CAMILO_ENVIRONMENT})
 
 DEPRECATED_ENVIRONMENTS = frozenset()
 
@@ -55,7 +58,7 @@ ABAS_POR_AMBIENTE = {
         'cadastro-clientes',
     }),
     'Compras': frozenset({'home', 'controle-estoque'}),
-    'RH': frozenset({'home', 'movimentacoes'}),
+    'RH': frozenset({'home', 'movimentacoes', 'documentos'}),
     'SGQ': frozenset({'home', 'pesquisa-satisfacao'}),
     'Marketing': frozenset({'home', 'campanhas'}),
     'Logística': frozenset({'home', 'configuracoes'}),
@@ -71,6 +74,7 @@ ABAS_POR_AMBIENTE = {
         'propostas-comerciais',
         'validacao-clientes',
     }),
+    AGENTE_CAMILO_ENVIRONMENT: frozenset({'home'}),
 }
 
 # Funções liberáveis por ambiente para operadores (admin sempre tem todas).
@@ -116,6 +120,8 @@ FUNCOES_POR_AMBIENTE = {
 def normalize_environment(env: str) -> str:
     if env == LEGACY_ADMIN_ENVIRONMENT:
         return ADMIN_ENVIRONMENT
+    if env in LEGACY_AGENTE_CAMILO_ENVIRONMENTS:
+        return AGENTE_CAMILO_ENVIRONMENT
     return env
 
 

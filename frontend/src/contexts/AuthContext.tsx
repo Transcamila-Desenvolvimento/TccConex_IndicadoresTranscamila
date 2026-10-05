@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { User } from '../types/domain';
 import { apiService } from '../services/apiService';
 import { endpointDoNavegador } from '../services/webPush';
-import { ACTIVE_ENVIRONMENTS, environmentRequiresFilial } from '../constants/environments';
+import { ACTIVE_ENVIRONMENTS, environmentRequiresFilial, normalizeEnvironment } from '../constants/environments';
 import { branchesForModule } from '../constants/filiais';
 import { AUTH_PROFILE_QUERY_KEY, useAuthProfile, useLogin } from '../hooks/useAuthProfile';
 
@@ -34,9 +34,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginMutation = useLogin();
 
   useEffect(() => {
-    const savedEnv = localStorage.getItem('prothon_env');
+    const rawEnv = localStorage.getItem('prothon_env');
+    const savedEnv = rawEnv ? normalizeEnvironment(rawEnv) : null;
     const savedFilial = localStorage.getItem('prothon_filial');
     if (savedEnv && activeEnvSet.has(savedEnv)) {
+      if (rawEnv !== savedEnv) localStorage.setItem('prothon_env', savedEnv);
       // Sessões antigas do SGQ (quando era global) ficam sem filial e a API passa a responder 403.
       if (environmentRequiresFilial(savedEnv)) {
         const allowed = branchesForModule(savedEnv);

@@ -22,7 +22,7 @@ import type {
   AuditLogQueryParams,
   AuditLogFacets,
   UserQueryParams,
-  Colaborador, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
+  Colaborador, DocumentoRH, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
   UnidadeMedida, Setor, ColaboradorCompras, Fornecedor, ItemEstoque, EntradaEstoque, SaidaEstoque,
   RegistrarCompraPayload, RegistrarSaidaPayload,
   ClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft,
@@ -54,6 +54,7 @@ import type {
   RotaDistanciaPayload, RotaDistanciaResult, EnderecoSugestao, GoogleMapsConfigComercial,
   ProdutoComercial, ProdutoComercialPayload, ProdutoComercialLotePayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
   Notificacao, PushNotificacoesConfig, PushInscricaoPayload,
+  CamiloAgente, CamiloAgentePayload, CamiloConsulta, CamiloParteGrupo,
 } from '../types/domain';
 import {
   cloneTabelaArmazenagem,
@@ -62,6 +63,7 @@ import {
   parseClienteComercialFispq,
   parseClienteComercialGrupoEmbalagem,
   parseClienteComercialSituacao,
+  parseProdutoComercialTipo,
 } from '../types/domain';
 import { filterActiveEnvironments, ACTIVE_ENVIRONMENTS } from '../constants/environments';
 
@@ -222,6 +224,7 @@ function normalizeProdutoComercial(raw: any): ProdutoComercial {
     numeroOnu: raw.numeroOnu ?? '',
     classeRisco: parseClienteComercialClasseRisco(raw.classeRisco),
     grupoEmbalagem: parseClienteComercialGrupoEmbalagem(raw.grupoEmbalagem),
+    tipoProduto: parseProdutoComercialTipo(raw.tipoProduto),
     ativo: raw.ativo !== false,
     clientes: Array.isArray(raw.clientes)
       ? raw.clientes.map((item: any) => ({
@@ -259,6 +262,7 @@ function normalizePropostaFreteLinha(raw: any): PropostaFreteLinha {
     gris: raw.gris ?? '',
     icms: raw.icms ?? '',
     prazoDias: raw.prazoDias ?? '',
+    outrosValores: raw.outrosValores ?? '',
     totalEstimado: raw.totalEstimado != null && raw.totalEstimado !== '' ? String(raw.totalEstimado) : null,
   };
 }
@@ -308,6 +312,7 @@ function normalizePropostaComercial(raw: any): PropostaComercial {
     incluiDistribuicao: Boolean(raw.incluiDistribuicao),
     incluiArmazenagem: Boolean(raw.incluiArmazenagem) || tipo === 'armazenagem',
     incluiOpPortuaria: Boolean(raw.incluiOpPortuaria),
+    incluiSpot: Boolean(raw.incluiSpot),
     margensVeiculo: Array.isArray(raw.margensVeiculo) ? raw.margensVeiculo : [],
     tabelaDistribuicao: raw.tabelaDistribuicao && typeof raw.tabelaDistribuicao === 'object' ? raw.tabelaDistribuicao : null,
     historicoRevisoes: Array.isArray(raw.historicoRevisoes) ? raw.historicoRevisoes : [],
@@ -1707,6 +1712,56 @@ export const apiService = {
     return data;
   },
 
+  async getDocumentosRH(params: { page?: number; search?: string } = {}): Promise<PaginatedResponse<DocumentoRH>> {
+    const { data } = await api.get('/api/rh/documentos/', {
+      params: {
+        page: params.page ?? 1,
+        page_size: 10,
+        search: params.search || undefined,
+      },
+    });
+    return data;
+  },
+
+  async getRHDriveStatus(): Promise<GoogleDriveStatus> {
+    const { data } = await api.get('/api/rh/drive/status/');
+    return data as GoogleDriveStatus;
+  },
+
+  async browseRHDrive(params: {
+    folderId?: string;
+    pageToken?: string;
+    pageSize?: number;
+    driveId?: string;
+  } = {}): Promise<GoogleDriveBrowseResponse> {
+    const { data } = await api.get('/api/rh/drive/browse/', { params });
+    return data as GoogleDriveBrowseResponse;
+  },
+
+  async createDocumentoRH(titulo: string, driveFileId: string): Promise<DocumentoRH> {
+    const { data } = await api.post('/api/rh/documentos/', { titulo, driveFileId });
+    return data;
+  },
+
+  async renomearDocumentoRH(id: string, titulo: string): Promise<DocumentoRH> {
+    const { data } = await api.post(`/api/rh/documentos/${id}/renomear/`, { titulo });
+    return data;
+  },
+
+  async substituirDocumentoRH(id: string, titulo: string, driveFileId: string): Promise<DocumentoRH> {
+    const { data } = await api.post(`/api/rh/documentos/${id}/substituir/`, { titulo, driveFileId });
+    return data;
+  },
+
+  async deleteDocumentoRH(id: string): Promise<void> {
+    await api.delete(`/api/rh/documentos/${id}/`);
+  },
+
+  async downloadDocumentoRH(id: string): Promise<Blob> {
+    const { data } = await api.get(`/api/rh/documentos/${id}/arquivo/`, { responseType: 'blob' });
+    return data;
+  },
+
   async exportarModeloRH(): Promise<Blob> {
     const { data } = await api.get('/api/rh/lotes/exportar_modelo/', { responseType: 'blob' });
     return data;
@@ -2629,6 +2684,7 @@ export const apiService = {
         page_size: params.pageSize,
         search: params.search || undefined,
         cliente: params.clienteId || undefined,
+        tipo: params.tipoProduto || undefined,
         ativo: params.ativo == null ? undefined : params.ativo ? 'true' : 'false',
       },
     });
@@ -3138,6 +3194,47 @@ export const apiService = {
   async restaurarParametrosComercial(): Promise<ParametrosComercial> {
     const { data } = await api.post('/api/comercial/parametros/', { acao: 'restaurar-padrao' });
     return normalizeParametrosComercial(data);
+  },
+
+  async getCamiloPartes(): Promise<CamiloParteGrupo[]> {
+    const { data } = await api.get('/api/camilo/partes/');
+    return data.grupos ?? [];
+  },
+
+  async getCamiloAgentes(): Promise<CamiloAgente[]> {
+    const { data } = await api.get('/api/camilo/agentes/');
+    return Array.isArray(data) ? data : [];
+  },
+
+  async createCamiloAgente(payload: CamiloAgentePayload): Promise<CamiloAgente> {
+    const { data } = await api.post('/api/camilo/agentes/', payload);
+    return data;
+  },
+
+  async updateCamiloAgente(id: string, payload: CamiloAgentePayload): Promise<CamiloAgente> {
+    const { data } = await api.patch(`/api/camilo/agentes/${id}/`, payload);
+    return data;
+  },
+
+  async deleteCamiloAgente(id: string): Promise<void> {
+    await api.delete(`/api/camilo/agentes/${id}/`);
+  },
+
+  async conversarCamilo(
+    pergunta: string,
+    historico: { papel: 'user' | 'assistant'; texto: string }[] = [],
+  ): Promise<{ resposta: string }> {
+    const { data } = await api.post('/api/camilo/conversar/', { pergunta, historico });
+    return data;
+  },
+
+  async consultarCamiloAgente(
+    id: string,
+    pergunta: string,
+    historico: { papel: 'user' | 'assistant'; texto: string }[] = [],
+  ): Promise<CamiloConsulta> {
+    const { data } = await api.post(`/api/camilo/agentes/${id}/consultar/`, { pergunta, historico });
+    return data;
   },
 
 };

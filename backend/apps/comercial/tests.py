@@ -1853,6 +1853,7 @@ class ClienteComercialTests(TestCase):
             ('transferencia', 'inclui_transferencia'),
             ('distribuicao', 'inclui_distribuicao'),
             ('portuaria', 'inclui_op_portuaria'),
+            ('spot', 'inclui_spot'),
         ):
             proposta = PropostaComercial.objects.create(
                 tipo='transporte_rodoviario', cliente_id=cliente_id, **{flag: True},
@@ -3468,7 +3469,7 @@ class RevisaoPorTipoOperacaoTests(TestCase):
             'tipo', 'clienteId', 'status', 'titulo', 'subtitulo', 'revisao', 'dataProposta',
             'propostaReferente', 'responsavel', 'reajuste', 'att', 'validade', 'vigencia', 'faturamento',
             'localEmissao', 'valorEstimado', 'observacoes', 'incluiTransferencia', 'incluiDistribuicao',
-            'incluiArmazenagem', 'incluiOpPortuaria', 'margensVeiculo', 'condicoes', 'linhas',
+            'incluiArmazenagem', 'incluiOpPortuaria', 'incluiSpot', 'margensVeiculo', 'condicoes', 'linhas',
         )
         formulario = {chave: enviada[chave] for chave in campos_formulario if chave in enviada}
         if enviada.get('incluiArmazenagem'):
@@ -3546,6 +3547,22 @@ class RevisaoPorTipoOperacaoTests(TestCase):
             {'tipo': 'transporte_rodoviario', 'incluiOpPortuaria': True, 'linhas': [linha]},
             'op_portuaria',
             lambda _p: {'linhas': [{**linha, 'retiradaCtnt': '250.00'}]},
+            conferir,
+        )
+
+    def test_spot(self, _mock):
+        linha = {'origem': 'Ibiporã-PR', 'entrega': 'Santos-SP', 'veiculo': 'Truck',
+                 'veiculoKey': 'de9000', 'km': '120', 'tarifaFrete': '800.00',
+                 'modalidade': 'spot', 'prazoDias': '3 dias úteis', 'outrosValores': 'Escolta combinada'}
+
+        def conferir(campos):
+            outros = campos['Trecho 1 (Ibiporã-PR → Santos-SP) · Outros valores']
+            self.assertEqual((outros['de'], outros['para']), ('Escolta combinada', 'Sem escolta'))
+
+        self._ciclo(
+            {'tipo': 'transporte_rodoviario', 'incluiSpot': True, 'linhas': [linha]},
+            'frete',
+            lambda _p: {'linhas': [{**linha, 'outrosValores': 'Sem escolta'}]},
             conferir,
         )
 
@@ -4046,6 +4063,37 @@ class HomologacaoProdutosComercialTests(TestCase):
         nomes = [item['nome'] for item in filtrado.json()['results']]
         self.assertIn('PRODUTO A', nomes)
         self.assertNotIn('PRODUTO B', nomes)
+        self.assertEqual(filtrado.json()['results'][0]['tipoProduto'], 'outros')
+
+    def test_filtro_tipo_produto(self):
+        cliente = self._cliente()
+        self._auth(self.produtos)
+        herbicida = self.api.post(
+            '/api/comercial/produtos/',
+            {'nome': 'Herbicida Teste', 'tipoProduto': 'herbicida', 'clienteIds': [cliente]},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(herbicida.status_code, 201, herbicida.content)
+        self.assertEqual(herbicida.json()['tipoProduto'], 'herbicida')
+        sem_tipo = self.api.post(
+            '/api/comercial/produtos/',
+            {'nome': 'Produto Sem Tipo', 'clienteIds': [cliente]},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(sem_tipo.status_code, 201, sem_tipo.content)
+        self.assertEqual(sem_tipo.json()['tipoProduto'], 'outros')
+        filtrado = self.api.get('/api/comercial/produtos/?tipo=herbicida', **HEADERS)
+        nomes = [item['nome'] for item in filtrado.json()['results']]
+        self.assertEqual(nomes, ['HERBICIDA TESTE'])
+        invalido = self.api.post(
+            '/api/comercial/produtos/',
+            {'nome': 'Tipo Invalido', 'tipoProduto': 'semente', 'clienteIds': [cliente]},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(invalido.status_code, 400, invalido.content)
 
     def _usuario_notificacao(self, username, google_email=None, **kwargs):
         defaults = {

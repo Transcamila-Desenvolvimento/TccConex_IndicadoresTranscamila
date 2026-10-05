@@ -26,6 +26,7 @@ export const ABA_ITEMS = [
 
   { module: 'RH', key: 'home', label: 'Home RH', path: '/rh' },
   { module: 'RH', key: 'movimentacoes', label: 'Movimentações', path: '/rh/movimentacoes' },
+  { module: 'RH', key: 'documentos', label: 'Documentos', path: '/rh/documentos' },
 
   { module: 'SGQ', key: 'home', label: 'Home SGQ', path: '/sgq' },
   { module: 'SGQ', key: 'pesquisa-satisfacao', label: 'Pesquisa de satisfação', path: '/sgq/pesquisa-satisfacao' },
@@ -50,6 +51,8 @@ export const ABA_ITEMS = [
   { module: 'Comercial', key: 'cadastro-produtos', label: 'Composição de produtos', path: '/comercial/cadastros/produtos' },
   { module: 'Comercial', key: 'propostas-comerciais', label: 'Propostas comerciais', path: '/comercial/propostas' },
   { module: 'Comercial', key: 'validacao-clientes', label: 'Validação clientes', path: '/comercial/validacao-clientes' },
+
+  { module: 'CamiloIA', key: 'home', label: 'Chat', path: '/agente-camilo' },
 ] as const;
 
 export type AbaKey = (typeof ABA_ITEMS)[number]['key'];

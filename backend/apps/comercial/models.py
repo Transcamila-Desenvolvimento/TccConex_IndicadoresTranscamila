@@ -84,6 +84,22 @@ CLASSE_RISCO_CHOICES = [
 ]
 CLASSE_RISCO_VALORES = {item[0] for item in CLASSE_RISCO_CHOICES}
 
+TIPO_PRODUTO_FUNGICIDA = 'fungicida'
+TIPO_PRODUTO_HERBICIDA = 'herbicida'
+TIPO_PRODUTO_INSETICIDA = 'inseticida'
+TIPO_PRODUTO_ACARICIDA = 'acaricida'
+TIPO_PRODUTO_FERTILIZANTE = 'fertilizante'
+TIPO_PRODUTO_OUTROS = 'outros'
+TIPO_PRODUTO_CHOICES = [
+    (TIPO_PRODUTO_FUNGICIDA, 'Fungicidas'),
+    (TIPO_PRODUTO_HERBICIDA, 'Herbicidas'),
+    (TIPO_PRODUTO_INSETICIDA, 'Inseticidas'),
+    (TIPO_PRODUTO_ACARICIDA, 'Acaricidas'),
+    (TIPO_PRODUTO_FERTILIZANTE, 'Fertilizante'),
+    (TIPO_PRODUTO_OUTROS, 'Outros'),
+]
+TIPO_PRODUTO_VALORES = {item[0] for item in TIPO_PRODUTO_CHOICES}
+
 FISPQ_LEGADO = {
     'pendente',
     'portal_fabricante',
@@ -316,6 +332,12 @@ class ProdutoComercial(models.Model):
         default='',
         verbose_name='Link da FISPQ/FDS',
     )
+    tipo_produto = models.CharField(
+        max_length=20,
+        choices=TIPO_PRODUTO_CHOICES,
+        default=TIPO_PRODUTO_OUTROS,
+        verbose_name='Tipo de produto',
+    )
     ativo = models.BooleanField(default=True)
     criado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -543,13 +565,20 @@ def tipos_servico_generalidade(
     inclui_distribuicao=False,
     inclui_armazenagem=False,
     inclui_op_portuaria=False,
+    inclui_spot=False,
 ):
-    if tipo_proposta == TIPO_PROPOSTA_ARMAZENAGEM and not inclui_transferencia and not inclui_distribuicao and not inclui_op_portuaria:
+    if (
+        tipo_proposta == TIPO_PROPOSTA_ARMAZENAGEM
+        and not inclui_transferencia
+        and not inclui_distribuicao
+        and not inclui_op_portuaria
+        and not inclui_spot
+    ):
         return [TIPO_GENERALIDADE_ARMAZENAGEM]
     tipos = []
     if inclui_distribuicao:
         tipos.append(TIPO_GENERALIDADE_DISTRIBUICAO)
-    if inclui_transferencia:
+    if inclui_transferencia or inclui_spot:
         tipos.append(TIPO_GENERALIDADE_FRETE)
     if inclui_op_portuaria:
         tipos.append(TIPO_GENERALIDADE_OP_PORTUARIA)
@@ -728,6 +757,7 @@ class PropostaComercial(models.Model):
     inclui_distribuicao = models.BooleanField(default=False, verbose_name='Distribuição')
     inclui_armazenagem = models.BooleanField(default=False, verbose_name='Armazenagem')
     inclui_op_portuaria = models.BooleanField(default=False, verbose_name='Op. Portuária')
+    inclui_spot = models.BooleanField(default=False, verbose_name='Spot')
     condicoes = models.JSONField(default=list, blank=True, verbose_name='Generalidades e condições')
     tabela_armazenagem = models.JSONField(
         default=dict,
@@ -806,6 +836,7 @@ class PropostaComercial(models.Model):
                     self.inclui_distribuicao,
                     self.inclui_armazenagem,
                     self.inclui_op_portuaria,
+                    self.inclui_spot,
                 ),
             )
         if self.cliente_id:
@@ -909,6 +940,7 @@ class PropostaFreteLinha(models.Model):
     gris = models.CharField(max_length=20, blank=True, default='', verbose_name='GRIS')
     icms = models.CharField(max_length=40, blank=True, default='Não incluso')
     prazo_dias = models.CharField(max_length=20, blank=True, default='')
+    outros_valores = models.CharField(max_length=240, blank=True, default='', verbose_name='Outros valores')
     total_estimado = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
 
     class Meta:

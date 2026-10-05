@@ -1,16 +1,30 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { userCanSeeAba } from '../../constants/abas';
 
 const QUICK_LINKS = [
   {
     title: 'Movimentações',
     description: 'Importe planilhas de ativos, acompanhe admissões, desligamentos e alterações salariais por filial.',
+    aba: 'movimentacoes',
     path: '/rh/movimentacoes',
     badge: 'Movimentação de Pessoal',
     icon: (
       <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+      </svg>
+    ),
+  },
+  {
+    title: 'Documentos',
+    description: 'Inclua arquivos do RH e libere só os que o agente pode consultar.',
+    aba: 'documentos',
+    path: '/rh/documentos',
+    badge: 'Controle de documentos',
+    icon: (
+      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
       </svg>
     ),
   },
@@ -35,7 +49,7 @@ const RHHome: React.FC = () => {
       </div>
 
       <div className="quick-access-grid">
-        {QUICK_LINKS.map((link) => (
+        {QUICK_LINKS.filter((link) => userCanSeeAba(user, 'RH', link.aba)).map((link) => (
           <button
             key={link.path}
             type="button"
@@ -69,7 +83,7 @@ const RHHome: React.FC = () => {
         lineHeight: '1.6'
       }}>
         <p style={{ margin: 0 }}>Este é o painel principal do ambiente de Recursos Humanos (RH) da Transcamila.</p>
-        <p style={{ marginTop: '8px', marginBottom: 0 }}>Use o menu lateral ou o card acima para acessar as Movimentações de RH.</p>
+        <p style={{ marginTop: '8px', marginBottom: 0 }}>Use o menu lateral para acessar Movimentações e Documentos.</p>
       </div>
     </section>
   );

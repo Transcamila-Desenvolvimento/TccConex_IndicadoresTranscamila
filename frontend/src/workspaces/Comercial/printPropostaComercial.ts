@@ -101,17 +101,19 @@ const destinosGrisAdvUnificado = (proposta: PropostaComercial) => {
   return comTaxa.length > 0 && comTaxa.every((linha) => String(linha.gris ?? '').trim() === String(linha.adValorem ?? '').trim());
 };
 
-const buildDestinosTable = (proposta: PropostaComercial, modalidade: 'transferencia' | 'op_portuaria' = 'transferencia') => {
+const buildDestinosTable = (proposta: PropostaComercial, modalidade: 'transferencia' | 'op_portuaria' | 'spot' = 'transferencia') => {
   if (proposta.tipo !== 'transporte_rodoviario') return '';
   const linhas = proposta.linhas.filter((linha) => {
     const tipo = linha.modalidade || 'transferencia';
     if (modalidade === 'op_portuaria') return tipo === 'op_portuaria';
-    return tipo !== 'op_portuaria';
+    if (modalidade === 'spot') return tipo === 'spot';
+    return tipo !== 'op_portuaria' && tipo !== 'spot';
   }).filter((linha) =>
-    [linha.origem, linha.entrega, linha.veiculo, linha.km, linha.tarifaFrete, linha.pedagio].some((item) => String(item ?? '').trim()),
+    [linha.origem, linha.entrega, linha.veiculo, linha.km, linha.tarifaFrete, linha.pedagio, linha.outrosValores].some((item) => String(item ?? '').trim()),
   );
   const source = linhas.length ? linhas : [];
   const portuaria = modalidade === 'op_portuaria';
+  const spot = modalidade === 'spot';
   const grisAdvUnificado = destinosGrisAdvUnificado(proposta);
   const rows = source.map((linha) => `
     <tr>
@@ -127,13 +129,15 @@ const buildDestinosTable = (proposta: PropostaComercial, modalidade: 'transferen
         : `<td>${dash(linha.gris)}</td><td>${dash(linha.adValorem)}</td>`}
       <td>${dash(linha.icms)}</td>
       <td>${dash(linha.prazoDias)}</td>
+      ${spot ? `<td>${dash(linha.outrosValores)}</td>` : ''}
     </tr>
   `).join('');
-  const colunas = (portuaria ? 12 : 10) - (grisAdvUnificado ? 1 : 0);
+  const colunas = (portuaria ? 12 : 10) + (spot ? 1 : 0) - (grisAdvUnificado ? 1 : 0);
+  const titulo = spot ? 'SPOT' : portuaria ? 'Logística Retroportuária/Rodoviária' : 'Transferência';
 
   return `
     <section class="block">
-      <h2>${portuaria ? 'Logística Retroportuária/Rodoviária' : 'Transferência'}</h2>
+      <h2>${titulo}</h2>
       <table class="destinos">
         <thead>
           <tr>
@@ -147,6 +151,7 @@ const buildDestinosTable = (proposta: PropostaComercial, modalidade: 'transferen
             ${grisAdvUnificado ? '<th>GRIS/ADV</th>' : '<th>GRIS</th><th>Ad-VL</th>'}
             <th>ICMS</th>
             <th>Prazo</th>
+            ${spot ? '<th>Outros valores</th>' : ''}
           </tr>
         </thead>
         <tbody>${rows || `<tr><td colspan="${colunas}">Nenhum trecho informado.</td></tr>`}</tbody>
@@ -583,11 +588,15 @@ const chunk = <T,>(items: T[], size: number) => {
   return groups;
 };
 
-type PrintSecao = 'geral' | 'transferencia' | 'distribuicao' | 'portuaria';
+type PrintSecao = 'geral' | 'transferencia' | 'distribuicao' | 'portuaria' | 'spot';
 
 const condicoesDaSecao = (proposta: PropostaComercial, secao: PrintSecao): PropostaCondicaoComercial[] => {
   const todas = proposta.condicoes.length ? proposta.condicoes : CONDICOES_FRETE_PADRAO;
-  const tipo = secao === 'distribuicao' ? 'distribuicao' : (secao === 'transferencia' || secao === 'portuaria') ? 'frete' : undefined;
+  const tipo = secao === 'distribuicao'
+    ? 'distribuicao'
+    : (secao === 'transferencia' || secao === 'portuaria' || secao === 'spot')
+      ? 'frete'
+      : undefined;
   const tipadas = tipo ? todas.filter((item) => item.tipo === tipo) : [];
   if (tipadas.length) return tipadas;
   const semTipo = todas.filter((item) => !item.tipo);
@@ -635,10 +644,12 @@ const secoesDaProposta = (proposta: PropostaComercial): PrintSecao[] => {
   const transferencia = proposta.incluiTransferencia;
   const distribuicao = proposta.incluiDistribuicao;
   const portuaria = Boolean(proposta.incluiOpPortuaria);
+  const spot = Boolean(proposta.incluiSpot);
   const secoes: PrintSecao[] = [];
   if (transferencia) secoes.push('transferencia');
   if (distribuicao) secoes.push('distribuicao');
   if (portuaria) secoes.push('portuaria');
+  if (spot) secoes.push('spot');
   if (!secoes.length) return ['transferencia'];
   return secoes;
 };
@@ -801,9 +812,11 @@ const buildHtml = (
     ? 'Distribuição'
     : secao === 'portuaria'
       ? 'Logística Retroportuária/Rodoviária'
-      : secao === 'transferencia'
-        ? 'Transferência'
-        : '';
+      : secao === 'spot'
+        ? 'SPOT'
+        : secao === 'transferencia'
+          ? 'Transferência'
+          : '';
   const closingHtml = `
   ${opcoes.includeCondicoes ? buildCondicoesTable(proposta, secao, 3, opcoes.condicoesPagina) : ''}
   ${opcoes.includeAssinatura ? buildHistoricoRevisoes(proposta) : ''}
@@ -1042,6 +1055,7 @@ const buildHtml = (
   </section>` : ''}
   ${opcoes.includeTabela && secao === 'distribuicao' ? buildDistribuicaoTable(tabela, opcoes.faixasPagina) : ''}
   ${opcoes.includeTabela && (secao === 'transferencia' || secao === 'geral') ? buildDestinosTable(proposta, 'transferencia') : ''}
+  ${opcoes.includeTabela && secao === 'spot' ? buildDestinosTable(proposta, 'spot') : ''}
   ${opcoes.includeTabela && secao === 'portuaria' ? buildDestinosTable(proposta, 'op_portuaria') : ''}
   ${opcoes.includeTabela && secao === 'geral' ? buildArmazenagemTable(proposta) : ''}
   ${closingHtml}
@@ -1717,6 +1731,7 @@ export async function generatePropostaComercialPdfBlob(
       && !proposta.incluiTransferencia
       && !proposta.incluiDistribuicao
       && !proposta.incluiOpPortuaria
+      && !proposta.incluiSpot
     ) {
       return await generateArmazenagemPdfBlob(proposta, cliente);
     }

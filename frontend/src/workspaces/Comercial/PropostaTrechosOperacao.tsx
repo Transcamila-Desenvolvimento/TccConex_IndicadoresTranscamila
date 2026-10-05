@@ -21,6 +21,7 @@ export type TrechoLinha = {
   gris: string;
   icms: string;
   prazoDias: string;
+  outrosValores?: string;
 };
 
 const VEICULOS = [
@@ -57,6 +58,7 @@ type Props = {
   clienteId: string;
   margensVeiculo: PropostaMargemVeiculo[];
   portuaria?: boolean;
+  spot?: boolean;
   grisAdvUnificado?: boolean;
   onChange: (linhas: TrechoLinha[]) => void;
 };
@@ -79,6 +81,7 @@ const emptyLinha = (modalidade: string): TrechoLinha => ({
   gris: '',
   icms: '',
   prazoDias: '',
+  outrosValores: '',
 });
 
 export default function PropostaTrechosOperacao({
@@ -89,6 +92,7 @@ export default function PropostaTrechosOperacao({
   clienteId,
   margensVeiculo,
   portuaria = false,
+  spot = false,
   grisAdvUnificado = false,
   onChange,
 }: Props) {
@@ -103,7 +107,7 @@ export default function PropostaTrechosOperacao({
   calcularRef.current = calcular;
   const margensRef = useRef(margensVeiculo);
   margensRef.current = margensVeiculo;
-  const modalidade = portuaria ? 'op_portuaria' : 'transferencia';
+  const modalidade = spot ? 'spot' : portuaria ? 'op_portuaria' : 'transferencia';
   const lista = linhas.length ? linhas : [emptyLinha(modalidade)];
   const margensKey = JSON.stringify(margensVeiculo ?? []);
   const prevMargensKey = useRef(margensKey);
@@ -293,7 +297,7 @@ export default function PropostaTrechosOperacao({
         </div>
       </div>
       <div className="table-container proposta-destinos-wrap">
-        <table className={`erp-table reports-table comercial-browse-table proposta-destinos-table${portuaria ? ' proposta-destinos-table--portuaria' : ''}`}>
+        <table className={`erp-table reports-table comercial-browse-table proposta-destinos-table${portuaria ? ' proposta-destinos-table--portuaria' : ''}${spot ? ' proposta-destinos-table--spot' : ''}`}>
           <thead>
             <tr>
               <th className="col-trecho">Origem</th>
@@ -314,6 +318,7 @@ export default function PropostaTrechosOperacao({
               )}
               <th className="col-icms">ICMS</th>
               <th className="col-prazo">Prazo entrega</th>
+              {spot ? <th className="col-outros">Outros valores</th> : null}
               {canEdit ? <th className="col-actions" aria-label="Ações" /> : null}
             </tr>
           </thead>
@@ -442,6 +447,17 @@ export default function PropostaTrechosOperacao({
                 <td className="col-prazo">
                   <input className="proposta-destinos-input" value={linha.prazoDias} disabled={!canEditValores} placeholder="3 dias úteis" onChange={(e) => patch(index, { prazoDias: e.target.value })} />
                 </td>
+                {spot ? (
+                  <td className="col-outros">
+                    <input
+                      className="proposta-destinos-input"
+                      value={linha.outrosValores ?? ''}
+                      disabled={!canEdit}
+                      placeholder="Informação adicional"
+                      onChange={(e) => patch(index, { outrosValores: e.target.value })}
+                    />
+                  </td>
+                ) : null}
                 {canEdit ? (
                   <td className="col-actions">
                     <button

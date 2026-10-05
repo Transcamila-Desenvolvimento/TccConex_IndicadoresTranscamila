@@ -199,6 +199,8 @@ def _tipo_label(tipo: str) -> str:
 
 
 def _servico_label(proposta) -> str:
+    if getattr(proposta, 'inclui_spot', False):
+        return 'SPOT'
     tipos = tipos_servico_generalidade(
         proposta.tipo,
         inclui_transferencia=bool(getattr(proposta, 'inclui_transferencia', False)),
