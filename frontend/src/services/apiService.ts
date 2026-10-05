@@ -3243,7 +3243,7 @@ export const apiService = {
   async conversarCamilo(
     pergunta: string,
     historico: { papel: 'user' | 'assistant'; texto: string }[] = [],
-  ): Promise<{ resposta: string; titulo?: string }> {
+  ): Promise<{ resposta: string; titulo?: string; contextoUsado?: number; contextoLimite?: number }> {
     const { data } = await api.post('/api/camilo/conversar/', { pergunta, historico });
     return data;
   },

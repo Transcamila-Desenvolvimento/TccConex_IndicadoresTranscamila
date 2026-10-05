@@ -1,4 +1,8 @@
-"""Leitura resumida das partes liberadas. Não altera dados e não lista registros nominais."""
+"""Leitura das partes liberadas. Não altera dados.
+
+A pergunta abre o detalhe de no máximo duas funções. As outras ficam só listadas,
+para a resposta ser específica sem encher o contexto.
+"""
 
 from apps.accounts.permissions import allowed_filiais_for_module, db_values_for_filiais
 from apps.camilo.catalogo import PARTE_POR_CHAVE, escopos_publicos, partes_do_usuario
@@ -555,6 +559,377 @@ LEITORES = {
 }
 
 
+_SINAIS = {
+    ('Financeiro', 'calendario'): ('calendario', 'agenda', 'evento', 'compromisso'),
+    ('Financeiro', 'inclusao-relatorios'): ('pagar', 'receber', 'titulo', 'fornecedor', 'inadimplencia'),
+    ('Financeiro', 'saldos-bancarios'): ('saldo', 'banco', 'conta bancaria'),
+    ('Financeiro', 'ajustes-caixa'): ('ajuste', 'caixa'),
+    ('Financeiro', 'faturamento'): ('faturamento',),
+    ('Faturamento', 'envio-nf-cliente'): ('protocolo', 'canhoto', 'nota fiscal'),
+    ('Faturamento', 'cadastro-clientes'): ('protocolo',),
+    ('Compras', 'controle-estoque'): ('estoque', 'quantidade minima'),
+    ('RH', 'movimentacoes'): ('salario', 'cargo', 'colaborador', 'funcionario', 'movimentacao', 'admissao'),
+    ('RH', 'documentos'): ('documento', 'convencao', 'piso', 'diaria', 'sindical', 'acordo'),
+    ('SGQ', 'pesquisa-satisfacao'): ('pesquisa', 'satisfacao'),
+    ('Marketing', 'campanhas'): ('campanha', 'marketing'),
+    ('Logística', 'configuracoes'): ('logistica',),
+    ('Frota', 'custos-frota'): ('abastecimento', 'manutencao', 'custo da frota'),
+    ('Frota', 'cadastro-condutores'): ('condutor', 'motorista'),
+    ('Frota', 'cadastro-veiculos'): ('placa', 'veiculo da frota'),
+    ('Comercial', 'cadastro-clientes'): ('cliente comercial', 'razao'),
+    ('Comercial', 'cadastro-tabela-frete'): ('tabela de frete', 'tarifa'),
+    ('Comercial', 'cadastro-generalidades'): ('generalidade',),
+    ('Comercial', 'cadastro-icms-ufs'): ('icms', 'aliquota'),
+    ('Comercial', 'cadastro-parametros'): ('parametro comercial', 'vigencia padrao'),
+    ('Comercial', 'cadastro-produtos'): ('produto', 'onu', 'pastagem', 'composicao'),
+    ('Comercial', 'propostas-comerciais'): ('proposta', 'cotacao', 'spot'),
+    ('Comercial', 'validacao-clientes'): ('homologacao', 'validacao'),
+    ('Indicadores', 'fluxo-caixa'): ('fluxo de caixa',),
+    ('Indicadores', 'meta-faturamento'): ('meta de faturamento',),
+    ('Indicadores', 'movimentacao-rh'): ('movimentacao de rh',),
+    ('Indicadores', 'satisfacao-clientes'): ('satisfacao dos clientes',),
+    ('Indicadores', 'custos-frota'): ('custo de frota',),
+}
+
+_LIMITE_RESUMO = 2800
+
+
+def _tem_sinal(texto: str, sinal: str) -> bool:
+    import re
+    chave = _sem_acento(sinal)
+    if ' ' in chave or len(chave) >= 6:
+        return chave in texto
+    return re.search(rf'\b{re.escape(chave)}\b', texto) is not None
+
+
+def _pontos_parte(pergunta: str, item: dict) -> int:
+    texto = _sem_acento((pergunta or '').lower())
+    nota = 0
+    rotulo = _sem_acento(item.get('rotulo') or '')
+    for palavra in rotulo.split():
+        if len(palavra) > 3 and _tem_sinal(texto, palavra):
+            nota += 3
+    for sinal in _SINAIS.get((item.get('ambiente'), item.get('parte')), ()):
+        if _tem_sinal(texto, sinal):
+            nota += 2
+    return nota
+
+
+def _partes_em_foco(pergunta: str, efetivos: list[dict]) -> list[dict]:
+    ranqueadas = sorted(efetivos, key=lambda item: _pontos_parte(pergunta, item), reverse=True)
+    fortes = [item for item in ranqueadas if _pontos_parte(pergunta, item) >= 2]
+    if fortes:
+        return fortes[:2]
+    if len(efetivos) == 1:
+        return list(efetivos)
+    return []
+
+
+def _contagem_documentos(user) -> str:
+    from apps.rh.models import DocumentoRH
+    return _texto(DocumentoRH.objects.count(), 'documento na aba Documentos', 'documentos na aba Documentos')
+
+
+def _contagem_movimentacoes(user) -> str:
+    from apps.rh.models import MovimentacaoColaborador
+    total = _filtra_filial(MovimentacaoColaborador.objects.all(), user, 'RH', 'filial').count()
+    return _texto(total, 'registro de movimentação', 'registros de movimentação')
+
+
+def _linhas_casadas(qs, campos: tuple[str, ...], pergunta: str, formatar, limite: int = 4) -> str:
+    from django.db.models import Q
+    termos = [termo for termo in _termos_pergunta(pergunta) if len(termo) >= 4][:3]
+    if termos and campos:
+        filtro = Q()
+        for termo in termos:
+            for campo in campos:
+                filtro |= Q(**{f'{campo}__icontains': termo})
+        achados = list(qs.filter(filtro)[:limite])
+        if not achados:
+            return 'Nenhum registro dessa função com os termos da pergunta.'
+        titulo = 'Registros que batem com a pergunta:'
+    else:
+        achados = list(qs[:limite])
+        if not achados:
+            return ''
+        titulo = 'Amostra recente:'
+    linhas = [titulo]
+    linhas.extend(f'- {formatar(item)}' for item in achados)
+    return '\n'.join(linhas)
+
+
+def _detalhe_propostas(user, pergunta: str) -> str:
+    from apps.comercial.models import PropostaComercial
+    qs = PropostaComercial.objects.select_related('cliente').order_by('-data_criacao')
+
+    def linha(proposta):
+        cliente = proposta.cliente_nome or (proposta.cliente.razao_social if proposta.cliente_id else '—')
+        numero = proposta.numero_identificacao or 'sem número'
+        return f'{numero} {proposta.titulo or "sem título"}: {proposta.get_status_display()}, cliente {cliente}'
+
+    return _linhas_casadas(qs, ('titulo', 'cliente_nome', 'proposta_referente'), pergunta, linha)
+
+
+def _detalhe_produtos(user, pergunta: str) -> str:
+    from apps.comercial.models import ProdutoComercial
+    qs = ProdutoComercial.objects.order_by('nome')
+
+    def linha(produto):
+        onu = produto.numero_onu or '—'
+        return f'{produto.nome}: {produto.get_tipo_produto_display()}, ONU {onu}'
+
+    return _linhas_casadas(qs, ('nome', 'numero_onu'), pergunta, linha)
+
+
+def _detalhe_clientes(user, pergunta: str) -> str:
+    from apps.comercial.models import ClienteComercial
+    qs = ClienteComercial.objects.order_by('razao_social')
+
+    def linha(cliente):
+        return f'{cliente.razao_social} ({cliente.uf or "—"})'
+
+    return _linhas_casadas(qs, ('razao_social', 'nome_fantasia'), pergunta, linha)
+
+
+def _detalhe_tabela_frete(user, pergunta: str) -> str:
+    from apps.comercial.models import TabelaFrete
+    qs = TabelaFrete.objects.order_by('-data_criacao')
+
+    def linha(tabela):
+        return f'{tabela.nome}: {tabela.get_status_display()}, revisão {tabela.revisao}'
+
+    return _linhas_casadas(qs, ('nome', 'codigo'), pergunta, linha)
+
+
+def _detalhe_generalidades(user, pergunta: str) -> str:
+    from apps.comercial.models import GeneralidadeComercial
+    qs = GeneralidadeComercial.objects.select_related('cliente').order_by('ordem', 'pk')
+
+    def linha(item):
+        escopo = item.cliente.razao_social if item.cliente_id else 'Padrão'
+        return f'{escopo} / {item.rotulo}: {(item.valor or "—")[:160]}'
+
+    return _linhas_casadas(qs, ('rotulo', 'valor'), pergunta, linha)
+
+
+def _detalhe_icms(user, pergunta: str) -> str:
+    import re
+    from apps.comercial.models import MatrizIcmsUf
+    matriz = MatrizIcmsUf.objects.order_by('-atualizado_em').first()
+    dados = matriz.matriz if matriz and isinstance(matriz.matriz, dict) else {}
+    if not dados:
+        return 'Nenhuma alíquota cadastrada na matriz.'
+    ufs = re.findall(r'\b[A-Za-z]{2}\b', pergunta or '')
+    ufs = [uf.upper() for uf in ufs][:2]
+    linhas = []
+    if len(ufs) == 2 and isinstance(dados.get(ufs[0]), dict) and ufs[1] in dados[ufs[0]]:
+        linhas.append(f'{ufs[0]} para {ufs[1]}: {dados[ufs[0]][ufs[1]]}')
+    elif len(ufs) == 1 and isinstance(dados.get(ufs[0]), dict):
+        pares = list(dados[ufs[0]].items())[:6]
+        linhas.extend(f'{ufs[0]} para {destino}: {valor}' for destino, valor in pares)
+    else:
+        origens = list(dados.items())[:4]
+        for origem, destinos in origens:
+            if not isinstance(destinos, dict):
+                continue
+            amostra = ', '.join(f'{destino} {valor}' for destino, valor in list(destinos.items())[:3])
+            linhas.append(f'{origem}: {amostra}')
+    if not linhas:
+        return 'A matriz existe, mas não há par de UF na pergunta.'
+    return 'Alíquotas:\n' + '\n'.join(f'- {linha}' for linha in linhas[:6])
+
+
+def _detalhe_parametros(user, pergunta: str) -> str:
+    from apps.comercial.models import ParametrosComercial
+    item = ParametrosComercial.objects.order_by('-atualizado_em').first()
+    if not item:
+        return ''
+    return (
+        f'Validade padrão: {item.validade_padrao or "—"}. '
+        f'Faturamento padrão: {item.faturamento_padrao or "—"}. '
+        f'Vigência padrão: {item.vigencia_padrao or "—"}.'
+    )
+
+
+def _detalhe_validacao(user, pergunta: str) -> str:
+    from apps.comercial.models import COMPATIBILIDADE_HOMOLOGADO, ClienteComercial
+    qs = ClienteComercial.objects.exclude(compatibilidade=COMPATIBILIDADE_HOMOLOGADO).order_by('razao_social')
+
+    def linha(cliente):
+        return f'{cliente.razao_social}: {cliente.compatibilidade or "pendente"}'
+
+    return _linhas_casadas(qs, ('razao_social',), pergunta, linha)
+
+
+def _detalhe_estoque(user, pergunta: str) -> str:
+    from apps.compras.models import ItemEstoque
+    qs = ItemEstoque.objects.order_by('nome')
+
+    def linha(item):
+        return f'{item.nome}: {item.qtd_atual} {item.unidade}, mínimo {item.qtd_minima}'
+
+    return _linhas_casadas(qs, ('nome',), pergunta, linha)
+
+
+def _detalhe_saldos(user, pergunta: str) -> str:
+    from apps.financeiro.models import BankAccount
+    qs = BankAccount.objects.order_by('bank', 'number')
+
+    def linha(conta):
+        return f'{conta.bank} ag {conta.agency} cc {conta.number}: saldo {conta.balance}'
+
+    return _linhas_casadas(qs, ('bank', 'number'), pergunta, linha)
+
+
+def _detalhe_relatorios(user, pergunta: str) -> str:
+    from apps.financeiro.models import PagarTitulo, ReceberTitulo
+    texto = _sem_acento((pergunta or '').lower())
+    blocos = []
+    if 'receber' not in texto or 'pagar' in texto:
+        pagar = _filtra_filial(PagarTitulo.objects.all(), user, 'Financeiro', 'filial').order_by('vencimento')
+        blocos.append('A pagar:\n' + _linhas_casadas(
+            pagar, ('fornecedor', 'titulo'), pergunta,
+            lambda item: f'{item.fornecedor} título {item.titulo}: saldo {item.saldo}, vencimento {item.vencimento or "—"}',
+        ))
+    if 'pagar' not in texto or 'receber' in texto:
+        receber = _filtra_filial(ReceberTitulo.objects.all(), user, 'Financeiro', 'filial').order_by('vencimento')
+        blocos.append('A receber:\n' + _linhas_casadas(
+            receber, ('cliente', 'titulo'), pergunta,
+            lambda item: f'{item.cliente} título {item.titulo}: saldo {item.saldo}, vencimento {item.vencimento or "—"}',
+        ))
+    return '\n'.join(bloco for bloco in blocos if bloco.strip())
+
+
+def _detalhe_calendario(user, pergunta: str) -> str:
+    from apps.financeiro.models import CalendarioEvento
+    qs = CalendarioEvento.objects.filter(usuario=user).order_by('data')
+
+    def linha(evento):
+        return f'{evento.data.strftime("%d/%m/%Y")} {evento.titulo}'
+
+    return _linhas_casadas(qs, ('titulo',), pergunta, linha)
+
+
+def _detalhe_faturamento(user, pergunta: str) -> str:
+    from apps.financeiro.models import BillingRecord
+    qs = BillingRecord.objects.order_by('-reference_date')
+
+    def linha(item):
+        return f'{item.reference_date.strftime("%d/%m/%Y")} {item.branch}: {item.value}'
+
+    return _linhas_casadas(qs, ('branch',), pergunta, linha)
+
+
+def _detalhe_protocolos(user, pergunta: str) -> str:
+    from apps.faturamento.models import ProtocoloEnvio
+    qs = ProtocoloEnvio.objects.select_related('cliente').order_by('-data')
+
+    def linha(item):
+        nome = item.cliente.nome if item.cliente_id else '—'
+        return f'{item.data.strftime("%d/%m/%Y")} {nome}: NF {(item.nota_fiscal or "—")[:80]}'
+
+    return _linhas_casadas(qs, ('nota_fiscal', 'cliente__nome'), pergunta, linha)
+
+
+def _detalhe_veiculos(user, pergunta: str) -> str:
+    from apps.frota.models import VeiculoFrota
+    qs = _filtra_filial(VeiculoFrota.objects.all(), user, 'Frota', 'filial').order_by('placa')
+
+    def linha(item):
+        return f'{item.placa} {item.marca} {item.modelo}, filial {item.filial}'
+
+    return _linhas_casadas(qs, ('placa', 'modelo', 'marca'), pergunta, linha)
+
+
+def _detalhe_condutores(user, pergunta: str) -> str:
+    from apps.frota.models import CondutorFrota
+    qs = _filtra_filial(CondutorFrota.objects.all(), user, 'Frota', 'filial').order_by('nome')
+    return _linhas_casadas(qs, ('nome',), pergunta, lambda item: item.nome)
+
+
+def _detalhe_campanhas(user, pergunta: str) -> str:
+    from apps.marketing.models import CampanhaMarketing
+    qs = CampanhaMarketing.objects.order_by('-data_inicio')
+
+    def linha(item):
+        return f'{item.titulo}: {item.get_status_display()}, {item.data_inicio.strftime("%d/%m/%Y")}'
+
+    return _linhas_casadas(qs, ('titulo',), pergunta, linha)
+
+
+def _detalhe_pesquisas(user, pergunta: str) -> str:
+    from apps.sgq.models import PesquisaSatisfacao
+    qs = _filtra_filial(PesquisaSatisfacao.objects.all(), user, 'SGQ', 'filial').order_by('-data_entrega')
+
+    def linha(item):
+        return f'{item.data_entrega.strftime("%d/%m/%Y")} {item.cliente}: CT-e {item.cte}'
+
+    return _linhas_casadas(qs, ('cliente', 'cte', 'motorista'), pergunta, linha)
+
+
+def _detalhe_metas(user, pergunta: str) -> str:
+    from apps.indicadores.models import MetaFaturamentoMensal
+    qs = MetaFaturamentoMensal.objects.order_by('-ano', '-mes')
+
+    def linha(item):
+        return f'{item.mes:02d}/{item.ano}: {item.valor}'
+
+    return _linhas_casadas(qs, (), pergunta, linha)
+
+
+_DETALHE = {
+    ('Financeiro', 'calendario'): _detalhe_calendario,
+    ('Financeiro', 'inclusao-relatorios'): _detalhe_relatorios,
+    ('Financeiro', 'saldos-bancarios'): _detalhe_saldos,
+    ('Financeiro', 'faturamento'): _detalhe_faturamento,
+    ('Faturamento', 'envio-nf-cliente'): _detalhe_protocolos,
+    ('Compras', 'controle-estoque'): _detalhe_estoque,
+    ('SGQ', 'pesquisa-satisfacao'): _detalhe_pesquisas,
+    ('Marketing', 'campanhas'): _detalhe_campanhas,
+    ('Logística', 'configuracoes'): _detalhe_metas,
+    ('Frota', 'cadastro-veiculos'): _detalhe_veiculos,
+    ('Frota', 'cadastro-condutores'): _detalhe_condutores,
+    ('Comercial', 'cadastro-clientes'): _detalhe_clientes,
+    ('Comercial', 'cadastro-tabela-frete'): _detalhe_tabela_frete,
+    ('Comercial', 'cadastro-generalidades'): _detalhe_generalidades,
+    ('Comercial', 'cadastro-icms-ufs'): _detalhe_icms,
+    ('Comercial', 'cadastro-parametros'): _detalhe_parametros,
+    ('Comercial', 'cadastro-produtos'): _detalhe_produtos,
+    ('Comercial', 'propostas-comerciais'): _detalhe_propostas,
+    ('Comercial', 'validacao-clientes'): _detalhe_validacao,
+    ('Indicadores', 'fluxo-caixa'): _detalhe_relatorios,
+    ('Indicadores', 'meta-faturamento'): _detalhe_metas,
+    ('Indicadores', 'satisfacao-clientes'): _detalhe_pesquisas,
+}
+
+
+def _ler_parte(user, item: dict, pergunta: str, detalhar: bool) -> str:
+    chave = (item['ambiente'], item['parte'])
+    if not detalhar:
+        if chave == ('RH', 'documentos'):
+            return _contagem_documentos(user)
+        if chave in {('RH', 'movimentacoes'), ('Indicadores', 'movimentacao-rh')}:
+            return _contagem_movimentacoes(user)
+        leitor = LEITORES.get(chave)
+        return leitor(user) if leitor else 'Parte liberada, sem resumo cadastrado.'
+
+    if chave == ('RH', 'documentos'):
+        texto = resumo_documentos(user, pergunta)
+    elif chave in {('RH', 'movimentacoes'), ('Indicadores', 'movimentacao-rh')}:
+        texto = resumo_movimentacoes(user, pergunta)
+    else:
+        leitor = LEITORES.get(chave)
+        texto = leitor(user) if leitor else 'Parte liberada, sem resumo cadastrado.'
+        extra = _DETALHE.get(chave)
+        if extra:
+            detalhe = extra(user, pergunta)
+            if detalhe:
+                texto = f'{texto}\n{detalhe}'
+    if len(texto) > _LIMITE_RESUMO:
+        texto = texto[:_LIMITE_RESUMO].rstrip() + '…'
+    return texto
+
+
 def consultar(user, agente, pergunta: str) -> dict:
     liberadas = {(item['ambiente'], item['parte']) for item in partes_do_usuario(user)}
     efetivos = []
@@ -566,23 +941,29 @@ def consultar(user, agente, pergunta: str) -> dict:
         else:
             ignorados.append(item)
 
+    foco = {(item['ambiente'], item['parte']) for item in _partes_em_foco(pergunta, efetivos)}
     fontes = []
     for item in efetivos:
-        if (item['ambiente'], item['parte']) == ('RH', 'documentos'):
-            resumo = resumo_documentos(user, pergunta)
-        elif (item['ambiente'], item['parte']) in {('RH', 'movimentacoes'), ('Indicadores', 'movimentacao-rh')}:
-            resumo = resumo_movimentacoes(user, pergunta)
-        else:
-            leitor = LEITORES.get((item['ambiente'], item['parte']))
-            resumo = leitor(user) if leitor else 'Parte liberada, sem resumo cadastrado.'
-        fontes.append({**item, 'resumo': resumo})
+        resumo = _ler_parte(user, item, pergunta, (item['ambiente'], item['parte']) in foco)
+        fontes.append({**item, 'resumo': resumo, 'detalhada': (item['ambiente'], item['parte']) in foco})
 
     if not fontes:
         resposta = f'{agente.nome} não tem partes liberadas no seu acesso atual.'
+        material = ''
     else:
         linhas = [f'{agente.nome} consultou {len(fontes)} parte(s) do seu acesso:']
         linhas.extend(f"{fonte['ambiente']} / {fonte['rotulo']}: {fonte['resumo']}" for fonte in fontes)
         resposta = '\n'.join(linhas)
+        abertas = [fonte for fonte in fontes if fonte['detalhada']]
+        fechadas = [fonte for fonte in fontes if not fonte['detalhada']]
+        blocos = [
+            f"{fonte['ambiente']} / {fonte['rotulo']}: {fonte['resumo']}"
+            for fonte in abertas
+        ]
+        if fechadas:
+            nomes = ', '.join(f"{fonte['ambiente']} / {fonte['rotulo']}" for fonte in fechadas)
+            blocos.append(f'Também liberado, sem detalhe nesta pergunta: {nomes}.')
+        material = '\n'.join(blocos)
 
     if ignorados:
         nomes = ', '.join(f"{item['ambiente']} / {item['rotulo']}" for item in ignorados)
@@ -597,4 +978,4 @@ def consultar(user, agente, pergunta: str) -> dict:
     if citados:
         resposta += '\nA pergunta cita ' + ', '.join(citados) + ', e isso não está liberado neste agente.'
 
-    return {'resposta': resposta, 'fontes': fontes}
+    return {'resposta': resposta, 'fontes': fontes, 'material': material}

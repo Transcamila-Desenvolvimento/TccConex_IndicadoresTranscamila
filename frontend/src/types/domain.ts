@@ -3386,6 +3386,8 @@ export interface CamiloAgentePayload {
 export interface CamiloConsulta {
   resposta: string;
   titulo?: string;
+  contextoUsado?: number;
+  contextoLimite?: number;
   fontes: Array<CamiloEscopo & { resumo: string }>;
 }
 

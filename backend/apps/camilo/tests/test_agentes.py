@@ -152,3 +152,64 @@ class CamiloAgenteTests(TestCase):
         self.assertIn('Ana Lima, em 06/2026', ficha)
         self.assertIn('salário 1500.00', ficha)
         self.assertNotIn('111', ficha)
+
+    def test_detalha_so_a_funcao_citada(self):
+        from apps.camilo.consulta import consultar
+        from apps.comercial.models import PropostaComercial
+        from apps.rh.models import LoteMovimentacaoRH, MovimentacaoColaborador
+
+        admin = User.objects.create_user(
+            username='camilo.foco',
+            password='test123',
+            name='Foco',
+            role_id='1',
+            status='ativo',
+            environments=['CamiloIA', 'Comercial', 'RH'],
+        )
+        PropostaComercial.objects.create(
+            tipo='transporte_rodoviario',
+            titulo='Frete Alfa',
+            cliente_nome='Alfa Quimica',
+        )
+        lote = LoteMovimentacaoRH.objects.create(mes=6, ano=2026)
+        MovimentacaoColaborador.objects.create(lote=lote, nome='Ana Lima', cpf='222', salario='1500.00')
+
+        class Agente:
+            nome = 'Misto'
+            escopos = [
+                {'ambiente': 'Comercial', 'parte': 'propostas-comerciais'},
+                {'ambiente': 'RH', 'parte': 'movimentacoes'},
+            ]
+
+        resultado = consultar(admin, Agente(), 'Qual o status da proposta Frete Alfa?')
+        propostas = next(item for item in resultado['fontes'] if item['parte'] == 'propostas-comerciais')
+        rh = next(item for item in resultado['fontes'] if item['parte'] == 'movimentacoes')
+        self.assertIn('Frete Alfa', propostas['resumo'])
+        self.assertNotIn('Ana Lima', rh['resumo'])
+        self.assertIn('Frete Alfa', resultado['material'])
+        self.assertIn('sem detalhe nesta pergunta', resultado['material'])
+        self.assertNotIn('Ana Lima', resultado['material'])
+
+    def test_consulta_devolve_o_uso_do_contexto(self):
+        from apps.camilo.conversa import LIMITE_CONTEXTO, encaixar_historico
+
+        self.client.force_authenticate(user=self.comercial)
+        criado = self.client.post('/api/camilo/agentes/', {
+            'nome': 'Propostas',
+            'escopos': [{'ambiente': 'Comercial', 'parte': 'propostas-comerciais'}],
+        }, format='json')
+        consulta = self.client.post(
+            f"/api/camilo/agentes/{criado.json()['id']}/consultar/",
+            {'pergunta': 'Quantas propostas comerciais existem?'},
+            format='json',
+        )
+        self.assertEqual(consulta.status_code, 200, consulta.content)
+        corpo = consulta.json()
+        self.assertEqual(corpo['contextoLimite'], LIMITE_CONTEXTO)
+        self.assertGreater(corpo['contextoUsado'], 0)
+        self.assertLessEqual(corpo['contextoUsado'], LIMITE_CONTEXTO)
+
+        historico = [{'role': 'user' if i % 2 == 0 else 'model', 'text': 'x' * 2000} for i in range(24)]
+        cabido = encaixar_historico(historico, 5000)
+        self.assertLessEqual(sum(len(item['text']) for item in cabido), 5000)
+        self.assertEqual(cabido[-1]['text'], historico[-1]['text'])

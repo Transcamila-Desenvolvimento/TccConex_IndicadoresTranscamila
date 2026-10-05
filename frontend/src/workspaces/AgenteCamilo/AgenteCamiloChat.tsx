@@ -16,6 +16,7 @@ import type { CamiloAgente } from '../../types/domain';
 import CamiloTexto from './CamiloTexto';
 
 const STORAGE_KEY = 'tccconex.agente-camilo.threads';
+const LIMITE_CONTEXTO = 24000;
 
 const SUGGESTIONS = [
   { icon: 'bi-pencil', label: 'Escreva ou edite', prompt: 'Escreva um texto curto para comunicação interna.' },
@@ -36,6 +37,8 @@ interface ChatThread {
   updatedAt: number;
   agentId?: string;
   agentName?: string;
+  contextoUsado?: number;
+  contextoLimite?: number;
 }
 
 function newId() {
@@ -47,10 +50,63 @@ function isThread(value: unknown): value is ChatThread {
   const thread = value as ChatThread;
   if (thread.agentId != null && typeof thread.agentId !== 'string') return false;
   if (thread.agentName != null && typeof thread.agentName !== 'string') return false;
+  if (thread.contextoUsado != null && typeof thread.contextoUsado !== 'number') return false;
+  if (thread.contextoLimite != null && typeof thread.contextoLimite !== 'number') return false;
   return typeof thread.id === 'string'
     && typeof thread.title === 'string'
     && typeof thread.updatedAt === 'number'
     && Array.isArray(thread.messages);
+}
+
+function contextoDoChat(thread: ChatThread) {
+  const limite = thread.contextoLimite || LIMITE_CONTEXTO;
+  const usado = thread.contextoUsado ?? thread.messages.reduce((total, message) => total + message.text.length, 0);
+  const percentual = limite > 0 ? Math.min(100, Math.round((usado / limite) * 100)) : 0;
+  return { usado, limite, percentual };
+}
+
+function RodinhaContexto({ usado, limite }: { usado: number; limite: number }) {
+  const percentual = limite > 0 ? Math.min(100, (usado / limite) * 100) : 0;
+  const raio = 7.5;
+  const volta = 2 * Math.PI * raio;
+  const preenchido = (percentual / 100) * volta;
+  const faixa = percentual >= 90 ? ' is-full' : percentual >= 70 ? ' is-high' : '';
+  return (
+    <span
+      className={`camilo-context-ring${faixa}`}
+      role="img"
+      aria-label={`Contexto ${Math.round(percentual)}%`}
+      title="Contexto da conversa"
+    >
+      <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+        <circle className="camilo-context-ring-track" cx="10" cy="10" r={raio} />
+        <circle
+          className="camilo-context-ring-fill"
+          cx="10"
+          cy="10"
+          r={raio}
+          strokeDasharray={`${preenchido} ${volta}`}
+          transform="rotate(-90 10 10)"
+        />
+      </svg>
+    </span>
+  );
+}
+
+function BarraContexto({ thread }: { thread: ChatThread }) {
+  const { usado, limite, percentual } = contextoDoChat(thread);
+  const faixa = percentual >= 90 ? ' is-full' : percentual >= 70 ? ' is-high' : '';
+  return (
+    <span
+      className={`camilo-context${faixa}`}
+      title={`${usado.toLocaleString('pt-BR')} de ${limite.toLocaleString('pt-BR')} caracteres de contexto`}
+    >
+      <span className="camilo-context-track" aria-hidden="true">
+        <span className="camilo-context-fill" style={{ width: `${percentual}%` }} />
+      </span>
+      <small>{percentual}%</small>
+    </span>
+  );
 }
 
 function rememberThread(
@@ -59,6 +115,7 @@ function rememberThread(
   message: ChatMessage,
   agent?: { id: string; nome: string },
   titulo?: string,
+  contexto?: { usado: number; limite: number },
 ): ChatThread[] {
   const now = Date.now();
   const existing = current.find((thread) => thread.id === threadId);
@@ -70,6 +127,7 @@ function rememberThread(
       title: tituloLimpo || (existing.messages.length === 0 ? threadTitle(message.text) : existing.title),
       messages: [...existing.messages, message],
       updatedAt: now,
+      ...(contexto ? { contextoUsado: contexto.usado, contextoLimite: contexto.limite } : {}),
     }
     : {
       id: threadId,
@@ -269,16 +327,25 @@ const AgenteCamiloChat: React.FC = () => {
       : Boolean(active && !active.agentId);
     const threadId = continua && active ? active.id : (speakingAgent ? newId() : (activeId ?? newId()));
     const anteriores = continua && active ? active.messages : [];
-    const historico = anteriores.slice(-8).map((message) => ({
+    const historico = anteriores.slice(-24).map((message) => ({
       papel: message.role,
       texto: message.text,
     }));
     const userMessage: ChatMessage = { id: newId(), role: 'user', text: trimmed };
-    const guardarResposta = (texto: string, titulo?: string) => {
+    const guardarResposta = (
+      texto: string,
+      titulo?: string,
+      contexto?: { usado: number; limite: number },
+    ) => {
       const reply: ChatMessage = { id: newId(), role: 'assistant', text: texto };
-      setThreads((current) => rememberThread(current, threadId, reply, undefined, titulo));
+      setThreads((current) => rememberThread(current, threadId, reply, undefined, titulo, contexto));
       setPendingId((current) => (current === threadId ? null : current));
     };
+    const contextoDaResposta = (data: { contextoUsado?: number; contextoLimite?: number }) => (
+      typeof data.contextoUsado === 'number'
+        ? { usado: data.contextoUsado, limite: data.contextoLimite || LIMITE_CONTEXTO }
+        : undefined
+    );
 
     setThreads((current) => rememberThread(
       current,
@@ -295,7 +362,7 @@ const AgenteCamiloChat: React.FC = () => {
       consultarAgent.mutate(
         { id: speakingAgent.id, pergunta: trimmed, historico },
         {
-          onSuccess: (data) => guardarResposta(data.resposta, data.titulo),
+          onSuccess: (data) => guardarResposta(data.resposta, data.titulo, contextoDaResposta(data)),
           onError: (error) => guardarResposta(erroApi(error)),
         },
       );
@@ -305,7 +372,7 @@ const AgenteCamiloChat: React.FC = () => {
     conversarCamilo.mutate(
       { pergunta: trimmed, historico },
       {
-        onSuccess: (data) => guardarResposta(data.resposta, data.titulo),
+        onSuccess: (data) => guardarResposta(data.resposta, data.titulo, contextoDaResposta(data)),
         onError: (error) => guardarResposta(erroApi(error)),
       },
     );
@@ -385,6 +452,10 @@ const AgenteCamiloChat: React.FC = () => {
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
       />
+      <RodinhaContexto
+        usado={(active ? contextoDoChat(active).usado : 0) + draft.length}
+        limite={active?.contextoLimite || LIMITE_CONTEXTO}
+      />
       {chatPicker}
       <button
         type="submit"
@@ -428,6 +499,7 @@ const AgenteCamiloChat: React.FC = () => {
                   <button type="button" className="camilo-thread-open" onClick={() => openThread(thread)}>
                     <span>{thread.title}</span>
                     {threadAgent && <small>{threadAgent}</small>}
+                    <BarraContexto thread={thread} />
                   </button>
                   <button
                     type="button"

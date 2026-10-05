@@ -25,9 +25,9 @@ def _alternar(mensagens: list[dict]) -> list[dict]:
         if papel not in {'user', 'model'} or not texto:
             continue
         if saida and saida[-1]['role'] == papel:
-            saida[-1]['text'] = f"{saida[-1]['text']}\n{texto}"[:4000]
+            saida[-1]['text'] = f"{saida[-1]['text']}\n{texto}"[:8000]
             continue
-        saida.append({'role': papel, 'text': texto[:4000]})
+        saida.append({'role': papel, 'text': texto[:8000]})
     if saida and saida[0]['role'] != 'user':
         saida.insert(0, {'role': 'user', 'text': 'Olá.'})
     return saida
@@ -47,7 +47,7 @@ def gerar(sistema: str, mensagens: list[dict], max_tokens: int = 2048) -> str:
     modelo = getattr(settings, 'GEMINI_MODEL', '') or 'gemini-3.8-flash'
     url = f'https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent'
     corpo = json.dumps({
-        'systemInstruction': {'parts': [{'text': sistema[:12000]}]},
+        'systemInstruction': {'parts': [{'text': sistema[:4000]}]},
         'contents': [
             {'role': item['role'], 'parts': [{'text': item['text']}]}
             for item in conteudo

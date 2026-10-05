@@ -16,6 +16,36 @@ FORMATO_RESPOSTA = (
     'Negrito só no rótulo que importa. Não use HTML.'
 )
 
+# Teto do que realmente segue para o modelo: instrução, material da função e o chat.
+LIMITE_CONTEXTO = 24000
+ORCAMENTO_MATERIAL = 5500
+
+
+def medir_contexto(sistema: str, mensagens: list[dict]) -> dict:
+    usado = len(sistema or '') + sum(len(item.get('text') or '') for item in mensagens)
+    return {'contextoUsado': usado, 'contextoLimite': LIMITE_CONTEXTO}
+
+
+def encaixar_historico(historico: list[dict], orcamento: int) -> list[dict]:
+    """Mantém o fim da conversa até caber no orçamento. O começo sai primeiro."""
+    if orcamento <= 0:
+        return []
+    escolhidos = []
+    usado = 0
+    for item in reversed(historico):
+        texto = item.get('text') or ''
+        cabe = orcamento - usado
+        if cabe <= 80:
+            break
+        if len(texto) > cabe:
+            if escolhidos:
+                break
+            texto = texto[-cabe:]
+        escolhidos.append({'role': item['role'], 'text': texto})
+        usado += len(texto)
+    escolhidos.reverse()
+    return escolhidos
+
 def sistema_camilo() -> str:
     config = ChatPadrao.atual()
     instrucao = config.instrucao_efetiva or INSTRUCAO_CHAT_PADRAO
@@ -77,7 +107,7 @@ def titulo_da_conversa(pergunta: str, resposta: str) -> str:
     return titulo
 
 
-def historico_valido(bruto, limite: int = 8) -> list[dict]:
+def historico_valido(bruto, limite: int = 24) -> list[dict]:
     itens = []
     if not isinstance(bruto, list):
         return itens
@@ -90,17 +120,19 @@ def historico_valido(bruto, limite: int = 8) -> list[dict]:
             continue
         itens.append({
             'role': 'user' if papel == 'user' else 'model',
-            'text': texto[:1500],
+            'text': texto[:2000],
         })
     return itens
 
 
 def responder_camilo(pergunta: str, historico: list[dict] | None = None) -> dict:
     anteriores = historico_valido(historico)
-    mensagens = [*anteriores, {'role': 'user', 'text': pergunta}]
-    resposta = gerar(sistema_camilo(), mensagens)
+    sistema = sistema_camilo()
+    orcamento = max(0, LIMITE_CONTEXTO - len(sistema) - len(pergunta))
+    mensagens = [*encaixar_historico(anteriores, orcamento), {'role': 'user', 'text': pergunta}]
+    resposta = gerar(sistema, mensagens)
     titulo = titulo_da_conversa(pergunta, resposta) if not anteriores else ''
-    return {'resposta': resposta, 'titulo': titulo}
+    return {'resposta': resposta, 'titulo': titulo, **medir_contexto(sistema, mensagens)}
 
 
 def responder_agente(user, agente, pergunta: str, historico: list[dict] | None = None) -> dict:
@@ -108,25 +140,26 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
     anteriores = historico_valido(historico)
     if not anteriores:
         resultado['titulo'] = titulo_local(pergunta)
-    if not configurado() or not resultado.get('fontes'):
-        return resultado
-
-    blocos = '\n'.join(
-        f"{fonte['ambiente']} / {fonte['rotulo']}: {fonte['resumo']}"
-        for fonte in resultado['fontes']
-    )
+    material = (resultado.get('material') or '')[:ORCAMENTO_MATERIAL]
     instrucao = (agente.instrucao or '').strip() or 'Responda só com o material consultado.'
     sistema = (
         f'Você é {agente.nome}, um agente do ERP TccConex. Responda em português, de forma direta. '
-        f'Instrução: {instrucao[:2000]} '
-        'Use somente o material abaixo. Não invente números nem documentos. '
+        f'Instrução: {instrucao[:800]} '
+        'Use somente o material enviado com a pergunta. Não invente números nem documentos. '
+        'Esse material abre só as funções liberadas que combinam com a pergunta, com poucos registros. '
+        'Se outra função aparecer só como liberada, não invente o conteúdo: diga que ela pode ser detalhada '
+        'se a pessoa perguntar dela. '
         'Se a pergunta usar um nome e o material trouxer o dado equivalente, '
         'responda com os valores que estão escritos e diga o nome que o documento usa. '
         'Exemplo: perguntaram diária e o texto traz piso mensal — mostre os pisos, não omita as cifras. '
         'Diga que não há a informação só quando o material não tiver nem o termo nem um valor equivalente. '
-        f'{FORMATO_RESPOSTA}\n'
-        f'Material:\n{blocos[:12000]}'
+        + FORMATO_RESPOSTA
     )
-    mensagens = [*anteriores, {'role': 'user', 'text': pergunta}]
+    pedido = pergunta if not material else f'Material consultado agora:\n{material}\n\nPergunta: {pergunta}'
+    orcamento = max(0, LIMITE_CONTEXTO - len(sistema) - len(pedido))
+    mensagens = [*encaixar_historico(anteriores, orcamento), {'role': 'user', 'text': pedido}]
+    resultado.update(medir_contexto(sistema, mensagens))
+    if not configurado() or not resultado.get('fontes'):
+        return resultado
     resultado['resposta'] = gerar(sistema, mensagens)
     return resultado

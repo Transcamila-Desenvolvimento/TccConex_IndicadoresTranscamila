@@ -19962,8 +19962,8 @@ textarea.form-input {
   cursor: pointer;
 }
 
-.camilo-thread-open span,
-.camilo-thread-open small {
+.camilo-thread-open > span:not(.camilo-context),
+.camilo-thread-open > small {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -19973,6 +19973,45 @@ textarea.form-input {
 .camilo-thread-open small {
   color: #6b7280;
   font-size: 11px;
+}
+
+.camilo-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.camilo-context-track {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.camilo-context-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #118CC4;
+}
+
+.camilo-context.is-high .camilo-context-fill {
+  background: #d97706;
+}
+
+.camilo-context.is-full .camilo-context-fill {
+  background: #dc2626;
+}
+
+.camilo-context small {
+  flex: none;
+  min-width: 28px;
+  color: #6b7280;
+  font-size: 10px;
+  text-align: right;
 }
 
 .camilo-thread-delete {
@@ -20007,6 +20046,37 @@ textarea.form-input {
   align-items: center;
   justify-content: center;
   padding: 32px 24px 48px;
+}
+
+.camilo-context-ring {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
+}
+
+.camilo-context-ring-track,
+.camilo-context-ring-fill {
+  fill: none;
+  stroke-width: 2.4;
+}
+
+.camilo-context-ring-track {
+  stroke: #e5e7eb;
+}
+
+.camilo-context-ring-fill {
+  stroke: #118CC4;
+  stroke-linecap: round;
+}
+
+.camilo-context-ring.is-high .camilo-context-ring-fill {
+  stroke: #d97706;
+}
+
+.camilo-context-ring.is-full .camilo-context-ring-fill {
+  stroke: #dc2626;
 }
 
 .camilo-picker {
