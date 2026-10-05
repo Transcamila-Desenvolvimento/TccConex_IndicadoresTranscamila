@@ -202,7 +202,19 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
       </div>
 
       <div className="proposta-destinos-head proposta-armazenagem-subhead">
-        <h4>{TABELA_ARMAZENAGEM_PADRAO.horaExtraTitulo}</h4>
+        {canEdit ? (
+          <input
+            className="proposta-destinos-input proposta-armazenagem-titulo"
+            value={dados.horaExtraTitulo}
+            aria-label="Título da hora extra"
+            onChange={(e) => {
+              const horaExtraTitulo = e.target.value;
+              alterar((atual) => ({ ...atual, horaExtraTitulo }));
+            }}
+          />
+        ) : (
+          <h4>{dados.horaExtraTitulo}</h4>
+        )}
       </div>
       <div className="table-container proposta-destinos-wrap" ref={arrasteHora.refCaixa}>
         <table className="erp-table reports-table comercial-browse-table proposta-destinos-table proposta-armazenagem-table">

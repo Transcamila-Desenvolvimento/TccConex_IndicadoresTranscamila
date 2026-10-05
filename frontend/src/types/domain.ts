@@ -2787,7 +2787,9 @@ export function cloneTabelaArmazenagem(tabela?: TabelaArmazenagem | null): Tabel
       valor: item.valor,
       formato: item.formato || inferirFormatoTarifaArmazenagem(item.valor, 'moeda'),
     })),
-    horaExtraTitulo: TABELA_ARMAZENAGEM_PADRAO.horaExtraTitulo,
+    horaExtraTitulo: typeof fonte.horaExtraTitulo === 'string'
+      ? fonte.horaExtraTitulo
+      : TABELA_ARMAZENAGEM_PADRAO.horaExtraTitulo,
     horaExtra: (fonte.horaExtra?.length ? fonte.horaExtra : TABELA_ARMAZENAGEM_PADRAO.horaExtra)
       .map((item) => ({
         periodo: item.periodo,

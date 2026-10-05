@@ -985,6 +985,15 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(tabela['itens'][0]['formato'], 'moeda')
         self.assertEqual(tabela['itens'][1]['formato'], 'hora')
         self.assertEqual(tabela['itens'][1]['valor'], 'R$ 15,00/h')
+        self.assertEqual(tabela['horaExtraTitulo'], 'Hora-extra (7)')
+        renomeado = self.api.patch(
+            f"/api/comercial/propostas/{created.json()['id']}/",
+            {'tabelaArmazenagem': {**tabela, 'horaExtraTitulo': 'Hora-extra (8)'}},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(renomeado.status_code, 200, renomeado.content)
+        self.assertEqual(renomeado.json()['tabelaArmazenagem']['horaExtraTitulo'], 'Hora-extra (8)')
         self.assertEqual(tabela['horaExtra'][0]['periodo'], 'De segunda a sábado')
         self.assertEqual(tabela['horaExtra'][0]['formato'], 'tonelada')
 

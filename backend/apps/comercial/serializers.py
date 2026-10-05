@@ -1149,7 +1149,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             'periodoFim': '',
             'unidade': padrao['unidade'],
             'itens': _linhas(value.get('itens'), 'rotulo', 'valor', 'moeda'),
-            'horaExtraTitulo': padrao['horaExtraTitulo'],
+            'horaExtraTitulo': str(value.get('horaExtraTitulo') or '').strip()[:80] or padrao['horaExtraTitulo'],
             'horaExtra': _linhas(value.get('horaExtra') or value.get('hora_extra'), 'periodo', 'valor', 'tonelada') or padrao['horaExtra'],
             'expediente': str(value.get('expediente') or '').strip()[:240],
         }
