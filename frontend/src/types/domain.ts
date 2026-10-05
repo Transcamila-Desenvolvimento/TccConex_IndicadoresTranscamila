@@ -2306,7 +2306,7 @@ export interface ProdutoComercialClienteVinculo {
   compatibilidade: ClienteComercialCompatibilidade;
 }
 
-export type ProdutoComercialTipo = 'fungicida' | 'herbicida' | 'inseticida' | 'acaricida' | 'fertilizante' | 'outros';
+export type ProdutoComercialTipo = 'fungicida' | 'herbicida' | 'inseticida' | 'acaricida' | 'fertilizante' | 'adjuvante' | 'pastagem' | 'outros';
 
 export const PRODUTO_COMERCIAL_TIPO_OPTIONS: { value: ProdutoComercialTipo; label: string }[] = [
   { value: 'fungicida', label: 'Fungicidas' },
@@ -2314,6 +2314,8 @@ export const PRODUTO_COMERCIAL_TIPO_OPTIONS: { value: ProdutoComercialTipo; labe
   { value: 'inseticida', label: 'Inseticidas' },
   { value: 'acaricida', label: 'Acaricidas' },
   { value: 'fertilizante', label: 'Fertilizante' },
+  { value: 'adjuvante', label: 'Adjuvantes' },
+  { value: 'pastagem', label: 'Pastagem' },
   { value: 'outros', label: 'Outros' },
 ];
 

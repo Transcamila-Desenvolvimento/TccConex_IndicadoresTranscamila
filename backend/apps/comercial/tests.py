@@ -4087,6 +4087,15 @@ class HomologacaoProdutosComercialTests(TestCase):
         filtrado = self.api.get('/api/comercial/produtos/?tipo=herbicida', **HEADERS)
         nomes = [item['nome'] for item in filtrado.json()['results']]
         self.assertEqual(nomes, ['HERBICIDA TESTE'])
+        for valor in ('adjuvante', 'pastagem'):
+            criado = self.api.post(
+                '/api/comercial/produtos/',
+                {'nome': f'Tipo {valor}', 'tipoProduto': valor, 'clienteIds': [cliente]},
+                format='json',
+                **HEADERS,
+            )
+            self.assertEqual(criado.status_code, 201, criado.content)
+            self.assertEqual(criado.json()['tipoProduto'], valor)
         invalido = self.api.post(
             '/api/comercial/produtos/',
             {'nome': 'Tipo Invalido', 'tipoProduto': 'semente', 'clienteIds': [cliente]},
