@@ -90,6 +90,38 @@ class CamiloAgenteTests(TestCase):
         }, format='json')
         self.assertEqual(recusado.status_code, 400)
 
+    def test_escopo_fora_do_acesso_some_do_agente(self):
+        from apps.camilo.models import Agente
+
+        self.client.force_authenticate(user=self.comercial)
+        criado = self.client.post('/api/camilo/agentes/', {
+            'nome': 'Propostas',
+            'escopos': [{'ambiente': 'Comercial', 'parte': 'propostas-comerciais'}],
+        }, format='json')
+        self.assertEqual(criado.status_code, 201, criado.content)
+        agente = Agente.objects.get(pk=criado.json()['id'])
+        agente.escopos = [
+            {'ambiente': 'Comercial', 'parte': 'propostas-comerciais'},
+            {'ambiente': 'RH', 'parte': 'movimentacoes'},
+        ]
+        agente.save(update_fields=['escopos'])
+
+        lido = self.client.get(f"/api/camilo/agentes/{agente.id}/")
+        self.assertEqual(lido.status_code, 200, lido.content)
+        self.assertEqual(
+            [item['parte'] for item in lido.json()['escopos']],
+            ['propostas-comerciais'],
+        )
+
+        consulta = self.client.post(
+            f'/api/camilo/agentes/{agente.id}/consultar/',
+            {'pergunta': 'Quem teve alteração de salário no RH?'},
+            format='json',
+        )
+        self.assertEqual(consulta.status_code, 200, consulta.content)
+        self.assertNotIn('RH / Movimentações:', consulta.json()['resposta'])
+        self.assertIn('RH', consulta.json()['resposta'])
+
     def test_outro_usuario_nao_consulta_o_agente(self):
         self.client.force_authenticate(user=self.comercial)
         criado = self.client.post('/api/camilo/agentes/', {
@@ -189,6 +221,10 @@ class CamiloAgenteTests(TestCase):
         self.assertIn('Frete Alfa', resultado['material'])
         self.assertIn('sem detalhe nesta pergunta', resultado['material'])
         self.assertNotIn('Ana Lima', resultado['material'])
+
+        geral = consultar(admin, Agente(), 'Tenho alguma proposta comercial?')
+        self.assertIn('Frete Alfa', geral['material'])
+        self.assertNotIn('Ana Lima', geral['material'])
 
     def test_consulta_devolve_o_uso_do_contexto(self):
         from apps.camilo.conversa import LIMITE_CONTEXTO, encaixar_historico

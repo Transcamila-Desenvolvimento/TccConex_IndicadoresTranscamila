@@ -89,6 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     apiService.clearToken();
     setSessionActive(false);
     queryClient.setQueryData(AUTH_PROFILE_QUERY_KEY, null);
+    queryClient.removeQueries({ queryKey: ['camilo'] });
     setSelectedEnvironment(null);
     setSelectedFilial(null);
     localStorage.removeItem('prothon_env');

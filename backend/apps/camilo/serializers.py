@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.camilo.catalogo import escopos_publicos, normalizar_escopos
+from apps.camilo.catalogo import escopos_publicos, normalizar_escopos, partes_do_usuario
 from apps.camilo.models import INSTRUCAO_CHAT_PADRAO, NOME_CHAT_PADRAO, Agente, ChatPadrao
 
 
@@ -34,7 +34,14 @@ class AgenteSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data['id'] = str(instance.id)
-        data['escopos'] = escopos_publicos(instance.escopos)
+        permitidos = {
+            (item['ambiente'], item['parte'])
+            for item in partes_do_usuario(self.context['request'].user)
+        }
+        data['escopos'] = [
+            item for item in escopos_publicos(instance.escopos)
+            if (item['ambiente'], item['parte']) in permitidos
+        ]
         return data
 
     def create(self, validated_data):

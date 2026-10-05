@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import camiloLogo from '../../assets/camilo-logo.png';
+import { useAuth } from '../../contexts/AuthContext';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
@@ -15,7 +16,11 @@ import {
 import type { CamiloAgente } from '../../types/domain';
 import CamiloTexto from './CamiloTexto';
 
-const STORAGE_KEY = 'tccconex.agente-camilo.threads';
+const STORAGE_PREFIX = 'tccconex.agente-camilo.threads';
+
+function storageKey(userId: string) {
+  return `${STORAGE_PREFIX}.${userId}`;
+}
 const LIMITE_CONTEXTO = 24000;
 
 const SUGGESTIONS = [
@@ -150,9 +155,9 @@ function escopoKey(ambiente: string, parte: string) {
   return `${ambiente}::${parte}`;
 }
 
-function loadThreads(): ChatThread[] {
+function loadThreads(userId: string): ChatThread[] {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = sessionStorage.getItem(storageKey(userId));
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -168,7 +173,10 @@ function threadTitle(text: string) {
 }
 
 const AgenteCamiloChat: React.FC = () => {
-  const [threads, setThreads] = useState<ChatThread[]>(loadThreads);
+  const { user } = useAuth();
+  const userId = user?.id ?? '';
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [hydratedFor, setHydratedFor] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -206,8 +214,22 @@ const AgenteCamiloChat: React.FC = () => {
   const authorName = activeAgent?.nome ?? active?.agentName ?? chatNome;
 
   useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(threads));
-  }, [threads]);
+    if (!userId) {
+      setThreads([]);
+      setHydratedFor('');
+      setActiveId(null);
+      return;
+    }
+    setThreads(loadThreads(userId));
+    setHydratedFor(userId);
+    setActiveId(null);
+    setDraftAgentId(null);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId || hydratedFor !== userId) return;
+    sessionStorage.setItem(storageKey(userId), JSON.stringify(threads));
+  }, [threads, userId, hydratedFor]);
 
   useEffect(() => {
     const node = threadRef.current;

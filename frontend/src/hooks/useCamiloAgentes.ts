@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import type { CamiloAgentePayload, CamiloChatPadraoPayload } from '../types/domain';
 
@@ -7,16 +8,20 @@ export const CAMILO_AGENTES_KEY = ['camilo', 'agentes'] as const;
 export const CAMILO_CHAT_PADRAO_KEY = ['camilo', 'chat-padrao'] as const;
 
 export function useCamiloPartes() {
+  const { user } = useAuth();
   return useQuery({
-    queryKey: CAMILO_PARTES_KEY,
+    queryKey: [...CAMILO_PARTES_KEY, user?.id ?? ''],
     queryFn: apiService.getCamiloPartes,
+    enabled: Boolean(user?.id),
   });
 }
 
 export function useCamiloChatPadrao() {
+  const { user } = useAuth();
   return useQuery({
-    queryKey: CAMILO_CHAT_PADRAO_KEY,
+    queryKey: [...CAMILO_CHAT_PADRAO_KEY, user?.id ?? ''],
     queryFn: apiService.getCamiloChatPadrao,
+    enabled: Boolean(user?.id),
   });
 }
 
@@ -31,9 +36,11 @@ export function useSalvarCamiloChatPadrao() {
 }
 
 export function useCamiloAgentes() {
+  const { user } = useAuth();
   return useQuery({
-    queryKey: CAMILO_AGENTES_KEY,
+    queryKey: [...CAMILO_AGENTES_KEY, user?.id ?? ''],
     queryFn: apiService.getCamiloAgentes,
+    enabled: Boolean(user?.id),
   });
 }
 

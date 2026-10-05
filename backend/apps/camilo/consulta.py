@@ -636,9 +636,19 @@ def _contagem_movimentacoes(user) -> str:
     return _texto(total, 'registro de movimentação', 'registros de movimentação')
 
 
+_GENERICOS_BUSCA = frozenset(
+    'proposta propostas comercial comerciais cliente clientes produto produtos '
+    'alguma algum tenho existe existem quantas quantos status registrada registrado '
+    'funcao rotina cadastro tabela documento documentos'.split()
+)
+
+
 def _linhas_casadas(qs, campos: tuple[str, ...], pergunta: str, formatar, limite: int = 4) -> str:
     from django.db.models import Q
-    termos = [termo for termo in _termos_pergunta(pergunta) if len(termo) >= 4][:3]
+    termos = [
+        termo for termo in _termos_pergunta(pergunta)
+        if len(termo) >= 4 and _sem_acento(termo) not in _GENERICOS_BUSCA
+    ][:3]
     if termos and campos:
         filtro = Q()
         for termo in termos:
@@ -646,7 +656,12 @@ def _linhas_casadas(qs, campos: tuple[str, ...], pergunta: str, formatar, limite
                 filtro |= Q(**{f'{campo}__icontains': termo})
         achados = list(qs.filter(filtro)[:limite])
         if not achados:
-            return 'Nenhum registro dessa função com os termos da pergunta.'
+            recentes = list(qs[:limite])
+            if not recentes:
+                return 'Nenhum registro nessa função.'
+            linhas = ['Nenhum registro com esse nome. Amostra recente:']
+            linhas.extend(f'- {formatar(item)}' for item in recentes)
+            return '\n'.join(linhas)
         titulo = 'Registros que batem com a pergunta:'
     else:
         achados = list(qs[:limite])
