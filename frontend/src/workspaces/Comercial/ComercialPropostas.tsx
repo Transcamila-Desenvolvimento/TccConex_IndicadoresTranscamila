@@ -252,6 +252,48 @@ const destinosProntosParaSalvar = (form: PropostaForm) => {
   return relevantes.length > 0 && relevantes.every(linhaDestinoPreenchida);
 };
 
+const linhaDoTrecho = (
+  linha: {
+    origem: string;
+    entrega: string;
+    veiculo: string;
+    veiculoKey?: string;
+    km?: string;
+    devolucaoContainer: string;
+    observacoes: string;
+    peso: string;
+    tarifaFrete: string;
+    pedagio: string;
+    retiradaCtnt: string;
+    desovaCtnt: string;
+    adValorem: string;
+    gris: string;
+    icms: string;
+    prazoDias: string;
+    outrosValores?: string;
+  },
+  modalidade: string,
+): LinhaForm => ({
+  origem: linha.origem,
+  entrega: linha.entrega,
+  veiculo: linha.veiculo,
+  veiculoKey: linha.veiculoKey,
+  modalidade,
+  km: linha.km,
+  devolucaoContainer: linha.devolucaoContainer,
+  observacoes: linha.observacoes,
+  peso: linha.peso,
+  tarifaFrete: linha.tarifaFrete,
+  pedagio: linha.pedagio,
+  retiradaCtnt: linha.retiradaCtnt,
+  desovaCtnt: linha.desovaCtnt,
+  adValorem: linha.adValorem,
+  gris: linha.gris,
+  icms: linha.icms,
+  prazoDias: linha.prazoDias,
+  outrosValores: linha.outrosValores ?? '',
+});
+
 const emptyLinha = (modalidade = 'transferencia'): LinhaForm => ({
   origem: '',
   entrega: '',
@@ -1910,7 +1952,7 @@ const ComercialPropostas: React.FC = () => {
                           }
                           onChange={(linhas) => setForm((current) => ({
                             ...current,
-                            linhas: linhas.map((linha) => ({ ...linha, modalidade: 'transferencia' })),
+                            linhas: linhas.map((linha) => linhaDoTrecho(linha, 'transferencia')),
                           }))}
                         />
                         <PropostaGeneralidadesRevisao
@@ -1954,11 +1996,7 @@ const ComercialPropostas: React.FC = () => {
                           }
                           onChange={(linhas) => setForm((current) => ({
                             ...current,
-                            linhas: linhas.map((linha) => ({
-                              ...linha,
-                              modalidade: 'spot',
-                              outrosValores: linha.outrosValores ?? '',
-                            })),
+                            linhas: linhas.map((linha) => linhaDoTrecho(linha, 'spot')),
                           }))}
                         />
                         <PropostaGeneralidadesRevisao
@@ -1986,7 +2024,7 @@ const ComercialPropostas: React.FC = () => {
                           }
                           onChange={(linhas) => setForm((current) => ({
                             ...current,
-                            linhas: linhas.map((linha) => ({ ...linha, modalidade: 'op_portuaria' })),
+                            linhas: linhas.map((linha) => linhaDoTrecho(linha, 'op_portuaria')),
                           }))}
                         />
                         <PropostaGeneralidadesRevisao

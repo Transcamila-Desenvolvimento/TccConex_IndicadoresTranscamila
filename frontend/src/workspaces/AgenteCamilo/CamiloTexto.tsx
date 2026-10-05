@@ -3,7 +3,8 @@ import React from 'react';
 type Bloco =
   | { tipo: 'p'; texto: string }
   | { tipo: 'h'; texto: string }
-  | { tipo: 'ul' | 'ol'; itens: string[] }
+  | { tipo: 'ul'; itens: string[] }
+  | { tipo: 'ol'; itens: string[] }
   | { tipo: 'tabela'; cabecalho: string[]; linhas: string[][] };
 
 function celulas(linha: string): string[] {
@@ -145,7 +146,8 @@ const CamiloTexto: React.FC<{ texto: string }> = ({ texto }) => {
             </div>
           );
         }
-        return <p key={chave}>{trechos(bloco.texto, chave)}</p>;
+        if (bloco.tipo === 'p') return <p key={chave}>{trechos(bloco.texto, chave)}</p>;
+        return null;
       })}
     </div>
   );
