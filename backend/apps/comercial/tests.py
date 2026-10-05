@@ -963,7 +963,24 @@ class ClienteComercialTests(TestCase):
         )
         self.assertEqual(created.status_code, 201, created.content)
         tabela = created.json()['tabelaArmazenagem']
+        self.assertEqual(tabela['codigo'], 'AG')
         self.assertEqual(tabela['unidade'], 'MT')
+        filial = self.api.patch(
+            f"/api/comercial/propostas/{created.json()['id']}/",
+            {'tabelaArmazenagem': {**tabela, 'codigo': 'FILIAL'}},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(filial.status_code, 200, filial.content)
+        self.assertEqual(filial.json()['tabelaArmazenagem']['codigo'], 'FILIAL')
+        invalido = self.api.patch(
+            f"/api/comercial/propostas/{created.json()['id']}/",
+            {'tabelaArmazenagem': {**tabela, 'codigo': 'OUTRO'}},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(invalido.status_code, 200, invalido.content)
+        self.assertEqual(invalido.json()['tabelaArmazenagem']['codigo'], 'AG')
         self.assertEqual(tabela['itens'][0]['valor'], 'R$ 10.000,00')
         self.assertEqual(tabela['itens'][0]['formato'], 'moeda')
         self.assertEqual(tabela['itens'][1]['formato'], 'hora')

@@ -19,6 +19,7 @@ import {
   CONDICOES_FRETE_PADRAO,
   PROPOSTA_COMERCIAL_STATUS_LABEL,
   PROPOSTA_COMERCIAL_TIPO_LABEL,
+  normalizarCodigoArmazenagem,
   propostaIncluiArmazenagem,
   rotuloNumeroProposta,
 } from '../../types/domain';
@@ -281,7 +282,7 @@ const buildArmazenagemTable = (proposta: PropostaComercial) => {
   return `
     <section class="block">
       <h2>Armazém</h2>
-      <p class="armaz-id"><strong>${escapeHtml(tabela.codigo || 'AG')}</strong> · ${escapeHtml(tabela.local || 'RONDONÓPOLIS-MT')}</p>
+      <p class="armaz-id"><strong>${escapeHtml(normalizarCodigoArmazenagem(tabela.codigo))}</strong> · ${escapeHtml(tabela.local || 'RONDONÓPOLIS-MT')}</p>
       <table class="tarifas">
         <thead>
           <tr>

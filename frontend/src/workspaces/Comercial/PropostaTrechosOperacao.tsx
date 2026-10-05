@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import ComercialEnderecoAutocomplete from './ComercialEnderecoAutocomplete';
+import { AlcaArraste, reordenarLista, useArrasteLista } from './PropostaArraste';
 import { useCalcularTrechoProposta } from '../../hooks/useComercialClientes';
 import type { PropostaMargemVeiculo } from '../../types/domain';
 
@@ -116,6 +117,7 @@ export default function PropostaTrechosOperacao({
   onChange,
 }: Props) {
   const calcular = useCalcularTrechoProposta();
+  const arraste = useArrasteLista(canEdit);
   const timer = useRef<number | null>(null);
   const margemTimer = useRef<number | null>(null);
   const linhasRef = useRef(linhas);
@@ -317,10 +319,11 @@ export default function PropostaTrechosOperacao({
           ) : null}
         </div>
       </div>
-      <div className="table-container proposta-destinos-wrap">
+      <div className="table-container proposta-destinos-wrap" ref={arraste.refCaixa}>
         <table className={`erp-table reports-table comercial-browse-table proposta-destinos-table${portuaria ? ' proposta-destinos-table--portuaria' : ''}${spot ? ' proposta-destinos-table--spot' : ''}`}>
           <thead>
             <tr>
+              {canEdit ? <th className="col-drag" aria-label="Ordem" /> : null}
               <th className="col-trecho">Origem</th>
               <th className="col-trecho">Destino</th>
               <th className="col-veiculo">Veículo</th>
@@ -345,7 +348,12 @@ export default function PropostaTrechosOperacao({
           </thead>
           <tbody>
             {lista.map((linha, index) => (
-              <tr key={`${modalidade}-${index}`}>
+              <tr key={`${modalidade}-${index}`} {...arraste.propsLinha(index, (de, para) => onChange(reordenarLista(lista, de, para)))}>
+                {canEdit ? (
+                  <td className="col-drag">
+                    <AlcaArraste {...arraste.propsAlca(index)} />
+                  </td>
+                ) : null}
                 <td className="col-trecho">
                   <ComercialEnderecoAutocomplete
                     compact
@@ -500,6 +508,7 @@ export default function PropostaTrechosOperacao({
             ))}
           </tbody>
         </table>
+        {arraste.marca}
       </div>
     </section>
   );

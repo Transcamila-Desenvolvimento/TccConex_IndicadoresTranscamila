@@ -46,6 +46,7 @@ from .models import (
     gravar_catalogo_generalidades,
     nome_base_tabela_frete,
     normalizar_homologacao,
+    normalizar_codigo_armazenagem,
     tabela_armazenagem_padrao,
     tipos_servico_generalidade,
 )
@@ -1142,7 +1143,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             return linhas
 
         tabela = {
-            'codigo': padrao['codigo'],
+            'codigo': normalizar_codigo_armazenagem(value.get('codigo')),
             'local': padrao['local'],
             'periodoInicio': '',
             'periodoFim': '',

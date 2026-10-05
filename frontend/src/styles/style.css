@@ -15903,10 +15903,66 @@ textarea.form-input {
 .proposta-destinos-table--portuaria .col-icms { width: 70px; min-width: 70px; }
 .proposta-destinos-table--portuaria .col-prazo { width: 120px; min-width: 120px; }
 
+.proposta-destinos-table .col-drag {
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  padding-left: 6px;
+  padding-right: 0;
+  text-align: center;
+}
+
+.proposta-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: grab;
+}
+
+.proposta-drag-handle:hover {
+  color: #118CC4;
+  background: #f1f5f9;
+}
+
+.proposta-drag-handle:active {
+  cursor: grabbing;
+}
+
+.proposta-destinos-wrap {
+  position: relative;
+}
+
+.proposta-insert-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  width: 0;
+  height: 3px;
+  margin: 0;
+  border-radius: 999px;
+  background: #118CC4;
+  box-shadow: 0 0 0 3px rgba(17, 140, 196, 0.18);
+  transform: translateY(-50%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.proposta-insert-line.is-on {
+  opacity: 1;
+}
+
 .proposta-destinos-table .col-actions {
-  width: 48px;
-  min-width: 48px;
-  max-width: 48px;
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
   padding-left: 4px;
   padding-right: 8px;
   text-align: center;
@@ -16031,6 +16087,47 @@ textarea.form-input {
   padding: 6px 0 2px;
 }
 
+.proposta-armazenagem-codigo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.proposta-armazenagem-codigo label {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+
+.proposta-armazenagem-codigo label.is-selected {
+  border-color: #118CC4;
+  background: #f0f9ff;
+  color: #0c4a6e;
+}
+
+.proposta-armazenagem-codigo input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #118CC4;
+}
+
+.proposta-armazenagem-codigo label:has(input:disabled) {
+  cursor: default;
+}
+
 .proposta-armazenagem-table .col-valor {
   width: 42%;
 }
@@ -16049,9 +16146,9 @@ textarea.form-input {
 }
 
 .proposta-armazenagem-table .col-actions {
-  width: 48px;
-  min-width: 48px;
-  max-width: 48px;
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
 }
 
 .proposta-armazenagem-unidade {
@@ -16582,6 +16679,7 @@ textarea.form-input {
 .comercial-generalidades-table tbody tr:hover td {
   background-color: #ffffff !important;
 }
+
 
 .comercial-generalidades-condicao-row {
   display: flex;
@@ -19823,8 +19921,7 @@ textarea.form-input {
   color: #374151;
 }
 
-.camilo-scope > p,
-.camilo-agent-scope {
+.camilo-scope > p {
   margin: 6px 0 12px;
   color: #6b7280;
   font-size: 13px;
@@ -19962,7 +20059,7 @@ textarea.form-input {
   cursor: pointer;
 }
 
-.camilo-thread-open > span:not(.camilo-context),
+.camilo-thread-open > span,
 .camilo-thread-open > small {
   max-width: 100%;
   overflow: hidden;
@@ -19973,45 +20070,6 @@ textarea.form-input {
 .camilo-thread-open small {
   color: #6b7280;
   font-size: 11px;
-}
-
-.camilo-context {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  margin-top: 4px;
-}
-
-.camilo-context-track {
-  flex: 1;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e5e7eb;
-}
-
-.camilo-context-fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: #118CC4;
-}
-
-.camilo-context.is-high .camilo-context-fill {
-  background: #d97706;
-}
-
-.camilo-context.is-full .camilo-context-fill {
-  background: #dc2626;
-}
-
-.camilo-context small {
-  flex: none;
-  min-width: 28px;
-  color: #6b7280;
-  font-size: 10px;
-  text-align: right;
 }
 
 .camilo-thread-delete {
@@ -20253,10 +20311,6 @@ textarea.form-input {
   font-weight: 500;
   letter-spacing: -0.02em;
   color: #111827;
-}
-
-.camilo-hero h1:has(+ .camilo-agent-scope) {
-  margin-bottom: 8px;
 }
 
 .camilo-composer {

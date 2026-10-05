@@ -651,6 +651,14 @@ OBSERVACOES_ARMAZENAGEM_PADRAO = [
 ]
 
 
+CODIGOS_ARMAZENAGEM = ('AG', 'FILIAL')
+
+
+def normalizar_codigo_armazenagem(valor):
+    texto = str(valor or '').strip().upper()
+    return texto if texto in CODIGOS_ARMAZENAGEM else 'AG'
+
+
 def tabela_armazenagem_padrao():
     return {
         'codigo': 'AG',

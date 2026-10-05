@@ -1,8 +1,11 @@
 import type { FormatoTarifaArmazenagem, TabelaArmazenagem } from '../../types/domain';
+import { AlcaArraste, reordenarLista, useArrasteLista } from './PropostaArraste';
 import {
   cloneTabelaArmazenagem,
+  CODIGOS_ARMAZENAGEM,
   FORMATOS_TARIFA_ARMAZENAGEM,
   formatarValorTarifaArmazenagem,
+  normalizarCodigoArmazenagem,
   placeholderTarifaArmazenagem,
   TABELA_ARMAZENAGEM_PADRAO,
 } from '../../types/domain';
@@ -62,6 +65,8 @@ function CampoValor({
 
 export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }: Props) {
   const dados = cloneTabelaArmazenagem(tabela);
+  const arrasteItens = useArrasteLista(canEdit);
+  const arrasteHora = useArrasteLista(canEdit);
 
   const alterar = (patcher: (dados: TabelaArmazenagem) => TabelaArmazenagem) => {
     onChange((atual) => patcher(cloneTabelaArmazenagem(atual)));
@@ -88,25 +93,52 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
       <div className="proposta-armazenagem-meta">
         <div>
           <span>Código</span>
-          <strong>{TABELA_ARMAZENAGEM_PADRAO.codigo}</strong>
+          <div className="proposta-armazenagem-codigo" role="group" aria-label="Código">
+            {CODIGOS_ARMAZENAGEM.map((opcao) => {
+              const marcado = normalizarCodigoArmazenagem(dados.codigo) === opcao;
+              return (
+                <label key={opcao} className={marcado ? 'is-selected' : undefined}>
+                  <input
+                    type="checkbox"
+                    checked={marcado}
+                    disabled={!canEdit}
+                    onChange={() => alterar((atual) => ({ ...atual, codigo: opcao }))}
+                  />
+                  {opcao}
+                </label>
+              );
+            })}
+          </div>
         </div>
         <div>
           <span>Unidade</span>
           <strong>{TABELA_ARMAZENAGEM_PADRAO.local}</strong>
         </div>
       </div>
-      <div className="table-container proposta-destinos-wrap">
+      <div className="table-container proposta-destinos-wrap" ref={arrasteItens.refCaixa}>
         <table className="erp-table reports-table comercial-browse-table proposta-destinos-table proposta-armazenagem-table">
           <thead>
             <tr>
+              {canEdit ? <th className="col-drag" aria-label="Ordem" /> : null}
               <th>Armazém</th>
               <th className="col-valor">Valor</th>
-              {canEdit ? <th className="col-actions" /> : null}
+              {canEdit ? <th className="col-actions" aria-label="Excluir" /> : null}
             </tr>
           </thead>
           <tbody>
             {dados.itens.map((item, index) => (
-              <tr key={`item-${index}`}>
+              <tr
+                key={`item-${index}`}
+                {...arrasteItens.propsLinha(index, (de, para) => alterar((atual) => ({
+                  ...atual,
+                  itens: reordenarLista(atual.itens, de, para),
+                })))}
+              >
+                {canEdit ? (
+                  <td className="col-drag">
+                    <AlcaArraste {...arrasteItens.propsAlca(index)} />
+                  </td>
+                ) : null}
                 <td>
                   <input
                     className="proposta-destinos-input"
@@ -166,22 +198,35 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
             ))}
           </tbody>
         </table>
+        {arrasteItens.marca}
       </div>
 
       <div className="proposta-destinos-head proposta-armazenagem-subhead">
         <h4>{TABELA_ARMAZENAGEM_PADRAO.horaExtraTitulo}</h4>
       </div>
-      <div className="table-container proposta-destinos-wrap">
+      <div className="table-container proposta-destinos-wrap" ref={arrasteHora.refCaixa}>
         <table className="erp-table reports-table comercial-browse-table proposta-destinos-table proposta-armazenagem-table">
           <thead>
             <tr>
+              {canEdit ? <th className="col-drag" aria-label="Ordem" /> : null}
               <th>Período</th>
               <th className="col-valor">Valor</th>
             </tr>
           </thead>
           <tbody>
             {dados.horaExtra.map((item, index) => (
-              <tr key={`hora-${index}`}>
+              <tr
+                key={`hora-${index}`}
+                {...arrasteHora.propsLinha(index, (de, para) => alterar((atual) => ({
+                  ...atual,
+                  horaExtra: reordenarLista(atual.horaExtra, de, para),
+                })))}
+              >
+                {canEdit ? (
+                  <td className="col-drag">
+                    <AlcaArraste {...arrasteHora.propsAlca(index)} />
+                  </td>
+                ) : null}
                 <td>
                   <input
                     className="proposta-destinos-input"
@@ -225,6 +270,7 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
             ))}
           </tbody>
         </table>
+        {arrasteHora.marca}
       </div>
       <label className="proposta-armazenagem-expediente">
         <span>Expediente do CD</span>

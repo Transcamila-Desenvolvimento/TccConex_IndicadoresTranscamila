@@ -219,7 +219,7 @@ class CamiloAgenteTests(TestCase):
         self.assertIn('Frete Alfa', propostas['resumo'])
         self.assertNotIn('Ana Lima', rh['resumo'])
         self.assertIn('Frete Alfa', resultado['material'])
-        self.assertIn('sem detalhe nesta pergunta', resultado['material'])
+        self.assertNotIn('sem detalhe nesta pergunta', resultado['material'])
         self.assertNotIn('Ana Lima', resultado['material'])
 
         geral = consultar(admin, Agente(), 'Tenho alguma proposta comercial?')

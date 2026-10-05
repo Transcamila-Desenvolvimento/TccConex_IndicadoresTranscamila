@@ -2670,6 +2670,14 @@ export interface TabelaArmazenagemHoraExtra {
   formato: FormatoTarifaArmazenagem;
 }
 
+export const CODIGOS_ARMAZENAGEM = ['AG', 'FILIAL'] as const;
+export type CodigoArmazenagem = (typeof CODIGOS_ARMAZENAGEM)[number];
+
+export function normalizarCodigoArmazenagem(valor?: string | null): CodigoArmazenagem {
+  const texto = (valor || '').trim().toUpperCase();
+  return texto === 'FILIAL' ? 'FILIAL' : 'AG';
+}
+
 export interface TabelaArmazenagem {
   codigo: string;
   local: string;
@@ -2769,7 +2777,7 @@ export function formatarValorTarifaArmazenagem(valor: string, formato: FormatoTa
 export function cloneTabelaArmazenagem(tabela?: TabelaArmazenagem | null): TabelaArmazenagem {
   const fonte = tabela && Array.isArray(tabela.itens) ? tabela : TABELA_ARMAZENAGEM_PADRAO;
   return {
-    codigo: TABELA_ARMAZENAGEM_PADRAO.codigo,
+    codigo: normalizarCodigoArmazenagem(fonte.codigo),
     local: TABELA_ARMAZENAGEM_PADRAO.local,
     periodoInicio: '',
     periodoFim: '',

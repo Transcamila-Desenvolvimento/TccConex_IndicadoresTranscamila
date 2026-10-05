@@ -1,4 +1,5 @@
 import type { PropostaCondicaoComercial } from '../../types/domain';
+import { AlcaArraste, reordenarLista, useArrasteLista } from './PropostaArraste';
 
 type Props = {
   titulo: string;
@@ -15,6 +16,7 @@ export default function PropostaGeneralidadesRevisao({
   emptyHint,
   onChange,
 }: Props) {
+  const arraste = useArrasteLista(canEdit);
   const updateItem = (index: number, patch: Partial<PropostaCondicaoComercial>) => {
     onChange(items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
   };
@@ -37,21 +39,30 @@ export default function PropostaGeneralidadesRevisao({
       {items.length === 0 ? (
         <p className="proposta-modalidades-hint">{emptyHint}</p>
       ) : (
-        <div className="table-container proposta-destinos-wrap proposta-generalidades-wrap">
+        <div className="table-container proposta-destinos-wrap proposta-generalidades-wrap" ref={arraste.refCaixa}>
           <table className="erp-table reports-table comercial-browse-table proposta-destinos-table comercial-generalidades-table">
             <colgroup>
+              {canEdit ? <col className="col-drag" /> : null}
               <col className="col-item" />
               <col className="col-condicao" />
+              {canEdit ? <col className="col-actions" /> : null}
             </colgroup>
             <thead>
               <tr>
+                {canEdit ? <th className="col-drag" aria-label="Ordem" /> : null}
                 <th className="col-item">Item</th>
                 <th className="col-condicao">Condição</th>
+                {canEdit ? <th className="col-actions" aria-label="Excluir" /> : null}
               </tr>
             </thead>
             <tbody>
               {items.map((item, index) => (
-                <tr key={`${item.rotulo}-${index}`}>
+                <tr key={`${item.rotulo}-${index}`} {...arraste.propsLinha(index, (de, para) => onChange(reordenarLista(items, de, para)))}>
+                  {canEdit ? (
+                    <td className="col-drag">
+                      <AlcaArraste {...arraste.propsAlca(index)} />
+                    </td>
+                  ) : null}
                   <td>
                     <input
                       className="proposta-destinos-input"
@@ -61,30 +72,31 @@ export default function PropostaGeneralidadesRevisao({
                     />
                   </td>
                   <td>
-                    <div className="comercial-generalidades-condicao-row">
-                      <input
-                        className="proposta-destinos-input"
-                        value={item.valor}
-                        disabled={!canEdit}
-                        maxLength={800}
-                        onChange={(e) => updateItem(index, { valor: e.target.value })}
-                      />
-                      {canEdit ? (
-                        <button
-                          type="button"
-                          className="btn-icon"
-                          title="Remover"
-                          onClick={() => onChange(items.filter((_, i) => i !== index))}
-                        >
-                          <i className="bi bi-trash" />
-                        </button>
-                      ) : null}
-                    </div>
+                    <input
+                      className="proposta-destinos-input"
+                      value={item.valor}
+                      disabled={!canEdit}
+                      maxLength={800}
+                      onChange={(e) => updateItem(index, { valor: e.target.value })}
+                    />
                   </td>
+                  {canEdit ? (
+                    <td className="col-actions">
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        title="Remover"
+                        onClick={() => onChange(items.filter((_, i) => i !== index))}
+                      >
+                        <i className="bi bi-trash" />
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
           </table>
+          {arraste.marca}
         </div>
       )}
     </div>

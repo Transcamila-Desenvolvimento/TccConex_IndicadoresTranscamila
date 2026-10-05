@@ -970,15 +970,10 @@ def consultar(user, agente, pergunta: str) -> dict:
         linhas.extend(f"{fonte['ambiente']} / {fonte['rotulo']}: {fonte['resumo']}" for fonte in fontes)
         resposta = '\n'.join(linhas)
         abertas = [fonte for fonte in fontes if fonte['detalhada']]
-        fechadas = [fonte for fonte in fontes if not fonte['detalhada']]
-        blocos = [
+        material = '\n'.join(
             f"{fonte['ambiente']} / {fonte['rotulo']}: {fonte['resumo']}"
             for fonte in abertas
-        ]
-        if fechadas:
-            nomes = ', '.join(f"{fonte['ambiente']} / {fonte['rotulo']}" for fonte in fechadas)
-            blocos.append(f'Também liberado, sem detalhe nesta pergunta: {nomes}.')
-        material = '\n'.join(blocos)
+        )
 
     if ignorados:
         nomes = ', '.join(f"{item['ambiente']} / {item['rotulo']}" for item in ignorados)

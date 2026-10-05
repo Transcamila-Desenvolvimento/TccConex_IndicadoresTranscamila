@@ -9,6 +9,7 @@ from .models import (
     STATUS_PROPOSTA_RECUSADA,
     TIPO_PROPOSTA_ARMAZENAGEM,
     TIPO_PROPOSTA_TRANSPORTE_RODOVIARIO,
+    normalizar_codigo_armazenagem,
 )
 
 _STATUS = {
@@ -119,7 +120,7 @@ def _sanitize_tabela(raw):
         return linhas
 
     return {
-        'codigo': _as_str(raw.get('codigo'), 20) or 'AG',
+        'codigo': normalizar_codigo_armazenagem(raw.get('codigo')),
         'local': _as_str(raw.get('local'), 80) or 'RONDONÓPOLIS-MT',
         'periodoInicio': '',
         'periodoFim': '',

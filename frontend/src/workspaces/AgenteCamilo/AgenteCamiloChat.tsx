@@ -98,22 +98,6 @@ function RodinhaContexto({ usado, limite }: { usado: number; limite: number }) {
   );
 }
 
-function BarraContexto({ thread }: { thread: ChatThread }) {
-  const { usado, limite, percentual } = contextoDoChat(thread);
-  const faixa = percentual >= 90 ? ' is-full' : percentual >= 70 ? ' is-high' : '';
-  return (
-    <span
-      className={`camilo-context${faixa}`}
-      title={`${usado.toLocaleString('pt-BR')} de ${limite.toLocaleString('pt-BR')} caracteres de contexto`}
-    >
-      <span className="camilo-context-track" aria-hidden="true">
-        <span className="camilo-context-fill" style={{ width: `${percentual}%` }} />
-      </span>
-      <small>{percentual}%</small>
-    </span>
-  );
-}
-
 function rememberThread(
   current: ChatThread[],
   threadId: string,
@@ -450,7 +434,6 @@ const AgenteCamiloChat: React.FC = () => {
                 onClick={() => chooseChat(agent)}
               >
                 <strong>{agent.nome}</strong>
-                <small>{agent.escopos.map((item) => item.rotulo).join(', ') || 'Agente'}</small>
               </button>
             </li>
           ))}
@@ -521,7 +504,6 @@ const AgenteCamiloChat: React.FC = () => {
                   <button type="button" className="camilo-thread-open" onClick={() => openThread(thread)}>
                     <span>{thread.title}</span>
                     {threadAgent && <small>{threadAgent}</small>}
-                    <BarraContexto thread={thread} />
                   </button>
                   <button
                     type="button"
@@ -726,11 +708,6 @@ const AgenteCamiloChat: React.FC = () => {
         ) : openingChat ? (
           <div className="camilo-hero">
             <h1>Por onde devemos começar?</h1>
-            {activeAgent && (
-              <p className="camilo-agent-scope">
-                Consulta somente: {activeAgent.escopos.map((item) => `${item.ambiente} / ${item.rotulo}`).join(', ')}.
-              </p>
-            )}
             {composer}
             {!activeAgent && (
               <div className="camilo-suggestions">
@@ -758,14 +735,6 @@ const AgenteCamiloChat: React.FC = () => {
             </header>
             <div className="camilo-messages" ref={threadRef}>
               <div className="camilo-messages-inner">
-                {(active.agentId || active.agentName) && (
-                  <p className="camilo-agent-scope">
-                    {authorName}
-                    {activeAgent
-                      ? ` consulta: ${activeAgent.escopos.map((item) => item.rotulo).join(', ')}.`
-                      : ' — esta conversa ficou no histórico.'}
-                  </p>
-                )}
                 {agentGone && (
                   <p className="camilo-form-error">Este agente não está mais disponível.</p>
                 )}
