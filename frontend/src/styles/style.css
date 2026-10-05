@@ -15868,22 +15868,22 @@ textarea.form-input {
 
 .proposta-destinos-table {
   width: 100%;
-  min-width: 1080px;
+  min-width: 1280px;
   table-layout: fixed;
 }
 
 .proposta-destinos-table--portuaria {
-  min-width: 1520px;
-  width: max(100%, 1520px);
+  min-width: 1720px;
+  width: max(100%, 1720px);
 }
 
 .proposta-destinos-table--spot {
-  min-width: 1280px;
-  width: max(100%, 1280px);
+  min-width: 1480px;
+  width: max(100%, 1480px);
 }
 
 .proposta-destinos-table .col-trecho { width: 12%; min-width: 120px; }
-.proposta-destinos-table .col-veiculo { width: 10%; min-width: 110px; }
+.proposta-destinos-table .col-veiculo { width: 280px; min-width: 280px; }
 .proposta-destinos-table .col-km { width: 6%; min-width: 72px; }
 .proposta-destinos-table .col-money { width: 9%; min-width: 112px; }
 .proposta-destinos-table .col-pct { width: 7%; min-width: 72px; }
@@ -15896,7 +15896,7 @@ textarea.form-input {
 }
 
 .proposta-destinos-table--portuaria .col-trecho { width: 140px; min-width: 140px; }
-.proposta-destinos-table--portuaria .col-veiculo { width: 120px; min-width: 120px; }
+.proposta-destinos-table--portuaria .col-veiculo { width: 280px; min-width: 280px; }
 .proposta-destinos-table--portuaria .col-km { width: 72px; min-width: 72px; }
 .proposta-destinos-table--portuaria .col-money { width: 118px; min-width: 118px; }
 .proposta-destinos-table--portuaria .col-pct { width: 78px; min-width: 78px; }
@@ -15957,6 +15957,10 @@ textarea.form-input {
 
 .proposta-destinos-table tbody tr:hover td {
   background: #f7fafc;
+}
+
+.proposta-destinos-veiculo {
+  min-width: 264px;
 }
 
 .proposta-destinos-input {

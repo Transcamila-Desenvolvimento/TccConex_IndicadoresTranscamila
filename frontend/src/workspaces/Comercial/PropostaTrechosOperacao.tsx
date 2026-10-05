@@ -368,10 +368,11 @@ export default function PropostaTrechosOperacao({
                     onChange={(entrega) => patch(index, { entrega })}
                   />
                 </td>
-                <td>
+                <td className="col-veiculo">
                   <select
-                    className="proposta-destinos-input"
+                    className="proposta-destinos-input proposta-destinos-veiculo"
                     disabled={!canEditValores}
+                    title={linha.veiculo || undefined}
                     value={linha.veiculoKey || ''}
                     onChange={(e) => {
                       const tipo = veiculos.find((item) => item.bandaKey === e.target.value);
@@ -382,7 +383,7 @@ export default function PropostaTrechosOperacao({
                       ? [{ bandaKey: linha.veiculoKey, rotulo: linha.veiculo || linha.veiculoKey }, ...veiculos]
                       : veiculos
                     ).map((item) => (
-                      <option key={item.bandaKey} value={item.bandaKey}>{item.rotulo}</option>
+                      <option key={item.bandaKey} value={item.bandaKey} title={item.rotulo}>{item.rotulo}</option>
                     ))}
                   </select>
                 </td>
