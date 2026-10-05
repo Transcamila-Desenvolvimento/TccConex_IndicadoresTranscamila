@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.camilo.catalogo import escopos_publicos, normalizar_escopos
-from apps.camilo.models import Agente
+from apps.camilo.models import INSTRUCAO_CHAT_PADRAO, NOME_CHAT_PADRAO, Agente, ChatPadrao
 
 
 class AgenteSerializer(serializers.ModelSerializer):
@@ -45,3 +45,34 @@ class AgenteSerializer(serializers.ModelSerializer):
             setattr(instance, field, value)
         instance.save()
         return instance
+
+
+class ChatPadraoSerializer(serializers.Serializer):
+    nome = serializers.CharField(max_length=80)
+    instrucao = serializers.CharField(allow_blank=True, max_length=4000, required=False, default='')
+
+    def validate_nome(self, value: str) -> str:
+        nome = (value or '').strip()
+        if not nome:
+            raise serializers.ValidationError('Informe o nome do chat padrão.')
+        return nome[:80]
+
+    def validate_instrucao(self, value: str) -> str:
+        return (value or '').strip()
+
+    def save(self, **kwargs):
+        config = ChatPadrao.atual()
+        config.nome = self.validated_data['nome']
+        instrucao = self.validated_data.get('instrucao') or ''
+        config.instrucao = '' if instrucao == INSTRUCAO_CHAT_PADRAO else instrucao
+        config.save()
+        return config
+
+    @staticmethod
+    def publico(config: ChatPadrao, *, completo: bool) -> dict:
+        data = {'nome': config.nome_efetivo}
+        if completo:
+            data['instrucao'] = config.instrucao_efetiva
+            data['instrucaoPadrao'] = INSTRUCAO_CHAT_PADRAO
+            data['nomePadrao'] = NOME_CHAT_PADRAO
+        return data

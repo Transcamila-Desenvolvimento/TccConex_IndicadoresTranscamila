@@ -20095,6 +20095,84 @@ textarea.form-input {
   font-size: 13px;
 }
 
+.camilo-thread-title {
+  flex-shrink: 0;
+  padding: 16px 24px 0;
+  text-align: center;
+}
+
+.camilo-thread-title h1 {
+  margin: 0 auto;
+  max-width: 720px;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-camilo-card {
+  max-width: 720px;
+  padding: 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.admin-camilo-card h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.admin-camilo-card > p {
+  margin: 0 0 16px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-camilo-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.admin-camilo-card input,
+.admin-camilo-card textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 400;
+  color: #111827;
+}
+
+.admin-camilo-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-camilo-error,
+.admin-camilo-ok {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.admin-camilo-error {
+  color: #b91c1c;
+}
+
+.admin-camilo-ok {
+  color: #047857;
+}
+
 .camilo-hero h1 {
   margin: 0 0 28px;
   font-size: 28px;

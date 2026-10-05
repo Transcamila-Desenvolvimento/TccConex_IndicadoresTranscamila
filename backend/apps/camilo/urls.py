@@ -5,11 +5,13 @@ from .views import (
     AgenteDetailView,
     AgenteListCreateView,
     CamiloConversarView,
+    ChatPadraoView,
     PartesDisponiveisView,
 )
 
 urlpatterns = [
     path('conversar/', CamiloConversarView.as_view(), name='camilo-conversar'),
+    path('chat-padrao/', ChatPadraoView.as_view(), name='camilo-chat-padrao'),
     path('partes/', PartesDisponiveisView.as_view(), name='camilo-partes'),
     path('agentes/', AgenteListCreateView.as_view(), name='camilo-agentes'),
     path('agentes/<uuid:agente_id>/', AgenteDetailView.as_view(), name='camilo-agente'),

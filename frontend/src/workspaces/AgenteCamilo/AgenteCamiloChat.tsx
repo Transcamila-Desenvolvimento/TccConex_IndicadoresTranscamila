@@ -4,6 +4,7 @@ import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
   useCamiloAgentes,
+  useCamiloChatPadrao,
   useCamiloPartes,
   useConsultarCamiloAgente,
   useConversarCamilo,
@@ -57,20 +58,22 @@ function rememberThread(
   threadId: string,
   message: ChatMessage,
   agent?: { id: string; nome: string },
+  titulo?: string,
 ): ChatThread[] {
   const now = Date.now();
   const existing = current.find((thread) => thread.id === threadId);
+  const tituloLimpo = titulo?.trim();
   const next: ChatThread = existing
     ? {
       ...existing,
       agentName: agent?.nome ?? existing.agentName,
-      title: existing.messages.length === 0 ? threadTitle(message.text) : existing.title,
+      title: tituloLimpo || (existing.messages.length === 0 ? threadTitle(message.text) : existing.title),
       messages: [...existing.messages, message],
       updatedAt: now,
     }
     : {
       id: threadId,
-      title: threadTitle(message.text),
+      title: tituloLimpo || threadTitle(message.text),
       messages: [message],
       updatedAt: now,
       ...(agent ? { agentId: agent.id, agentName: agent.nome } : {}),
@@ -121,6 +124,7 @@ const AgenteCamiloChat: React.FC = () => {
   const [draftAgentId, setDraftAgentId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const partesQuery = useCamiloPartes();
+  const chatPadraoQuery = useCamiloChatPadrao();
   const agentesQuery = useCamiloAgentes();
   const agentesState = useAsyncQueryState(agentesQuery);
   const createAgent = useCreateCamiloAgente();
@@ -140,7 +144,8 @@ const AgenteCamiloChat: React.FC = () => {
   const conversationAgentId = active?.agentId ?? draftAgentId;
   const activeAgent = agents.find((agent) => agent.id === conversationAgentId) ?? null;
   const agentGone = Boolean(active?.agentId) && agentesQuery.isSuccess && !activeAgent;
-  const authorName = activeAgent?.nome ?? active?.agentName ?? 'Camilo';
+  const chatNome = chatPadraoQuery.data?.nome?.trim() || 'Camilo';
+  const authorName = activeAgent?.nome ?? active?.agentName ?? chatNome;
 
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(threads));
@@ -269,9 +274,9 @@ const AgenteCamiloChat: React.FC = () => {
       texto: message.text,
     }));
     const userMessage: ChatMessage = { id: newId(), role: 'user', text: trimmed };
-    const guardarResposta = (texto: string) => {
+    const guardarResposta = (texto: string, titulo?: string) => {
       const reply: ChatMessage = { id: newId(), role: 'assistant', text: texto };
-      setThreads((current) => rememberThread(current, threadId, reply));
+      setThreads((current) => rememberThread(current, threadId, reply, undefined, titulo));
       setPendingId((current) => (current === threadId ? null : current));
     };
 
@@ -290,7 +295,7 @@ const AgenteCamiloChat: React.FC = () => {
       consultarAgent.mutate(
         { id: speakingAgent.id, pergunta: trimmed, historico },
         {
-          onSuccess: (data) => guardarResposta(data.resposta),
+          onSuccess: (data) => guardarResposta(data.resposta, data.titulo),
           onError: (error) => guardarResposta(erroApi(error)),
         },
       );
@@ -300,7 +305,7 @@ const AgenteCamiloChat: React.FC = () => {
     conversarCamilo.mutate(
       { pergunta: trimmed, historico },
       {
-        onSuccess: (data) => guardarResposta(data.resposta),
+        onSuccess: (data) => guardarResposta(data.resposta, data.titulo),
         onError: (error) => guardarResposta(erroApi(error)),
       },
     );
@@ -329,7 +334,7 @@ const AgenteCamiloChat: React.FC = () => {
         aria-expanded={pickerOpen}
         onClick={() => setPickerOpen((open) => !open)}
       >
-        <span>{activeAgent ? activeAgent.nome : 'Camilo'}</span>
+        <span>{activeAgent ? activeAgent.nome : chatNome}</span>
         <i className="bi bi-chevron-down" aria-hidden="true" />
       </button>
       {pickerOpen && (
@@ -342,7 +347,7 @@ const AgenteCamiloChat: React.FC = () => {
               className={!activeAgent ? 'is-selected' : undefined}
               onClick={() => chooseChat(null)}
             >
-              <strong>Camilo</strong>
+              <strong>{chatNome}</strong>
               <small>Chat padrão</small>
             </button>
           </li>
@@ -374,8 +379,8 @@ const AgenteCamiloChat: React.FC = () => {
         ref={inputRef}
         rows={1}
         value={draft}
-        placeholder={activeAgent ? `Pergunte ao ${activeAgent.nome}` : 'Pergunte qualquer coisa'}
-        aria-label={activeAgent ? `Mensagem para ${activeAgent.nome}` : 'Mensagem para o Camilo'}
+        placeholder={activeAgent ? `Pergunte ao ${activeAgent.nome}` : `Pergunte ao ${chatNome}`}
+        aria-label={activeAgent ? `Mensagem para ${activeAgent.nome}` : `Mensagem para ${chatNome}`}
         disabled={agentGone}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
@@ -654,6 +659,9 @@ const AgenteCamiloChat: React.FC = () => {
           </div>
         ) : active ? (
           <>
+            <header className="camilo-thread-title">
+              <h1>{active.title}</h1>
+            </header>
             <div className="camilo-messages" ref={threadRef}>
               <div className="camilo-messages-inner">
                 {(active.agentId || active.agentName) && (

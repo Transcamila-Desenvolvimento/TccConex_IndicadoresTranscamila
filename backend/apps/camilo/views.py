@@ -9,8 +9,8 @@ from apps.audit.services import record_audit
 from apps.camilo.catalogo import grupos_do_usuario
 from apps.camilo.conversa import historico_valido, responder_agente, responder_camilo
 from apps.camilo.gemini import GeminiErro
-from apps.camilo.models import Agente
-from apps.camilo.serializers import AgenteSerializer
+from apps.camilo.models import Agente, ChatPadrao
+from apps.camilo.serializers import AgenteSerializer, ChatPadraoSerializer
 
 
 class CamiloAccessMixin:
@@ -93,11 +93,11 @@ class CamiloConversarView(CamiloAccessMixin, APIView):
         if erro:
             return erro
         try:
-            resposta = responder_camilo(pergunta, historico_valido(request.data.get('historico')))
+            resultado = responder_camilo(pergunta, historico_valido(request.data.get('historico')))
         except GeminiErro as exc:
             return Response({'detail': str(exc)}, status=exc.status)
         record_audit(request.user, 'camilo.conversar', pergunta[:160])
-        return Response({'resposta': resposta})
+        return Response(resultado)
 
 
 class AgenteConsultarView(CamiloAccessMixin, APIView):
@@ -123,3 +123,25 @@ class AgenteConsultarView(CamiloAccessMixin, APIView):
             f'{agente.nome}: {len(resultado["fontes"])} fontes',
         )
         return Response(resultado)
+
+
+class ChatPadraoView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_admin and not user_has_module_access(request.user, AGENTE_CAMILO_ENVIRONMENT):
+            return Response({'detail': 'Sem acesso ao CamiloIA.'}, status=status.HTTP_403_FORBIDDEN)
+        config = ChatPadrao.atual()
+        return Response(ChatPadraoSerializer.publico(config, completo=request.user.is_admin))
+
+    def put(self, request):
+        if not request.user.is_admin:
+            return Response(
+                {'detail': 'Só a administração altera o chat padrão.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = ChatPadraoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        config = serializer.save()
+        record_audit(request.user, 'camilo.chat_padrao.editar', config.nome_efetivo)
+        return Response(ChatPadraoSerializer.publico(config, completo=True))

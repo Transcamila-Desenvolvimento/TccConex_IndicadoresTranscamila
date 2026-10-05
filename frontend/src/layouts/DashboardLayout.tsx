@@ -160,6 +160,17 @@ const DashboardLayout: React.FC = () => {
         show: isAdminEnvironment(selectedEnvironment)
       },
       {
+        title: "Camilo IA",
+        path: "Administração / Camilo IA",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.2-3.2A7.7 7.7 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        ),
+        action: () => navigate('/admin/camilo'),
+        show: isAdminEnvironment(selectedEnvironment)
+      },
+      {
         title: "Home Financeiro",
         path: "Financeiro / Dashboard Geral",
         icon: (
@@ -641,6 +652,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/agente-camilo')) return env;
     if (path.startsWith('/marketing/campanhas')) return `${env} / Calendario Transcamila`;
     if (path.startsWith('/marketing')) return env;
+    if (path.startsWith('/admin/camilo')) return `Administração / Camilo IA`;
     if (path.startsWith('/admin/usuarios')) return `Administração / Controle Geral`;
     if (path.startsWith('/admin')) return `Administração / Home`;
     if (path.startsWith('/relatorios')) return `${env} / Inclusão de Relatórios`;
@@ -720,6 +732,17 @@ const DashboardLayout: React.FC = () => {
                 <div className="nav-btn-left">
                   <NavIcon name="people" />
                   <span className="nav-text">Usuários</span>
+                </div>
+              </Link>
+
+              <Link
+                to="/admin/camilo"
+                className={`nav-btn ${isRouteActive('/admin/camilo') ? 'active' : ''}`}
+                data-tooltip="Camilo IA"
+              >
+                <div className="nav-btn-left">
+                  <NavIcon name="chat-dots" />
+                  <span className="nav-text">Camilo IA</span>
                 </div>
               </Link>
             </div>

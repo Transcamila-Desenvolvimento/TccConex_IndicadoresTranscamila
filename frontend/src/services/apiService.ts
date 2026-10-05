@@ -54,7 +54,7 @@ import type {
   RotaDistanciaPayload, RotaDistanciaResult, EnderecoSugestao, GoogleMapsConfigComercial,
   ProdutoComercial, ProdutoComercialPayload, ProdutoComercialLotePayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
   Notificacao, PushNotificacoesConfig, PushInscricaoPayload,
-  CamiloAgente, CamiloAgentePayload, CamiloConsulta, CamiloParteGrupo,
+  CamiloAgente, CamiloAgentePayload, CamiloChatPadrao, CamiloChatPadraoPayload, CamiloConsulta, CamiloParteGrupo,
 } from '../types/domain';
 import {
   cloneTabelaArmazenagem,
@@ -3220,10 +3220,30 @@ export const apiService = {
     await api.delete(`/api/camilo/agentes/${id}/`);
   },
 
+  async getCamiloChatPadrao(): Promise<CamiloChatPadrao> {
+    const { data } = await api.get('/api/camilo/chat-padrao/');
+    return {
+      nome: typeof data?.nome === 'string' && data.nome.trim() ? data.nome.trim() : 'Camilo',
+      instrucao: typeof data?.instrucao === 'string' ? data.instrucao : undefined,
+      instrucaoPadrao: typeof data?.instrucaoPadrao === 'string' ? data.instrucaoPadrao : undefined,
+      nomePadrao: typeof data?.nomePadrao === 'string' ? data.nomePadrao : 'Camilo',
+    };
+  },
+
+  async salvarCamiloChatPadrao(payload: CamiloChatPadraoPayload): Promise<CamiloChatPadrao> {
+    const { data } = await api.put('/api/camilo/chat-padrao/', payload);
+    return {
+      nome: typeof data?.nome === 'string' && data.nome.trim() ? data.nome.trim() : 'Camilo',
+      instrucao: typeof data?.instrucao === 'string' ? data.instrucao : '',
+      instrucaoPadrao: typeof data?.instrucaoPadrao === 'string' ? data.instrucaoPadrao : undefined,
+      nomePadrao: typeof data?.nomePadrao === 'string' ? data.nomePadrao : 'Camilo',
+    };
+  },
+
   async conversarCamilo(
     pergunta: string,
     historico: { papel: 'user' | 'assistant'; texto: string }[] = [],
-  ): Promise<{ resposta: string }> {
+  ): Promise<{ resposta: string; titulo?: string }> {
     const { data } = await api.post('/api/camilo/conversar/', { pergunta, historico });
     return data;
   },

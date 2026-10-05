@@ -18,6 +18,18 @@ const QUICK_LINKS = [
     ),
   },
   {
+    title: 'Camilo IA',
+    description: 'Defina o nome e a instrução do chat padrão do CamiloIA.',
+    path: '/admin/camilo',
+    tab: 'camilo' as const,
+    badge: 'Chat',
+    icon: (
+      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.2-3.2A7.7 7.7 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+      </svg>
+    ),
+  },
+  {
     title: 'Logs de Auditoria',
     description: 'Acompanhe o histórico de ações realizadas pelos usuários em todos os ambientes.',
     path: '/admin/usuarios',

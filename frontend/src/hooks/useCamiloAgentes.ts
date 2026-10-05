@@ -1,14 +1,32 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/apiService';
-import type { CamiloAgentePayload } from '../types/domain';
+import type { CamiloAgentePayload, CamiloChatPadraoPayload } from '../types/domain';
 
 export const CAMILO_PARTES_KEY = ['camilo', 'partes'] as const;
 export const CAMILO_AGENTES_KEY = ['camilo', 'agentes'] as const;
+export const CAMILO_CHAT_PADRAO_KEY = ['camilo', 'chat-padrao'] as const;
 
 export function useCamiloPartes() {
   return useQuery({
     queryKey: CAMILO_PARTES_KEY,
     queryFn: apiService.getCamiloPartes,
+  });
+}
+
+export function useCamiloChatPadrao() {
+  return useQuery({
+    queryKey: CAMILO_CHAT_PADRAO_KEY,
+    queryFn: apiService.getCamiloChatPadrao,
+  });
+}
+
+export function useSalvarCamiloChatPadrao() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CamiloChatPadraoPayload) => apiService.salvarCamiloChatPadrao(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CAMILO_CHAT_PADRAO_KEY });
+    },
   });
 }
 

@@ -33,7 +33,7 @@ def _alternar(mensagens: list[dict]) -> list[dict]:
     return saida
 
 
-def gerar(sistema: str, mensagens: list[dict]) -> str:
+def gerar(sistema: str, mensagens: list[dict], max_tokens: int = 2048) -> str:
     chave = getattr(settings, 'GEMINI_API_KEY', '')
     if not chave:
         raise GeminiErro(
@@ -52,7 +52,7 @@ def gerar(sistema: str, mensagens: list[dict]) -> str:
             {'role': item['role'], 'parts': [{'text': item['text']}]}
             for item in conteudo
         ],
-        'generationConfig': {'maxOutputTokens': 2048},
+        'generationConfig': {'maxOutputTokens': max_tokens},
     }).encode('utf-8')
     pedido = urllib.request.Request(
         url,

@@ -1,7 +1,8 @@
 """Monta o pedido ao Gemini. O chat padrão não vê o ERP; o agente só vê a consulta."""
 
 from apps.camilo.consulta import consultar
-from apps.camilo.gemini import configurado, gerar
+from apps.camilo.gemini import GeminiErro, configurado, gerar
+from apps.camilo.models import INSTRUCAO_CHAT_PADRAO, ChatPadrao
 
 
 # A API devolve texto. O formato visual (tópicos, tabela) vai na system instruction,
@@ -15,14 +16,65 @@ FORMATO_RESPOSTA = (
     'Negrito só no rótulo que importa. Não use HTML.'
 )
 
-SISTEMA_CAMILO = (
-    'Você é o Camilo, assistente do ERP TccConex da Transcamila. '
-    'Responda em português, de forma direta e curta. '
-    'Neste chat você não consulta dados do ERP, documentos internos nem números da empresa. '
-    'Se pedirem um dado do sistema, diga para usar um agente com essa parte liberada. '
-    'Não invente cifras, nomes de clientes ou documentos. '
-    + FORMATO_RESPOSTA
-)
+def sistema_camilo() -> str:
+    config = ChatPadrao.atual()
+    instrucao = config.instrucao_efetiva or INSTRUCAO_CHAT_PADRAO
+    return (
+        f'Você é {config.nome_efetivo}, assistente do ERP TccConex da Transcamila. '
+        f'{instrucao} '
+        'Neste chat você não consulta dados do ERP, documentos internos nem números da empresa. '
+        'Se pedirem um dado do sistema, diga para usar um agente com essa parte liberada. '
+        'Não invente cifras, nomes de clientes ou documentos. '
+        + FORMATO_RESPOSTA
+    )
+
+
+def _limpar_titulo(texto: str) -> str:
+    linha = ' '.join((texto or '').replace('\n', ' ').split())
+    linha = linha.strip(' "\'“”‘’#*-')
+    if linha.lower().startswith('título:'):
+        linha = linha.split(':', 1)[1].strip()
+    if linha.endswith('.'):
+        linha = linha[:-1].rstrip()
+    return linha
+
+
+def titulo_local(pergunta: str) -> str:
+    linha = _limpar_titulo(pergunta)
+    baixo = linha.lower()
+    for prefixo in (
+        'oi, ', 'oi ', 'olá, ', 'olá ', 'ola, ', 'ola ',
+        'bom dia, ', 'bom dia ', 'boa tarde, ', 'boa tarde ',
+        'boa noite, ', 'boa noite ',
+    ):
+        if baixo.startswith(prefixo):
+            linha = linha[len(prefixo):].strip(' ,')
+            break
+    if not linha:
+        return 'Nova conversa'
+    if len(linha) > 48:
+        return f'{linha[:48].rstrip()}…'
+    return linha
+
+
+def titulo_da_conversa(pergunta: str, resposta: str) -> str:
+    """Título curto a partir da pergunta e da resposta, sem depender do começo cru da frase."""
+    fallback = titulo_local(pergunta)
+    if not configurado():
+        return fallback
+    try:
+        bruto = gerar(
+            'Escreva somente um título curto, em português, com no máximo 6 palavras, '
+            'sobre o assunto da conversa. Sem aspas, sem ponto final e sem Markdown.',
+            [{'role': 'user', 'text': f'Pergunta: {pergunta[:400]}\nResposta: {resposta[:400]}'}],
+            max_tokens=32,
+        )
+    except GeminiErro:
+        return fallback
+    titulo = _limpar_titulo(bruto.split('\n')[0])
+    if not titulo or len(titulo.split()) > 8 or len(titulo) > 60:
+        return fallback
+    return titulo
 
 
 def historico_valido(bruto, limite: int = 8) -> list[dict]:
@@ -43,14 +95,19 @@ def historico_valido(bruto, limite: int = 8) -> list[dict]:
     return itens
 
 
-def responder_camilo(pergunta: str, historico: list[dict] | None = None) -> str:
-    mensagens = historico_valido(historico)
-    mensagens.append({'role': 'user', 'text': pergunta})
-    return gerar(SISTEMA_CAMILO, mensagens)
+def responder_camilo(pergunta: str, historico: list[dict] | None = None) -> dict:
+    anteriores = historico_valido(historico)
+    mensagens = [*anteriores, {'role': 'user', 'text': pergunta}]
+    resposta = gerar(sistema_camilo(), mensagens)
+    titulo = titulo_da_conversa(pergunta, resposta) if not anteriores else ''
+    return {'resposta': resposta, 'titulo': titulo}
 
 
 def responder_agente(user, agente, pergunta: str, historico: list[dict] | None = None) -> dict:
     resultado = consultar(user, agente, pergunta)
+    anteriores = historico_valido(historico)
+    if not anteriores:
+        resultado['titulo'] = titulo_local(pergunta)
     if not configurado() or not resultado.get('fontes'):
         return resultado
 
@@ -70,7 +127,6 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
         f'{FORMATO_RESPOSTA}\n'
         f'Material:\n{blocos[:12000]}'
     )
-    mensagens = historico_valido(historico)
-    mensagens.append({'role': 'user', 'text': pergunta})
+    mensagens = [*anteriores, {'role': 'user', 'text': pergunta}]
     resultado['resposta'] = gerar(sistema, mensagens)
     return resultado
