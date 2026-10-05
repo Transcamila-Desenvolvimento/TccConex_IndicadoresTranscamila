@@ -372,7 +372,7 @@ const ComercialCadastroProdutos: React.FC = () => {
           </div>
           <div className="erp-pagination-bar">
             <div className="erp-pagination-page-size">
-              <label htmlFor="comercial-produtos-page-size">Itens por página</label>
+              <label htmlFor="comercial-produtos-page-size">Clientes por página</label>
               <select
                 id="comercial-produtos-page-size"
                 value={pageSize}
@@ -386,7 +386,7 @@ const ComercialCadastroProdutos: React.FC = () => {
             <span style={{ fontWeight: 500, marginRight: '4px' }}>
               Página <span className="erp-pagination-current">{clampedPage}</span> de{' '}
               <span className="erp-pagination-current">{totalPages}</span>
-              <span className="erp-pagination-meta">({totalCount} registros)</span>
+              <span className="erp-pagination-meta">({totalCount} cliente{totalCount === 1 ? '' : 's'})</span>
             </span>
             <button type="button" className="reports-action-btn secondary" disabled={clampedPage <= 1} onClick={() => setPage(1)} style={{ height: '32px', width: '32px', padding: 0, opacity: clampedPage <= 1 ? 0.5 : 1 }}>«</button>
             <button type="button" className="reports-action-btn secondary" disabled={clampedPage <= 1} onClick={() => setPage(clampedPage - 1)} style={{ height: '32px', padding: '0 12px', opacity: clampedPage <= 1 ? 0.5 : 1 }}>Anterior</button>

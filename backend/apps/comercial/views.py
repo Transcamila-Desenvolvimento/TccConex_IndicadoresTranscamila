@@ -525,6 +525,49 @@ class ProdutoComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             qs = qs.filter(tipo_produto=tipo)
         return qs
 
+    def list(self, request, *args, **kwargs):
+        """Pagina por cliente, não por produto.
+
+        A tela agrupa os itens do cliente. Paginar o produto cortava o grupo:
+        em Todos sobrava um produto, e no filtro do tipo apareciam os demais.
+        """
+        qs = self.filter_queryset(self.get_queryset())
+        cliente_ids = list(
+            ClienteComercial.objects.filter(produtos__produto__in=qs)
+            .distinct()
+            .order_by('razao_social', 'pk')
+            .values_list('pk', flat=True)
+        )
+        if qs.filter(vinculos__isnull=True).exists():
+            cliente_ids.append(None)
+
+        paginator = self.paginator
+        pagina = paginator.paginate_queryset(cliente_ids, request, view=self) if paginator else None
+        escolhidos = pagina if pagina is not None else cliente_ids
+        reais = [pk for pk in escolhidos if pk is not None]
+        produtos = list(
+            qs.filter(vinculos__cliente_id__in=reais)
+            .distinct()
+            .prefetch_related('vinculos__cliente')
+        )
+        if None in escolhidos:
+            produtos.extend(qs.filter(vinculos__isnull=True))
+        reais_set = set(reais)
+
+        def ordem(produto):
+            nomes = sorted(
+                vinculo.cliente.razao_social.lower()
+                for vinculo in produto.vinculos.all()
+                if vinculo.cliente_id in reais_set and vinculo.cliente_id
+            )
+            return (nomes[0] if nomes else 'zzzz', (produto.nome or '').lower())
+
+        produtos.sort(key=ordem)
+        serializer = self.get_serializer(produtos, many=True)
+        if pagina is not None:
+            return paginator.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
     def create(self, request, *args, **kwargs):
         denied = _funcao_required_response(request, 'gerenciar-produtos', _GERENCIAR_PRODUTOS_DETAIL)
         if denied:

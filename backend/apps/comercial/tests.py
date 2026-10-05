@@ -4104,6 +4104,48 @@ class HomologacaoProdutosComercialTests(TestCase):
         )
         self.assertEqual(invalido.status_code, 400, invalido.content)
 
+    def test_pagina_reune_os_produtos_do_mesmo_cliente(self):
+        cliente_a = self._cliente()
+        self._auth(self.admin)
+        cliente_b = self.api.post(
+            '/api/comercial/clientes/',
+            {**PAYLOAD, 'cnpj': '00000000000434', 'razaoSocial': 'ZZZ CLIENTE LTDA'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(cliente_b.status_code, 201, cliente_b.content)
+        self._auth(self.produtos)
+        for nome, tipo in (('AAA PRODUTO', 'pastagem'), ('ZZZ PRODUTO', 'outros')):
+            criado = self.api.post(
+                '/api/comercial/produtos/',
+                {'nome': nome, 'tipoProduto': tipo, 'clienteIds': [cliente_a]},
+                format='json',
+                **HEADERS,
+            )
+            self.assertEqual(criado.status_code, 201, criado.content)
+        meio = self.api.post(
+            '/api/comercial/produtos/',
+            {'nome': 'MMM PRODUTO', 'tipoProduto': 'pastagem', 'clienteIds': [cliente_b.json()['id']]},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(meio.status_code, 201, meio.content)
+
+        pagina = self.api.get('/api/comercial/produtos/?page_size=1', **HEADERS)
+        self.assertEqual(pagina.status_code, 200, pagina.content)
+        self.assertEqual(pagina.json()['count'], 2)
+        self.assertEqual(
+            [item['nome'] for item in pagina.json()['results']],
+            ['AAA PRODUTO', 'ZZZ PRODUTO'],
+        )
+
+        so_pastagem = self.api.get('/api/comercial/produtos/?tipo=pastagem&page_size=1', **HEADERS)
+        self.assertEqual(so_pastagem.status_code, 200, so_pastagem.content)
+        self.assertEqual(
+            [item['nome'] for item in so_pastagem.json()['results']],
+            ['AAA PRODUTO'],
+        )
+
     def _usuario_notificacao(self, username, google_email=None, **kwargs):
         defaults = {
             'password': 'test123',
