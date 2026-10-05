@@ -949,6 +949,7 @@ class ClienteComercialTests(TestCase):
                     'unidade': 'MT',
                     'itens': [
                         {'rotulo': 'FATURAMENTO MÍNIMO (1)', 'valor': 'R$ 10.000,00'},
+                        {'rotulo': 'HORA AVULSA', 'valor': 'R$ 15,00/h'},
                     ],
                     'horaExtraTitulo': 'Hora-extra (7)',
                     'horaExtra': [
@@ -965,6 +966,8 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(tabela['unidade'], 'MT')
         self.assertEqual(tabela['itens'][0]['valor'], 'R$ 10.000,00')
         self.assertEqual(tabela['itens'][0]['formato'], 'moeda')
+        self.assertEqual(tabela['itens'][1]['formato'], 'hora')
+        self.assertEqual(tabela['itens'][1]['valor'], 'R$ 15,00/h')
         self.assertEqual(tabela['horaExtra'][0]['periodo'], 'De segunda a sábado')
         self.assertEqual(tabela['horaExtra'][0]['formato'], 'tonelada')
 

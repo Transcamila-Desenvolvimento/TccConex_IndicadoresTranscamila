@@ -17,7 +17,7 @@ _STATUS = {
     STATUS_PROPOSTA_APROVADA,
     STATUS_PROPOSTA_RECUSADA,
 }
-_FORMATOS = {'moeda', 'percentual', 'tonelada', 'quantidade'}
+_FORMATOS = {'moeda', 'percentual', 'tonelada', 'hora', 'quantidade'}
 _ABAS = {'transferencia', 'distribuicao', 'armazenagem', 'portuaria', 'spot'}
 _MAX_LINHAS = 80
 _MAX_CONDICOES = 80

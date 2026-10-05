@@ -1108,7 +1108,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Informe a tabela de armazenagem.')
         padrao = tabela_armazenagem_padrao()
 
-        FORMATOS = {'moeda', 'percentual', 'tonelada', 'quantidade'}
+        FORMATOS = {'moeda', 'percentual', 'tonelada', 'hora', 'quantidade'}
 
         def _formato(item, valor, padrao='moeda'):
             atual = str(item.get('formato') or '').strip().lower()
@@ -1117,6 +1117,8 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             texto = (valor or '').lower()
             if '%' in texto:
                 return 'percentual'
+            if '/h' in texto:
+                return 'hora'
             if 'ton' in texto:
                 return 'tonelada'
             if 'r$' in texto:

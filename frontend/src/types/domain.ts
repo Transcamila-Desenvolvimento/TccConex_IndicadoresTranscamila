@@ -2648,12 +2648,13 @@ export const OBSERVACOES_ARMAZENAGEM_PADRAO: PropostaCondicaoComercial[] = [
   { rotulo: 'h)', valor: 'O reajuste nas tarifas é aplicado anualmente através de nova negociação entre as partes.' },
 ];
 
-export type FormatoTarifaArmazenagem = 'moeda' | 'percentual' | 'tonelada' | 'quantidade';
+export type FormatoTarifaArmazenagem = 'moeda' | 'percentual' | 'tonelada' | 'hora' | 'quantidade';
 
 export const FORMATOS_TARIFA_ARMAZENAGEM: { key: FormatoTarifaArmazenagem; label: string }[] = [
   { key: 'moeda', label: 'Valor (R$)' },
   { key: 'percentual', label: 'Percentual (%)' },
   { key: 'tonelada', label: 'Por tonelada (R$/ton)' },
+  { key: 'hora', label: 'Valor por hora (R$/h)' },
   { key: 'quantidade', label: 'Quantidade' },
 ];
 
@@ -2710,6 +2711,7 @@ export function inferirFormatoTarifaArmazenagem(
 ): FormatoTarifaArmazenagem {
   const texto = (valor || '').toLowerCase();
   if (texto.includes('%')) return 'percentual';
+  if (texto.includes('/h')) return 'hora';
   if (texto.includes('ton')) return 'tonelada';
   if (texto.includes('r$')) return 'moeda';
   return padrao;
@@ -2718,6 +2720,7 @@ export function inferirFormatoTarifaArmazenagem(
 export function placeholderTarifaArmazenagem(formato: FormatoTarifaArmazenagem) {
   if (formato === 'percentual') return '0,00% ou -';
   if (formato === 'tonelada') return 'R$ 0,00/ton ou -';
+  if (formato === 'hora') return 'R$ 0,00/h ou -';
   if (formato === 'quantidade') return '0 ou -';
   return 'R$ 0,00 ou -';
 }
@@ -2739,7 +2742,13 @@ export function tabelaArmazenagemProntaParaSalvar(tabela?: TabelaArmazenagem | n
 export function formatarValorTarifaArmazenagem(valor: string, formato: FormatoTarifaArmazenagem) {
   const texto = normalizarTracoTarifaArmazenagem(valor);
   if (!texto || texto === '-') return texto;
-  const cleaned = texto.replace(/R\$\s?/gi, '').replace(/%/g, '').replace(/\/ton/gi, '').trim();
+  const cleaned = texto
+    .replace(/R\$\s?/gi, '')
+    .replace(/%/g, '')
+    .replace(/\/\s*ton(?:elada)?s?/gi, '')
+    .replace(/\/\s*horas?/gi, '')
+    .replace(/\/\s*h\b/gi, '')
+    .trim();
   const normalized = cleaned.includes(',')
     ? cleaned.replace(/\./g, '').replace(',', '.')
     : cleaned.replace(/\s/g, '');
@@ -2752,7 +2761,9 @@ export function formatarValorTarifaArmazenagem(valor: string, formato: FormatoTa
     return amount.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
   }
   const money = amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return formato === 'tonelada' ? `R$ ${money}/ton` : `R$ ${money}`;
+  if (formato === 'tonelada') return `R$ ${money}/ton`;
+  if (formato === 'hora') return `R$ ${money}/h`;
+  return `R$ ${money}`;
 }
 
 export function cloneTabelaArmazenagem(tabela?: TabelaArmazenagem | null): TabelaArmazenagem {

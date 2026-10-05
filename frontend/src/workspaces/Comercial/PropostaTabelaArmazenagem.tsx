@@ -7,24 +7,32 @@ import {
   TABELA_ARMAZENAGEM_PADRAO,
 } from '../../types/domain';
 
+type TabelaUpdater = (atual: TabelaArmazenagem) => TabelaArmazenagem;
+
 type Props = {
   tabela: TabelaArmazenagem;
   canEdit: boolean;
-  onChange: (tabela: TabelaArmazenagem) => void;
+  onChange: (updater: TabelaUpdater) => void;
 };
+
+function valorNoFormato(valor: string, formato: FormatoTarifaArmazenagem) {
+  return valor.trim() ? formatarValorTarifaArmazenagem(valor, formato) : valor;
+}
 
 function CampoValor({
   valor,
   formato,
   canEdit,
   onChangeValor,
-  onChangeFormato,
+  onFormatar,
+  onTrocarFormato,
 }: {
   valor: string;
   formato: FormatoTarifaArmazenagem;
   canEdit: boolean;
   onChangeValor: (valor: string) => void;
-  onChangeFormato: (formato: FormatoTarifaArmazenagem) => void;
+  onFormatar: () => void;
+  onTrocarFormato: (formato: FormatoTarifaArmazenagem) => void;
 }) {
   return (
     <div className="proposta-armazenagem-valor">
@@ -33,11 +41,7 @@ function CampoValor({
         value={formato}
         disabled={!canEdit}
         aria-label="Tipo do valor"
-        onChange={(e) => {
-          const proximo = e.target.value as FormatoTarifaArmazenagem;
-          onChangeFormato(proximo);
-          if (valor.trim()) onChangeValor(formatarValorTarifaArmazenagem(valor, proximo));
-        }}
+        onChange={(e) => onTrocarFormato(e.target.value as FormatoTarifaArmazenagem)}
       >
         {FORMATOS_TARIFA_ARMAZENAGEM.map((opcao) => (
           <option key={opcao.key} value={opcao.key}>{opcao.label}</option>
@@ -50,9 +54,7 @@ function CampoValor({
         placeholder={placeholderTarifaArmazenagem(formato)}
         aria-invalid={!valor.trim()}
         onChange={(e) => onChangeValor(e.target.value)}
-        onBlur={() => {
-          if (valor.trim()) onChangeValor(formatarValorTarifaArmazenagem(valor, formato));
-        }}
+        onBlur={onFormatar}
       />
     </div>
   );
@@ -61,8 +63,8 @@ function CampoValor({
 export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }: Props) {
   const dados = cloneTabelaArmazenagem(tabela);
 
-  const update = (patch: Partial<TabelaArmazenagem>) => {
-    onChange({ ...dados, ...patch });
+  const alterar = (patcher: (dados: TabelaArmazenagem) => TabelaArmazenagem) => {
+    onChange((atual) => patcher(cloneTabelaArmazenagem(atual)));
   };
 
   return (
@@ -73,7 +75,10 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
           <button
             type="button"
             className="proposta-secao-add"
-            onClick={() => update({ itens: [...dados.itens, { rotulo: '', valor: '', formato: 'moeda' }] })}
+            onClick={() => alterar((atual) => ({
+              ...atual,
+              itens: [...atual.itens, { rotulo: '', valor: '', formato: 'moeda' }],
+            }))}
           >
             <i className="bi bi-plus-lg" aria-hidden="true" />
             Adicionar
@@ -107,9 +112,13 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
                     className="proposta-destinos-input"
                     value={item.rotulo}
                     disabled={!canEdit}
-                    onChange={(e) => update({
-                      itens: dados.itens.map((linha, i) => (i === index ? { ...linha, rotulo: e.target.value } : linha)),
-                    })}
+                    onChange={(e) => {
+                      const rotulo = e.target.value;
+                      alterar((atual) => ({
+                        ...atual,
+                        itens: atual.itens.map((linha, i) => (i === index ? { ...linha, rotulo } : linha)),
+                      }));
+                    }}
                   />
                 </td>
                 <td>
@@ -117,12 +126,24 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
                     valor={item.valor}
                     formato={item.formato}
                     canEdit={canEdit}
-                    onChangeValor={(valor) => update({
-                      itens: dados.itens.map((linha, i) => (i === index ? { ...linha, valor } : linha)),
-                    })}
-                    onChangeFormato={(formato) => update({
-                      itens: dados.itens.map((linha, i) => (i === index ? { ...linha, formato } : linha)),
-                    })}
+                    onChangeValor={(valor) => alterar((atual) => ({
+                      ...atual,
+                      itens: atual.itens.map((linha, i) => (i === index ? { ...linha, valor } : linha)),
+                    }))}
+                    onFormatar={() => alterar((atual) => ({
+                      ...atual,
+                      itens: atual.itens.map((linha, i) => (
+                        i === index ? { ...linha, valor: valorNoFormato(linha.valor, linha.formato) } : linha
+                      )),
+                    }))}
+                    onTrocarFormato={(formato) => alterar((atual) => ({
+                      ...atual,
+                      itens: atual.itens.map((linha, i) => (
+                        i === index
+                          ? { ...linha, formato, valor: valorNoFormato(linha.valor, formato) }
+                          : linha
+                      )),
+                    }))}
                   />
                 </td>
                 {canEdit ? (
@@ -132,7 +153,10 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
                       className="btn-icon"
                       title="Remover"
                       disabled={dados.itens.length <= 1}
-                      onClick={() => update({ itens: dados.itens.filter((_, i) => i !== index) })}
+                      onClick={() => alterar((atual) => ({
+                        ...atual,
+                        itens: atual.itens.filter((_, i) => i !== index),
+                      }))}
                     >
                       <i className="bi bi-trash" />
                     </button>
@@ -163,9 +187,13 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
                     className="proposta-destinos-input"
                     value={item.periodo}
                     disabled={!canEdit}
-                    onChange={(e) => update({
-                      horaExtra: dados.horaExtra.map((linha, i) => (i === index ? { ...linha, periodo: e.target.value } : linha)),
-                    })}
+                    onChange={(e) => {
+                      const periodo = e.target.value;
+                      alterar((atual) => ({
+                        ...atual,
+                        horaExtra: atual.horaExtra.map((linha, i) => (i === index ? { ...linha, periodo } : linha)),
+                      }));
+                    }}
                   />
                 </td>
                 <td>
@@ -173,12 +201,24 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
                     valor={item.valor}
                     formato={item.formato}
                     canEdit={canEdit}
-                    onChangeValor={(valor) => update({
-                      horaExtra: dados.horaExtra.map((linha, i) => (i === index ? { ...linha, valor } : linha)),
-                    })}
-                    onChangeFormato={(formato) => update({
-                      horaExtra: dados.horaExtra.map((linha, i) => (i === index ? { ...linha, formato } : linha)),
-                    })}
+                    onChangeValor={(valor) => alterar((atual) => ({
+                      ...atual,
+                      horaExtra: atual.horaExtra.map((linha, i) => (i === index ? { ...linha, valor } : linha)),
+                    }))}
+                    onFormatar={() => alterar((atual) => ({
+                      ...atual,
+                      horaExtra: atual.horaExtra.map((linha, i) => (
+                        i === index ? { ...linha, valor: valorNoFormato(linha.valor, linha.formato) } : linha
+                      )),
+                    }))}
+                    onTrocarFormato={(formato) => alterar((atual) => ({
+                      ...atual,
+                      horaExtra: atual.horaExtra.map((linha, i) => (
+                        i === index
+                          ? { ...linha, formato, valor: valorNoFormato(linha.valor, formato) }
+                          : linha
+                      )),
+                    }))}
                   />
                 </td>
               </tr>
@@ -192,7 +232,10 @@ export default function PropostaTabelaArmazenagem({ tabela, canEdit, onChange }:
           className="proposta-destinos-input"
           value={dados.expediente}
           disabled={!canEdit}
-          onChange={(e) => update({ expediente: e.target.value })}
+          onChange={(e) => {
+            const expediente = e.target.value;
+            alterar((atual) => ({ ...atual, expediente }));
+          }}
         />
       </label>
     </div>

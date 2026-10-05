@@ -38,8 +38,8 @@ import type {
   TabelaArmazenagem,
 } from '../../types/domain';
 import {
+  catalogoGeneralidadesPadrao,
   cloneTabelaArmazenagem,
-  CONDICOES_FRETE_PADRAO,
   PROPOSTA_COMERCIAL_SERVICO_FILTRO_LABEL,
   PROPOSTA_COMERCIAL_SITUACAO_LABEL,
   PROPOSTA_COMERCIAL_STATUS_LABEL,
@@ -343,7 +343,7 @@ const emptyForm = (
   incluiOpPortuaria: false,
   incluiSpot: false,
   margensVeiculo: [],
-  condicoes: (condicoes?.length ? condicoes : CONDICOES_FRETE_PADRAO).map((item) => ({ ...item })),
+  condicoes: (condicoes ?? []).map((item) => ({ ...item })),
   condicoesTransferencia: [],
   condicoesDistribuicao: [],
   tabelaArmazenagem: cloneTabelaArmazenagem(),
@@ -738,16 +738,25 @@ const ComercialPropostas: React.FC = () => {
       catalogoArmazenagemRef.current = '';
       return;
     }
-    if (form.incluiArmazenagem && !editingId && form.clienteId && generalidadesArmazenagem.isSuccess) {
+    if (
+      form.incluiArmazenagem
+      && !editingId
+      && draftHydrated
+      && form.clienteId
+      && generalidadesArmazenagem.isSuccess
+    ) {
       const chave = `${form.clienteId}:armazenagem`;
       if (catalogoArmazenagemRef.current !== chave) {
         catalogoArmazenagemRef.current = chave;
-        const condicoes = (generalidadesArmazenagem.data?.items.length
+        const fonte = generalidadesArmazenagem.data?.items.length
           ? generalidadesArmazenagem.data.items
-          : CONDICOES_FRETE_PADRAO).map((item) => ({ ...item, tipo: 'armazenagem' as const }));
-        setForm((current) => (
-          current.condicoes.length > 0 ? current : { ...current, condicoes }
-        ));
+          : catalogoGeneralidadesPadrao('armazenagem');
+        const condicoes = fonte.map((item) => ({
+          rotulo: item.rotulo,
+          valor: item.valor,
+          tipo: 'armazenagem' as const,
+        }));
+        setForm((current) => ({ ...current, condicoes }));
       }
     }
     if (!form.clienteId) return;
@@ -788,6 +797,7 @@ const ComercialPropostas: React.FC = () => {
       }
     }
   }, [
+    draftHydrated,
     editingId,
     form.clienteId,
     form.incluiArmazenagem,
@@ -823,7 +833,7 @@ const ComercialPropostas: React.FC = () => {
       setRestoredDraft(true);
       setDraftUnavailable(false);
       if (restaurado.clienteId) {
-        if (restaurado.condicoes.length) {
+        if (restaurado.incluiArmazenagem && restaurado.condicoes.some((item) => item.tipo === 'armazenagem')) {
           catalogoArmazenagemRef.current = `${restaurado.clienteId}:armazenagem`;
         }
         if (restaurado.condicoesTransferencia.length) {
@@ -1003,6 +1013,7 @@ const ComercialPropostas: React.FC = () => {
         ...flags,
         linhas: [emptyLinha()],
         tabelaArmazenagem: cloneTabelaArmazenagem(current.tabelaArmazenagem),
+        condicoes: [],
       }));
       catalogoArmazenagemRef.current = '';
       setAbaOperacao('armazenagem');
@@ -1740,6 +1751,7 @@ const ComercialPropostas: React.FC = () => {
                           incluiOpPortuaria: clienteId ? form.incluiOpPortuaria : false,
                           incluiSpot: clienteId ? form.incluiSpot : false,
                           incluiArmazenagem: clienteId ? form.incluiArmazenagem : false,
+                          condicoes: [],
                           condicoesTransferencia: [],
                           condicoesDistribuicao: [],
                         });
@@ -2045,7 +2057,11 @@ const ComercialPropostas: React.FC = () => {
                         <PropostaTabelaArmazenagem
                           tabela={form.tabelaArmazenagem}
                           canEdit={canEdit}
-                          onChange={(tabela) => setForm((current) => ({ ...current, tabelaArmazenagem: tabela }))}
+                          onChange={(updater) => setForm((current) => {
+                            const tabelaArmazenagem = updater(current.tabelaArmazenagem);
+                            if (tabelaArmazenagem === current.tabelaArmazenagem) return current;
+                            return { ...current, tabelaArmazenagem };
+                          })}
                         />
                         <PropostaGeneralidadesRevisao
                           titulo="Generalidades — Armazenagem"
