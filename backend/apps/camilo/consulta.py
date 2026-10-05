@@ -346,6 +346,57 @@ def _ficha_pessoas(movimentos, pergunta: str) -> str:
     return '\n'.join(linhas)
 
 
+def _linha_alteracao(item) -> str:
+    anterior = item.valor_anterior or '—'
+    atual = item.valor_atual or '—'
+    motivo = (item.justificativa or '').strip()
+    extra = f' Motivo: {motivo[:120]}' if motivo else ''
+    return f'{item.nome}: {item.get_tipo_display()} de {anterior} para {atual}.{extra}'
+
+
+def _alteracoes_do_periodo(lotes, por_lote, tipos, limite: int = 48) -> list[str]:
+    """Reparte a lista entre os meses, para um mês grande não esconder os outros."""
+    grupos = []
+    total = 0
+    for lote in lotes:
+        cpfs, totais = por_lote[lote.id]
+        if not any(totais.get(tipo, 0) for tipo in tipos):
+            continue
+        itens = list(
+            lote.inconsistencias.filter(cpf__in=cpfs, tipo__in=tipos)
+            .select_related('lote')
+            .order_by('nome')
+        )
+        if itens:
+            grupos.append(itens)
+            total += len(itens)
+    if not grupos:
+        return ['Não há alteração do tipo pedido no período importado.']
+
+    cota = max(1, limite // len(grupos))
+    escolhidos = []
+    for itens in grupos:
+        escolhidos.extend(itens[:cota])
+    if len(escolhidos) < limite:
+        faltam = limite - len(escolhidos)
+        for itens in grupos:
+            extra = itens[cota:cota + faltam]
+            escolhidos.extend(extra)
+            faltam -= len(extra)
+            if faltam <= 0:
+                break
+    escolhidos = escolhidos[:limite]
+    linhas = [
+        f'Alterações no período: {total}. '
+        f'A lista traz {len(escolhidos)}, com nome, valor anterior e valor atual.',
+    ]
+    for item in escolhidos:
+        linhas.append(f'- {item.lote.mes:02d}/{item.lote.ano} {_linha_alteracao(item)}')
+    if total > len(escolhidos):
+        linhas.append(f'E mais {total - len(escolhidos)} alteração(ões) no período, fora desta lista.')
+    return linhas
+
+
 def resumo_movimentacoes(user, pergunta: str = '') -> str:
     from datetime import date
 
@@ -396,33 +447,23 @@ def resumo_movimentacoes(user, pergunta: str = '') -> str:
             linhas.insert(0, f'Não há movimentação importada em {mes:02d}/{ano}.')
 
     tipos = _tipos_pedidos(pergunta)
-    lote_lista = alvo
-    if lote_lista is None and tipos and not (mes and ano):
-        lote_lista = next(
-            (lote for lote in lotes if por_lote[lote.id][1].get(tipos[0], 0)),
-            None,
-        )
-    if lote_lista is not None:
-        cpfs, totais = por_lote[lote_lista.id]
+    if alvo is not None:
+        cpfs, totais = por_lote[alvo.id]
         pedidos = tipos or ['salario', 'cargo', 'outros']
         escolhidos = [tipo for tipo in pedidos if totais.get(tipo, 0)]
         if not escolhidos:
-            linhas.append(f'Em {lote_lista.mes:02d}/{lote_lista.ano} não há alteração do tipo pedido.')
+            linhas.append(f'Em {alvo.mes:02d}/{alvo.ano} não há alteração do tipo pedido.')
         else:
             itens = list(
-                lote_lista.inconsistencias.filter(cpf__in=cpfs, tipo__in=escolhidos).order_by('tipo', 'nome')
+                alvo.inconsistencias.filter(cpf__in=cpfs, tipo__in=escolhidos).order_by('tipo', 'nome')
             )
-            linhas.append(f'Alterações em {lote_lista.mes:02d}/{lote_lista.ano}:')
+            linhas.append(f'Alterações em {alvo.mes:02d}/{alvo.ano}:')
             for item in itens[:20]:
-                anterior = item.valor_anterior or '—'
-                atual = item.valor_atual or '—'
-                motivo = (item.justificativa or '').strip()
-                extra = f' Motivo: {motivo[:120]}' if motivo else ''
-                linhas.append(
-                    f'- {item.nome}: {item.get_tipo_display()} de {anterior} para {atual}.{extra}'
-                )
+                linhas.append(f'- {_linha_alteracao(item)}')
             if len(itens) > 20:
                 linhas.append(f'E mais {len(itens) - 20} alteração(ões) nesse mês.')
+    elif tipos and not (mes and ano):
+        linhas.extend(_alteracoes_do_periodo(lotes, por_lote, tipos))
     elif not (mes and ano):
         linhas.append('Nenhum mês foi citado na pergunta. Os números acima separam salário e cargo por período.')
 
@@ -940,8 +981,11 @@ def _ler_parte(user, item: dict, pergunta: str, detalhar: bool) -> str:
             detalhe = extra(user, pergunta)
             if detalhe:
                 texto = f'{texto}\n{detalhe}'
-    if len(texto) > _LIMITE_RESUMO:
-        texto = texto[:_LIMITE_RESUMO].rstrip() + '…'
+    limite = _LIMITE_RESUMO
+    if detalhar and chave in {('RH', 'movimentacoes'), ('Indicadores', 'movimentacao-rh')}:
+        limite = 9000
+    if len(texto) > limite:
+        texto = texto[:limite].rstrip() + '…'
     return texto
 
 

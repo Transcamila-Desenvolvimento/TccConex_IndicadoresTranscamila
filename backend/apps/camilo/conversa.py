@@ -18,7 +18,7 @@ FORMATO_RESPOSTA = (
 
 # Teto do que realmente segue para o modelo: instrução, material da função e o chat.
 LIMITE_CONTEXTO = 24000
-ORCAMENTO_MATERIAL = 5500
+ORCAMENTO_MATERIAL = 10000
 
 
 def medir_contexto(sistema: str, mensagens: list[dict]) -> dict:
@@ -150,6 +150,8 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
         'Não liste outras funções nem acrescente assunto que não foi pedido. '
         'Se pedirem comparação, evolução ou vários registros, entregue a tabela inteira, '
         'com todos os valores que estão no material. Não pare no cabeçalho. '
+        'Quando o material listar colaboradores com valor anterior e valor atual, '
+        'mostre esses nomes e valores. A contagem por mês não substitui essa lista. '
         'Se a pergunta usar um nome e o material trouxer o dado equivalente, '
         'responda com os valores que estão escritos e diga o nome que o documento usa. '
         'Exemplo: perguntaram diária e o texto traz piso mensal — mostre os pisos, não omita as cifras. '

@@ -179,6 +179,24 @@ class CamiloAgenteTests(TestCase):
         self.assertIn('3.350,00', trecho)
         self.assertLess(trecho.count('SINDICATO DOS MOTORISTAS'), 8)
 
+        julho = LoteMovimentacaoRH.objects.create(mes=7, ano=2026)
+        MovimentacaoColaborador.objects.create(lote=julho, nome='Bruno Souza', cpf='333', salario='2000.00')
+        InconsistenciaColaborador.objects.create(
+            lote=julho,
+            cpf='333',
+            nome='Bruno Souza',
+            tipo='salario',
+            valor_anterior='2000.00',
+            valor_atual='2300.00',
+            justificativa='Mérito',
+        )
+        estudo = resumo_movimentacoes(admin, 'Faça um estudo do aumento salarial dos colaboradores')
+        self.assertIn('Ana Lima', estudo)
+        self.assertIn('Bruno Souza', estudo)
+        self.assertIn('1500.00', estudo)
+        self.assertIn('2300.00', estudo)
+        self.assertIn('Mérito', estudo)
+
         ficha = resumo_movimentacoes(admin, 'Com base nas movimentações do RH, quem é Ana Lima?')
         self.assertIn('Colaboradores encontrados pelo nome', ficha)
         self.assertIn('Ana Lima, em 06/2026', ficha)
