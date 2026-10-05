@@ -30,6 +30,22 @@ const VEICULOS = [
   { bandaKey: 'acima26001', rotulo: 'Carreta 7 eixos' },
 ];
 
+type VeiculoOpcao = { bandaKey: string; rotulo: string };
+
+function catalogoVeiculos(veiculosTarifa?: { bandaKey?: string; rotulo?: string }[] | null): VeiculoOpcao[] {
+  const fonte = (veiculosTarifa ?? []).filter((item) => (item.bandaKey || '').trim());
+  const base = (fonte.length ? fonte : VEICULOS).map((item) => ({
+    bandaKey: (item.bandaKey || '').trim(),
+    rotulo: (item.rotulo || item.bandaKey || '').trim(),
+  }));
+  const vistos = new Set<string>();
+  return base.filter((item) => {
+    if (!item.bandaKey || vistos.has(item.bandaKey)) return false;
+    vistos.add(item.bandaKey);
+    return true;
+  });
+}
+
 /** Normaliza número vindo da API ("15551.80") ou digitado ("R$ 15.551,80"). */
 const parseMoneyInput = (value: string): number | null => {
   const raw = String(value || '').trim();
@@ -57,17 +73,19 @@ type Props = {
   canEditValores?: boolean;
   clienteId: string;
   margensVeiculo: PropostaMargemVeiculo[];
+  /** Veículos da tabela de frete do cliente. Sem isso, ficam só os três tipos oficiais. */
+  veiculosTarifa?: { bandaKey?: string; rotulo?: string }[] | null;
   portuaria?: boolean;
   spot?: boolean;
   grisAdvUnificado?: boolean;
   onChange: (linhas: TrechoLinha[]) => void;
 };
 
-const emptyLinha = (modalidade: string): TrechoLinha => ({
+const emptyLinha = (modalidade: string, veiculo: VeiculoOpcao = VEICULOS[0]): TrechoLinha => ({
   origem: '',
   entrega: '',
-  veiculo: 'Truck',
-  veiculoKey: 'de9000',
+  veiculo: veiculo.rotulo,
+  veiculoKey: veiculo.bandaKey,
   modalidade,
   km: '',
   devolucaoContainer: '',
@@ -91,6 +109,7 @@ export default function PropostaTrechosOperacao({
   canEditValores = canEdit,
   clienteId,
   margensVeiculo,
+  veiculosTarifa,
   portuaria = false,
   spot = false,
   grisAdvUnificado = false,
@@ -108,7 +127,9 @@ export default function PropostaTrechosOperacao({
   const margensRef = useRef(margensVeiculo);
   margensRef.current = margensVeiculo;
   const modalidade = spot ? 'spot' : portuaria ? 'op_portuaria' : 'transferencia';
-  const lista = linhas.length ? linhas : [emptyLinha(modalidade)];
+  const veiculos = catalogoVeiculos(veiculosTarifa);
+  const veiculoPadrao = veiculos.find((item) => item.bandaKey === 'de9000') ?? veiculos[0] ?? VEICULOS[0];
+  const lista = linhas.length ? linhas : [emptyLinha(modalidade, veiculoPadrao)];
   const margensKey = JSON.stringify(margensVeiculo ?? []);
   const prevMargensKey = useRef(margensKey);
 
@@ -148,7 +169,7 @@ export default function PropostaTrechosOperacao({
 
   /** Recalcula frete, GRIS/ADV, ICMS e prazo de todos os trechos com km e veículo. */
   const recalcularTodos = async (isCancelled: () => boolean = () => false) => {
-    const atuais = linhasRef.current.length ? linhasRef.current : [emptyLinha(modalidade)];
+    const atuais = linhasRef.current.length ? linhasRef.current : [emptyLinha(modalidade, veiculoPadrao)];
     const elegiveis = atuais
       .map((linha, index) => ({ linha, index }))
       .filter(({ linha }) => (
@@ -288,7 +309,7 @@ export default function PropostaTrechosOperacao({
             <button
               type="button"
               className="proposta-secao-add"
-              onClick={() => onChange([...lista, emptyLinha(modalidade)])}
+              onClick={() => onChange([...lista, emptyLinha(modalidade, veiculoPadrao)])}
             >
               <i className="bi bi-plus-lg" aria-hidden="true" />
               Adicionar
@@ -353,11 +374,14 @@ export default function PropostaTrechosOperacao({
                     disabled={!canEditValores}
                     value={linha.veiculoKey || ''}
                     onChange={(e) => {
-                      const tipo = VEICULOS.find((item) => item.bandaKey === e.target.value);
-                      patch(index, { veiculoKey: e.target.value, veiculo: tipo?.rotulo || e.target.value });
+                      const tipo = veiculos.find((item) => item.bandaKey === e.target.value);
+                      patch(index, { veiculoKey: e.target.value, veiculo: tipo?.rotulo || linha.veiculo || e.target.value });
                     }}
                   >
-                    {VEICULOS.map((item) => (
+                    {(linha.veiculoKey && !veiculos.some((item) => item.bandaKey === linha.veiculoKey)
+                      ? [{ bandaKey: linha.veiculoKey, rotulo: linha.veiculo || linha.veiculoKey }, ...veiculos]
+                      : veiculos
+                    ).map((item) => (
                       <option key={item.bandaKey} value={item.bandaKey}>{item.rotulo}</option>
                     ))}
                   </select>

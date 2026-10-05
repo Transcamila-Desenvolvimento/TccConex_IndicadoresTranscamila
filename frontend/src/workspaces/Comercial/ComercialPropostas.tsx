@@ -1946,6 +1946,7 @@ const ComercialPropostas: React.FC = () => {
                           canEdit={canEdit}
                           clienteId={form.clienteId}
                           margensVeiculo={form.margensVeiculo}
+                          veiculosTarifa={tabelaDistribuicaoCliente.tabela?.config?.veiculosTarifa}
                           grisAdvUnificado={
                             isGrisAdvUnificado(tabelaDistribuicaoCliente.tabela?.config)
                             || Boolean(snapshotDistribuicao?.grisAdvUnificado)
@@ -1990,6 +1991,7 @@ const ComercialPropostas: React.FC = () => {
                           canEdit={canEdit}
                           clienteId={form.clienteId}
                           margensVeiculo={form.margensVeiculo}
+                          veiculosTarifa={tabelaDistribuicaoCliente.tabela?.config?.veiculosTarifa}
                           grisAdvUnificado={
                             isGrisAdvUnificado(tabelaDistribuicaoCliente.tabela?.config)
                             || Boolean(snapshotDistribuicao?.grisAdvUnificado)
@@ -2018,6 +2020,7 @@ const ComercialPropostas: React.FC = () => {
                           canEdit={canEdit}
                           clienteId={form.clienteId}
                           margensVeiculo={form.margensVeiculo}
+                          veiculosTarifa={tabelaDistribuicaoCliente.tabela?.config?.veiculosTarifa}
                           grisAdvUnificado={
                             isGrisAdvUnificado(tabelaDistribuicaoCliente.tabela?.config)
                             || Boolean(snapshotDistribuicao?.grisAdvUnificado)
