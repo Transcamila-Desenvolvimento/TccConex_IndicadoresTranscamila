@@ -170,6 +170,8 @@ def sanitize_draft_payload(raw):
             'reajuste': _as_str(form.get('reajuste'), 200),
             'att': _as_str(form.get('att'), 150),
             'validade': _as_str(form.get('validade'), 40),
+            'validadeInicio': _as_str(form.get('validadeInicio') or form.get('validade_inicio'), 32),
+            'dataVencimento': _as_str(form.get('dataVencimento') or form.get('data_vencimento'), 32),
             'vigencia': _as_str(form.get('vigencia'), 40),
             'faturamento': _as_str(form.get('faturamento'), 80),
             'localEmissao': _as_str(form.get('localEmissao') or form.get('local_emissao'), 120),

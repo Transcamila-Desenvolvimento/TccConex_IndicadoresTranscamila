@@ -2866,6 +2866,8 @@ export interface PropostaComercial {
   reajuste: string;
   att: string;
   validade: string;
+  /** Dia em que o prazo passa a contar. Vazio quando ainda acompanha a data da proposta. */
+  validadeInicio?: string | null;
   vigencia: string;
   faturamento: string;
   localEmissao: string;
@@ -2891,6 +2893,19 @@ export interface PropostaComercial {
   dataAtualizacao?: string;
   dataVencimento?: string | null;
   situacao?: PropostaComercialSituacao;
+  avisoReprogramacaoPendente?: boolean;
+}
+
+export interface ReprogramarValidadeResult {
+  dataVencimento: string;
+  aviso: { enviados: number; falhas: string[] } | null;
+}
+
+export interface PropostaSituacaoEvento {
+  em: string;
+  situacao: PropostaComercialSituacao;
+  resumo: string;
+  usuario: string;
 }
 
 export interface PropostaComercialPayload {
@@ -2907,6 +2922,7 @@ export interface PropostaComercialPayload {
   reajuste?: string;
   att?: string;
   validade?: string;
+  dataVencimento?: string | null;
   vigencia?: string;
   faturamento?: string;
   localEmissao?: string;
@@ -2982,6 +2998,8 @@ export interface PropostaComercialFormDraft {
     reajuste: string;
     att: string;
     validade: string;
+    validadeInicio?: string;
+    dataVencimento?: string;
     vigencia: string;
     faturamento: string;
     localEmissao: string;

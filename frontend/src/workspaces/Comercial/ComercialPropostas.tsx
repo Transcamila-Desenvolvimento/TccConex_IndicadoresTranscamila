@@ -7,6 +7,7 @@ import { userHasFuncao } from '../../constants/funcoes';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
   getComercialErrorMessage,
+  useEnviarAvisoReprogramacao,
   bumpPropostaDraftGen,
   useClientesComercial,
   useComercialGeneralidades,
@@ -53,9 +54,12 @@ import {
   tabelaArmazenagemProntaParaSalvar,
   tipoPropostaDasOperacoes,
 } from '../../types/domain';
-import { printPropostaComercial } from './printPropostaComercial';
+import { generatePropostaComercialPdfBlob, printPropostaComercial } from './printPropostaComercial';
 import { isGrisAdvUnificado } from './formatTabelaFrete';
 import ComercialPropostaEmailModal from './ComercialPropostaEmailModal';
+import ComercialPropostaReprogramarModal from './ComercialPropostaReprogramarModal';
+import ComercialPropostaSituacaoHistoricoModal from './ComercialPropostaSituacaoHistoricoModal';
+import { addDaysISO, complementoProrrogacao, prazoParaVencimento, vencimentoDoPrazo } from './validadeProposta';
 import PropostaCondicoesEspeciais from './PropostaCondicoesEspeciais';
 import PropostaGeneralidadesRevisao from './PropostaGeneralidadesRevisao';
 import PropostaTabelaArmazenagem from './PropostaTabelaArmazenagem';
@@ -155,6 +159,8 @@ type PropostaForm = {
   reajuste: string;
   att: string;
   validade: string;
+  validadeInicio: string;
+  dataVencimento: string;
   vigencia: string;
   faturamento: string;
   localEmissao: string;
@@ -332,6 +338,8 @@ const emptyForm = (
   reajuste: 'Anual com base no índice INCT',
   att: '',
   validade: padroes?.validade || VALIDADE_PADRAO_FALLBACK,
+  validadeInicio: todayISO(),
+  dataVencimento: vencimentoDoPrazo(todayISO(), padroes?.validade || VALIDADE_PADRAO_FALLBACK),
   vigencia: padroes?.vigencia || VIGENCIA_PADRAO_FALLBACK,
   faturamento: padroes?.faturamento || FATURAMENTO_PADRAO_FALLBACK,
   localEmissao: 'Maringá',
@@ -402,6 +410,9 @@ const formFromDraft = (
     reajuste: draftForm.reajuste || fallback.reajuste,
     att: draftForm.att || '',
     validade: draftForm.validade || fallback.validade,
+    validadeInicio: draftForm.validadeInicio || draftForm.dataProposta || fallback.validadeInicio,
+    dataVencimento: draftForm.dataVencimento
+      || vencimentoDoPrazo(draftForm.validadeInicio || draftForm.dataProposta || fallback.dataProposta, draftForm.validade || fallback.validade),
     vigencia: draftForm.vigencia || fallback.vigencia,
     faturamento: draftForm.faturamento || fallback.faturamento,
     localEmissao: draftForm.localEmissao || fallback.localEmissao,
@@ -629,6 +640,10 @@ const ComercialPropostas: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const [emailPropostas, setEmailPropostas] = useState<PropostaComercial[]>([]);
+  const [reprogramarPropostas, setReprogramarPropostas] = useState<PropostaComercial[]>([]);
+  const [historicoProposta, setHistoricoProposta] = useState<PropostaComercial | null>(null);
+  const [enviandoAviso, setEnviandoAviso] = useState(false);
+  const enviarAvisoReprogramacao = useEnviarAvisoReprogramacao();
   const [abaOperacao, setAbaOperacao] = useState<PropostaOperacaoAba>('transferencia');
   const [snapshotDistribuicao, setSnapshotDistribuicao] = useState<PropostaTabelaDistribuicaoSnapshot | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(true);
@@ -933,6 +948,9 @@ const ComercialPropostas: React.FC = () => {
       reajuste: proposta.reajuste || 'Anual com base no índice INCT',
       att: responsavelDoCliente(proposta.clienteId ?? '') || proposta.att,
       validade: proposta.validade || validadePadrao,
+      validadeInicio: proposta.validadeInicio || proposta.dataProposta || todayISO(),
+      dataVencimento: proposta.dataVencimento
+        || vencimentoDoPrazo(proposta.validadeInicio || proposta.dataProposta || todayISO(), proposta.validade || validadePadrao),
       vigencia: proposta.vigencia || vigenciaPadrao,
       faturamento: proposta.faturamento || faturamentoPadrao,
       localEmissao: proposta.localEmissao,
@@ -1121,6 +1139,7 @@ const ComercialPropostas: React.FC = () => {
       reajuste: form.reajuste.trim(),
       att: form.att.trim(),
       validade: form.validade.trim(),
+      dataVencimento: form.dataVencimento || null,
       vigencia: form.vigencia.trim(),
       faturamento: form.faturamento.trim(),
       localEmissao: form.localEmissao.trim(),
@@ -1252,7 +1271,7 @@ const ComercialPropostas: React.FC = () => {
       totalEstimado: linhaTotal(linha)?.toFixed(2) ?? null,
     })),
     dataCriacao: todayISO(),
-    dataVencimento: null,
+    dataVencimento: form.dataVencimento || null,
   });
 
   const handlePrint = (proposta: PropostaComercial) => {
@@ -1289,6 +1308,62 @@ const ComercialPropostas: React.FC = () => {
       return;
     }
     setEmailPropostas(selectedPropostas);
+  };
+
+  const handleReprogramarSelected = () => {
+    if (!canManage || selectedPropostas.length === 0) return;
+    setIsActionsMenuOpen(false);
+    setReprogramarPropostas(selectedPropostas);
+  };
+
+  const handleHistoricoSelected = () => {
+    const proposta = selectedPropostas[0];
+    if (!proposta) return;
+    setIsActionsMenuOpen(false);
+    setHistoricoProposta(proposta);
+  };
+
+  const handleEnviarAvisoReprogramacao = async () => {
+    const pendentes = selectedPropostas.filter((item) => item.avisoReprogramacaoPendente && item.status !== 'rascunho');
+    if (!canManage || pendentes.length === 0 || enviandoAviso) return;
+    setIsActionsMenuOpen(false);
+    const limite = 5.5 * 1024 * 1024;
+    const gerar = async (compact: boolean) => {
+      const arquivos: Blob[] = [];
+      for (const item of pendentes) {
+        arquivos.push(await generatePropostaComercialPdfBlob(item, clienteDaProposta(item), { compact }));
+      }
+      return arquivos;
+    };
+    setEnviandoAviso(true);
+    let pdfs: Blob[];
+    try {
+      pdfs = await gerar(false);
+      if (pdfs.reduce((total, arquivo) => total + arquivo.size, 0) > limite) {
+        pdfs = await gerar(true);
+      }
+    } catch {
+      setEnviandoAviso(false);
+      alert('Não foi possível gerar o PDF da proposta.');
+      return;
+    }
+    try {
+      const aviso = await enviarAvisoReprogramacao.mutateAsync({
+        ids: pendentes.map((item) => item.id),
+        pdfs,
+      });
+      const falhas = aviso?.falhas ?? [];
+      const enviados = aviso?.enviados ?? 0;
+      let mensagem = enviados === 1
+        ? 'O aviso de reprogramação foi enviado ao cliente.'
+        : `${enviados} avisos de reprogramação foram enviados.`;
+      if (falhas.length) mensagem += ` ${falhas.join(' ')}`;
+      alert(mensagem);
+    } catch (err) {
+      alert(getComercialErrorMessage(err));
+    } finally {
+      setEnviandoAviso(false);
+    }
   };
 
   const discardDraft = () => {
@@ -1372,7 +1447,7 @@ const ComercialPropostas: React.FC = () => {
               disabled={selectedIds.length === 0}
               onClick={() => setIsActionsMenuOpen((open) => !open)}
             >
-              <span>Ações{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}</span>
+              <span>Outras ações{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}</span>
               <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
@@ -1399,6 +1474,30 @@ const ComercialPropostas: React.FC = () => {
                   <span className="reports-dropdown-item-left">
                     <i className="bi bi-envelope" />
                     Enviar e-mail
+                  </span>
+                </span>
+              )}
+              {canManage && selectedPropostas.length > 0 && (
+                <span className="reports-dropdown-item" onClick={handleReprogramarSelected}>
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-calendar-event" />
+                    Prorrogar vencimento
+                  </span>
+                </span>
+              )}
+              {canManage && selectedPropostas.some((item) => item.avisoReprogramacaoPendente) && (
+                <span className="reports-dropdown-item" onClick={() => { void handleEnviarAvisoReprogramacao(); }}>
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-envelope-paper" />
+                    {enviandoAviso ? 'Enviando aviso...' : 'Enviar aviso de reprogramação'}
+                  </span>
+                </span>
+              )}
+              {selectedPropostas.length === 1 && (
+                <span className="reports-dropdown-item" onClick={handleHistoricoSelected}>
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-clock-history" />
+                    Histórico da situação
                   </span>
                 </span>
               )}
@@ -1532,7 +1631,9 @@ const ComercialPropostas: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  propostas.map((proposta) => (
+                  propostas.map((proposta) => {
+                    const extraValidade = complementoProrrogacao(proposta);
+                    return (
                     <tr key={proposta.id}>
                       <td className="checkbox-cell">
                         <input
@@ -1566,24 +1667,30 @@ const ComercialPropostas: React.FC = () => {
                           </span>
                         </span>
                       </td>
-                      <td>{proposta.validade || '—'}</td>
+                      <td title={extraValidade ? `${proposta.validade} contados da emissão, mais ${extraValidade} de prorrogação.` : undefined}>
+                        {proposta.validade || '—'}
+                        {extraValidade ? <span className="proposta-servico-operacao"> + {extraValidade}</span> : null}
+                      </td>
                       <td>{proposta.vigencia || '—'}</td>
                       <td>
                         {(() => {
                           const situacao = proposta.situacao ?? proposta.status;
                           return (
-                            <span
+                            <button
+                              type="button"
                               className={`proposta-status-badge ${SITUACAO_BADGE_CLASS[situacao]}`}
-                              title={situacaoTitulo(proposta, situacao)}
+                              title={situacaoTitulo(proposta, situacao) || 'Ver histórico da situação'}
+                              onClick={() => setHistoricoProposta(proposta)}
                             >
                               {PROPOSTA_COMERCIAL_SITUACAO_LABEL[situacao]}
-                            </span>
+                            </button>
                           );
                         })()}
                       </td>
                       <td>{formatDateBr(proposta.dataVencimento)}</td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1876,18 +1983,39 @@ const ComercialPropostas: React.FC = () => {
                       placeholder="Cadastre o responsável no cliente"
                     />
                   </IncludeField>
-                  <IncludeField label="Validade da proposta">
-                    <select
-                      className="proposta-include-input proposta-include-select"
-                      value={form.validade}
-                      disabled={!canEdit}
-                      onChange={(e) => setForm({ ...form, validade: e.target.value })}
-                    >
-                      {optionsWithCurrent(validadeOptions, form.validade).map((option) => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
-                  </IncludeField>
+                  <div className="proposta-validade-na-coluna">
+                    <IncludeField label="Validade">
+                      <select
+                        className="proposta-include-input proposta-include-select"
+                        value={form.validade}
+                        disabled={!canEdit}
+                        onChange={(e) => {
+                          const validade = e.target.value;
+                          const inicio = form.validadeInicio || form.dataProposta;
+                          setForm({ ...form, validade, dataVencimento: vencimentoDoPrazo(inicio, validade) });
+                        }}
+                      >
+                        {optionsWithCurrent(validadeOptions, form.validade).map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    </IncludeField>
+                    <IncludeField label="Vencimento">
+                      <input
+                        type="date"
+                        className="proposta-include-input"
+                        min={(form.validadeInicio || form.dataProposta) ? addDaysISO(form.validadeInicio || form.dataProposta, 1) : undefined}
+                        value={form.dataVencimento}
+                        disabled={!canEdit}
+                        onChange={(e) => {
+                          const dataVencimento = e.target.value;
+                          const inicio = form.validadeInicio || form.dataProposta;
+                          const prazo = prazoParaVencimento(inicio, dataVencimento, validadeOptions);
+                          setForm({ ...form, dataVencimento, validade: prazo || form.validade });
+                        }}
+                      />
+                    </IncludeField>
+                  </div>
                   <IncludeField label="Vigência do contrato">
                     <select
                       className="proposta-include-input proposta-include-select"
@@ -1900,9 +2028,6 @@ const ComercialPropostas: React.FC = () => {
                       ))}
                     </select>
                   </IncludeField>
-                </div>
-
-                <div className="proposta-include-grid">
                   <IncludeField label="Faturamento">
                     <select
                       className="proposta-include-input proposta-include-select"
@@ -2085,6 +2210,26 @@ const ComercialPropostas: React.FC = () => {
           propostas={emailPropostas}
           clienteFor={clienteDaProposta}
           onClose={() => setEmailPropostas([])}
+        />
+      ) : null}
+
+      {historicoProposta ? (
+        <ComercialPropostaSituacaoHistoricoModal
+          proposta={historicoProposta}
+          badgeClass={(situacao) => SITUACAO_BADGE_CLASS[situacao] || ''}
+          onClose={() => setHistoricoProposta(null)}
+        />
+      ) : null}
+
+      {reprogramarPropostas.length > 0 ? (
+        <ComercialPropostaReprogramarModal
+          propostas={reprogramarPropostas}
+          prazos={validadeOptions}
+          clienteFor={clienteDaProposta}
+          onClose={(saved) => {
+            setReprogramarPropostas([]);
+            if (saved) setSelectedIds([]);
+          }}
         />
       ) : null}
     </div>

@@ -1,6 +1,6 @@
 import re
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 from django.db import transaction
 from django.utils import timezone
@@ -58,6 +58,9 @@ from .models import (
     ensure_parametros_comercial,
     lista_opcoes_parametro,
     normalizar_opcao_parametro,
+    normalizar_opcao_validade,
+    prorrogar_vencimento,
+    validade_texto_em_dias,
     aplicar_padrao_generalidades,
     gravar_catalogo_generalidades,
     normalizar_homologacao,
@@ -78,6 +81,7 @@ from .proposta_email_service import (
     request_observacao,
     request_proposta_ids,
     request_revisoes_pdf,
+    send_aviso_reprogramacao,
     send_proposta_comercial_email,
     send_propostas_comerciais_email,
     validar_envio_conjunto,
@@ -112,9 +116,10 @@ def _annotate_proposta_vencimento(qs):
         default=None,
         output_field=IntegerField(),
     )
-    base = Coalesce('data_proposta', TruncDate('data_criacao'))
+    base = Coalesce('validade_inicio', 'data_proposta', TruncDate('data_criacao'))
     offset = ExpressionWrapper(dias * Value(timedelta(days=1)), output_field=DurationField())
-    return qs.annotate(_vencimento=ExpressionWrapper(base + offset, output_field=DateField()))
+    calculado = ExpressionWrapper(base + offset, output_field=DateField())
+    return qs.annotate(_vencimento=Coalesce('vencimento_reprogramado', calculado))
 
 
 _PROPOSTA_OPERACAO_FLAG = {
@@ -972,6 +977,185 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             'to': resultado['to'],
             'cc': resultado['cc'],
         })
+
+    @action(detail=False, methods=['post'], url_path='reprogramar-validade')
+    def reprogramar_validade(self, request):
+        denied = _funcao_required_response(request, 'gerenciar-propostas', _GERENCIAR_PROPOSTAS_DETAIL)
+        if denied:
+            return denied
+        ids = request_proposta_ids(request.data)
+        if not ids:
+            return Response({'detail': 'Selecione ao menos uma proposta para reprogramar.'}, status=status.HTTP_400_BAD_REQUEST)
+        prazo_informado = str(request.data.get('validade') or '').strip()
+        data_informada = str(request.data.get('dataVencimento') or '').strip()
+        if bool(prazo_informado) == bool(data_informada):
+            return Response(
+                {'detail': 'Informe um prazo cadastrado ou uma data manual.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        hoje = timezone.localdate()
+        registro = ensure_parametros_comercial()
+        opcoes = lista_opcoes_parametro('validade', registro.validades, VALIDADES_PROPOSTA_PADRAO)
+        dias = None
+        data_manual = None
+        if data_informada:
+            try:
+                data_manual = date.fromisoformat(data_informada[:10])
+            except ValueError:
+                return Response({'detail': 'Data de validade inválida.'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            novo_prazo = normalizar_opcao_validade(prazo_informado) or ''
+            if not novo_prazo or novo_prazo not in opcoes:
+                return Response(
+                    {'detail': 'Selecione um prazo de validade cadastrado.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            dias = validade_texto_em_dias(novo_prazo)
+
+        queryset = self.filter_queryset(self.get_queryset())
+        encontradas = {str(item.pk): item for item in queryset.filter(pk__in=ids).select_related('cliente')}
+        propostas = []
+        for item_id in ids:
+            proposta = encontradas.get(item_id)
+            if not proposta:
+                return Response({'detail': 'Uma das propostas selecionadas não foi encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+            propostas.append(proposta)
+
+        planos = []
+        for proposta in propostas:
+            try:
+                nova_data = prorrogar_vencimento(proposta, dias=dias, data=data_manual, hoje=hoje)
+            except ValueError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            planos.append((proposta, nova_data))
+
+        enviar_aviso = _flag_verdadeiro(request.data, 'enviarAviso')
+        for proposta, nova_data in planos:
+            situacao_antes = proposta.situacao()
+            vencimento_antes = proposta.data_vencimento()
+            proposta.vencimento_reprogramado = nova_data
+            if situacao_antes == SITUACAO_PROPOSTA_EXPIRADA and vencimento_antes:
+                proposta.registrar_situacao(
+                    SITUACAO_PROPOSTA_EXPIRADA,
+                    request.user,
+                    f'Validade encerrada em {vencimento_antes.strftime("%d/%m/%Y")}',
+                    quando=timezone.make_aware(datetime.combine(vencimento_antes, time(23, 59))),
+                )
+            validade_atual = (proposta.validade or '').strip() or 'a validade original'
+            proposta.registrar_situacao(
+                proposta.status,
+                request.user,
+                (
+                    f'Vencimento prorrogado de {vencimento_antes.strftime("%d/%m/%Y")} '
+                    f'para {nova_data.strftime("%d/%m/%Y")}. A validade permanece {validade_atual}.'
+                ),
+            )
+            proposta.aviso_reprogramacao_pendente = (
+                proposta.status != STATUS_PROPOSTA_RASCUNHO and not enviar_aviso
+            )
+            proposta.save(update_fields=[
+                'vencimento_reprogramado',
+                'historico_situacoes', 'aviso_reprogramacao_pendente', 'data_atualizacao',
+            ])
+
+        numeros = ', '.join(item.numero_identificacao or str(item.pk) for item in propostas)
+        datas = {nova for _, nova in planos}
+        data_unica = next(iter(datas)) if len(datas) == 1 else None
+        if data_unica:
+            resumo_auditoria = f'Vencimento prorrogado para {data_unica.strftime("%d/%m/%Y")} nas propostas {numeros}.'
+        else:
+            resumo_auditoria = f'Vencimento prorrogado nas propostas {numeros}.'
+        record_audit(
+            request.user,
+            'comercial.proposta.validade_reprogramada',
+            resumo_auditoria,
+        )
+
+        aviso = None
+        if enviar_aviso:
+            enviadas = [item for item in propostas if item.status != STATUS_PROPOSTA_RASCUNHO]
+            if enviadas:
+                aviso = _enviar_aviso_reprogramacao(request, enviadas, prazo='')
+
+        return Response({
+            'dataVencimento': data_unica.isoformat() if data_unica else '',
+            'aviso': aviso,
+            'propostas': self.get_serializer(propostas, many=True).data,
+        })
+
+    @action(detail=False, methods=['post'], url_path='enviar-aviso-reprogramacao')
+    def enviar_aviso_reprogramacao(self, request):
+        denied = _funcao_required_response(request, 'gerenciar-propostas', _GERENCIAR_PROPOSTAS_DETAIL)
+        if denied:
+            return denied
+        ids = request_proposta_ids(request.data)
+        if not ids:
+            return Response({'detail': 'Selecione ao menos uma proposta.'}, status=status.HTTP_400_BAD_REQUEST)
+        queryset = self.filter_queryset(self.get_queryset())
+        encontradas = {str(item.pk): item for item in queryset.filter(pk__in=ids).select_related('cliente')}
+        propostas = []
+        for item_id in ids:
+            proposta = encontradas.get(item_id)
+            if not proposta:
+                return Response({'detail': 'Uma das propostas selecionadas não foi encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+            if proposta.status == STATUS_PROPOSTA_RASCUNHO or not proposta.aviso_reprogramacao_pendente:
+                return Response(
+                    {'detail': 'O aviso só pode ser enviado para propostas reprogramadas que ainda não receberam o e-mail.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            propostas.append(proposta)
+        prazos = {(item.validade or '').strip() for item in propostas}
+        prazo = next(iter(prazos)) if len(prazos) == 1 else ''
+        aviso = _enviar_aviso_reprogramacao(request, propostas, prazo=prazo)
+        return Response({
+            'aviso': aviso,
+            'propostas': self.get_serializer(propostas, many=True).data,
+        })
+
+    @action(detail=True, methods=['get'], url_path='historico-situacoes')
+    def historico_situacoes(self, request, pk=None):
+        proposta = self.get_object()
+        return Response({'itens': proposta.historico_situacoes_exibicao()})
+
+
+def _enviar_aviso_reprogramacao(request, propostas, *, prazo: str):
+    try:
+        pdfs = read_proposta_pdfs(request)
+        aviso = send_aviso_reprogramacao(request.user, propostas, prazo=prazo, pdfs=pdfs)
+    except ValueError as exc:
+        for proposta in propostas:
+            if proposta.status != STATUS_PROPOSTA_RASCUNHO:
+                proposta.aviso_reprogramacao_pendente = True
+                proposta.save(update_fields=['aviso_reprogramacao_pendente', 'data_atualizacao'])
+        return {'enviados': 0, 'falhas': [str(exc)], 'idsEnviados': []}
+    enviados = {str(item) for item in aviso.get('idsEnviados') or []}
+    for proposta in propostas:
+        if str(proposta.pk) in enviados:
+            proposta.aviso_reprogramacao_pendente = False
+            proposta.registrar_situacao(
+                STATUS_PROPOSTA_ENVIADA,
+                request.user,
+                'Aviso de reprogramação enviado ao cliente.',
+            )
+            proposta.save(update_fields=[
+                'aviso_reprogramacao_pendente', 'historico_situacoes', 'data_atualizacao',
+            ])
+        elif proposta.status != STATUS_PROPOSTA_RASCUNHO:
+            proposta.aviso_reprogramacao_pendente = True
+            proposta.save(update_fields=['aviso_reprogramacao_pendente', 'data_atualizacao'])
+    record_audit(
+        request.user,
+        'comercial.proposta.aviso_reprogramacao',
+        f'Aviso de reprogramação: {aviso["enviados"]} e-mail(s). {"; ".join(aviso["falhas"])}'.strip(),
+    )
+    return aviso
+
+
+def _flag_verdadeiro(data, key: str) -> bool:
+    value = data.get(key) if hasattr(data, 'get') else None
+    if isinstance(value, bool):
+        return value
+    return str(value or '').strip().lower() in {'1', 'true', 'sim', 'on'}
 
 
 class TabelaFreteViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):

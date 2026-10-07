@@ -74,6 +74,15 @@ const formatDateBr = (value?: string | null) => {
   return `${day}/${month}/${year}`;
 };
 
+const validadeAlinhada = (proposta: { validade?: string | null; dataVencimento?: string | null }) => {
+  const prazo = (proposta.validade || '').trim();
+  const ate = proposta.dataVencimento ? formatDateBr(proposta.dataVencimento) : '';
+  if (!prazo && (!ate || ate === '—')) return '—';
+  if (!prazo) return ate;
+  if (!ate || ate === '—') return escapeHtml(prazo);
+  return `${escapeHtml(prazo)} · até ${ate}`;
+};
+
 const formatMoneyBr = (value?: string | number | null) => {
   if (value == null || value === '') return '—';
   const amount = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
@@ -481,7 +490,7 @@ const buildArmazenagemDocumentoHtml = (
     ${field('CNPJ', dash(cliente?.cnpj))}
     ${field('Serviço', dash(PROPOSTA_COMERCIAL_TIPO_LABEL[proposta.tipo]))}
     ${field('Emissão da proposta', revisao)}
-    ${field('Validade da proposta', dash(proposta.validade))}
+    ${field('Validade da proposta', validadeAlinhada(proposta))}
     ${field('Vigência do contrato', dash(proposta.vigencia))}
     ${field('Faturamento', dash(proposta.faturamento))}
     ${fieldStatusProposta(proposta)}
@@ -1049,7 +1058,7 @@ const buildHtml = (
     ${field('CNPJ', dash(cliente?.cnpj))}
     ${field('Serviço', dash(PROPOSTA_COMERCIAL_TIPO_LABEL[proposta.tipo]))}
     ${field('Emissão da proposta', formatDateBr(proposta.dataProposta || proposta.dataCriacao))}
-    ${field('Validade da proposta', dash(proposta.validade))}
+    ${field('Validade da proposta', validadeAlinhada(proposta))}
     ${field('Vigência do contrato', dash(proposta.vigencia))}
     ${field('Faturamento', dash(proposta.faturamento))}
     ${fieldStatusProposta(proposta)}

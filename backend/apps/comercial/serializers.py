@@ -42,6 +42,7 @@ from .models import (
     cliente_tem_tabela_distribuicao_vigente,
     default_condicoes,
     erro_valores_tabela_armazenagem,
+    alinhar_validade,
     normalizar_opcao_validade,
     gravar_catalogo_generalidades,
     nome_base_tabela_frete,
@@ -1002,6 +1003,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
     reajuste = serializers.CharField(required=False, allow_blank=True, max_length=200)
     att = serializers.CharField(required=False, allow_blank=True, max_length=150)
     validade = serializers.CharField(required=False, allow_blank=True, max_length=80)
+    validadeInicio = serializers.DateField(source='validade_inicio', read_only=True)
     vigencia = serializers.CharField(required=False, allow_blank=True, max_length=80, label='Vigência do contrato')
     faturamento = serializers.CharField(required=False, allow_blank=True, max_length=120)
     localEmissao = serializers.CharField(source='local_emissao', required=False, allow_blank=True, max_length=120)
@@ -1023,6 +1025,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
     margensVeiculo = serializers.JSONField(source='margens_veiculo', required=False)
     tabelaDistribuicao = serializers.JSONField(source='tabela_distribuicao', required=False, read_only=True)
     historicoRevisoes = serializers.SerializerMethodField()
+    avisoReprogramacaoPendente = serializers.BooleanField(source='aviso_reprogramacao_pendente', read_only=True)
     modoEnvio = serializers.CharField(source='modo_envio', required=False, allow_blank=True, max_length=20)
     linhas = PropostaFreteLinhaSerializer(many=True, required=False)
     dataCriacao = serializers.DateTimeField(source='data_criacao', read_only=True)
@@ -1053,6 +1056,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             'reajuste',
             'att',
             'validade',
+            'validadeInicio',
             'vigencia',
             'faturamento',
             'localEmissao',
@@ -1068,6 +1072,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             'margensVeiculo',
             'tabelaDistribuicao',
             'historicoRevisoes',
+            'avisoReprogramacaoPendente',
             'modoEnvio',
             'linhas',
             'dataCriacao',
@@ -1446,7 +1451,10 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             )
         valor = validated_data.get('valor_estimado')
         validated_data['revisao'] = ''
+        self._alinhar_validade(validated_data, instance=None)
         proposta = PropostaComercial.objects.create(**validated_data)
+        proposta.registrar_situacao('rascunho', self._usuario_requisicao(), 'Proposta incluída')
+        proposta.save(update_fields=['historico_situacoes'])
         if linhas_data is not None:
             self._save_linhas(proposta, linhas_data)
         self._sync_valor_estimado(proposta, valor_informado=valor, linhas_aplicadas=linhas_data is not None)
@@ -1473,6 +1481,8 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
         validated_data.pop('modo_envio', None)
         modo_antes = (instance.modo_envio or '').strip()
         revisao_antes = (instance.revisao or '').strip()
+        status_antes = instance.status
+        self._alinhar_validade(validated_data, instance=instance)
         valor = validated_data.get('valor_estimado', instance.valor_estimado)
         antes = snapshot_proposta(instance)
         conteudo_antes = conteudo_proposta(instance)
@@ -1518,7 +1528,40 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
                 instance.revisao = revisao_anterior(instance.revisao)
                 instance.modo_envio = ''
             instance.save(update_fields=['revisao', 'modo_envio', 'historico_revisoes', 'data_atualizacao'])
+        self._registrar_mudanca_de_situacao(instance, status_antes, modo_antes)
         return instance
+
+    def _usuario_requisicao(self):
+        request = self.context.get('request')
+        usuario = getattr(request, 'user', None) if request is not None else None
+        if usuario is not None and getattr(usuario, 'is_authenticated', False):
+            return usuario
+        return None
+
+    def _registrar_mudanca_de_situacao(self, instance, status_antes, modo_antes):
+        usuario = self._usuario_requisicao()
+        mudou = False
+        if instance.status != status_antes:
+            resumos = {
+                'aprovada': 'Proposta aceita',
+                'recusada': 'Proposta recusada',
+                'enviada': 'Situação alterada para enviada',
+            }
+            instance.registrar_situacao(
+                instance.status,
+                usuario,
+                resumos.get(instance.status, 'Situação alterada'),
+            )
+            mudou = True
+        if instance.modo_envio == 'revisao' and modo_antes != 'revisao':
+            instance.registrar_situacao(
+                'revisao_pendente',
+                usuario,
+                'Alteração ainda não enviada ao cliente',
+            )
+            mudou = True
+        if mudou:
+            instance.save(update_fields=['historico_situacoes', 'data_atualizacao'])
 
     def _sync_catalogo_generalidades(self, proposta):
         cliente = proposta.cliente
@@ -1554,6 +1597,91 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
         if instance.cliente_id:
             data['att'] = (instance.cliente.responsavel or '').strip()
         return data
+
+    def _vencimento_informado(self):
+        from datetime import date
+
+        dados = getattr(self, 'initial_data', None)
+        if not hasattr(dados, 'get') or 'dataVencimento' not in dados:
+            return None
+        raw = dados.get('dataVencimento')
+        if raw in (None, ''):
+            return None
+        try:
+            return date.fromisoformat(str(raw)[:10])
+        except ValueError as exc:
+            raise serializers.ValidationError({'dataVencimento': 'Data de vencimento inválida.'}) from exc
+
+    def _inicio_validade(self, validated_data, instance):
+        from django.utils import timezone
+
+        data_proposta = validated_data.get(
+            'data_proposta',
+            getattr(instance, 'data_proposta', None) if instance else None,
+        )
+        if instance is None:
+            return data_proposta or timezone.localdate()
+        inicio = instance.validade_inicio
+        antiga = instance.data_proposta
+        if inicio and antiga and inicio != antiga:
+            return inicio
+        if 'data_proposta' in validated_data:
+            return validated_data.get('data_proposta') or timezone.localdate()
+        return inicio or data_proposta or (
+            instance.data_criacao.date() if instance.data_criacao else timezone.localdate()
+        )
+
+    def _alinhar_validade(self, validated_data, instance):
+        """Mantém prazo e data de vencimento como a mesma janela, a partir do início vigente.
+
+        Prazo escolhido no catálogo conta da data da proposta. Data avulsa, ou uma validade
+        já reprogramada, fixa o início e grava o vencimento para os dois não divergirem.
+        """
+        informou_data = self._vencimento_informado()
+        mexe_prazo = 'validade' in validated_data or 'data_proposta' in validated_data or informou_data is not None
+        if instance is not None and not mexe_prazo:
+            return
+        from .models import (
+            VALIDADES_PROPOSTA_PADRAO,
+            ensure_parametros_comercial,
+            lista_opcoes_parametro,
+            normalizar_opcao_validade,
+            validade_texto_em_dias,
+        )
+
+        prazo = validated_data.get('validade', getattr(instance, 'validade', '') if instance else '')
+        if not str(prazo or '').strip():
+            prazo = '30 dias'
+        inicio = self._inicio_validade(validated_data, instance)
+        registro = ensure_parametros_comercial()
+        opcoes = lista_opcoes_parametro('validade', registro.validades, VALIDADES_PROPOSTA_PADRAO)
+        try:
+            texto, inicio, fim = alinhar_validade(
+                inicio=inicio,
+                prazo=prazo,
+                vencimento=informou_data,
+                opcoes=opcoes,
+            )
+        except ValueError as exc:
+            raise serializers.ValidationError({'dataVencimento': str(exc)}) from exc
+        validated_data['validade'] = texto
+        prazo_norm = normalizar_opcao_validade(prazo)
+        data_acompanha_prazo = (
+            informou_data is None
+            or (prazo_norm and validade_texto_em_dias(prazo_norm) == (fim - inicio).days)
+        )
+        ancora_da_proposta = not (
+            instance
+            and instance.validade_inicio
+            and instance.data_proposta
+            and instance.validade_inicio != instance.data_proposta
+        )
+        if data_acompanha_prazo and ancora_da_proposta:
+            validated_data['validade_inicio'] = None
+            validated_data['vencimento_reprogramado'] = None
+        else:
+            validated_data['validade_inicio'] = inicio
+            validated_data['vencimento_reprogramado'] = fim
 
     def get_dataVencimento(self, instance):
         value = instance.data_vencimento()

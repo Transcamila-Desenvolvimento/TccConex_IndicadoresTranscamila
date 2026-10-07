@@ -1667,6 +1667,211 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(ids('status=expirada'), [str(vencida_id)])
         self.assertEqual(ids('status=enviada'), [str(vigente.pk)])
 
+    def test_reprogramar_validade_a_partir_de_hoje_ou_data_manual(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.comercial.models import PropostaComercial
+
+        proposta_id = self._proposta_armazenagem_enviada()
+        hoje = timezone.localdate()
+        PropostaComercial.objects.filter(pk=proposta_id).update(
+            validade='10 dias',
+            data_proposta=hoje - timedelta(days=40),
+            revisao='01',
+        )
+        item = PropostaComercial.objects.get(pk=proposta_id)
+        self.assertEqual(item.situacao(), 'expirada')
+        vencimento_original = item.data_vencimento()
+        self.assertEqual(vencimento_original, hoje - timedelta(days=30))
+
+        curto = self.api.post(
+            '/api/comercial/propostas/reprogramar-validade/',
+            {'ids': [proposta_id], 'validade': '5 dias'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(curto.status_code, 400, curto.content)
+        item.refresh_from_db()
+        self.assertEqual(item.validade, '10 dias')
+        self.assertIsNone(item.vencimento_reprogramado)
+        self.assertEqual(item.data_vencimento(), vencimento_original)
+
+        prazo = self.api.post(
+            '/api/comercial/propostas/reprogramar-validade/',
+            {'ids': [proposta_id], 'validade': '30 dias'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(prazo.status_code, 200, prazo.content)
+        self.assertEqual(prazo.json()['dataVencimento'], hoje.isoformat())
+        self.assertIsNone(prazo.json()['aviso'])
+        item.refresh_from_db()
+        self.assertEqual(item.validade, '10 dias')
+        self.assertIsNone(item.validade_inicio)
+        self.assertEqual(item.vencimento_reprogramado, hoje)
+        self.assertEqual(item.situacao(), 'enviada')
+        self.assertEqual(item.revisao, '01')
+        self.assertEqual(item.modo_envio, '')
+
+        manual = (hoje + timedelta(days=12)).isoformat()
+        resposta = self.api.post(
+            '/api/comercial/propostas/reprogramar-validade/',
+            {'ids': [proposta_id], 'dataVencimento': manual},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        item.refresh_from_db()
+        self.assertEqual(item.vencimento_reprogramado.isoformat(), manual)
+        self.assertIsNone(item.validade_inicio)
+        self.assertEqual(item.validade, '10 dias')
+        self.assertEqual(item.data_vencimento().isoformat(), manual)
+
+        passado = self.api.post(
+            '/api/comercial/propostas/reprogramar-validade/',
+            {'ids': [proposta_id], 'dataVencimento': (hoje - timedelta(days=1)).isoformat()},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(passado.status_code, 400, passado.content)
+
+        invalido = self.api.post(
+            '/api/comercial/propostas/reprogramar-validade/',
+            {'ids': [proposta_id], 'validade': '9 dias'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(invalido.status_code, 400, invalido.content)
+
+        editada = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/',
+            {'validade': '15 dias'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(editada.status_code, 200, editada.content)
+        item.refresh_from_db()
+        self.assertEqual(item.validade, '15 dias')
+        self.assertIsNone(item.validade_inicio)
+        self.assertIsNone(item.vencimento_reprogramado)
+        self.assertEqual(item.data_vencimento(), item.data_proposta + timedelta(days=15))
+
+    def test_criar_proposta_com_data_de_vencimento_alinha_o_prazo(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', {**PAYLOAD, 'email': 'compras@empresa.com'}, format='json', **HEADERS)
+        hoje = timezone.localdate()
+        vencimento = (hoje + timedelta(days=18)).isoformat()
+        criada = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'armazenagem',
+                'clienteId': cliente.json()['id'],
+                'status': 'rascunho',
+                'dataProposta': hoje.isoformat(),
+                'validade': '30 dias',
+                'dataVencimento': vencimento,
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(criada.status_code, 201, criada.content)
+        corpo = criada.json()
+        self.assertEqual(corpo['validade'], '18 dias')
+        self.assertEqual(corpo['dataVencimento'], vencimento)
+        self.assertEqual(corpo['validadeInicio'], hoje.isoformat())
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+    def test_reprogramar_enviada_pode_avisar_o_cliente(self, mock_send):
+        from apps.comercial.models import PropostaComercial
+
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        proposta_id = self._proposta_armazenagem_enviada()
+        resposta = self.api.post(
+            '/api/comercial/propostas/reprogramar-validade/',
+            {'ids': [proposta_id], 'validade': '15 dias', 'enviarAviso': True, 'pdfBase64': PDF_BASE64},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertEqual(resposta.json()['aviso']['enviados'], 1)
+        self.assertEqual(resposta.json()['aviso']['falhas'], [])
+        mock_send.assert_called_once()
+        email = mock_send.call_args.args[1]
+        self.assertIn('Proposta comercial', email.subject)
+        self.assertNotIn('Reprogramação de validade', email.subject)
+        self.assertIn('O vencimento desta proposta foi prorrogado.', email.body)
+        self.assertNotIn('A validade original permanece a mesma.', email.body)
+        self.assertIn('30 dias + 15 dias', email.body)
+        self.assertNotIn('contado a partir de hoje', email.body)
+        self.assertIn('compras@empresa.com', email.to)
+        self.assertTrue(any(
+            isinstance(item, tuple) and len(item) >= 3 and item[2] == 'application/pdf'
+            for item in email.attachments
+        ))
+        self.assertFalse(PropostaComercial.objects.get(pk=proposta_id).aviso_reprogramacao_pendente)
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+    def test_aviso_de_reprogramacao_pode_ser_enviado_depois(self, mock_send):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.comercial.models import PropostaComercial
+
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        proposta_id = self._proposta_armazenagem_enviada()
+        hoje = timezone.localdate()
+        PropostaComercial.objects.filter(pk=proposta_id).update(
+            validade='10 dias',
+            data_proposta=hoje - timedelta(days=40),
+        )
+        sem_email = self.api.post(
+            '/api/comercial/propostas/reprogramar-validade/',
+            {'ids': [proposta_id], 'validade': '30 dias'},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(sem_email.status_code, 200, sem_email.content)
+        item = PropostaComercial.objects.get(pk=proposta_id)
+        vencimento = item.data_vencimento()
+        self.assertTrue(item.aviso_reprogramacao_pendente)
+        self.assertEqual(item.situacao(), 'enviada')
+        historico = self.api.get(f'/api/comercial/propostas/{proposta_id}/historico-situacoes/', **HEADERS)
+        self.assertEqual(historico.status_code, 200, historico.content)
+        resumos = [entrada.get('resumo') or '' for entrada in historico.json()['itens']]
+        self.assertTrue(any('encerrada' in texto for texto in resumos), resumos)
+        self.assertTrue(any('prorrogad' in texto for texto in resumos), resumos)
+
+        aviso = self.api.post(
+            '/api/comercial/propostas/enviar-aviso-reprogramacao/',
+            {'ids': [proposta_id], 'pdfBase64': PDF_BASE64},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(aviso.status_code, 200, aviso.content)
+        self.assertEqual(aviso.json()['aviso']['enviados'], 1)
+        item.refresh_from_db()
+        self.assertFalse(item.aviso_reprogramacao_pendente)
+        self.assertEqual(item.data_vencimento(), vencimento)
+        self.assertIn('Aviso de reprogramação enviado ao cliente.', [entrada.get('resumo') for entrada in item.historico_situacoes])
+        mock_send.assert_called_once()
+
+        de_novo = self.api.post(
+            '/api/comercial/propostas/enviar-aviso-reprogramacao/',
+            {'ids': [proposta_id], 'pdfBase64': PDF_BASE64},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(de_novo.status_code, 400, de_novo.content)
+
     def test_lista_clientes_filtra_por_cliente(self):
         from apps.comercial.models import PropostaComercial
 

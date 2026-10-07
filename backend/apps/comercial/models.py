@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 import re
 
 from django.conf import settings
@@ -754,6 +754,16 @@ class PropostaComercial(models.Model):
     cliente_nome = models.CharField(max_length=200, blank=True, default='', verbose_name='Cliente (proposta)')
     att = models.CharField(max_length=150, blank=True, default='', verbose_name='Responsável do cliente')
     validade = models.CharField(max_length=80, blank=True, default='30 dias')
+    validade_inicio = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Início da validade',
+    )
+    vencimento_reprogramado = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Data de vencimento',
+    )
     vigencia = models.CharField(max_length=80, blank=True, default='12 meses', verbose_name='Vigência do contrato')
     faturamento = models.CharField(max_length=120, blank=True, default='Semanal / 30 DDL')
     local_emissao = models.CharField(max_length=120, blank=True, default='')
@@ -779,6 +789,11 @@ class PropostaComercial(models.Model):
     margens_veiculo = models.JSONField(default=list, blank=True, verbose_name='Margens da proposta')
     tabela_distribuicao = models.JSONField(default=dict, blank=True, verbose_name='Snapshot da tabela de distribuição')
     historico_revisoes = models.JSONField(default=list, blank=True, verbose_name='Trilha de revisões')
+    historico_situacoes = models.JSONField(default=list, blank=True, verbose_name='Histórico de situações')
+    aviso_reprogramacao_pendente = models.BooleanField(
+        default=False,
+        verbose_name='Aviso de reprogramação pendente',
+    )
     ajustes_iniciais = models.JSONField(
         default=list,
         blank=True,
@@ -885,11 +900,13 @@ class PropostaComercial(models.Model):
         return None
 
     def data_vencimento(self):
-        base = self.data_base_vigencia()
+        if self.vencimento_reprogramado:
+            return self.vencimento_reprogramado
+        inicio = self.validade_inicio or self.data_base_vigencia()
         dias = self.validade_em_dias()
-        if not base or dias is None:
-            return None
-        return base + timedelta(days=dias)
+        if inicio and dias is not None:
+            return inicio + timedelta(days=dias)
+        return None
 
     def situacao(self, hoje=None):
         if self.status == STATUS_PROPOSTA_RASCUNHO:
@@ -901,6 +918,53 @@ class PropostaComercial(models.Model):
             if vencimento and vencimento < (hoje or timezone.localdate()):
                 return SITUACAO_PROPOSTA_EXPIRADA
         return self.status
+
+    def registrar_situacao(self, situacao, usuario=None, resumo='', quando=None):
+        nome = ''
+        if usuario is not None and getattr(usuario, 'is_authenticated', False):
+            nome = (
+                (getattr(usuario, 'name', None) or '')
+                or (getattr(usuario, 'get_full_name', lambda: '')() or '')
+                or (getattr(usuario, 'username', '') or '')
+            ).strip()
+        momento = quando or timezone.localtime()
+        historico = list(self.historico_situacoes or [])
+        historico.append({
+            'em': momento.isoformat() if hasattr(momento, 'isoformat') else str(momento),
+            'situacao': situacao,
+            'resumo': (resumo or '').strip(),
+            'usuario': nome,
+        })
+        self.historico_situacoes = historico[-80:]
+        return self.historico_situacoes
+
+    def historico_situacoes_exibicao(self):
+        itens = [item for item in (self.historico_situacoes or []) if isinstance(item, dict)]
+        if not itens:
+            itens = [{
+                'em': timezone.localtime(self.data_criacao).isoformat() if self.data_criacao else '',
+                'situacao': self.status or STATUS_PROPOSTA_RASCUNHO,
+                'resumo': 'Proposta incluída',
+                'usuario': '',
+            }]
+        if self.situacao() == SITUACAO_PROPOSTA_EXPIRADA:
+            vencimento = self.data_vencimento()
+            marca = vencimento.isoformat() if vencimento else ''
+            ja_registrada = any(
+                item.get('situacao') == SITUACAO_PROPOSTA_EXPIRADA
+                and str(item.get('em') or '')[:10] == marca
+                for item in itens
+            )
+            if vencimento and not ja_registrada:
+                momento = timezone.make_aware(datetime.combine(vencimento, time(23, 59)))
+                itens.append({
+                    'em': momento.isoformat(),
+                    'situacao': SITUACAO_PROPOSTA_EXPIRADA,
+                    'resumo': 'Validade encerrada sem resposta do cliente',
+                    'usuario': '',
+                })
+        itens.sort(key=lambda item: item.get('em') or '')
+        return itens
 
 
 class PropostaComercialDraft(models.Model):
@@ -1474,6 +1538,88 @@ def validade_texto_em_dias(texto) -> int | None:
     if unidade.startswith('ano'):
         return quantidade * 365
     return quantidade * 30
+
+
+def texto_validade_para_dias(dias: int, opcoes: list[str] | None = None) -> str:
+    """O texto de prazo que produz exatamente `dias`. Prefere uma opção já cadastrada."""
+    if dias <= 0 or dias > 3650:
+        raise ValueError('A data de vencimento precisa ficar entre 1 e 3650 dias após o início da validade.')
+    candidatos = []
+    for opcao in opcoes or []:
+        normal = normalizar_opcao_validade(opcao)
+        if normal and validade_texto_em_dias(normal) == dias and normal not in candidatos:
+            candidatos.append(normal)
+    for candidato in candidatos:
+        if candidato.endswith('dia') or candidato.endswith('dias'):
+            return candidato
+    if candidatos:
+        return candidatos[0]
+    return f'{dias} {"dia" if dias == 1 else "dias"}'
+
+
+def texto_validade_com_prorrogacao(proposta) -> str:
+    """'30 dias' ou '30 dias + 15 dias' quando o vencimento foi empurrado além do prazo original."""
+    base = (proposta.validade or '').strip()
+    if not base:
+        return '—'
+    atual = proposta.data_vencimento()
+    inicio = proposta.data_base_vigencia()
+    dias = proposta.validade_em_dias()
+    if not atual or not inicio or dias is None:
+        return base
+    extra = (atual - (inicio + timedelta(days=dias))).days
+    if extra <= 0:
+        return base
+    return f'{base} + {extra} {"dia" if extra == 1 else "dias"}'
+
+
+def prorrogar_vencimento(proposta, *, dias=None, data=None, hoje):
+    """Empurra o vencimento para a frente a partir da data atual, sem trocar a validade.
+
+    A validade continua contando da data da proposta. O prazo informado soma dias
+    ao vencimento vigente; a data manual substitui esse vencimento, desde que
+    fique depois dele e não no passado.
+    """
+    numero = proposta.numero_identificacao or str(proposta.pk)
+    atual = proposta.data_vencimento()
+    if atual is None:
+        raise ValueError(f'A proposta {numero} não tem data de vencimento para prorrogar.')
+    nova = atual + timedelta(days=dias) if dias is not None else data
+    if nova is None or nova <= atual:
+        raise ValueError(
+            f'A nova data da proposta {numero} precisa ser posterior ao vencimento atual '
+            f'({atual.strftime("%d/%m/%Y")}).'
+        )
+    if nova < hoje:
+        raise ValueError(
+            f'Prorrogar a proposta {numero} a partir de {atual.strftime("%d/%m/%Y")} '
+            f'deixaria o vencimento em {nova.strftime("%d/%m/%Y")}, ainda no passado. '
+            f'Escolha um prazo maior ou uma data a partir de {hoje.strftime("%d/%m/%Y")}.'
+        )
+    return nova
+
+
+def alinhar_validade(*, inicio, prazo=None, vencimento=None, opcoes: list[str] | None = None):
+    """Prazo e vencimento sempre descrevem a mesma janela: vencimento = início + dias do prazo.
+
+    Se os dois vierem e não baterem, a data de vencimento prevalece e o texto do prazo é reescrito.
+    """
+    if inicio is None:
+        raise ValueError('Informe a data em que a validade começa.')
+    prazo_norm = normalizar_opcao_validade(prazo) if str(prazo or '').strip() else None
+    if vencimento is not None:
+        if vencimento <= inicio:
+            raise ValueError('A data de vencimento precisa ser posterior ao início da validade.')
+        dias = (vencimento - inicio).days
+        if prazo_norm and validade_texto_em_dias(prazo_norm) == dias:
+            texto = prazo_norm
+        else:
+            texto = texto_validade_para_dias(dias, opcoes)
+        return texto, inicio, vencimento
+    if not prazo_norm:
+        raise ValueError('Informe o prazo ou a data de vencimento.')
+    dias = validade_texto_em_dias(prazo_norm)
+    return prazo_norm, inicio, inicio + timedelta(days=dias)
 
 
 FORMATO_OPCAO_PARAMETRO = {

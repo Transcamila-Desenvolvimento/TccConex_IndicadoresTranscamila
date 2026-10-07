@@ -45,6 +45,8 @@ import type {
   ClienteComercial, ClienteComercialPayload, ClienteComercialQueryParams,
   ClienteComercialHistorico, ClienteComercialProdutosSugestoes, ClienteComercialValidacaoResumo,
   PropostaComercial, PropostaComercialDashboard, PropostaComercialFormDraft, PropostaComercialPayload, PropostaComercialQueryParams, PropostaComercialStatus, PropostaComercialTipo, PropostaFreteLinha,
+  ReprogramarValidadeResult,
+  PropostaSituacaoEvento,
   PropostaCondicaoComercial, CatalogoGeneralidadesComercial, TipoGeneralidadeComercial,
   TabelaFrete, TabelaFreteLinha, TabelaFreteLinhaPayload, TabelaFretePayload,
   TabelaFreteQueryParams, TabelaFreteRevisaoHistorico, TabelaFreteSimulacaoResult, TabelaFreteSimulacaoIcms, TabelaFreteConfig, TabelaFreteFaixa,
@@ -303,6 +305,8 @@ function normalizePropostaComercial(raw: any): PropostaComercial {
     reajuste: raw.reajuste ?? '',
     att: raw.att ?? '',
     validade: raw.validade ?? '',
+    validadeInicio: raw.validadeInicio ?? null,
+    avisoReprogramacaoPendente: Boolean(raw.avisoReprogramacaoPendente),
     vigencia: raw.vigencia ?? '',
     faturamento: raw.faturamento ?? '',
     localEmissao: raw.localEmissao ?? '',
@@ -2868,6 +2872,61 @@ export const apiService = {
 
   async deletePropostaComercial(id: string): Promise<void> {
     await api.delete(`/api/comercial/propostas/${id}/`);
+  },
+
+  async reprogramarValidadePropostas(payload: {
+    ids: string[];
+    validade?: string;
+    dataVencimento?: string;
+    enviarAviso?: boolean;
+    pdfs?: Blob[];
+  }): Promise<ReprogramarValidadeResult> {
+    const corpo = payload.pdfs?.length
+      ? (() => {
+          const form = new FormData();
+          payload.ids.forEach((id) => form.append('ids', id));
+          if (payload.validade) form.append('validade', payload.validade);
+          if (payload.dataVencimento) form.append('dataVencimento', payload.dataVencimento);
+          if (payload.enviarAviso) form.append('enviarAviso', 'true');
+          payload.pdfs?.forEach((pdf, index) => form.append('pdf', pdf, `Proposta_comercial_${index + 1}.pdf`));
+          return form;
+        })()
+      : payload;
+    const { data } = await api.post('/api/comercial/propostas/reprogramar-validade/', corpo);
+    return {
+      dataVencimento: String(data?.dataVencimento ?? ''),
+      aviso: data?.aviso
+        ? {
+            enviados: Number(data.aviso.enviados ?? 0),
+            falhas: Array.isArray(data.aviso.falhas) ? data.aviso.falhas.map((item: unknown) => String(item)) : [],
+          }
+        : null,
+    };
+  },
+
+  async enviarAvisoReprogramacao(payload: { ids: string[]; pdfs: Blob[] }): Promise<ReprogramarValidadeResult['aviso']> {
+    const form = new FormData();
+    payload.ids.forEach((id) => form.append('ids', id));
+    payload.pdfs.forEach((pdf, index) => form.append('pdf', pdf, `Proposta_comercial_${index + 1}.pdf`));
+    const { data } = await api.post('/api/comercial/propostas/enviar-aviso-reprogramacao/', form);
+    const aviso = data?.aviso;
+    return aviso
+      ? {
+          enviados: Number(aviso.enviados ?? 0),
+          falhas: Array.isArray(aviso.falhas) ? aviso.falhas.map((item: unknown) => String(item)) : [],
+        }
+      : { enviados: 0, falhas: [] };
+  },
+
+  async getHistoricoSituacoesProposta(id: string): Promise<PropostaSituacaoEvento[]> {
+    const { data } = await api.get(`/api/comercial/propostas/${id}/historico-situacoes/`);
+    const itens = Array.isArray(data?.itens) ? data.itens : [];
+    return itens.map((item: Record<string, unknown>) => ({
+      em: String(item.em ?? ''),
+      situacao: String(item.situacao ?? 'rascunho') as PropostaSituacaoEvento['situacao'],
+      resumo: String(item.resumo ?? ''),
+      usuario: String(item.usuario ?? ''),
+    }));
   },
 
   async enviarEmailPropostaComercial(

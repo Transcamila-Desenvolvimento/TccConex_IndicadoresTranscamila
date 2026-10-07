@@ -19,6 +19,7 @@ from .models import (
     TIPO_GENERALIDADE_CHOICES,
     TIPO_PROPOSTA_CHOICES,
     tipos_servico_generalidade,
+    texto_validade_com_prorrogacao,
 )
 
 PDF_MAX_BYTES = 8 * 1024 * 1024
@@ -275,7 +276,7 @@ def _build_context(proposta, user) -> dict:
         'cliente_cnpj': getattr(cliente, 'cnpj', '') or '—',
         'servico': _servico_label(proposta),
         'emissao': _fmt_date(proposta.data_proposta or (proposta.data_criacao.date() if proposta.data_criacao else None)),
-        'validade': proposta.validade or '—',
+        'validade': texto_validade_com_prorrogacao(proposta),
         'vigencia': proposta.vigencia or '—',
         'vencimento': _fmt_date(proposta.data_vencimento()),
         'saudacao': _saudacao(proposta),
@@ -420,6 +421,7 @@ def send_propostas_comerciais_email(
             # Primeiro envio fixa a comparação com a tabela; revisões não a recalculam.
             item.ajustes_iniciais = ajustes_iniciais_proposta(item)
         modo = getattr(item, 'modo_envio', '') or ''
+        status_antes = item.status
         # Nova revisão enviada substitui a resposta anterior do cliente (aceite/recusa era da versão antiga).
         if item.status == STATUS_PROPOSTA_RASCUNHO or modo:
             item.status = STATUS_PROPOSTA_ENVIADA
@@ -431,8 +433,16 @@ def send_propostas_comerciais_email(
                 'Errata enviada ao cliente' if modo == 'errata' else 'Revisão enviada ao cliente',
             )
             item.modo_envio = ''
+        if item.status != status_antes or modo:
+            if modo == 'errata':
+                resumo = 'Errata enviada ao cliente'
+            elif modo == 'revisao':
+                resumo = 'Revisão enviada ao cliente'
+            else:
+                resumo = 'Proposta enviada ao cliente'
+            item.registrar_situacao('enviada', user, resumo)
         item.save(update_fields=[
-            'status', 'modo_envio', 'historico_revisoes', 'ajustes_iniciais', 'data_atualizacao',
+            'status', 'modo_envio', 'historico_revisoes', 'historico_situacoes', 'ajustes_iniciais', 'data_atualizacao',
         ])
 
     return {
@@ -441,3 +451,70 @@ def send_propostas_comerciais_email(
         'numero': context['numero'],
         'cliente': cliente_nome,
     }
+
+
+def send_aviso_reprogramacao(user, propostas, *, prazo: str = '', pdfs: list[bytes] | None = None) -> dict:
+    """Reenvia o e-mail padrão da proposta, com um aviso de que a validade foi reprogramada."""
+    google_from = _google_email(user)
+    if not google_from:
+        raise ValueError('Vincule sua conta Google no perfil para enviar o aviso pelo seu e-mail.')
+    if not propostas:
+        return {'enviados': 0, 'falhas': [], 'idsEnviados': []}
+    if not pdfs or len(pdfs) != len(propostas) or any(not pdf for pdf in pdfs):
+        raise ValueError('Não foi possível receber o PDF da proposta gerado na tela. Tente novamente.')
+
+    grupos: dict = {}
+    for proposta, pdf in zip(propostas, pdfs):
+        grupos.setdefault(getattr(proposta, 'cliente_id', None), []).append((proposta, pdf))
+
+    enviados = 0
+    falhas: list[str] = []
+    ids_enviados: list[str] = []
+    from .proposta_tarifas import assunto_envio_propostas
+
+    for grupo in grupos.values():
+        itens = [item[0] for item in grupo]
+        anexos = [item[1] for item in grupo]
+        proposta = itens[0]
+        cliente = getattr(proposta, 'cliente', None)
+        email = (getattr(cliente, 'email', None) or '').strip().lower()
+        contextos = [_build_context(item, user) for item in itens]
+        numeros = _juntar_lista([item['numero'] for item in contextos])
+        if not email:
+            falhas.append(f'Proposta {numeros} sem e-mail do cliente.')
+            continue
+        context = dict(contextos[0])
+        context['numero'] = numeros
+        context['servico'] = _juntar_lista([item['servico'] for item in contextos])
+        context['plural'] = len(itens) > 1
+        context['itens'] = contextos
+        context['observacao'] = ''
+        context['aviso_reprogramacao'] = True
+        context['prazo'] = (prazo or '').strip()
+        context['vencimento'] = _fmt_date(proposta.data_vencimento())
+        html_body = render_to_string('comercial/emails/proposta.html', context)
+        cliente_nome = context['cliente_nome']
+        email_obj = EmailMessage(
+            subject=assunto_envio_propostas(itens),
+            body=html_body,
+            from_email=f'{_usuario_display(user)} <{google_from}>',
+            to=[email],
+        )
+        email_obj.content_subtype = 'html'
+        logo_bytes = _logo_png_bytes()
+        if logo_bytes:
+            subtype = _logo_mime_subtype()
+            logo = MIMEImage(logo_bytes, _subtype=subtype)
+            logo.add_header('Content-ID', f'<{LOGO_CID}>')
+            logo.add_header('Content-Disposition', 'inline', filename=f'logo-proposta.{subtype if subtype != "jpeg" else "jpg"}')
+            email_obj.attach(logo)
+        for pdf, ctx in zip(anexos, contextos):
+            email_obj.attach(proposta_pdf_filename(ctx['numero'], cliente_nome), pdf, 'application/pdf')
+        try:
+            send_gmail_as_user(user, email_obj)
+        except Exception as exc:
+            falhas.append(f'Proposta {numeros}: {exc}')
+            continue
+        enviados += 1
+        ids_enviados.extend(str(item.pk) for item in itens)
+    return {'enviados': enviados, 'falhas': falhas, 'idsEnviados': ids_enviados}

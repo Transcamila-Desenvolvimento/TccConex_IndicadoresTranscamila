@@ -276,6 +276,40 @@ export function usePreviewDistribuicaoProposta() {
   });
 }
 
+export function useReprogramarValidadePropostas() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      ids: string[];
+      validade?: string;
+      dataVencimento?: string;
+      enviarAviso?: boolean;
+      pdfs?: Blob[];
+    }) => apiService.reprogramarValidadePropostas(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: COMERCIAL_PROPOSTAS_KEY });
+    },
+  });
+}
+
+export function useEnviarAvisoReprogramacao() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { ids: string[]; pdfs: Blob[] }) => apiService.enviarAvisoReprogramacao(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: COMERCIAL_PROPOSTAS_KEY });
+    },
+  });
+}
+
+export function useHistoricoSituacoesProposta(id: string | null) {
+  return useQuery({
+    queryKey: [...COMERCIAL_PROPOSTAS_KEY, 'historico-situacoes', id],
+    queryFn: () => apiService.getHistoricoSituacoesProposta(id as string),
+    enabled: Boolean(id),
+  });
+}
+
 export function useDeletePropostaComercial() {
   const queryClient = useQueryClient();
   return useMutation({

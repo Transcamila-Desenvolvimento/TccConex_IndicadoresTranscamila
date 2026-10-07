@@ -14170,6 +14170,17 @@ textarea.form-input {
   grid-column: 1 / -1;
 }
 
+.proposta-validade-na-coluna {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 24px;
+  min-width: 0;
+}
+
+.proposta-validade-na-coluna .proposta-include-field {
+  min-width: 0;
+}
+
 .proposta-include-field {
   display: flex;
   flex-direction: column;
@@ -14675,6 +14686,70 @@ textarea.form-input {
 .proposta-servico-operacao {
   color: #64748b;
   font-weight: 400;
+}
+
+button.proposta-status-badge {
+  cursor: pointer;
+}
+
+.proposta-situacao-trilha {
+  max-height: min(420px, 62vh);
+  overflow-y: auto;
+  margin-top: 8px;
+  padding: 8px 8px 4px 2px;
+}
+
+.proposta-situacao-trilha ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.proposta-situacao-trilha li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  column-gap: 14px;
+  padding-bottom: 18px;
+}
+
+.proposta-situacao-trilha li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 16px;
+  bottom: 0;
+  width: 2px;
+  background: #dbe3ee;
+}
+
+.proposta-situacao-trilha-marca {
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: #118cc4;
+  box-shadow: 0 0 0 3px #e8f4fb;
+  z-index: 1;
+}
+
+.proposta-situacao-trilha-quando {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.proposta-situacao-trilha-resumo {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.proposta-situacao-trilha-usuario {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 .proposta-status-badge,
