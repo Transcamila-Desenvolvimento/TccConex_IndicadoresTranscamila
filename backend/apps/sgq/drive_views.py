@@ -5,33 +5,27 @@ from rest_framework.views import APIView
 
 from apps.accounts.mixins import ModuleScopedViewMixin
 from apps.marketing.google_drive import browse_drive_folder, drive_status
+from apps.rh.drive_documento import EXTENSOES
 
-from .drive_documento import EXTENSOES
-
-
-def _sem_aba_documentos(user) -> bool:
-    if getattr(user, 'is_admin', False):
-        return False
-    abas = (getattr(user, 'abas', None) or {}).get('RH') or []
-    return bool(abas) and 'documentos' not in abas
+from .matriz_views import _sem_aba_matriz
 
 
-class RHDriveStatusView(ModuleScopedViewMixin, APIView):
-    permission_module = 'RH'
+class SGQDriveStatusView(ModuleScopedViewMixin, APIView):
+    permission_module = 'SGQ'
     permission_requires_filial = False
 
     def get(self, request):
-        if _sem_aba_documentos(request.user):
+        if _sem_aba_matriz(request.user):
             self.permission_denied(request, message='Sem acesso à Matriz de conhecimento.')
         return Response(drive_status(request.user))
 
 
-class RHDriveBrowseView(ModuleScopedViewMixin, APIView):
-    permission_module = 'RH'
+class SGQDriveBrowseView(ModuleScopedViewMixin, APIView):
+    permission_module = 'SGQ'
     permission_requires_filial = False
 
     def get(self, request):
-        if _sem_aba_documentos(request.user):
+        if _sem_aba_matriz(request.user):
             self.permission_denied(request, message='Sem acesso à Matriz de conhecimento.')
 
         folder_id = (request.query_params.get('folderId') or 'root').strip() or 'root'

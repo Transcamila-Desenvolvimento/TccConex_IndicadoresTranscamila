@@ -162,3 +162,71 @@ class EscopoAnaliseOpcao(models.Model):
 
     def __str__(self):
         return f'{self.escopo.label} — {self.label}'
+
+
+def documento_sgq_upload_path(instance, filename):
+    import uuid
+    from pathlib import Path
+    ext = Path(filename).suffix.lower()[:10]
+    return f'sgq/documentos/{uuid.uuid4().hex}{ext}'
+
+
+class DocumentoSGQ(models.Model):
+    """Arquivo da matriz de conhecimento do SGQ. O Drive guarda o arquivo; o servidor, o texto."""
+
+    titulo = models.CharField(max_length=160, verbose_name='Título')
+    arquivo = models.FileField(upload_to=documento_sgq_upload_path, blank=True, verbose_name='Arquivo')
+    drive_file_id = models.CharField(max_length=128, blank=True, default='', verbose_name='ID no Google Drive')
+    link_externo = models.CharField(max_length=500, blank=True, default='', verbose_name='Link no Google Drive')
+    nome_original = models.CharField(max_length=180, verbose_name='Nome do arquivo')
+    tamanho = models.PositiveIntegerField(default=0, verbose_name='Tamanho em bytes')
+    texto = models.TextField(blank=True, default='', verbose_name='Texto para consulta')
+    texto_extraido = models.BooleanField(default=False, verbose_name='Texto já extraído')
+    incluido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='documentos_sgq',
+        verbose_name='Incluído por',
+    )
+    pasta = models.ForeignKey(
+        'PastaMatrizSGQ',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='documentos',
+        verbose_name='Pasta',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Incluído em')
+
+    class Meta:
+        verbose_name = 'Documento do SGQ'
+        verbose_name_plural = 'Documentos do SGQ'
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return self.titulo
+
+
+class PastaMatrizSGQ(models.Model):
+    """Pasta da matriz de conhecimento do SGQ."""
+
+    nome = models.CharField(max_length=120, verbose_name='Nome')
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='subpastas',
+        verbose_name='Pasta superior',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Pasta da matriz de conhecimento do SGQ'
+        verbose_name_plural = 'Pastas da matriz de conhecimento do SGQ'
+        ordering = ['nome', 'pk']
+
+    def __str__(self):
+        return self.nome

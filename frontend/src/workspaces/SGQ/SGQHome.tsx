@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { userCanSeeAba } from '../../constants/abas';
 
 const QUICK_LINKS = [
   {
@@ -8,9 +9,22 @@ const QUICK_LINKS = [
     description: 'Registre e acompanhe as avaliações de entregas por cliente: prazo, mercadoria, veículo, motorista e atendimento.',
     path: '/sgq/pesquisa-satisfacao',
     badge: 'Qualidade',
+    aba: 'pesquisa-satisfacao',
     icon: (
       <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M11.35 3.836c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m8.9-4.414c.376.023.75.05 1.124.08 1.131.094 1.976 1.057 1.976 2.192V16.5A2.25 2.25 0 0118 18.75h-2.25m-7.5-10.5H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V18.75m-7.5-10.5h6.375c.621 0 1.125.504 1.125 1.125v9.375m-8.25-3l1.5 1.5 3-3.75" />
+      </svg>
+    ),
+  },
+  {
+    title: 'Matriz',
+    description: 'Organize a matriz de conhecimento em pastas para a IA consultar.',
+    path: '/sgq/matriz',
+    badge: 'Matriz',
+    aba: 'matriz',
+    icon: (
+      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
       </svg>
     ),
   },
@@ -36,7 +50,7 @@ const SGQHome: React.FC = () => {
       </div>
 
       <div className="quick-access-grid">
-        {QUICK_LINKS.map((link) => (
+        {QUICK_LINKS.filter((link) => userCanSeeAba(user, 'SGQ', link.aba)).map((link) => (
           <button
             key={link.path}
             type="button"
@@ -70,7 +84,7 @@ const SGQHome: React.FC = () => {
         lineHeight: '1.6'
       }}>
         <p style={{ margin: 0 }}>Este é o painel principal do ambiente de Gestão da Qualidade (SGQ) da Transcamila.</p>
-        <p style={{ marginTop: '8px', marginBottom: 0 }}>Use o menu lateral ou o card acima para acessar a Pesquisa de Satisfação.</p>
+        <p style={{ marginTop: '8px', marginBottom: 0 }}>Use o menu lateral para acessar a Pesquisa de Satisfação e a Matriz.</p>
       </div>
     </section>
   );

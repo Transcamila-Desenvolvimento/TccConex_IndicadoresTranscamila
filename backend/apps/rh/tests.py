@@ -940,3 +940,48 @@ class DocumentoRHTests(TestCase):
             **auth_headers(self.user, 'RH'),
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_pastas_da_matriz_guardam_arquivo_e_nao_excluem_com_conteudo(self):
+        headers = auth_headers(self.user, 'RH')
+        raiz = self.client.post('/api/rh/pastas/', {'nome': 'Convenções'}, format='json', **headers)
+        self.assertEqual(raiz.status_code, 201, raiz.data)
+        sub = self.client.post(
+            '/api/rh/pastas/',
+            {'nome': '2026', 'parentId': raiz.json()['id']},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(sub.status_code, 201, sub.data)
+        repetida = self.client.post(
+            '/api/rh/pastas/',
+            {'nome': '2026', 'parentId': raiz.json()['id']},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(repetida.status_code, 400, repetida.data)
+
+        criado = self.client.post(
+            '/api/rh/documentos/',
+            {
+                'titulo': 'Aditivo Ibiporã',
+                'arquivo': self._pdf('aditivo.pdf', b'%PDF-1.4 aditivo'),
+                'pastaId': sub.json()['id'],
+            },
+            format='multipart',
+            **headers,
+        )
+        self.assertEqual(criado.status_code, 201, criado.data)
+        self.assertEqual(criado.json()['pastaId'], sub.json()['id'])
+
+        arvore = self.client.get('/api/rh/documentos/?todos=1', **headers)
+        self.assertEqual(arvore.status_code, 200, arvore.data)
+        self.assertEqual(arvore.json()['count'], 1)
+
+        cheia = self.client.delete(f"/api/rh/pastas/{sub.json()['id']}/", **headers)
+        self.assertEqual(cheia.status_code, 400, cheia.data)
+        pai = self.client.delete(f"/api/rh/pastas/{raiz.json()['id']}/", **headers)
+        self.assertEqual(pai.status_code, 400, pai.data)
+
+        self.client.delete(f"/api/rh/documentos/{criado.json()['id']}/", **headers)
+        vazia = self.client.delete(f"/api/rh/pastas/{sub.json()['id']}/", **headers)
+        self.assertEqual(vazia.status_code, 204, getattr(vazia, 'data', vazia.content))

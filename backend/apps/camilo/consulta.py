@@ -167,22 +167,24 @@ def _trecho(texto: str, termos: list[str], limite: int = 1100) -> str:
     return fatia
 
 
-def resumo_documentos(user, pergunta: str = '') -> str:
+def resumo_documentos(user, pergunta: str = '', modelo=None) -> str:
     from apps.rh.documento_texto import garantir_texto
     from apps.rh.models import DocumentoRH
 
+    modelo = modelo or DocumentoRH
     documentos = list(
-        DocumentoRH.objects
-        .only('id', 'titulo', 'texto', 'texto_extraido', 'nome_original', 'tamanho', 'arquivo')
+        modelo.objects
+        .select_related('pasta')
         .order_by('-criado_em')[:40]
     )
     if not documentos:
-        return 'Nenhum documento cadastrado na aba Documentos.'
+        return 'Nenhum arquivo cadastrado na Matriz de conhecimento.'
 
     termos = _termos_pergunta(pergunta)
     if termos:
         def pontos(documento):
-            base = f'{documento.titulo} {documento.texto}'.lower()
+            pasta = documento.pasta.nome if documento.pasta_id else ''
+            base = f'{pasta} {documento.titulo} {documento.texto}'.lower()
             return sum(base.count(termo) for termo in termos)
         ordenados = sorted(documentos, key=pontos, reverse=True)
         escolhidos = [documento for documento in ordenados if pontos(documento) > 0][:2]
@@ -203,11 +205,18 @@ def resumo_documentos(user, pergunta: str = '') -> str:
     for documento in escolhidos:
         if not documento.texto_extraido:
             garantir_texto(documento)
+        pasta = (documento.pasta.nome if documento.pasta_id else '').strip()
+        rotulo = f'{pasta} / {documento.titulo}' if pasta else documento.titulo
         if documento.texto:
-            linhas.append(f'{documento.titulo}: {_trecho(documento.texto, termos)}')
+            linhas.append(f'{rotulo}: {_trecho(documento.texto, termos)}')
         else:
-            linhas.append(f'{documento.titulo}: o arquivo não tem texto legível para leitura.')
-    return 'Trechos lidos dos documentos:\n' + '\n'.join(linhas)
+            linhas.append(f'{rotulo}: o arquivo não tem texto legível para leitura.')
+    return 'Trechos lidos da Matriz de conhecimento:\n' + '\n'.join(linhas)
+
+
+def resumo_matriz_sgq(user, pergunta: str = '') -> str:
+    from apps.sgq.models import DocumentoSGQ
+    return resumo_documentos(user, pergunta, modelo=DocumentoSGQ)
 
 
 _NOMES_MES = (
@@ -578,6 +587,7 @@ LEITORES = {
     ('Compras', 'controle-estoque'): resumo_estoque,
     ('RH', 'movimentacoes'): resumo_movimentacoes,
     ('RH', 'documentos'): resumo_documentos,
+    ('SGQ', 'matriz'): resumo_matriz_sgq,
     ('SGQ', 'pesquisa-satisfacao'): resumo_pesquisas,
     ('Marketing', 'campanhas'): resumo_campanhas,
     ('Logística', 'configuracoes'): resumo_metas,
@@ -610,7 +620,8 @@ _SINAIS = {
     ('Faturamento', 'cadastro-clientes'): ('protocolo',),
     ('Compras', 'controle-estoque'): ('estoque', 'quantidade minima'),
     ('RH', 'movimentacoes'): ('salario', 'cargo', 'colaborador', 'funcionario', 'movimentacao', 'admissao'),
-    ('RH', 'documentos'): ('documento', 'convencao', 'piso', 'diaria', 'sindical', 'acordo'),
+    ('RH', 'documentos'): ('documento', 'matriz', 'conhecimento', 'convencao', 'piso', 'diaria', 'sindical', 'acordo'),
+    ('SGQ', 'matriz'): ('matriz', 'conhecimento', 'documento', 'procedimento', 'norma', 'qualidade', 'auditoria'),
     ('SGQ', 'pesquisa-satisfacao'): ('pesquisa', 'satisfacao'),
     ('Marketing', 'campanhas'): ('campanha', 'marketing'),
     ('Logística', 'configuracoes'): ('logistica',),
@@ -666,9 +677,15 @@ def _partes_em_foco(pergunta: str, efetivos: list[dict]) -> list[dict]:
     return []
 
 
-def _contagem_documentos(user) -> str:
+def _contagem_documentos(user, modelo=None) -> str:
     from apps.rh.models import DocumentoRH
-    return _texto(DocumentoRH.objects.count(), 'documento na aba Documentos', 'documentos na aba Documentos')
+    modelo = modelo or DocumentoRH
+    return _texto(modelo.objects.count(), 'arquivo na Matriz de conhecimento', 'arquivos na Matriz de conhecimento')
+
+
+def _contagem_matriz_sgq(user) -> str:
+    from apps.sgq.models import DocumentoSGQ
+    return _contagem_documentos(user, DocumentoSGQ)
 
 
 def _contagem_movimentacoes(user) -> str:
@@ -964,6 +981,8 @@ def _ler_parte(user, item: dict, pergunta: str, detalhar: bool) -> str:
     if not detalhar:
         if chave == ('RH', 'documentos'):
             return _contagem_documentos(user)
+        if chave == ('SGQ', 'matriz'):
+            return _contagem_matriz_sgq(user)
         if chave in {('RH', 'movimentacoes'), ('Indicadores', 'movimentacao-rh')}:
             return _contagem_movimentacoes(user)
         leitor = LEITORES.get(chave)
@@ -971,6 +990,8 @@ def _ler_parte(user, item: dict, pergunta: str, detalhar: bool) -> str:
 
     if chave == ('RH', 'documentos'):
         texto = resumo_documentos(user, pergunta)
+    elif chave == ('SGQ', 'matriz'):
+        texto = resumo_matriz_sgq(user, pergunta)
     elif chave in {('RH', 'movimentacoes'), ('Indicadores', 'movimentacao-rh')}:
         texto = resumo_movimentacoes(user, pergunta)
     else:

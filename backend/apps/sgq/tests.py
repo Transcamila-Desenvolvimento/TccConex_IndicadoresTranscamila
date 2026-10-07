@@ -1311,3 +1311,41 @@ class EscopoAnaliseCadastroTests(APITestCase):
         )
         self.assertEqual(denied.status_code, 400, denied.data)
         self.assertTrue(EscopoAnaliseOpcao.objects.filter(pk=opcao.pk).exists())
+
+
+class MatrizSGQTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='sgq.matriz',
+            password='x',
+            name='Matriz SGQ',
+            role_id='2',
+            status='ativo',
+            environments=['SGQ', 'CamiloIA'],
+            filiais={'SGQ': [IBIPORA]},
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_pastas_guardam_arquivo_para_a_ia(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from apps.camilo.consulta import resumo_matriz_sgq
+
+        pasta = self.client.post('/api/sgq/pastas/', {'nome': 'Procedimentos'}, format='json', **_headers())
+        self.assertEqual(pasta.status_code, 201, pasta.data)
+        criado = self.client.post(
+            '/api/sgq/documentos/',
+            {
+                'titulo': 'Descarga na doca',
+                'arquivo': SimpleUploadedFile('descarga.txt', 'O procedimento de descarga na doca exige conferência.'.encode(), content_type='text/plain'),
+                'pastaId': pasta.json()['id'],
+            },
+            format='multipart',
+            **_headers(),
+        )
+        self.assertEqual(criado.status_code, 201, criado.data)
+        self.assertEqual(criado.json()['pastaId'], pasta.json()['id'])
+        self.assertIn('descarga', resumo_matriz_sgq(self.user, 'procedimento de descarga').lower())
+
+        cheia = self.client.delete(f"/api/sgq/pastas/{pasta.json()['id']}/", **_headers())
+        self.assertEqual(cheia.status_code, 400, cheia.data)

@@ -22,7 +22,7 @@ import type {
   AuditLogQueryParams,
   AuditLogFacets,
   UserQueryParams,
-  Colaborador, DocumentoRH, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
+  Colaborador, DocumentoRH, PastaMatrizRH, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
   UnidadeMedida, Setor, ColaboradorCompras, Fornecedor, ItemEstoque, EntradaEstoque, SaidaEstoque,
   RegistrarCompraPayload, RegistrarSaidaPayload,
   ClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft,
@@ -1716,14 +1716,45 @@ export const apiService = {
     return data;
   },
 
-  async getDocumentosRH(params: { page?: number; search?: string } = {}): Promise<PaginatedResponse<DocumentoRH>> {
+  async getDocumentosRH(params: { page?: number; search?: string; todos?: boolean } = {}): Promise<PaginatedResponse<DocumentoRH>> {
     const { data } = await api.get('/api/rh/documentos/', {
-      params: {
-        page: params.page ?? 1,
-        page_size: 10,
-        search: params.search || undefined,
-      },
+      params: params.todos
+        ? { todos: 1, search: params.search || undefined }
+        : {
+          page: params.page ?? 1,
+          page_size: 10,
+          search: params.search || undefined,
+        },
     });
+    return data;
+  },
+
+  async getPastasMatrizRH(): Promise<PaginatedResponse<PastaMatrizRH>> {
+    const { data } = await api.get('/api/rh/pastas/');
+    return data;
+  },
+
+  async createPastaMatrizRH(nome: string, parentId?: string | null): Promise<PastaMatrizRH> {
+    const { data } = await api.post('/api/rh/pastas/', { nome, parentId: parentId || null });
+    return data;
+  },
+
+  async renomearPastaMatrizRH(id: string, nome: string): Promise<PastaMatrizRH> {
+    const { data } = await api.post(`/api/rh/pastas/${id}/renomear/`, { nome });
+    return data;
+  },
+
+  async deletePastaMatrizRH(id: string): Promise<void> {
+    await api.delete(`/api/rh/pastas/${id}/`);
+  },
+
+  async createDocumentoRH(titulo: string, driveFileId: string, pastaId?: string | null): Promise<DocumentoRH> {
+    const { data } = await api.post('/api/rh/documentos/', { titulo, driveFileId, pastaId: pastaId || null });
+    return data;
+  },
+
+  async moverDocumentoRH(id: string, pastaId: string | null): Promise<DocumentoRH> {
+    const { data } = await api.post(`/api/rh/documentos/${id}/mover/`, { pastaId });
     return data;
   },
 
@@ -1740,11 +1771,6 @@ export const apiService = {
   } = {}): Promise<GoogleDriveBrowseResponse> {
     const { data } = await api.get('/api/rh/drive/browse/', { params });
     return data as GoogleDriveBrowseResponse;
-  },
-
-  async createDocumentoRH(titulo: string, driveFileId: string): Promise<DocumentoRH> {
-    const { data } = await api.post('/api/rh/documentos/', { titulo, driveFileId });
-    return data;
   },
 
   async renomearDocumentoRH(id: string, titulo: string): Promise<DocumentoRH> {
@@ -1764,6 +1790,74 @@ export const apiService = {
   async downloadDocumentoRH(id: string): Promise<Blob> {
     const { data } = await api.get(`/api/rh/documentos/${id}/arquivo/`, { responseType: 'blob' });
     return data;
+  },
+
+  async getDocumentosSGQ(): Promise<PaginatedResponse<DocumentoRH>> {
+    const { data } = await api.get('/api/sgq/documentos/', { params: { todos: 1 } });
+    return data;
+  },
+
+  async getPastasMatrizSGQ(): Promise<PaginatedResponse<PastaMatrizRH>> {
+    const { data } = await api.get('/api/sgq/pastas/');
+    return data;
+  },
+
+  async createPastaMatrizSGQ(nome: string, parentId?: string | null): Promise<PastaMatrizRH> {
+    const { data } = await api.post('/api/sgq/pastas/', { nome, parentId: parentId || null });
+    return data;
+  },
+
+  async renomearPastaMatrizSGQ(id: string, nome: string): Promise<PastaMatrizRH> {
+    const { data } = await api.post(`/api/sgq/pastas/${id}/renomear/`, { nome });
+    return data;
+  },
+
+  async deletePastaMatrizSGQ(id: string): Promise<void> {
+    await api.delete(`/api/sgq/pastas/${id}/`);
+  },
+
+  async createDocumentoSGQ(titulo: string, driveFileId: string, pastaId?: string | null): Promise<DocumentoRH> {
+    const { data } = await api.post('/api/sgq/documentos/', { titulo, driveFileId, pastaId: pastaId || null });
+    return data;
+  },
+
+  async renomearDocumentoSGQ(id: string, titulo: string): Promise<DocumentoRH> {
+    const { data } = await api.post(`/api/sgq/documentos/${id}/renomear/`, { titulo });
+    return data;
+  },
+
+  async substituirDocumentoSGQ(id: string, titulo: string, driveFileId: string): Promise<DocumentoRH> {
+    const { data } = await api.post(`/api/sgq/documentos/${id}/substituir/`, { titulo, driveFileId });
+    return data;
+  },
+
+  async deleteDocumentoSGQ(id: string): Promise<void> {
+    await api.delete(`/api/sgq/documentos/${id}/`);
+  },
+
+  async downloadDocumentoSGQ(id: string): Promise<Blob> {
+    const { data } = await api.get(`/api/sgq/documentos/${id}/arquivo/`, { responseType: 'blob' });
+    return data;
+  },
+
+  async moverDocumentoSGQ(id: string, pastaId: string | null): Promise<DocumentoRH> {
+    const { data } = await api.post(`/api/sgq/documentos/${id}/mover/`, { pastaId });
+    return data;
+  },
+
+  async getSGQDriveStatus(): Promise<GoogleDriveStatus> {
+    const { data } = await api.get('/api/sgq/drive/status/');
+    return data as GoogleDriveStatus;
+  },
+
+  async browseSGQDrive(params: {
+    folderId?: string;
+    pageToken?: string;
+    pageSize?: number;
+    driveId?: string;
+  } = {}): Promise<GoogleDriveBrowseResponse> {
+    const { data } = await api.get('/api/sgq/drive/browse/', { params });
+    return data as GoogleDriveBrowseResponse;
   },
 
   async exportarModeloRH(): Promise<Blob> {

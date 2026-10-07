@@ -188,14 +188,14 @@ const ComercialCadastroProdutos: React.FC = () => {
     }
     return Array.from(mapa.values());
   }, [produtos]);
-  const [recolhidos, setRecolhidos] = useState<Record<string, boolean>>({});
+  const [expandidos, setExpandidos] = useState<Record<string, boolean>>({});
 
   const toggleGrupo = (id: string) => {
-    setRecolhidos((prev) => ({ ...prev, [id]: !prev[id] }));
+    setExpandidos((prev) => ({ ...prev, [id]: !prev[id] }));
   };
-  const todosRecolhidos = grupos.length > 0 && grupos.every((grupo) => recolhidos[grupo.id]);
+  const todosRecolhidos = grupos.length > 0 && grupos.every((grupo) => !expandidos[grupo.id]);
   const alternarTodos = () => {
-    setRecolhidos(Object.fromEntries(grupos.map((grupo) => [grupo.id, !todosRecolhidos])));
+    setExpandidos(Object.fromEntries(grupos.map((grupo) => [grupo.id, todosRecolhidos])));
   };
 
   return (
@@ -305,7 +305,7 @@ const ComercialCadastroProdutos: React.FC = () => {
                     </td>
                   </tr>
                 ) : grupos.map((grupo) => {
-                  const aberto = !recolhidos[grupo.id];
+                  const aberto = Boolean(expandidos[grupo.id]);
                   return (
                     <React.Fragment key={grupo.id}>
                       <tr className="comercial-grupo-cliente-row" onClick={() => toggleGrupo(grupo.id)}>

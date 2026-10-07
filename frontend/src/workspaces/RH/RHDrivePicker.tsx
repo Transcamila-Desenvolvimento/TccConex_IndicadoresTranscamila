@@ -18,15 +18,17 @@ const RHDrivePicker: React.FC<{
   open: boolean;
   onClose: () => void;
   onSelect: (item: GoogleDriveItem) => void;
-}> = ({ open, onClose, onSelect }) => {
+  useStatus?: typeof useRHDriveStatus;
+  useBrowse?: typeof useRHDriveBrowse;
+}> = ({ open, onClose, onSelect, useStatus = useRHDriveStatus, useBrowse = useRHDriveBrowse }) => {
   const { linkGoogle, isLinking } = useGoogleAccount();
-  const statusQuery = useRHDriveStatus(open);
+  const statusQuery = useStatus(open);
   const canBrowse = Boolean(statusQuery.data && !statusQuery.data.needsGoogleLink);
   const [breadcrumbs, setBreadcrumbs] = useState<Crumb[]>([{ id: HOME_ID, name: 'Google Drive' }]);
   const [search, setSearch] = useState('');
 
   const current = breadcrumbs[breadcrumbs.length - 1];
-  const browseQuery = useRHDriveBrowse(current?.id ?? HOME_ID, open && canBrowse, current?.driveId);
+  const browseQuery = useBrowse(current?.id ?? HOME_ID, open && canBrowse, current?.driveId);
 
   const items = useMemo(
     () => browseQuery.data?.pages.flatMap((page) => page.items) ?? [],

@@ -59,7 +59,7 @@ ABAS_POR_AMBIENTE = {
     }),
     'Compras': frozenset({'home', 'controle-estoque'}),
     'RH': frozenset({'home', 'movimentacoes', 'documentos'}),
-    'SGQ': frozenset({'home', 'pesquisa-satisfacao'}),
+    'SGQ': frozenset({'home', 'pesquisa-satisfacao', 'matriz'}),
     'Marketing': frozenset({'home', 'campanhas'}),
     'Logística': frozenset({'home', 'configuracoes'}),
     'Frota': frozenset({'home', 'cadastro-veiculos', 'cadastro-condutores', 'custos-frota'}),

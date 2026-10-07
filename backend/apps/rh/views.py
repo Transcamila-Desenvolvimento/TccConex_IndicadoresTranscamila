@@ -25,6 +25,7 @@ from .models import (
     ColaboradorPJ,
     ColaboradorPJHistorico,
     DocumentoRH,
+    PastaMatrizRH,
 )
 from .serializers import (
     ColaboradorSerializer,
@@ -35,6 +36,7 @@ from .serializers import (
     ColaboradorPJSerializer,
     ColaboradorPJHistoricoSerializer,
     DocumentoRHSerializer,
+    PastaMatrizRHSerializer,
 )
 from .pj_sync_service import sync_pj_nos_lotes, remove_pj_de_todos_lotes
 from .import_service import (
@@ -1117,6 +1119,98 @@ def _erro_arquivo_documento(arquivo):
     return None
 
 
+_PROFUNDIDADE_MAXIMA_PASTA = 8
+
+
+def _resolver_pasta(valor):
+    if valor in (None, '', 'null'):
+        return None, None
+    pasta = PastaMatrizRH.objects.filter(pk=str(valor)).first()
+    if not pasta:
+        return None, Response({'pastaId': 'Pasta não encontrada.'}, status=status.HTTP_400_BAD_REQUEST)
+    return pasta, None
+
+
+def _profundidade_pasta(pasta):
+    nivel = 1
+    atual = pasta.parent
+    while atual is not None and nivel <= _PROFUNDIDADE_MAXIMA_PASTA + 1:
+        nivel += 1
+        atual = atual.parent
+    return nivel
+
+
+def _nome_pasta(valor):
+    nome = str(valor or '').strip()
+    if not nome:
+        return None, Response({'nome': 'Informe o nome da pasta.'}, status=status.HTTP_400_BAD_REQUEST)
+    if len(nome) > 120:
+        return None, Response({'nome': 'O nome passou de 120 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
+    return nome, None
+
+
+class PastaMatrizRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+    permission_module = 'RH'
+    serializer_class = PastaMatrizRHSerializer
+    queryset = PastaMatrizRH.objects.all()
+    pagination_class = None
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        user = request.user
+        if getattr(user, 'is_admin', False):
+            return
+        abas = (getattr(user, 'abas', None) or {}).get('RH') or []
+        if abas and 'documentos' not in abas:
+            self.permission_denied(request, message='Sem acesso à Matriz de conhecimento.')
+
+    def list(self, request, *args, **kwargs):
+        pastas = self.get_queryset()
+        dados = self.get_serializer(pastas, many=True).data
+        return Response({'count': len(dados), 'results': dados})
+
+    def create(self, request, *args, **kwargs):
+        nome, erro = _nome_pasta(request.data.get('nome'))
+        if erro:
+            return erro
+        parent, erro = _resolver_pasta(request.data.get('parentId'))
+        if erro:
+            return erro
+        if parent and _profundidade_pasta(parent) >= _PROFUNDIDADE_MAXIMA_PASTA:
+            return Response({'parentId': 'Essa pasta já está no limite de níveis.'}, status=status.HTTP_400_BAD_REQUEST)
+        if PastaMatrizRH.objects.filter(parent=parent, nome__iexact=nome).exists():
+            return Response({'nome': 'Já existe uma pasta com esse nome aqui.'}, status=status.HTTP_400_BAD_REQUEST)
+        pasta = PastaMatrizRH.objects.create(nome=nome, parent=parent)
+        record_audit(request.user, 'rh.matriz.pasta_criar', nome)
+        return Response(self.get_serializer(pasta).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def renomear(self, request, pk=None):
+        pasta = self.get_object()
+        nome, erro = _nome_pasta(request.data.get('nome'))
+        if erro:
+            return erro
+        if PastaMatrizRH.objects.filter(parent=pasta.parent, nome__iexact=nome).exclude(pk=pasta.pk).exists():
+            return Response({'nome': 'Já existe uma pasta com esse nome aqui.'}, status=status.HTTP_400_BAD_REQUEST)
+        pasta.nome = nome
+        pasta.save(update_fields=['nome'])
+        record_audit(request.user, 'rh.matriz.pasta_renomear', nome)
+        return Response(self.get_serializer(pasta).data)
+
+    def destroy(self, request, *args, **kwargs):
+        pasta = self.get_object()
+        if pasta.subpastas.exists() or pasta.documentos.exists():
+            return Response(
+                {'detail': 'A pasta tem itens. Esvazie antes de excluir.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        nome = pasta.nome
+        pasta.delete()
+        record_audit(request.user, 'rh.matriz.pasta_excluir', nome)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class DocumentoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     permission_module = 'RH'
     serializer_class = DocumentoRHSerializer
@@ -1132,7 +1226,14 @@ class DocumentoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             return
         abas = (getattr(user, 'abas', None) or {}).get('RH') or []
         if abas and 'documentos' not in abas:
-            self.permission_denied(request, message='Sem acesso à aba Documentos do RH.')
+            self.permission_denied(request, message='Sem acesso à Matriz de conhecimento.')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        if request.query_params.get('todos') == '1':
+            dados = self.get_serializer(queryset, many=True).data
+            return Response({'count': len(dados), 'results': dados})
+        return super().list(request, *args, **kwargs)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -1151,6 +1252,9 @@ class DocumentoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             return Response({'titulo': 'Informe o título do documento.'}, status=status.HTTP_400_BAD_REQUEST)
         if len(titulo) > 160:
             return Response({'titulo': 'O título passou de 160 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
+        pasta, erro_pasta = _resolver_pasta(request.data.get('pastaId'))
+        if erro_pasta:
+            return erro_pasta
         if drive_id:
             from apps.rh.drive_documento import baixar_conteudo_drive
             try:
@@ -1162,6 +1266,7 @@ class DocumentoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 nome_original=dados['nome'],
                 tamanho=dados['tamanho'],
                 incluido_por=request.user,
+                pasta=pasta,
             )
             _aplicar_conteudo_drive(documento, dados)
             documento.save()
@@ -1177,6 +1282,7 @@ class DocumentoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             nome_original=Path(arquivo.name).name[:180],
             tamanho=arquivo.size,
             incluido_por=request.user,
+            pasta=pasta,
         )
         from apps.rh.documento_texto import garantir_texto
         garantir_texto(documento)
@@ -1245,6 +1351,18 @@ class DocumentoRHViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         documento.titulo = titulo
         documento.save(update_fields=['titulo'])
         record_audit(request.user, 'rh.documento.renomear', titulo)
+        return Response(DocumentoRHSerializer(documento).data)
+
+    @action(detail=True, methods=['post'])
+    def mover(self, request, pk=None):
+        documento = self.get_object()
+        pasta, erro = _resolver_pasta(request.data.get('pastaId'))
+        if erro:
+            return erro
+        documento.pasta = pasta
+        documento.save(update_fields=['pasta'])
+        destino = pasta.nome if pasta else 'a raiz'
+        record_audit(request.user, 'rh.documento.mover', f'{documento.titulo} → {destino}')
         return Response(DocumentoRHSerializer(documento).data)
 
     def perform_destroy(self, instance):

@@ -904,6 +904,13 @@ export interface DocumentoRH {
   linkExterno: string;
   incluidoPor: string;
   criadoEm: string;
+  pastaId?: string | null;
+}
+
+export interface PastaMatrizRH {
+  id: string;
+  nome: string;
+  parentId: string | null;
 }
 
 export interface LoteMovimentacaoRH {

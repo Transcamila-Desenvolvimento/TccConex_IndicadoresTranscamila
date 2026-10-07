@@ -11,6 +11,7 @@ from .views import (
     HistoricoSalarialViewSet,
     InconsistenciaColaboradorViewSet,
     DocumentoRHViewSet,
+    PastaMatrizRHViewSet,
 )
 
 router = DefaultRouter()
@@ -22,6 +23,7 @@ router.register('colaboradores', ColaboradorViewSet, basename='colaboradores')
 router.register('historico-salarial', HistoricoSalarialViewSet, basename='historico-salarial')
 router.register('alteracoes', InconsistenciaColaboradorViewSet, basename='alteracoes')
 router.register('documentos', DocumentoRHViewSet, basename='documentos')
+router.register('pastas', PastaMatrizRHViewSet, basename='pastas-matriz')
 
 urlpatterns = [
     path('drive/status/', RHDriveStatusView.as_view(), name='rh-drive-status'),

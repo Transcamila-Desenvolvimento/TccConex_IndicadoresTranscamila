@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from .clientes_cadastro import cliente_pesquisa_permitido, indice_cadastros_pesquisa, nome_exibicao_pesquisa
 from .escopo_analise import has_escopo_opcoes, normalize_escopo_analise, slugify_chave
-from .models import EscopoAnalise, EscopoAnaliseOpcao, PesquisaSatisfacao
+from .models import DocumentoSGQ, EscopoAnalise, EscopoAnaliseOpcao, PastaMatrizSGQ, PesquisaSatisfacao
 
 # Nome do campo no model (source) → nome do campo camelCase no serializer.
 # Usado em validate() para reportar erros com a chave que o frontend espera
@@ -171,3 +171,36 @@ class EscopoAnaliseSerializer(serializers.ModelSerializer):
             max_ordem = EscopoAnalise.objects.order_by('-ordem').values_list('ordem', flat=True).first()
             validated_data['ordem'] = (max_ordem or 0) + 1
         return super().create(validated_data)
+
+
+class DocumentoSGQSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source='pk', read_only=True)
+    nomeArquivo = serializers.CharField(source='nome_original', read_only=True)
+    linkExterno = serializers.CharField(source='link_externo', read_only=True)
+    incluidoPor = serializers.SerializerMethodField()
+    criadoEm = serializers.DateTimeField(source='criado_em', format='%d/%m/%Y %H:%M', read_only=True)
+    pastaId = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DocumentoSGQ
+        fields = ['id', 'titulo', 'nomeArquivo', 'tamanho', 'linkExterno', 'incluidoPor', 'criadoEm', 'pastaId']
+
+    def get_incluidoPor(self, obj):
+        if not obj.incluido_por:
+            return ''
+        return obj.incluido_por.name or obj.incluido_por.username
+
+    def get_pastaId(self, obj):
+        return str(obj.pasta_id) if obj.pasta_id else None
+
+
+class PastaMatrizSGQSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source='pk', read_only=True)
+    parentId = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PastaMatrizSGQ
+        fields = ['id', 'nome', 'parentId']
+
+    def get_parentId(self, obj):
+        return str(obj.parent_id) if obj.parent_id else None

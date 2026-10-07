@@ -31,6 +31,7 @@ export const RH_KEYS = {
   colaboradores: ['rh', 'colaboradores'] as const,
   historicoSalarial: ['rh', 'historico-salarial'] as const,
   documentos: ['rh', 'documentos'] as const,
+  pastas: ['rh', 'matriz-pastas'] as const,
 };
 
 function invalidateRHData(queryClient: ReturnType<typeof useQueryClient>) {
@@ -339,18 +340,66 @@ export function useRHDriveBrowse(folderId: string, enabled = true, driveId?: str
   });
 }
 
-export function useDocumentosRH(params: { page: number; search: string }) {
+export function useDocumentosRH(params: { page?: number; search?: string; todos?: boolean } = {}) {
   return useQuery({
     queryKey: [...RH_KEYS.documentos, params],
     queryFn: () => apiService.getDocumentosRH(params),
   });
 }
 
+export function usePastasMatrizRH() {
+  return useQuery({
+    queryKey: RH_KEYS.pastas,
+    queryFn: () => apiService.getPastasMatrizRH(),
+  });
+}
+
+export function useCreatePastaMatrizRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ nome, parentId }: { nome: string; parentId?: string | null }) =>
+      apiService.createPastaMatrizRH(nome, parentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: RH_KEYS.pastas });
+    },
+  });
+}
+
+export function useRenomearPastaMatrizRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, nome }: { id: string; nome: string }) => apiService.renomearPastaMatrizRH(id, nome),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: RH_KEYS.pastas });
+    },
+  });
+}
+
+export function useDeletePastaMatrizRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.deletePastaMatrizRH(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: RH_KEYS.pastas });
+    },
+  });
+}
+
+export function useMoverDocumentoRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, pastaId }: { id: string; pastaId: string | null }) => apiService.moverDocumentoRH(id, pastaId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: RH_KEYS.documentos });
+    },
+  });
+}
+
 export function useCreateDocumentoRH() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ titulo, driveFileId }: { titulo: string; driveFileId: string }) =>
-      apiService.createDocumentoRH(titulo, driveFileId),
+    mutationFn: ({ titulo, driveFileId, pastaId }: { titulo: string; driveFileId: string; pastaId?: string | null }) =>
+      apiService.createDocumentoRH(titulo, driveFileId, pastaId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: RH_KEYS.documentos });
     },

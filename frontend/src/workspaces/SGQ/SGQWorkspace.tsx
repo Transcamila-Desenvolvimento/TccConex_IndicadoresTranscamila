@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { firstAllowedAbaPath } from '../../constants/abas';
 import AbaRoute from '../../components/AbaRoute';
 import SGQHome from './SGQHome';
+import SGQMatriz from './SGQMatriz';
 import SGQPesquisaSatisfacao from './SGQPesquisaSatisfacao';
 
 const SGQWorkspace: React.FC = () => {
@@ -14,6 +15,7 @@ const SGQWorkspace: React.FC = () => {
     <Routes>
       <Route index element={<AbaRoute module="SGQ" aba="home" fallback={fallback}><SGQHome /></AbaRoute>} />
       <Route path="pesquisa-satisfacao" element={<AbaRoute module="SGQ" aba="pesquisa-satisfacao" fallback={fallback}><SGQPesquisaSatisfacao /></AbaRoute>} />
+      <Route path="matriz" element={<AbaRoute module="SGQ" aba="matriz" fallback={fallback}><SGQMatriz /></AbaRoute>} />
       <Route path="*" element={<Navigate to={fallback} replace />} />
     </Routes>
   );

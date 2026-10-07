@@ -223,6 +223,14 @@ class DocumentoRH(models.Model):
         related_name='documentos_rh',
         verbose_name="Incluído por",
     )
+    pasta = models.ForeignKey(
+        'PastaMatrizRH',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='documentos',
+        verbose_name='Pasta',
+    )
     criado_em = models.DateTimeField(auto_now_add=True, verbose_name="Incluído em")
 
     class Meta:
@@ -232,3 +240,26 @@ class DocumentoRH(models.Model):
 
     def __str__(self):
         return self.titulo
+
+
+class PastaMatrizRH(models.Model):
+    """Pasta da matriz de conhecimento. O arquivo em si continua em DocumentoRH."""
+
+    nome = models.CharField(max_length=120, verbose_name='Nome')
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='subpastas',
+        verbose_name='Pasta superior',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Pasta da matriz de conhecimento'
+        verbose_name_plural = 'Pastas da matriz de conhecimento'
+        ordering = ['nome', 'pk']
+
+    def __str__(self):
+        return self.nome

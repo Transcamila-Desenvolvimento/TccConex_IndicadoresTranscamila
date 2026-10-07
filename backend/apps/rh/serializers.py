@@ -9,6 +9,7 @@ from .models import (
     ColaboradorPJ,
     ColaboradorPJHistorico,
     DocumentoRH,
+    PastaMatrizRH,
 )
 from .pj_sync_service import (
     pj_ativo_na_competencia,
@@ -174,12 +175,28 @@ class DocumentoRHSerializer(serializers.ModelSerializer):
     linkExterno = serializers.CharField(source='link_externo', read_only=True)
     incluidoPor = serializers.SerializerMethodField()
     criadoEm = serializers.DateTimeField(source='criado_em', format='%d/%m/%Y %H:%M', read_only=True)
+    pastaId = serializers.SerializerMethodField()
 
     class Meta:
         model = DocumentoRH
-        fields = ['id', 'titulo', 'nomeArquivo', 'tamanho', 'linkExterno', 'incluidoPor', 'criadoEm']
+        fields = ['id', 'titulo', 'nomeArquivo', 'tamanho', 'linkExterno', 'incluidoPor', 'criadoEm', 'pastaId']
 
     def get_incluidoPor(self, obj):
         if not obj.incluido_por:
             return ''
         return obj.incluido_por.name or obj.incluido_por.username
+
+    def get_pastaId(self, obj):
+        return str(obj.pasta_id) if obj.pasta_id else None
+
+
+class PastaMatrizRHSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(source='pk', read_only=True)
+    parentId = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PastaMatrizRH
+        fields = ['id', 'nome', 'parentId']
+
+    def get_parentId(self, obj):
+        return str(obj.parent_id) if obj.parent_id else None

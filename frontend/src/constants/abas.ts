@@ -26,10 +26,11 @@ export const ABA_ITEMS = [
 
   { module: 'RH', key: 'home', label: 'Home RH', path: '/rh' },
   { module: 'RH', key: 'movimentacoes', label: 'Movimentações', path: '/rh/movimentacoes' },
-  { module: 'RH', key: 'documentos', label: 'Documentos', path: '/rh/documentos' },
+  { module: 'RH', key: 'documentos', label: 'Matriz', path: '/rh/documentos' },
 
   { module: 'SGQ', key: 'home', label: 'Home SGQ', path: '/sgq' },
   { module: 'SGQ', key: 'pesquisa-satisfacao', label: 'Pesquisa de satisfação', path: '/sgq/pesquisa-satisfacao' },
+  { module: 'SGQ', key: 'matriz', label: 'Matriz', path: '/sgq/matriz' },
 
   { module: 'Marketing', key: 'home', label: 'Home Marketing', path: '/marketing' },
   { module: 'Marketing', key: 'campanhas', label: 'Calendário Transcamila', path: '/marketing/campanhas' },
