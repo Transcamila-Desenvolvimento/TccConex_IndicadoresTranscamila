@@ -50,6 +50,7 @@ const DashboardLayout: React.FC = () => {
   const [isEnvioDocumentosSubmenuOpen, setIsEnvioDocumentosSubmenuOpen] = useState(false);
   const [isCadastrosFaturamentoSubmenuOpen, setIsCadastrosFaturamentoSubmenuOpen] = useState(false);
   const [isCadastrosFrotaSubmenuOpen, setIsCadastrosFrotaSubmenuOpen] = useState(false);
+  const [isQuestionariosFrotaSubmenuOpen, setIsQuestionariosFrotaSubmenuOpen] = useState(false);
   const [isCadastrosComercialSubmenuOpen, setIsCadastrosComercialSubmenuOpen] = useState(false);
   const [, setIsAdminSubmenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
@@ -97,6 +98,9 @@ const DashboardLayout: React.FC = () => {
     }
     if (location.pathname.startsWith('/frota/cadastros')) {
       setIsCadastrosFrotaSubmenuOpen(true);
+    }
+    if (location.pathname.startsWith('/frota/questionarios')) {
+      setIsQuestionariosFrotaSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/comercial/cadastros') || location.pathname.startsWith('/comercial/parametros/prazos')) {
       setIsCadastrosComercialSubmenuOpen(true);
@@ -338,6 +342,13 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Indicadores' && allowedIndicadores.has('custos-frota')
       },
       {
+        title: "Olho vivo na estrada",
+        path: "Indicadores / Frota / Olho vivo na estrada",
+        icon: <i className="bi bi-eye search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/indicadores/frota/olho-vivo'),
+        show: selectedEnvironment === 'Indicadores' && allowedIndicadores.has('olho-vivo')
+      },
+      {
         title: "Home Compras",
         path: "Compras / Home",
         icon: (
@@ -492,6 +503,13 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Frota' && canAba('Frota', 'cadastro-veiculos')
       },
       {
+        title: "Olho vivo na estrada",
+        path: "Frota / Questionários / Olho vivo na estrada",
+        icon: <i className="bi bi-eye search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/frota/questionarios/olho-vivo'),
+        show: selectedEnvironment === 'Frota' && canAba('Frota', 'olho-vivo')
+      },
+      {
         title: "Home Comercial",
         path: "Comercial / Home",
         icon: (
@@ -610,10 +628,11 @@ const DashboardLayout: React.FC = () => {
   const IND_LOGISTICA_PATHS = ['/indicadores/logistica/meta-faturamento'];
   const IND_RH_PATHS = ['/indicadores/rh/movimentacao'];
   const IND_SGQ_PATHS = ['/indicadores/gestao-qualidade/satisfacao-clientes'];
-  const IND_FROTA_PATHS = ['/indicadores/frota/custos'];
+  const IND_FROTA_PATHS = ['/indicadores/frota/custos', '/indicadores/frota/olho-vivo'];
   const FATURAMENTO_ENVIO_PATHS = ['/faturamento/protocolos'];
   const FATURAMENTO_CADASTROS_PATHS = ['/faturamento/cadastros/clientes'];
   const FROTA_CADASTROS_PATHS = ['/frota/cadastros/condutores', '/frota/cadastros/veiculos'];
+  const FROTA_QUESTIONARIOS_PATHS = ['/frota/questionarios/olho-vivo'];
   const COMERCIAL_CADASTROS_PATHS = [
     '/comercial/cadastros/clientes',
     '/comercial/cadastros/tabela-frete',
@@ -648,6 +667,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/frota/cadastros/condutores')) return `${env} / Cadastros / Condutores`;
     if (path.startsWith('/frota/cadastros/veiculos')) return `${env} / Cadastros / Veículos frota`;
     if (path.startsWith('/frota/custos')) return `${env} / Custos de frota`;
+    if (path.startsWith('/frota/questionarios/olho-vivo')) return `${env} / Questionários / Olho vivo na estrada`;
     if (path.startsWith('/frota')) return env;
     if (path.startsWith('/comercial/cadastros/clientes')) return `${env} / Cadastros / Clientes`;
     if (path.startsWith('/comercial/cadastros/tabela-frete')) return `${env} / Cadastros / Tabela frete`;
@@ -680,6 +700,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/indicadores/logistica/meta-faturamento')) return `${env} / Logística / Meta de faturamento`;
     if (path.startsWith('/indicadores/rh/movimentacao')) return `${env} / Recursos Humanos / Movimentação de RH`;
     if (path.startsWith('/indicadores/gestao-qualidade/satisfacao-clientes')) return `${env} / Gestão da qualidade / Satisfação dos Clientes`;
+    if (path.startsWith('/indicadores/frota/olho-vivo')) return `${env} / Frota / Olho vivo na estrada`;
     if (path.startsWith('/indicadores/frota/custos')) return `${env} / Frota / Custos de frota`;
     if (path.startsWith('/indicadores/fluxo-de-caixa')) return `${env} / Financeiro / Fluxo de Caixa`;
     if (path.startsWith('/indicadores')) return `${env} / Home Indicadores`;
@@ -918,7 +939,7 @@ const DashboardLayout: React.FC = () => {
               </div>
               )}
 
-              {allowedIndicadores.has('custos-frota') && (
+              {(allowedIndicadores.has('custos-frota') || allowedIndicadores.has('olho-vivo')) && (
               <div className={`nav-group-wrapper${indOpenGroup === 'frota' ? ' submenu-open' : ''}`} id="btn-menu-indicadores-frota">
                 <button
                   type="button"
@@ -936,11 +957,12 @@ const DashboardLayout: React.FC = () => {
                   className="submenu-container"
                   style={{
                     display: isSidebarCollapsed ? undefined : 'block',
-                    maxHeight: isSidebarCollapsed ? undefined : (indOpenGroup === 'frota' ? '80px' : '0px'),
+                    maxHeight: isSidebarCollapsed ? undefined : (indOpenGroup === 'frota' ? '160px' : '0px'),
                     overflow: 'hidden',
                     transition: 'max-height 0.25s ease',
                   }}
                 >
+                  {allowedIndicadores.has('custos-frota') && (
                   <Link
                     to="/indicadores/frota/custos"
                     className={`nav-btn sub-nav-btn ${isRouteActive('/indicadores/frota/custos') ? 'active' : ''}`}
@@ -950,6 +972,18 @@ const DashboardLayout: React.FC = () => {
                       <span className="nav-text">Custos de frota</span>
                     </div>
                   </Link>
+                  )}
+                  {allowedIndicadores.has('olho-vivo') && (
+                  <Link
+                    to="/indicadores/frota/olho-vivo"
+                    className={`nav-btn sub-nav-btn ${isRouteActive('/indicadores/frota/olho-vivo') ? 'active' : ''}`}
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="eye" sub />
+                      <span className="nav-text">Olho vivo na estrada</span>
+                    </div>
+                  </Link>
+                  )}
                 </div>
               </div>
               )}
@@ -1396,6 +1430,43 @@ const DashboardLayout: React.FC = () => {
                       </div>
                     </Link>
                     )}
+                  </div>
+                </div>
+                )}
+                {canAba('Frota', 'olho-vivo') && (
+                <div className={`nav-group-wrapper${isQuestionariosFrotaSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-frota-questionarios">
+                  <button
+                    type="button"
+                    className={`nav-btn ${isParentNavActive(FROTA_QUESTIONARIOS_PATHS, isQuestionariosFrotaSubmenuOpen) ? 'active-parent' : ''}`}
+                    onClick={() => setIsQuestionariosFrotaSubmenuOpen(!isQuestionariosFrotaSubmenuOpen)}
+                    data-tooltip="Questionários"
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="clipboard2" />
+                      <span className="nav-text">Questionários</span>
+                    </div>
+                    <ChevronSubmenu open={isQuestionariosFrotaSubmenuOpen} />
+                  </button>
+
+                  <div
+                    className="submenu-container"
+                    style={{
+                      display: isSidebarCollapsed ? undefined : 'block',
+                      maxHeight: isSidebarCollapsed ? undefined : (isQuestionariosFrotaSubmenuOpen ? '80px' : '0px'),
+                      overflow: 'hidden',
+                      transition: 'max-height 0.25s ease',
+                    }}
+                  >
+                    <Link
+                      to="/frota/questionarios/olho-vivo"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/frota/questionarios/olho-vivo') ? 'active' : ''}`}
+                      data-tooltip="Olho vivo na estrada"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="eye" sub />
+                        <span className="nav-text">Olho vivo na estrada</span>
+                      </div>
+                    </Link>
                   </div>
                 </div>
                 )}

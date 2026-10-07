@@ -42,6 +42,7 @@ export const ABA_ITEMS = [
   { module: 'Frota', key: 'custos-frota', label: 'Custos de frota', path: '/frota/custos' },
   { module: 'Frota', key: 'cadastro-condutores', label: 'Condutores', path: '/frota/cadastros/condutores' },
   { module: 'Frota', key: 'cadastro-veiculos', label: 'Veículos frota', path: '/frota/cadastros/veiculos' },
+  { module: 'Frota', key: 'olho-vivo', label: 'Olho vivo na estrada', path: '/frota/questionarios/olho-vivo' },
 
   { module: 'Comercial', key: 'home', label: 'Home Comercial', path: '/comercial' },
   { module: 'Comercial', key: 'cadastro-clientes', label: 'Clientes', path: '/comercial/cadastros/clientes' },

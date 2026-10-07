@@ -15,6 +15,7 @@ class FrotaSummaryTests(TestCase):
             role_id='2',
             status='ativo',
             environments=['Frota'],
+            filiais={'Frota': ['Ibiporã (Matriz)']},
         )
 
     def test_summary_requires_auth(self):
@@ -26,6 +27,7 @@ class FrotaSummaryTests(TestCase):
         response = self.client.get(
             '/api/frota/summary/',
             HTTP_X_PROTHON_ENVIRONMENT='Frota',
+            HTTP_X_PROTHON_FILIAL='Ibiporã (Matriz)',
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['environment'], 'Frota')

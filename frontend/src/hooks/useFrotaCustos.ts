@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import type { CustoFrotaReportType, ReportQueryParams } from '../types/domain';
 
@@ -9,15 +10,17 @@ export const FROTA_CUSTOS_KEYS = {
 };
 
 export function useCustoFrotaLotes() {
+  const { selectedFilial } = useAuth();
   return useQuery({
-    queryKey: FROTA_CUSTOS_KEYS.lotes,
+    queryKey: [...FROTA_CUSTOS_KEYS.lotes, selectedFilial],
     queryFn: () => apiService.getCustoFrotaLotes(),
   });
 }
 
 export function useCustoFrotaRelatorio(type: CustoFrotaReportType, params: ReportQueryParams, enabled = true) {
+  const { selectedFilial } = useAuth();
   return useQuery({
-    queryKey: FROTA_CUSTOS_KEYS.relatorio(type, params),
+    queryKey: [...FROTA_CUSTOS_KEYS.relatorio(type, params), selectedFilial],
     queryFn: () => apiService.getCustoFrotaRelatorio(type, params),
     enabled,
   });

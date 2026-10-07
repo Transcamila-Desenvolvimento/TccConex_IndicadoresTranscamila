@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
-import { branchesForModule } from '../../constants/filiais';
 import { userHasFuncao } from '../../constants/funcoes';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
@@ -19,8 +18,6 @@ import {
 
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
-const FILIAIS_FROTA = branchesForModule('Frota');
-
 type CondutorForm = {
   nome: string;
   cpf: string;
@@ -31,7 +28,7 @@ type CondutorForm = {
 const emptyForm: CondutorForm = {
   nome: '',
   cpf: '',
-  filial: FILIAIS_FROTA[0] ?? '',
+  filial: '',
   status: 'ativo',
 };
 
@@ -51,7 +48,7 @@ const formatDateTime = (value?: string) => {
 };
 
 const FrotaCadastroCondutores: React.FC = () => {
-  const { user } = useAuth();
+  const { user, selectedFilial } = useAuth();
   const canManage = userHasFuncao(user, 'Frota', 'gerenciar-condutores');
   const condutoresQuery = useCondutoresFrota();
   const { canShowEmpty } = useAsyncQueryState(condutoresQuery);
@@ -124,14 +121,14 @@ const FrotaCadastroCondutores: React.FC = () => {
       alert('Informe o nome do condutor.');
       return;
     }
-    if (!form.filial) {
-      alert('Informe a filial.');
+    if (!selectedFilial) {
+      alert('Selecione a filial ao entrar no ambiente.');
       return;
     }
     const payload: CondutorFrotaPayload = {
       nome: form.nome.trim(),
       cpf: form.cpf.trim(),
-      filial: form.filial,
+      filial: selectedFilial,
       status: form.status,
     };
     const callbacks = {
@@ -383,16 +380,8 @@ const FrotaCadastroCondutores: React.FC = () => {
               <div className="form-grid two-cols" style={{ marginTop: '14px' }}>
                 <label>
                   Filial
-                  <select
-                    className="form-input"
-                    value={form.filial}
-                    required
-                    disabled={!canManage}
-                    onChange={(e) => setForm({ ...form, filial: e.target.value })}
-                  >
-                    {FILIAIS_FROTA.map((filial) => (
-                      <option key={filial} value={filial}>{filial}</option>
-                    ))}
+                  <select className="form-input" value={selectedFilial ?? ''} disabled>
+                    <option value={selectedFilial ?? ''}>{selectedFilial || '—'}</option>
                   </select>
                 </label>
                 <label>

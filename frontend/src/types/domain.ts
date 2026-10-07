@@ -630,6 +630,47 @@ export interface FrotaCustosIndicadorResponse {
   manutencaoPorTipo: FrotaCustosManutencaoTipo[];
 }
 
+export interface OlhoVivoIndicadorQueryParams {
+  ano?: number;
+  filial?: string;
+}
+
+export interface OlhoVivoIndicadorItem {
+  comportamento: string;
+  recorrencia: number | null;
+}
+
+export interface OlhoVivoIndicadorMes {
+  mes: number;
+  nome: string;
+  respondido: boolean;
+  total: number | null;
+  itens: OlhoVivoIndicadorItem[];
+}
+
+export interface OlhoVivoIndicadorFilial {
+  filial: string;
+  mesesRespondidos: number;
+  total: number;
+  itens: OlhoVivoIndicadorItem[];
+  meses: OlhoVivoIndicadorMes[];
+}
+
+export interface OlhoVivoIndicadorResponse {
+  ano: number;
+  anoMinimo: number;
+  anoMaximo: number;
+  filial: string | null;
+  filiaisDisponiveis: string[];
+  comportamentos: { key: string; label: string }[];
+  filiais: OlhoVivoIndicadorFilial[];
+  resumo: {
+    total: number;
+    mesesRespondidos: number;
+    comportamentoDestaque: { key: string; label: string; recorrencia: number } | null;
+  };
+}
+
 export interface MetaFaturamentoFilialBucket {
   filial: string;
   valor: number;
@@ -2002,6 +2043,42 @@ export interface CondutorFrotaPayload {
   cpf?: string;
   filial: string;
   status?: 'ativo' | 'inativo';
+}
+
+export interface OlhoVivoItem {
+  comportamento: string;
+  descricao: string;
+  recorrencia: number;
+}
+
+export interface OlhoVivoResposta {
+  ano: number;
+  mes: number;
+  filial: string;
+  respondido: boolean;
+  atualizadoEm: string | null;
+  atualizadoPor: string;
+  itens: OlhoVivoItem[];
+}
+
+export interface OlhoVivoMesResumo {
+  mes: number;
+  respondido: boolean;
+  total: number;
+  atualizadoEm: string | null;
+  atualizadoPor: string;
+}
+
+export interface OlhoVivoAno {
+  ano: number;
+  filial: string;
+  meses: OlhoVivoMesResumo[];
+}
+
+export interface OlhoVivoSalvarPayload {
+  ano: number;
+  mes: number;
+  itens: { comportamento: string; recorrencia: number }[];
 }
 
 export type CustoFrotaReportType = 'manutencao' | 'abastecimento';

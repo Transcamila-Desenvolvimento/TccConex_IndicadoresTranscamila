@@ -10,7 +10,7 @@ export const ACTIVE_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Indicadores', 'Financeir
 
 /**
  * Ambientes sem filial obrigatória na sessão (visão consolidada).
- * SGQ exige filial — pesquisas são segregadas por unidade.
+ * SGQ e Frota exigem filial — os registros são segregados por unidade.
  * Mantém paridade com backend/apps/accounts/permissions.py (GLOBAL_ENVIRONMENTS),
  * com Indicadores ainda consolidado no frontend (APIs usam require_filial=False).
  */
@@ -47,7 +47,6 @@ export const GLOBAL_SESSION_ENVIRONMENTS: readonly string[] = [
   'Faturamento',
   'Marketing',
   'Logística',
-  'Frota',
   'Comercial',
   AGENTE_CAMILO_ENVIRONMENT,
 ];

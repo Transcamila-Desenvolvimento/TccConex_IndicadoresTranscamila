@@ -2,7 +2,7 @@ import re
 
 from rest_framework import serializers
 
-from apps.accounts.constants import ALL_BRANCHES
+from apps.accounts.constants import branches_for_module
 from apps.accounts.permissions import allowed_filiais_for_module
 
 from .models import (
@@ -36,7 +36,7 @@ class VeiculoFrotaSerializer(serializers.ModelSerializer):
     tipoCarroceria = serializers.ChoiceField(choices=[c[0] for c in CARROCERIA_CHOICES], source='tipo_carroceria')
     hodometro = serializers.IntegerField(min_value=0, required=False, default=0)
     status = serializers.ChoiceField(choices=[c[0] for c in STATUS_CHOICES])
-    filial = serializers.ChoiceField(choices=list(ALL_BRANCHES))
+    filial = serializers.ChoiceField(choices=branches_for_module('Frota'))
     observacoes = serializers.CharField(required=False, allow_blank=True)
     dataCriacao = serializers.DateTimeField(source='data_criacao', read_only=True)
     dataAtualizacao = serializers.DateTimeField(source='data_atualizacao', read_only=True)
@@ -129,7 +129,7 @@ class CondutorFrotaSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='pk', read_only=True)
     cpf = serializers.CharField(max_length=14, required=False, allow_blank=True)
     nome = serializers.CharField(max_length=150)
-    filial = serializers.ChoiceField(choices=list(ALL_BRANCHES))
+    filial = serializers.ChoiceField(choices=branches_for_module('Frota'))
     status = serializers.ChoiceField(choices=[c[0] for c in STATUS_CHOICES], required=False)
     dataCriacao = serializers.DateTimeField(source='data_criacao', read_only=True)
 

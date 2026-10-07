@@ -10,7 +10,10 @@ from apps.frota.models import CustoAbastecimentoLinha, CustoFrotaLote, CustoManu
 User = get_user_model()
 
 
-HEADERS = {'HTTP_X_PROTHON_ENVIRONMENT': 'Frota'}
+HEADERS = {
+    'HTTP_X_PROTHON_ENVIRONMENT': 'Frota',
+    'HTTP_X_PROTHON_FILIAL': 'Ibiporã (Matriz)',
+}
 
 
 def _xlsx_bytes(rows: list[list]) -> bytes:

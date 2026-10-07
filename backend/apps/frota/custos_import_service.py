@@ -200,31 +200,33 @@ def lote_label(inicio: date, fim: date) -> str:
     return f'{inicio.strftime("%d/%m")}–{fim.strftime("%d/%m/%Y")}'
 
 
-def trim_old_lotes(max_lotes: int = MAX_CUSTO_LOTES) -> None:
+def trim_old_lotes(filial: str, max_lotes: int = MAX_CUSTO_LOTES) -> None:
     keep_ids = list(
-        CustoFrotaLote.objects.order_by('-periodo_inicio', '-created_at')
+        CustoFrotaLote.objects.filter(filial=filial)
+        .order_by('-periodo_inicio', '-created_at')
         .values_list('pk', flat=True)[:max_lotes]
     )
     if keep_ids:
-        CustoFrotaLote.objects.exclude(pk__in=keep_ids).delete()
+        CustoFrotaLote.objects.filter(filial=filial).exclude(pk__in=keep_ids).delete()
 
 
-def get_or_create_lote(inicio: date, fim: date, user) -> tuple[CustoFrotaLote, bool]:
-    existing = CustoFrotaLote.objects.filter(periodo_inicio=inicio, periodo_fim=fim).first()
+def get_or_create_lote(inicio: date, fim: date, user, filial: str) -> tuple[CustoFrotaLote, bool]:
+    existing = CustoFrotaLote.objects.filter(periodo_inicio=inicio, periodo_fim=fim, filial=filial).first()
     if existing:
         return existing, False
     lote = CustoFrotaLote.objects.create(
         label=lote_label(inicio, fim),
         periodo_inicio=inicio,
         periodo_fim=fim,
+        filial=filial,
         updated_by=user if getattr(user, 'is_authenticated', False) else None,
     )
-    trim_old_lotes()
+    trim_old_lotes(filial)
     return lote, True
 
 
-def _veiculos_por_placa() -> dict[str, VeiculoFrota]:
-    return {item.placa: item for item in VeiculoFrota.objects.all()}
+def _veiculos_por_placa(filial: str) -> dict[str, VeiculoFrota]:
+    return {item.placa: item for item in VeiculoFrota.objects.filter(filial=filial)}
 
 
 def _parse_manutencao(rows: list[list]) -> tuple[list[dict], list[str]]:
@@ -336,7 +338,7 @@ def _parse_abastecimento(rows: list[list]) -> tuple[list[dict], list[str], list[
     return items, placas, dates
 
 
-def import_custo_file(report_type: str, file_bytes: bytes, file_name: str, user) -> dict:
+def import_custo_file(report_type: str, file_bytes: bytes, file_name: str, user, filial: str) -> dict:
     issues: list[dict] = []
     try:
         rows = _read_rows(file_bytes, file_name)
@@ -419,7 +421,7 @@ def import_custo_file(report_type: str, file_bytes: bytes, file_name: str, user)
             'periodoFim': period[1].isoformat(),
         }
 
-    veiculos = _veiculos_por_placa()
+    veiculos = _veiculos_por_placa(filial)
     missing = sorted({placa for placa in placas_arquivo if placa not in veiculos})
     accepted = [item for item in parsed if item['placa'] in veiculos]
     skipped = len(parsed) - len(accepted)
@@ -427,7 +429,7 @@ def import_custo_file(report_type: str, file_bytes: bytes, file_name: str, user)
     for placa in missing:
         issues.append({
             'severity': 'warning',
-            'message': f'Veículo {format_placa(placa)} não está cadastrado na frota. Os lançamentos dessa placa foram ignorados.',
+            'message': f'Veículo {format_placa(placa)} não está cadastrado nesta filial. Os lançamentos dessa placa foram ignorados.',
         })
 
     if not accepted:
@@ -447,7 +449,7 @@ def import_custo_file(report_type: str, file_bytes: bytes, file_name: str, user)
         }
 
     with transaction.atomic():
-        lote, created = get_or_create_lote(period[0], period[1], user)
+        lote, created = get_or_create_lote(period[0], period[1], user, filial)
         if report_type == 'manutencao':
             lote.manutencao_linhas.all().delete()
             CustoManutencaoLinha.objects.bulk_create([

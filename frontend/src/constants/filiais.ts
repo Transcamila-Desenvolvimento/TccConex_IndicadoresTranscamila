@@ -3,11 +3,12 @@ export const ALL_BRANCHES = ['Ibiporã (Matriz)', 'Rondonópolis', 'Paranaguá']
 
 /**
  * Filiais liberáveis por módulo. Módulos ausentes usam ALL_BRANCHES (padrão).
- * SGQ opera só nas unidades Ibiporã e Rondonópolis.
+ * SGQ e Frota operam só nas unidades Ibiporã e Rondonópolis.
  * Mantém paridade com backend/apps/accounts/constants.py (MODULE_BRANCHES).
  */
 export const MODULE_BRANCHES: Record<string, readonly string[]> = {
   SGQ: ['Ibiporã (Matriz)', 'Rondonópolis'],
+  Frota: ['Ibiporã (Matriz)', 'Rondonópolis'],
 };
 
 export function branchesForModule(module: string): readonly string[] {

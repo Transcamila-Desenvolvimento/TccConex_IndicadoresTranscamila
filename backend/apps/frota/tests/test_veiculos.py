@@ -66,24 +66,24 @@ class FrotaVeiculosTests(TestCase):
             '/api/frota/veiculos/',
             PAYLOAD,
             format='json',
-            HTTP_X_PROTHON_ENVIRONMENT='Frota',
+            HTTP_X_PROTHON_ENVIRONMENT='Frota', HTTP_X_PROTHON_FILIAL='Ibiporã (Matriz)',
         )
         self.assertEqual(created.status_code, 201, created.content)
         self.assertEqual(created.json()['placa'], 'ABC-1D23')
         self.assertEqual(VeiculoFrota.objects.get().placa, normalize_placa('ABC1D23'))
 
-        listed = self.client.get('/api/frota/veiculos/', HTTP_X_PROTHON_ENVIRONMENT='Frota')
+        listed = self.client.get('/api/frota/veiculos/', HTTP_X_PROTHON_ENVIRONMENT='Frota', HTTP_X_PROTHON_FILIAL='Ibiporã (Matriz)')
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(len(listed.json()), 1)
 
     def test_placa_duplicada(self):
         self._auth(self.admin)
-        self.client.post('/api/frota/veiculos/', PAYLOAD, format='json', HTTP_X_PROTHON_ENVIRONMENT='Frota')
+        self.client.post('/api/frota/veiculos/', PAYLOAD, format='json', HTTP_X_PROTHON_ENVIRONMENT='Frota', HTTP_X_PROTHON_FILIAL='Ibiporã (Matriz)')
         duplicated = self.client.post(
             '/api/frota/veiculos/',
             PAYLOAD,
             format='json',
-            HTTP_X_PROTHON_ENVIRONMENT='Frota',
+            HTTP_X_PROTHON_ENVIRONMENT='Frota', HTTP_X_PROTHON_FILIAL='Ibiporã (Matriz)',
         )
         self.assertEqual(duplicated.status_code, 400)
 
@@ -93,7 +93,7 @@ class FrotaVeiculosTests(TestCase):
             '/api/frota/veiculos/',
             PAYLOAD,
             format='json',
-            HTTP_X_PROTHON_ENVIRONMENT='Frota',
+            HTTP_X_PROTHON_ENVIRONMENT='Frota', HTTP_X_PROTHON_FILIAL='Ibiporã (Matriz)',
         )
         self.assertEqual(response.status_code, 403)
 
@@ -108,6 +108,21 @@ class FrotaVeiculosTests(TestCase):
             filial='Rondonópolis',
         )
         self._auth(self.operador)
-        listed = self.client.get('/api/frota/veiculos/', HTTP_X_PROTHON_ENVIRONMENT='Frota')
+        listed = self.client.get('/api/frota/veiculos/', HTTP_X_PROTHON_ENVIRONMENT='Frota', HTTP_X_PROTHON_FILIAL='Ibiporã (Matriz)')
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json(), [])
+
+    def test_admin_na_sessao_nao_ve_outra_filial(self):
+        VeiculoFrota.objects.create(
+            placa='XYZ1A23',
+            marca='SCANIA',
+            modelo='R450',
+            categoria='truck',
+            combustivel='diesel-s10',
+            status='ativo',
+            filial='Rondonópolis',
+        )
+        self._auth(self.admin)
+        listed = self.client.get('/api/frota/veiculos/', HTTP_X_PROTHON_ENVIRONMENT='Frota', HTTP_X_PROTHON_FILIAL='Ibiporã (Matriz)')
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json(), [])

@@ -16,10 +16,11 @@ DEPRECATED_ENVIRONMENTS = frozenset()
 ALL_BRANCHES = ['Ibiporã (Matriz)', 'Rondonópolis', 'Paranaguá']
 
 # Filiais liberáveis por módulo. Módulos ausentes usam ALL_BRANCHES (padrão).
-# SGQ opera só nas unidades Ibiporã e Rondonópolis.
+# SGQ e Frota operam só nas unidades Ibiporã e Rondonópolis.
 # Mantém paridade com frontend/src/constants/filiais.ts.
 MODULE_BRANCHES: dict[str, list[str]] = {
     'SGQ': ['Ibiporã (Matriz)', 'Rondonópolis'],
+    'Frota': ['Ibiporã (Matriz)', 'Rondonópolis'],
 }
 
 
@@ -35,6 +36,7 @@ INDICADORES_KEYS = frozenset({
     'movimentacao-rh',
     'satisfacao-clientes',
     'custos-frota',
+    'olho-vivo',
 })
 
 # Abas de menu liberáveis por ambiente (Indicadores continua em INDICADORES_KEYS).
@@ -62,7 +64,7 @@ ABAS_POR_AMBIENTE = {
     'SGQ': frozenset({'home', 'pesquisa-satisfacao', 'matriz'}),
     'Marketing': frozenset({'home', 'campanhas'}),
     'Logística': frozenset({'home', 'configuracoes'}),
-    'Frota': frozenset({'home', 'cadastro-veiculos', 'cadastro-condutores', 'custos-frota'}),
+    'Frota': frozenset({'home', 'cadastro-veiculos', 'cadastro-condutores', 'custos-frota', 'olho-vivo'}),
     'Comercial': frozenset({
         'home',
         'cadastro-clientes',
@@ -102,6 +104,7 @@ FUNCOES_POR_AMBIENTE = {
         'gerenciar-veiculos',
         'gerenciar-condutores',
         'gerenciar-custos-frota',
+        'responder-olho-vivo',
     }),
     'Comercial': frozenset({
         'gerenciar-clientes',

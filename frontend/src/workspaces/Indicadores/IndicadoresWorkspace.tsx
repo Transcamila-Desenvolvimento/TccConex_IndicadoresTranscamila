@@ -8,6 +8,7 @@ import IndicadoresMetaFaturamento from './IndicadoresMetaFaturamento';
 import IndicadoresRHMovimentacao from './IndicadoresRHMovimentacao';
 import IndicadoresSatisfacaoClientes from './IndicadoresSatisfacaoClientes';
 import IndicadoresFrotaCustos from './IndicadoresFrotaCustos';
+import IndicadoresOlhoVivo from './IndicadoresOlhoVivo';
 
 const IndicadoresWorkspace: React.FC = () => {
   const { user } = useAuth();
@@ -35,6 +36,10 @@ const IndicadoresWorkspace: React.FC = () => {
       <Route
         path="frota/custos"
         element={allowed.has('custos-frota') ? <IndicadoresFrotaCustos /> : <Navigate to="" replace />}
+      />
+      <Route
+        path="frota/olho-vivo"
+        element={allowed.has('olho-vivo') ? <IndicadoresOlhoVivo /> : <Navigate to="" replace />}
       />
       <Route path="*" element={<Navigate to="" replace />} />
     </Routes>

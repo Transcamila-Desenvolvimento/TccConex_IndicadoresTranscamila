@@ -9,6 +9,7 @@ import type {
   RHIndicadorQueryParams, RHIndicadorResponse, RHIndicadorCategoriaBucket, RHIndicadorPorCategoria,
   MetaFaturamentoQueryParams, MetaFaturamentoResponse,
   FrotaCustosIndicadorQueryParams, FrotaCustosIndicadorResponse,
+  OlhoVivoIndicadorQueryParams, OlhoVivoIndicadorResponse,
   SgqSatisfacaoIndicadorQueryParams, SgqSatisfacaoIndicadorResponse, SgqSatisfacaoDetalhe,
   SendGerencialEmailParams, SendGerencialEmailResponse,
   ReportImportResult, ReportImportType,
@@ -41,6 +42,7 @@ import type {
   VeiculoFrota, VeiculoFrotaPayload,
   CondutorFrota, CondutorFrotaPayload,
   CustoFrotaLote, CustoFrotaLotesResponse, CustoFrotaImportResult, CustoFrotaReportType,
+  OlhoVivoResposta, OlhoVivoSalvarPayload, OlhoVivoAno,
   CustoManutencaoRow, CustoAbastecimentoRow,
   ClienteComercial, ClienteComercialPayload, ClienteComercialQueryParams,
   ClienteComercialHistorico, ClienteComercialProdutosSugestoes, ClienteComercialValidacaoResumo,
@@ -1611,6 +1613,16 @@ export const apiService = {
     return data as FrotaCustosIndicadorResponse;
   },
 
+  async getIndicadorOlhoVivo(
+    params: OlhoVivoIndicadorQueryParams = {},
+  ): Promise<OlhoVivoIndicadorResponse> {
+    const query: Record<string, string | number> = {};
+    if (params.ano != null) query.ano = params.ano;
+    if (params.filial) query.filial = params.filial;
+    const { data } = await api.get('/api/indicadores/frota/olho-vivo/', { params: query });
+    return data as OlhoVivoIndicadorResponse;
+  },
+
   async sendGerencialEmail(payload: SendGerencialEmailParams): Promise<SendGerencialEmailResponse> {
     const { data } = await api.post('/api/indicadores/fluxo-caixa/enviar-gerencial/', payload);
     return data;
@@ -2606,6 +2618,21 @@ export const apiService = {
 
   async deleteCondutorFrota(id: string): Promise<void> {
     await api.delete(`/api/frota/condutores/${id}/`);
+  },
+
+  async getOlhoVivoAno(ano: number): Promise<OlhoVivoAno> {
+    const { data } = await api.get('/api/frota/olho-vivo/', { params: { ano } });
+    return data as OlhoVivoAno;
+  },
+
+  async getOlhoVivo(params: { ano: number; mes: number }): Promise<OlhoVivoResposta> {
+    const { data } = await api.get('/api/frota/olho-vivo/', { params });
+    return data as OlhoVivoResposta;
+  },
+
+  async salvarOlhoVivo(payload: OlhoVivoSalvarPayload): Promise<OlhoVivoResposta> {
+    const { data } = await api.put('/api/frota/olho-vivo/', payload);
+    return data as OlhoVivoResposta;
   },
 
   async getCustoFrotaLotes(): Promise<CustoFrotaLotesResponse> {

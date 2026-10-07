@@ -111,6 +111,13 @@ export const FUNCAO_ITEMS = [
     description: 'Permite importar planilhas de manutenção e abastecimento para o indicador de custos da frota.',
   },
   {
+    module: 'Frota',
+    aba: 'olho-vivo',
+    key: 'responder-olho-vivo',
+    label: 'Responder',
+    description: 'Permite registrar a recorrência de cada mês do Olho vivo na estrada.',
+  },
+  {
     module: 'Comercial',
     aba: 'cadastro-clientes',
     key: 'gerenciar-clientes',

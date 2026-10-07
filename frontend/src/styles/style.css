@@ -21125,3 +21125,160 @@ button.proposta-status-badge {
   }
 }
 
+.olho-vivo-painel {
+  padding: 8px 12px 10px;
+}
+
+.olho-vivo-barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.olho-vivo-barra span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.olho-vivo-grade {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 20px;
+}
+
+.olho-vivo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+  padding: 2px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.olho-vivo-item span {
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.25;
+}
+
+.olho-vivo-item input {
+  width: 64px;
+  height: 26px;
+  margin: 0;
+  padding: 0 6px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 13px;
+}
+
+.olho-vivo-total {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: #334155;
+}
+
+@media (max-width: 860px) {
+  .olho-vivo-grade {
+    grid-template-columns: 1fr;
+  }
+}
+
+.olho-vivo-ind-scroll {
+  overflow-x: auto;
+}
+
+.olho-vivo-ind-tabela {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.olho-vivo-ind-tabela th,
+.olho-vivo-ind-tabela td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.olho-vivo-ind-tabela th:first-child,
+.olho-vivo-ind-tabela td:first-child {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: #fff;
+  min-width: 240px;
+}
+
+.olho-vivo-ind-tabela thead th {
+  color: #64748b;
+  font-weight: 600;
+  background: #f8fafc;
+}
+
+.olho-vivo-ind-tabela thead th:first-child {
+  background: #f8fafc;
+}
+
+.olho-vivo-ind-tabela tfoot td {
+  font-weight: 700;
+  background: #f8fafc;
+}
+
+.olho-vivo-ind-tabela tfoot td:first-child {
+  background: #f8fafc;
+}
+
+.olho-vivo-ind-vazio {
+  color: #94a3b8;
+}
+
+.olho-vivo-ind-graficos {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.olho-vivo-ind-chart-card {
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+.olho-vivo-ind-cabecalho .cashflow-section-title {
+  margin-bottom: 2px;
+}
+
+.olho-vivo-ind-cabecalho p {
+  margin: 0 0 12px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.olho-vivo-ind-grafico {
+  position: relative;
+}
+
+.olho-vivo-ind-grafico--comportamentos {
+  height: 460px;
+}
+
+.olho-vivo-mes-tabela th:not(:first-child),
+.olho-vivo-mes-tabela td:not(:first-child) {
+  text-align: center;
+  min-width: 48px;
+}
+
+.olho-vivo-mes-tabela td:last-child,
+.olho-vivo-mes-tabela th:last-child {
+  font-weight: 700;
+}

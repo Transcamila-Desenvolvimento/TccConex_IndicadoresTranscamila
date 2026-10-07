@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.mixins import ModuleScopedViewMixin
+from apps.accounts.permissions import allowed_filiais_for_module, get_request_context, resolve_filial_name
 from apps.audit.services import record_audit
 
 from .custos_import_service import MAX_CUSTO_LOTES, import_custo_file
@@ -18,6 +19,12 @@ from .serializers import (
     CustoManutencaoLinhaSerializer,
     VeiculoFrotaSerializer,
 )
+
+
+def _session_filial(request) -> str:
+    _, filial = get_request_context(request)
+    allowed = allowed_filiais_for_module(request.user, 'Frota')
+    return resolve_filial_name(filial, allowed) or ''
 
 
 class FrotaSummaryView(ModuleScopedViewMixin, APIView):
@@ -51,14 +58,13 @@ _GERENCIAR_CUSTOS_DETAIL = (
 
 class VeiculoFrotaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     permission_module = 'Frota'
-    permission_requires_filial = False
     serializer_class = VeiculoFrotaSerializer
     queryset = VeiculoFrota.objects.all()
     pagination_class = None
     http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        return self.scope_queryset(super().get_queryset(), 'filial')
+        return self.scope_queryset(super().get_queryset(), 'filial', admin_bypass=False)
 
     def create(self, request, *args, **kwargs):
         denied = _funcao_required_response(request, 'gerenciar-veiculos', _GERENCIAR_VEICULOS_DETAIL)
@@ -79,7 +85,7 @@ class VeiculoFrotaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
     def perform_create(self, serializer):
-        veiculo = serializer.save()
+        veiculo = serializer.save(filial=_session_filial(self.request))
         record_audit(
             self.request.user,
             'frota.veiculo.criado',
@@ -87,7 +93,7 @@ class VeiculoFrotaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         )
 
     def perform_update(self, serializer):
-        veiculo = serializer.save()
+        veiculo = serializer.save(filial=_session_filial(self.request))
         record_audit(
             self.request.user,
             'frota.veiculo.atualizado',
@@ -106,14 +112,13 @@ class VeiculoFrotaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
 class CondutorFrotaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     permission_module = 'Frota'
-    permission_requires_filial = False
     serializer_class = CondutorFrotaSerializer
     queryset = CondutorFrota.objects.all()
     pagination_class = None
     http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        return self.scope_queryset(super().get_queryset(), 'filial')
+        return self.scope_queryset(super().get_queryset(), 'filial', admin_bypass=False)
 
     def create(self, request, *args, **kwargs):
         denied = _funcao_required_response(request, 'gerenciar-condutores', _GERENCIAR_CONDUTORES_DETAIL)
@@ -134,11 +139,11 @@ class CondutorFrotaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
     def perform_create(self, serializer):
-        condutor = serializer.save()
+        condutor = serializer.save(filial=_session_filial(self.request))
         record_audit(self.request.user, 'frota.condutor.criado', f'Condutor "{condutor.nome}" cadastrado.')
 
     def perform_update(self, serializer):
-        condutor = serializer.save()
+        condutor = serializer.save(filial=_session_filial(self.request))
         record_audit(self.request.user, 'frota.condutor.atualizado', f'Condutor "{condutor.nome}" atualizado.')
 
     def perform_destroy(self, instance):
@@ -149,11 +154,13 @@ class CondutorFrotaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
 class CustoFrotaLoteViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):
     permission_module = 'Frota'
-    permission_requires_filial = False
     serializer_class = CustoFrotaLoteSerializer
     queryset = CustoFrotaLote.objects.select_related('updated_by').order_by(
         '-is_active', '-periodo_inicio', '-created_at',
     )
+
+    def get_queryset(self):
+        return self.scope_queryset(super().get_queryset(), 'filial', admin_bypass=False)
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
@@ -184,7 +191,7 @@ class CustoFrotaLoteViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet
 
         file_bytes = upload.read()
         file_name = upload.name
-        result = import_custo_file(report_type, file_bytes, file_name, request.user)
+        result = import_custo_file(report_type, file_bytes, file_name, request.user, _session_filial(request))
         if result['success']:
             record_audit(
                 request.user,
@@ -212,7 +219,7 @@ class CustoFrotaLoteViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet
         if denied:
             return denied
         lote = self.get_object()
-        CustoFrotaLote.objects.update(is_active=False)
+        CustoFrotaLote.objects.filter(filial=lote.filial).update(is_active=False)
         lote.is_active = True
         lote.updated_by = request.user
         lote.save(update_fields=['is_active', 'updated_by'])
@@ -226,14 +233,13 @@ class CustoFrotaLoteViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet
 
 class CustoFrotaRelatorioView(ModuleScopedViewMixin, APIView):
     permission_module = 'Frota'
-    permission_requires_filial = False
     pagination_class = CustoFrotaPagination
 
     def get(self, request, report_type):
         if report_type not in ('manutencao', 'abastecimento'):
             return Response({'detail': 'Tipo inválido.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        lote = CustoFrotaLote.objects.filter(is_active=True).first()
+        lote = CustoFrotaLote.objects.filter(is_active=True, filial=_session_filial(request)).first()
         paginator = self.pagination_class()
         if not lote:
             return Response({'count': 0, 'next': None, 'previous': None, 'results': []})

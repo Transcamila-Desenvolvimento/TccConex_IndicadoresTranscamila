@@ -8,6 +8,7 @@ from apps.accounts.mixins import ModuleScopedViewMixin
 
 from .cashflow_service import build_cashflow_day_detail, build_cashflow_payload, get_financeiro_activity_version
 from .frota_custos_service import build_frota_custos_payload
+from .olho_vivo_service import build_olho_vivo_indicador_payload
 from .gerencial_email_service import _parse_emails, _parse_reference, send_gerencial_email
 from .meta_faturamento_service import build_meta_faturamento_payload
 from .models import IndicadorFilial, IndicadorKpi
@@ -155,6 +156,20 @@ class FrotaCustosIndicadorView(ModuleScopedViewMixin, APIView):
     def get(self, request):
         try:
             payload = build_frota_custos_payload(request.query_params)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class OlhoVivoIndicadorView(ModuleScopedViewMixin, APIView):
+    """Olho vivo na estrada — recorrência dos comportamentos por filial da frota."""
+
+    permission_module = 'Indicadores'
+    permission_requires_filial = False
+
+    def get(self, request):
+        try:
+            payload = build_olho_vivo_indicador_payload(request.query_params)
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(payload)

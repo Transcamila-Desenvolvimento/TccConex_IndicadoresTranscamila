@@ -4,6 +4,7 @@ import type {
   CashflowDayDetailParams,
   CashflowQueryParams,
   FrotaCustosIndicadorQueryParams,
+  OlhoVivoIndicadorQueryParams,
   MetaFaturamentoQueryParams,
   RHIndicadorQueryParams,
   SendGerencialEmailParams,
@@ -18,6 +19,7 @@ export const INDICADORES_CASHFLOW_ACTIVITY_KEY = ['indicadores', 'cashflow', 'ac
 export const INDICADORES_RH_MOVIMENTACAO_KEY = ['indicadores', 'rh', 'movimentacao'] as const;
 export const INDICADORES_META_FATURAMENTO_KEY = ['indicadores', 'logistica', 'meta-faturamento'] as const;
 export const INDICADORES_FROTA_CUSTOS_KEY = ['indicadores', 'frota', 'custos'] as const;
+export const INDICADORES_OLHO_VIVO_KEY = ['indicadores', 'frota', 'olho-vivo'] as const;
 export const INDICADORES_SGQ_SATISFACAO_KEY = ['indicadores', 'sgq', 'satisfacao'] as const;
 export const INDICADORES_SGQ_ACTIVITY_KEY = ['indicadores', 'sgq', 'activity'] as const;
 
@@ -113,6 +115,16 @@ export function useIndicadorFrotaCustos(params: FrotaCustosIndicadorQueryParams)
   return useQuery({
     queryKey: [...INDICADORES_FROTA_CUSTOS_KEY, params],
     queryFn: () => apiService.getIndicadorFrotaCustos(params),
+    placeholderData: (prev) => prev,
+    retry: 1,
+  });
+}
+
+export function useIndicadorOlhoVivo(params: OlhoVivoIndicadorQueryParams, enabled = true) {
+  return useQuery({
+    queryKey: [...INDICADORES_OLHO_VIVO_KEY, params],
+    queryFn: () => apiService.getIndicadorOlhoVivo(params),
+    enabled,
     placeholderData: (prev) => prev,
     retry: 1,
   });

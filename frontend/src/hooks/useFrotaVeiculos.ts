@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import type { CondutorFrotaPayload, VeiculoFrotaPayload } from '../types/domain';
 
@@ -6,8 +7,9 @@ export const FROTA_VEICULOS_KEY = ['frota', 'veiculos'] as const;
 export const FROTA_CONDUTORES_KEY = ['frota', 'condutores'] as const;
 
 export function useVeiculosFrota() {
+  const { selectedFilial } = useAuth();
   return useQuery({
-    queryKey: FROTA_VEICULOS_KEY,
+    queryKey: [...FROTA_VEICULOS_KEY, selectedFilial],
     queryFn: () => apiService.getVeiculosFrota(),
   });
 }
@@ -38,8 +40,9 @@ export function useDeleteVeiculoFrota() {
 }
 
 export function useCondutoresFrota() {
+  const { selectedFilial } = useAuth();
   return useQuery({
-    queryKey: FROTA_CONDUTORES_KEY,
+    queryKey: [...FROTA_CONDUTORES_KEY, selectedFilial],
     queryFn: () => apiService.getCondutoresFrota(),
   });
 }

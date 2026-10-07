@@ -5,7 +5,10 @@ from rest_framework.test import APIClient
 from apps.frota.models import CondutorFrota
 
 User = get_user_model()
-HEADERS = {'HTTP_X_PROTHON_ENVIRONMENT': 'Frota'}
+HEADERS = {
+    'HTTP_X_PROTHON_ENVIRONMENT': 'Frota',
+    'HTTP_X_PROTHON_FILIAL': 'Ibiporã (Matriz)',
+}
 
 
 class FrotaCondutoresTests(TestCase):
