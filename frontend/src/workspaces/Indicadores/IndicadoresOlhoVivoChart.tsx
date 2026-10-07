@@ -112,14 +112,16 @@ const GraficoComportamentos: React.FC<{
 }> = ({ linhas, filiais, total }) => {
   const data = useMemo(() => ({
     labels: linhas.map((linha) => linha.label),
-    datasets: filiais.map((filial) => ({
+    datasets: filiais.map((filial, index) => ({
       label: legendaFilial(filial.filial),
       data: linhas.map((linha) => (
         linha.porFilial.find((parte) => parte.filial === filial.filial)?.valor ?? 0
       )),
       backgroundColor: COR_FILIAL[filial.filial] ?? 'rgba(17, 140, 196, 0.9)',
-      borderRadius: 3,
-      maxBarThickness: 12,
+      stack: 'recorrencia',
+      borderRadius: 4,
+      borderSkipped: filiais.length < 2 ? false : (index === 0 ? 'end' as const : 'start' as const),
+      maxBarThickness: 18,
     })),
   }), [filiais, linhas]);
 
@@ -127,12 +129,23 @@ const GraficoComportamentos: React.FC<{
     indexAxis: 'y' as const,
     responsive: true,
     maintainAspectRatio: false,
+    datasets: {
+      bar: { categoryPercentage: 0.62, barPercentage: 0.9 },
+    },
     interaction: { mode: 'index' as const, axis: 'y' as const, intersect: false },
     plugins: {
       legend: {
         display: filiais.length > 1,
         position: 'top' as const,
-        labels: { boxWidth: 12, font: { size: 12, family: 'inherit' } },
+        align: 'end' as const,
+        labels: {
+          usePointStyle: true,
+          pointStyle: 'circle' as const,
+          boxWidth: 8,
+          padding: 14,
+          font: { size: 11, family: 'inherit' },
+          color: '#64748b',
+        },
       },
       tooltip: {
         mode: 'index' as const,
@@ -158,13 +171,18 @@ const GraficoComportamentos: React.FC<{
     },
     scales: {
       x: {
+        stacked: true,
         beginAtZero: true,
-        grid: { color: 'rgba(148, 163, 184, 0.18)' },
-        ticks: { color: '#94a3b8', font: { size: 11 }, precision: 0 },
+        grace: '4%',
+        border: { display: false },
+        grid: { color: 'rgba(226, 232, 240, 0.9)' },
+        ticks: { color: '#94a3b8', font: { size: 11 }, precision: 0, maxTicksLimit: 6 },
       },
       y: {
+        stacked: true,
+        border: { display: false },
         grid: { display: false },
-        ticks: { color: '#334155', font: { size: 12 }, autoSkip: false },
+        ticks: { color: '#334155', font: { size: 12 }, autoSkip: false, padding: 10 },
       },
     },
   }), [filiais.length, total]);
