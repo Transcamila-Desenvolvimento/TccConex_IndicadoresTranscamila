@@ -3211,6 +3211,12 @@ export interface TabelaFreteBanda {
   valor?: string;
   /** Coluna criada automaticamente para um veículo do catálogo em `veiculosTarifa`. */
   veiculoAuto?: boolean;
+  /** Início da faixa, em kg. A cotação usa este número, não o rótulo. */
+  pesoDe?: number | null;
+  /** Fim da faixa, em kg. Vazio significa sem limite. */
+  pesoAte?: number | null;
+  /** False quando de/até foram digitados. True quando o sistema preencheu. */
+  pesoFaixaAuto?: boolean;
 }
 
 export interface TabelaFreteVeiculoTarifa {
@@ -3260,6 +3266,8 @@ export interface TabelaFreteFaixaTarifa {
   valor: string;
   antt?: string;
   margem?: string;
+  pesoDe?: number | null;
+  pesoAte?: number | null;
 }
 
 export interface TabelaFreteFaixa {

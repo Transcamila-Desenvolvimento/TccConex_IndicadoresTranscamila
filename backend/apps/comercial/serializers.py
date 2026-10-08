@@ -876,6 +876,9 @@ class TabelaFreteSerializer(serializers.ModelSerializer):
             data.pop('faixas', None)
             data.pop('linhas', None)
             data.pop('config', None)
+        elif instance.tipo == TIPO_TABELA_DISTRIBUICAO and isinstance(data.get('config'), dict):
+            from .tabela_distribuicao import merge_config
+            data['config'] = merge_config(instance.config or {})
         return data
 
     def validate(self, attrs):

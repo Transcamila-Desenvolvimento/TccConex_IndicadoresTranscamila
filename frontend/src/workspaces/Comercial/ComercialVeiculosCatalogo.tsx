@@ -16,6 +16,7 @@ type VeiculoForm = {
   nome: string;
   anttFixo: string;
   anttPorKm: string;
+  capacidadeKg: string;
   ativo: boolean;
   rotulos: RotuloForm[];
 };
@@ -24,6 +25,7 @@ const formVazio = (): VeiculoForm => ({
   nome: '',
   anttFixo: '',
   anttPorKm: '',
+  capacidadeKg: '',
   ativo: true,
   rotulos: [],
 });
@@ -33,9 +35,22 @@ const formDoVeiculo = (veiculo: VeiculoComercial): VeiculoForm => ({
   nome: veiculo.nome,
   anttFixo: String(Number(veiculo.anttFixo)).replace('.', ','),
   anttPorKm: String(Number(veiculo.anttPorKm)).replace('.', ','),
+  capacidadeKg: veiculo.capacidadeKg ? String(veiculo.capacidadeKg) : '',
   ativo: veiculo.ativo,
   rotulos: veiculo.rotulosCliente.map((item) => ({ clienteId: item.clienteId, rotulo: item.rotulo })),
 });
+
+const kgApi = (valor: string): number | null => {
+  const digitos = valor.replace(/\D/g, '');
+  if (!digitos) return null;
+  const numero = Number(digitos);
+  return numero > 0 ? numero : null;
+};
+
+const fmtKg = (valor: number | null | undefined) => {
+  if (valor == null) return '—';
+  return valor.toLocaleString('pt-BR');
+};
 
 const decimalApi = (valor: string) => {
   const texto = valor.trim();
@@ -50,6 +65,7 @@ const fmtNumero = (valor: string | number | null | undefined, casas = 2) => {
 
 const INFO_CC = 'Coeficiente de Carga e Descarga: valor fixo em R$ do piso mínimo de frete da ANTT, cobrado por viagem independentemente da distância.';
 const INFO_CCD = 'Coeficiente de Custo de Deslocamento: valor em R$ por km rodado do piso mínimo de frete da ANTT.';
+const INFO_CAPACIDADE = 'Peso máximo em kg, apenas para o cadastro do veículo. A cotação usa o de e o até da banda de peso.';
 
 function InfoTip({ texto }: { texto: string }) {
   return (
@@ -88,6 +104,7 @@ function VeiculoModal({
         nome: form.nome.trim(),
         anttFixo: decimalApi(form.anttFixo),
         anttPorKm: decimalApi(form.anttPorKm),
+        capacidadeKg: kgApi(form.capacidadeKg),
         ativo: form.ativo,
         rotulosCliente: form.rotulos.filter((item) => item.clienteId && item.rotulo.trim()),
       },
@@ -117,7 +134,17 @@ function VeiculoModal({
             <label className="comercial-veiculo-field">
               <span>CCD ANTT (R$/km) <InfoTip texto={INFO_CCD} /></span>
               <input inputMode="decimal" value={form.anttPorKm} onChange={(e) => setForm({ ...form, anttPorKm: e.target.value })} />
-            </label>            <label className="comercial-veiculo-ativo">
+            </label>
+            <label className="comercial-veiculo-field">
+              <span>Capacidade (kg) <InfoTip texto={INFO_CAPACIDADE} /></span>
+              <input
+                inputMode="numeric"
+                value={form.capacidadeKg}
+                placeholder="Ex.: 14000"
+                onChange={(e) => setForm({ ...form, capacidadeKg: e.target.value.replace(/\D/g, '') })}
+              />
+            </label>
+            <label className="comercial-veiculo-ativo">
               <input type="checkbox" checked={form.ativo} onChange={(e) => setForm({ ...form, ativo: e.target.checked })} />
               <span>Ativo</span>
             </label>
@@ -222,6 +249,7 @@ export default function ComercialVeiculosCatalogo({ canManage }: { canManage: bo
                   <col className="comercial-veiculos-col-nome" />
                   <col className="comercial-veiculos-col-valor" />
                   <col className="comercial-veiculos-col-valor" />
+                  <col className="comercial-veiculos-col-capacidade" />
                   <col />
                   {canManage ? <col className="comercial-veiculos-col-acoes" /> : null}
                 </colgroup>
@@ -236,6 +264,10 @@ export default function ComercialVeiculosCatalogo({ canManage }: { canManage: bo
                       CCD ANTT (R$/km)
                       <InfoTip texto={INFO_CCD} />
                     </th>
+                    <th>
+                      Capacidade (kg)
+                      <InfoTip texto={INFO_CAPACIDADE} />
+                    </th>
                     <th>Rótulos por cliente</th>
                     {canManage ? <th aria-label="Ações" /> : null}
                   </tr>
@@ -243,7 +275,7 @@ export default function ComercialVeiculosCatalogo({ canManage }: { canManage: bo
                 <tbody>
                   {veiculos.length === 0 ? (
                     <tr>
-                      <td colSpan={canManage ? 5 : 4} className="comercial-browse-empty">Nenhum tipo de veículo cadastrado.</td>
+                      <td colSpan={canManage ? 6 : 5} className="comercial-browse-empty">Nenhum tipo de veículo cadastrado.</td>
                     </tr>
                   ) : veiculos.map((veiculo) => (
                     <tr key={veiculo.id} className={veiculo.ativo ? undefined : 'is-inativo'}>
@@ -253,6 +285,7 @@ export default function ComercialVeiculosCatalogo({ canManage }: { canManage: bo
                       </td>
                       <td>{fmtNumero(veiculo.anttFixo)}</td>
                       <td>{fmtNumero(veiculo.anttPorKm, 4)}</td>
+                      <td>{fmtKg(veiculo.capacidadeKg)}</td>
                       <td
                         className="comercial-veiculo-rotulos-cell"
                         title={veiculo.rotulosCliente.map((item) => `${item.clienteNome}: ${item.rotulo}`).join('\n')}

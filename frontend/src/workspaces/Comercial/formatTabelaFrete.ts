@@ -23,6 +23,27 @@ export const isTarifaVeiculo = (tarifa?: { unidade?: string | null; key?: string
   return unidade === 'veiculo' || VEICULO_KEYS.has(key);
 };
 
+const kgDaFaixa = (valor: number) => valor.toLocaleString('pt-BR');
+
+/** Faixa de peso da banda, para aparecer abaixo do nome do veículo. */
+export const subtituloFaixaPeso = (banda?: { pesoDe?: number | null; pesoAte?: number | null } | null) => {
+  const de = banda?.pesoDe;
+  const ate = banda?.pesoAte;
+  if (de != null && ate != null) return `${kgDaFaixa(de)} a ${kgDaFaixa(ate)} kg`;
+  if (de != null) return `> ${kgDaFaixa(de)} kg`;
+  if (ate != null) return `até ${kgDaFaixa(ate)} kg`;
+  return '';
+};
+
+/** Linhas abaixo do nome: a faixa de peso e a unidade R$ p/veículo. */
+export const linhasAbaixoDoVeiculo = (
+  banda?: { unidade?: string | null; key?: string | null; pesoDe?: number | null; pesoAte?: number | null } | null,
+) => {
+  if (!isTarifaVeiculo(banda)) return [] as string[];
+  const faixa = subtituloFaixaPeso(banda);
+  return faixa ? [faixa, 'R$ p/veículo'] : ['R$ p/veículo'];
+};
+
 export const formatTabelaAmount = (value?: string | number | null) => {
   const amount = parseTabelaNumber(value);
   if (amount == null) return '—';

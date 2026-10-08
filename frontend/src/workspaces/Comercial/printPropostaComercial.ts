@@ -14,6 +14,7 @@ import {
   formatTabelaPercentFator,
   isTarifaVeiculo,
   isGrisAdvUnificado,
+  linhasAbaixoDoVeiculo,
 } from './formatTabelaFrete';
 import {
   CONDICOES_FRETE_PADRAO,
@@ -521,12 +522,13 @@ const buildDistribuicaoTable = (tabela: TabelaFrete | null, faixasPagina?: Tabel
   }
   const grisAdvUnificado = isGrisAdvUnificado(tabela.config);
   const grisAdvCols = grisAdvUnificado ? 1 : 2;
+  const pesoPorChave = new Map((tabela.config?.bandas ?? []).map((banda) => [banda.key, banda]));
   const headBandas = bandas.map((banda) => `<th class="grp">${dash(banda.rotulo)}</th>`).join('');
-  const unitBandas = bandas.map((banda) => (
-    isTarifaVeiculo(banda)
-      ? '<th class="unit unit-veiculo">R$ p/veículo</th>'
-      : '<th class="unit">R$ p/ton</th>'
-  )).join('');
+  const unitBandas = bandas.map((banda) => {
+    if (!isTarifaVeiculo(banda)) return '<th class="unit">R$ p/ton</th>';
+    const faixa = pesoPorChave.get(banda.key) ?? banda;
+    return `<th class="unit unit-veiculo">${linhasAbaixoDoVeiculo(faixa).join('<br>')}</th>`;
+  }).join('');
   const moneyCols = 1 + bandas.length + 1 + extras.filter((item) => item.formato !== 'percentual').length;
   const pctCols = grisAdvCols + extras.filter((item) => item.formato === 'percentual').length;
   const colgroup = `

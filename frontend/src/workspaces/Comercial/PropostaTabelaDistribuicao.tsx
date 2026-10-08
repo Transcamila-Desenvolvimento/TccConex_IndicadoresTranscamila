@@ -3,7 +3,7 @@ import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import { useTabelaFreteDistribuicaoCliente } from '../../hooks/useComercialClientes';
 import type { PropostaTabelaDistribuicaoSnapshot } from '../../types/domain';
-import { formatColunaExtraValor, formatTabelaAmount, formatTabelaPercentFator, isGrisAdvUnificado, isTarifaVeiculo } from './formatTabelaFrete';
+import { formatColunaExtraValor, formatTabelaAmount, formatTabelaPercentFator, isGrisAdvUnificado, isTarifaVeiculo, linhasAbaixoDoVeiculo } from './formatTabelaFrete';
 
 type Props = {
   clienteId: string | null;
@@ -87,6 +87,7 @@ export default function PropostaTabelaDistribuicao({
   const faixas = (snapshot?.faixas?.length ? snapshot.faixas : tabela?.faixas) ?? [];
   const bandas = faixas[0]?.tarifas ?? [];
   const extras = faixas[0]?.extras ?? [];
+  const pesoPorChave = new Map((tabela?.config?.bandas ?? []).map((banda) => [banda.key, banda]));
   const grisAdvUnificado = snapshot?.grisAdvUnificado ?? isGrisAdvUnificado(tabela?.config);
   const nomeTabela = snapshot?.nome || tabela?.nome || listQuery.data?.results[0]?.nome;
 
@@ -149,14 +150,20 @@ export default function PropostaTabelaDistribuicao({
                       <th className="is-km">De</th>
                       <th className="is-km">Até</th>
                       <th className="is-money">Frete mín.</th>
-                      {bandas.map((banda) => (
-                        <th
-                          key={banda.key || banda.rotulo}
-                          className={`is-banda${isTarifaVeiculo(banda) ? ' is-veiculo' : ' is-ton'}`}
-                        >
-                          {banda.rotulo}
-                        </th>
-                      ))}
+                      {bandas.map((banda) => {
+                        const faixa = pesoPorChave.get(banda.key) ?? banda;
+                        return (
+                          <th
+                            key={banda.key || banda.rotulo}
+                            className={`is-banda${isTarifaVeiculo(banda) ? ' is-veiculo' : ' is-ton'}`}
+                          >
+                            <span className="tabela-frete-th-banda">{banda.rotulo}</span>
+                            {linhasAbaixoDoVeiculo(faixa).map((linha) => (
+                              <span key={linha} className="tabela-frete-th-sub">{linha}</span>
+                            ))}
+                          </th>
+                        );
+                      })}
                       <th className="is-extra is-group-start">Pedágio/t</th>
                       {grisAdvUnificado ? (
                         <th className="is-extra">GRIS/ADV %</th>

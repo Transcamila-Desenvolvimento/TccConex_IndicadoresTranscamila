@@ -1960,6 +1960,10 @@ class ClienteComercialTests(TestCase):
             'anttFixo': '1200', 'anttPorKm': '10', 'margem': '0.2', 'capacidadeKg': 37000,
         })
         merged = merge_config(config)
+        self.assertEqual(next(item['rotulo'] for item in merged['bandas'] if item['key'] == 'de9000'), 'Truck')
+        self.assertEqual(next(item['rotulo'] for item in merged['bandas'] if item['key'] == 'de14001'), 'Carreta 6 eixos')
+        self.assertEqual(next(item['rotulo'] for item in merged['bandas'] if item['key'] == 'acima26001'), 'Carreta 7 eixos')
+        self.assertEqual(next(item['rotulo'] for item in merged['bandas'] if item['key'] == 'ate499'), 'Até 499 Kg')
         banda = next(item for item in merged['bandas'] if item['key'] == 'veic-bitrem')
         self.assertEqual(banda['unidade'], 'veiculo')
         self.assertEqual(banda['rotulo'], 'Bitrem')
@@ -1972,11 +1976,60 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(bitrem['valor'], str(esperado))
 
         self.assertEqual(simular_cotacao_distribuicao(merged, 50, 30000)['bandaPeso']['key'], 'acima26001')
-        self.assertEqual(simular_cotacao_distribuicao(merged, 50, 36000)['bandaPeso']['key'], 'veic-bitrem')
+        self.assertEqual(simular_cotacao_distribuicao(merged, 50, 36000)['bandaPeso']['key'], 'acima26001')
+        acima = next(item for item in merged['bandas'] if item['key'] == 'acima26001')
+        self.assertEqual(acima['pesoDe'], 26001)
+        self.assertIsNone(acima['pesoAte'])
+        bitrem_banda = next(item for item in merged['bandas'] if item['key'] == 'veic-bitrem')
+        self.assertIsNone(bitrem_banda.get('pesoDe'))
+        self.assertIsNone(bitrem_banda.get('pesoAte'))
 
         sem_bitrem = merge_config({**merged, 'veiculosTarifa': merged['veiculosTarifa'][:3]})
         self.assertNotIn('veic-bitrem', [item['key'] for item in sem_bitrem['bandas']])
         self.assertNotIn('limitesPesoBanda', sem_bitrem)
+
+        sem_capacidade = merge_config({
+            **preset_config_oficial_distribuicao(),
+            'veiculosTarifa': [
+                *preset_config_oficial_distribuicao()['veiculosTarifa'],
+                {'bandaKey': 'veic-van', 'rotulo': 'VAN - 2 eixo', 'anttFixo': '549.81', 'anttPorKm': '4.4482', 'margem': '0.33'},
+            ],
+        })
+        self.assertEqual(simular_cotacao_distribuicao(sem_capacidade, 1000, 50000)['bandaPeso']['key'], 'acima26001')
+        van = next(item for item in sem_capacidade['bandas'] if item['key'] == 'veic-van')
+        self.assertIsNone(van.get('pesoDe'))
+
+        com_van = merge_config({
+            **preset_config_oficial_distribuicao(),
+            'veiculosTarifa': [
+                *preset_config_oficial_distribuicao()['veiculosTarifa'],
+                {
+                    'bandaKey': 'veic-van', 'rotulo': 'VAN - 2 eixo',
+                    'anttFixo': '549.81', 'anttPorKm': '4.4482', 'margem': '0.33',
+                    'capacidadeKg': 1800,
+                },
+            ],
+        })
+        van_banda = next(item for item in com_van['bandas'] if item['key'] == 'veic-van')
+        self.assertIsNone(van_banda.get('pesoDe'))
+        self.assertIsNone(van_banda.get('pesoAte'))
+        acima_com_van = next(item for item in com_van['bandas'] if item['key'] == 'acima26001')
+        self.assertEqual(acima_com_van['pesoDe'], 26001)
+        self.assertIsNone(acima_com_van['pesoAte'])
+        self.assertEqual(simular_cotacao_distribuicao(com_van, 1000, 1500)['bandaPeso']['key'], 'de1000')
+        self.assertEqual(simular_cotacao_distribuicao(com_van, 1000, 40000)['bandaPeso']['key'], 'acima26001')
+
+        manual = merge_config({
+            **preset_config_oficial_distribuicao(),
+            'bandas': [
+                {**banda, 'pesoDe': 0, 'pesoAte': 10000, 'pesoFaixaAuto': False}
+                if banda['key'] == 'ate499' else banda
+                for banda in preset_config_oficial_distribuicao()['bandas']
+            ],
+        })
+        ate499 = next(item for item in manual['bandas'] if item['key'] == 'ate499')
+        self.assertEqual(ate499['pesoAte'], 10000)
+        self.assertEqual(simular_cotacao_distribuicao(manual, 100, 8000)['bandaPeso']['key'], 'ate499')
 
     def test_rotulo_de_veiculo_por_cliente_na_proposta(self):
         from apps.comercial.models import ClienteComercial, TabelaFrete, VeiculoComercial, VeiculoRotuloCliente

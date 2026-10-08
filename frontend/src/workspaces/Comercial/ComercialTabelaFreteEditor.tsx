@@ -35,6 +35,7 @@ import type {
   VeiculoComercial,
 } from '../../types/domain';
 import { useVeiculosComercial } from '../../hooks/useVeiculosComercial';
+import { AlcaArraste, reordenarLista, useArrasteLista } from './PropostaArraste';
 import ComercialTabelaFreteSimulador from './ComercialTabelaFreteSimulador';
 import ComercialTabelaFreteStatusBadge from './ComercialTabelaFreteStatusBadge';
 import ComercialTabelaFreteHistoricoRevisoesPanel from './ComercialTabelaFreteHistoricoRevisoesPanel';
@@ -49,6 +50,7 @@ import {
   isTarifaVeiculo,
   nomeBaseTabelaFrete,
   percentualToFator,
+  linhasAbaixoDoVeiculo,
 } from './formatTabelaFrete';
 
 const MODO_TARIFA_LABEL: Record<TabelaFreteModoTarifa, string> = {
@@ -163,6 +165,14 @@ const moneyOrNull = (value: string) => {
 };
 
 const faixaKey = (faixa: TabelaFreteFaixa) => `${faixa.kmDe}-${faixa.kmAte}`;
+
+const pesoKgDaBanda = (valor: string) => {
+  const texto = valor.trim();
+  if (!texto) return null;
+  const numero = Number(texto);
+  if (!Number.isFinite(numero)) return null;
+  return Math.max(0, Math.round(numero));
+};
 
 const compactBandaNumero = (value?: string | null) => {
   const raw = (value ?? '').trim();
@@ -286,6 +296,7 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
 
   const isLocked = status !== 'rascunho';
   const canEditTarifa = canManage && !isLocked;
+  const arrasteBandas = useArrasteLista(canEditTarifa);
 
   const clientes = clientesQuery.data?.results ?? [];
   const linhas = tabela?.linhas ?? [];
@@ -354,6 +365,9 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
           unidade: 'ton',
           calculo: 'multiplicador',
           fator: '1',
+          pesoDe: null,
+          pesoAte: null,
+          pesoFaixaAuto: false,
         },
       ],
     });
@@ -362,6 +376,11 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
   const removeBanda = (index: number) => {
     if (!config || config.bandas.length <= 1) return;
     setConfig({ ...config, bandas: config.bandas.filter((_, i) => i !== index) });
+  };
+
+  const moverBanda = (de: number, antesDe: number) => {
+    if (!config) return;
+    setConfig({ ...config, bandas: reordenarLista(config.bandas, de, antesDe) });
   };
 
   const veiculosTarifa = config?.veiculosTarifa ?? [];
@@ -405,6 +424,7 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
         item.anttFixo === doCatalogo.anttFixo
         && item.anttPorKm === doCatalogo.anttPorKm
         && item.rotulo === doCatalogo.rotulo
+        && (item.capacidadeKg ?? null) === (doCatalogo.capacidadeKg ?? null)
       ) return item;
       mudou = true;
       return { ...item, ...doCatalogo };
@@ -1041,21 +1061,24 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                         <th className="is-money">Frete mín.</th>
                         {bandas.map((banda) => {
                           const consulta = anttPorBanda.get(banda.key);
+                          const faixa = (config?.bandas ?? []).find((item) => item.key === banda.key) ?? banda;
+                          const abaixo = linhasAbaixoDoVeiculo(faixa);
                           if (!consulta) {
                             return (
                               <th
                                 key={banda.key || banda.rotulo}
                                 className={`is-banda${isTarifaVeiculo(banda) ? ' is-veiculo' : ' is-ton'}`}
                               >
-                                {banda.rotulo}
+                                <span className="tabela-frete-th-banda">{banda.rotulo}</span>
+                                {abaixo.map((linha) => <span key={linha} className="tabela-frete-th-sub">{linha}</span>)}
                               </th>
                             );
                           }
                           return (
                             <React.Fragment key={banda.key || banda.rotulo}>
                               <th className="is-banda is-veiculo">
-                                <span className="tabela-frete-th-banda">{banda.rotulo}</span>
-                                <span className="tabela-frete-th-sub">R$ p/veículo</span>
+                                <span className="tabela-frete-th-banda">{consulta.rotulo || banda.rotulo}</span>
+                                {abaixo.map((linha) => <span key={linha} className="tabela-frete-th-sub">{linha}</span>)}
                               </th>
                               <th className="is-antt">{rotuloColunaAntt(itemConsultaAntt(consulta, veiculosTarifa))}</th>
                               <th className="is-margem">Margem</th>
@@ -1177,11 +1200,15 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
               <button type="button" className="btn-icon" onClick={() => setBandasOpen(false)} aria-label="Fechar"><i className="bi bi-x-lg" /></button>
             </div>
             <div className="modal-body">
-              <p className="tabela-frete-hint">Cada coluna da grade usa a tarifa de referência (K) e o cálculo da banda.</p>
-              <div className="table-container tabela-frete-bandas-wrap">
+              <p className="tabela-frete-hint">O rótulo é o nome da coluna. De e até, em kg, definem qual banda a cotação usa. Até em branco não tem limite. Veículo sem essa faixa não entra pelo peso.</p>
+              <div className="table-container tabela-frete-bandas-wrap" ref={arrasteBandas.refCaixa}>
+                {arrasteBandas.marca}
                 <table className="data-table tabela-frete-mini tabela-frete-bandas-table">
                   <colgroup>
+                    {canEditTarifa ? <col className="tabela-frete-bandas-col-drag" /> : null}
                     <col className="tabela-frete-bandas-col-rotulo" />
+                    <col className="tabela-frete-bandas-col-peso" />
+                    <col className="tabela-frete-bandas-col-peso" />
                     <col className="tabela-frete-bandas-col-unidade" />
                     <col className="tabela-frete-bandas-col-calculo" />
                     <col className="tabela-frete-bandas-col-fator" />
@@ -1189,7 +1216,10 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                   </colgroup>
                   <thead>
                     <tr>
+                      {canEditTarifa ? <th className="col-drag" aria-label="Ordem" /> : null}
                       <th>Rótulo</th>
+                      <th>De (kg)</th>
+                      <th>Até (kg)</th>
                       <th>Unidade</th>
                       <th>Cálculo</th>
                       <th>Fator / valor</th>
@@ -1201,15 +1231,46 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                       const calculo = (banda.calculo || 'multiplicador') as TabelaFreteBandaCalculo;
                       const usaFator = calculo === 'multiplicador';
                       const usaValor = calculo !== 'multiplicador' && calculo !== 'referencia';
-                      const editavel = canEditTarifa && !banda.veiculoAuto;
+                      const veiculoDaLinha = anttPorBanda.get(banda.key);
+                      const colunaDeVeiculo = Boolean(banda.veiculoAuto || veiculoDaLinha);
+                      const editavel = canEditTarifa && !colunaDeVeiculo;
                       return (
-                        <tr key={banda.key || `banda-${index}`}>
+                        <tr
+                          key={banda.key || `banda-${index}`}
+                          {...(canEditTarifa ? arrasteBandas.propsLinha(index, moverBanda) : {})}
+                        >
+                          {canEditTarifa ? (
+                            <td className="col-drag">
+                              <AlcaArraste {...arrasteBandas.propsAlca(index)} />
+                            </td>
+                          ) : null}
                           <td>
                             <input
                               disabled={!editavel}
-                              value={banda.rotulo}
-                              title={banda.veiculoAuto ? 'Coluna gerenciada pelos veículos da ANTT' : undefined}
+                              value={veiculoDaLinha?.rotulo || banda.rotulo}
+                              title={colunaDeVeiculo ? 'Coluna do veículo cadastrado, calculada pela ANTT' : undefined}
                               onChange={(e) => setBanda(index, { rotulo: e.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              disabled={!canEditTarifa}
+                              type="number"
+                              min={0}
+                              inputMode="numeric"
+                              value={banda.pesoDe ?? ''}
+                              onChange={(e) => setBanda(index, { pesoDe: pesoKgDaBanda(e.target.value), pesoFaixaAuto: false })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              disabled={!canEditTarifa}
+                              type="number"
+                              min={0}
+                              inputMode="numeric"
+                              placeholder="sem limite"
+                              value={banda.pesoAte ?? ''}
+                              onChange={(e) => setBanda(index, { pesoAte: pesoKgDaBanda(e.target.value), pesoFaixaAuto: false })}
                             />
                           </td>
                           <td>
@@ -1219,7 +1280,7 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                             </select>
                           </td>
                           <td>
-                            {banda.veiculoAuto ? (
+                            {colunaDeVeiculo ? (
                               <span className="muted">{CALCULO_BANDA_LABEL.veiculo_antt}</span>
                             ) : (
                               <select
@@ -1234,7 +1295,7 @@ export default function ComercialTabelaFreteEditor({ tabelaId, canManage, onBack
                             )}
                           </td>
                           <td>
-                            {calculo === 'referencia' || banda.veiculoAuto ? (
+                            {calculo === 'referencia' || colunaDeVeiculo ? (
                               <span className="muted">—</span>
                             ) : (
                               <input

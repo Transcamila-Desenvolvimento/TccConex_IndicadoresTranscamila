@@ -376,6 +376,10 @@ def normalizar_bandas(bandas):
             item['calculo'] = 'multiplicador'
         if item.get('calculo') == 'multiplicador' and item.get('fator') is None:
             item['fator'] = '1'
+        if item.get('pesoFaixaAuto') is False:
+            item['pesoDe'] = _peso_kg(item.get('pesoDe'))
+            item['pesoAte'] = _peso_kg(item.get('pesoAte'))
+            item['pesoFaixaAuto'] = False
         normalizadas.append(item)
     return normalizadas or deepcopy(DEFAULT_BANDAS)
 
@@ -429,8 +433,9 @@ def sincronizar_bandas_veiculos(config):
     existentes = {banda.get('key') for banda in bandas}
     rotulos = {item['bandaKey']: item.get('rotulo') or item['bandaKey'] for item in veiculos}
     for banda in bandas:
-        if banda.get('veiculoAuto'):
-            banda['rotulo'] = rotulos.get(banda['key'], banda.get('rotulo'))
+        rotulo_veiculo = rotulos.get(banda.get('key'))
+        if rotulo_veiculo:
+            banda['rotulo'] = rotulo_veiculo
     for item in veiculos:
         if item['bandaKey'] in existentes:
             continue
@@ -533,6 +538,7 @@ def merge_config(raw):
     if isinstance(raw.get('veiculosTarifa'), list):
         config['veiculosTarifa'] = normalizar_veiculos_tarifa(raw.get('veiculosTarifa'))
     sincronizar_bandas_veiculos(config)
+    preencher_faixas_peso(config)
     if raw.get('anttFonte') not in (None,):
         config['anttFonte'] = str(raw.get('anttFonte') or '')[:240]
     if raw.get('anttFonteData') not in (None,):
@@ -727,6 +733,15 @@ def _valor_banda(referencia_k, tarifa_principal, banda, valor_anterior):
     return tarifa_principal * _dec(banda.get('fator', '1'))
 
 
+def _peso_na_tarifa(banda):
+    peso = {}
+    if banda.get('pesoDe') is not None:
+        peso['pesoDe'] = banda.get('pesoDe')
+    if 'pesoAte' in banda:
+        peso['pesoAte'] = banda.get('pesoAte')
+    return peso
+
+
 def gerar_faixas_distribuicao(raw_config):
     config = merge_config(raw_config)
     km_inicio = int(config['kmInicio'])
@@ -773,6 +788,7 @@ def gerar_faixas_distribuicao(raw_config):
                     'valor': _money(bruto),
                     'antt': _money(antt_valor),
                     'margem': str(margem_real.quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)),
+                    **_peso_na_tarifa(banda),
                 })
                 continue
             bruto = _valor_banda(referencia_k, tarifa_principal, banda, valor_anterior)
@@ -782,6 +798,7 @@ def gerar_faixas_distribuicao(raw_config):
                 'rotulo': banda.get('rotulo') or '',
                 'unidade': banda.get('unidade') or 'ton',
                 'valor': _money(bruto),
+                **_peso_na_tarifa(banda),
             })
 
         row = {
@@ -836,6 +853,19 @@ PESO_BANDA_LIMITES = (
     ('acima26001', None),
 )
 
+# Faixa inclusive em kg. O último teto vazio é a banda sem limite.
+PESO_FAIXAS_PADRAO = {
+    'ate499': (0, 499),
+    'de500': (500, 999),
+    'de1000': (1000, 1999),
+    'de2000': (2000, 3999),
+    'de4000': (4000, 5999),
+    'de6000': (6000, 8999),
+    'de9000': (9000, 14000),
+    'de14001': (14001, 26000),
+    'acima26001': (26001, None),
+}
+
 
 def _limites_peso_banda(config):
     custom = config.get('limitesPesoBanda') if isinstance(config, dict) else None
@@ -844,17 +874,89 @@ def _limites_peso_banda(config):
     return PESO_BANDA_LIMITES
 
 
+def _peso_kg(value):
+    if value is None or value == '':
+        return None
+    return int(_dec(value).to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def _faixas_de_tetos(limites):
+    faixas = {}
+    anterior = -1
+    for key, teto in limites:
+        ate = None if teto is None else int(teto)
+        faixas[key] = (anterior + 1, ate)
+        if ate is not None:
+            anterior = ate
+    return faixas
+
+
+def preencher_faixas_peso(config):
+    """Preenche de/até das bandas que o usuário ainda não editou.
+
+    A capacidade do cadastro não define essa faixa. Veículo sem banda de peso
+    própria só entra na cotação por peso quando o de/até é informado aqui.
+    """
+    bandas = config.get('bandas') or []
+    for banda in bandas:
+        if banda.get('pesoFaixaAuto') is False:
+            banda['pesoDe'] = _peso_kg(banda.get('pesoDe'))
+            banda['pesoAte'] = _peso_kg(banda.get('pesoAte'))
+
+    limites = config.get('limitesPesoBanda')
+    if limites and not config.get('limitesPesoBandaAuto'):
+        faixas = _faixas_de_tetos(limites)
+        for banda in bandas:
+            if banda.get('pesoFaixaAuto') is False or banda.get('key') not in faixas:
+                continue
+            de, ate = faixas[banda['key']]
+            banda['pesoDe'] = de
+            banda['pesoAte'] = ate
+            banda['pesoFaixaAuto'] = True
+        return config
+
+    for banda in bandas:
+        if banda.get('pesoFaixaAuto') is False:
+            continue
+        padrao = PESO_FAIXAS_PADRAO.get(banda.get('key'))
+        if not padrao:
+            continue
+        banda['pesoDe'], banda['pesoAte'] = padrao
+        banda['pesoFaixaAuto'] = True
+
+    for banda in bandas:
+        if banda.get('pesoFaixaAuto') is False or banda.get('key') in PESO_FAIXAS_PADRAO:
+            continue
+        banda.pop('pesoDe', None)
+        banda.pop('pesoAte', None)
+        banda.pop('pesoFaixaAuto', None)
+    return config
+
+
 def _banda_key_por_peso(peso_kg, modalidade='fracionado', config=None):
     config = config or {}
     selecao = config.get('selecaoBanda') if isinstance(config.get('selecaoBanda'), dict) else {}
     if modalidade == 'fechado' and selecao.get('fechado'):
         return selecao['fechado']
     peso = int(_dec(peso_kg).to_integral_value(rounding=ROUND_HALF_UP))
-    for key, limite in _limites_peso_banda(config):
-        if limite is None or peso <= int(limite):
-            return key
-    ultimo = _limites_peso_banda(config)[-1][0]
-    return ultimo
+    candidatas = [
+        banda for banda in (config.get('bandas') or [])
+        if banda.get('pesoDe') is not None or banda.get('pesoAte') is not None
+    ]
+    if not candidatas:
+        for key, limite in _limites_peso_banda(config):
+            if limite is None or peso <= int(limite):
+                return key
+        return _limites_peso_banda(config)[-1][0]
+    for banda in candidatas:
+        de = int(banda.get('pesoDe') or 0)
+        ate = banda.get('pesoAte')
+        if peso >= de and (ate is None or peso <= int(ate)):
+            return banda.get('key')
+    abertas = [banda for banda in candidatas if banda.get('pesoAte') is None]
+    if abertas:
+        return abertas[-1].get('key')
+    return candidatas[-1].get('key')
 
 
 def _faixa_por_km(faixas, km):
