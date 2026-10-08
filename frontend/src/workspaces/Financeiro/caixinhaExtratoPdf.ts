@@ -3,13 +3,27 @@ import autoTable from 'jspdf-autotable';
 import type { CaixinhaExtrato } from '../../types/domain';
 import logoTranscamila from '../../assets/logo-transcamila-30-anos.png';
 
-const INK = [31, 58, 77] as const;
-const MUTED = [90, 107, 122] as const;
-const LINE = [208, 218, 226] as const;
-const RULE = [91, 122, 148] as const;
-const HEAD_BG = [232, 239, 244] as const;
-const BOX_BG = [244, 247, 249] as const;
-const FOOT_BG = [236, 242, 246] as const;
+type Rgb = [number, number, number];
+
+const INK: Rgb = [31, 58, 77];
+const MUTED: Rgb = [90, 107, 122];
+const LINE: Rgb = [208, 218, 226];
+const RULE: Rgb = [91, 122, 148];
+const HEAD_BG: Rgb = [232, 239, 244];
+const BOX_BG: Rgb = [244, 247, 249];
+const FOOT_BG: Rgb = [236, 242, 246];
+
+function textColor(doc: jsPDF, color: Rgb): void {
+  doc.setTextColor(color[0], color[1], color[2]);
+}
+
+function drawColor(doc: jsPDF, color: Rgb): void {
+  doc.setDrawColor(color[0], color[1], color[2]);
+}
+
+function fillColor(doc: jsPDF, color: Rgb): void {
+  doc.setFillColor(color[0], color[1], color[2]);
+}
 
 function formatDateBr(isoDate: string): string {
   const [year, month, day] = isoDate.split('-');
@@ -47,14 +61,14 @@ export async function downloadCaixinhaExtratoPdf(extrato: CaixinhaExtrato): Prom
     logo = null;
   }
 
-  doc.setTextColor(...INK);
+  textColor(doc, INK);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.text('Extrato do Caixinha', margin, 16);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.setTextColor(...MUTED);
+  textColor(doc, MUTED);
   doc.text('Movimentações do Caixinha', margin, 21.5);
 
   if (logo) {
@@ -69,16 +83,16 @@ export async function downloadCaixinhaExtratoPdf(extrato: CaixinhaExtrato): Prom
     doc.addImage(logo, 'PNG', right - logoW, 11, logoW, logoH);
   }
 
-  doc.setDrawColor(...RULE);
+  drawColor(doc, RULE);
   doc.setLineWidth(0.45);
   doc.line(margin, 27, right, 27);
 
   doc.setFontSize(8);
-  doc.setTextColor(...MUTED);
+  textColor(doc, MUTED);
   doc.text('PERÍODO', margin, 34);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
-  doc.setTextColor(...INK);
+  textColor(doc, INK);
   doc.text(`${formatDateBr(extrato.startDate)} a ${formatDateBr(extrato.endDate)}`, margin, 40);
 
   const boxX = margin + 92;
@@ -91,8 +105,8 @@ export async function downloadCaixinhaExtratoPdf(extrato: CaixinhaExtrato): Prom
     ['Saldo final', extrato.saldoFinal],
   ] as const;
 
-  doc.setFillColor(...BOX_BG);
-  doc.setDrawColor(...LINE);
+  fillColor(doc, BOX_BG);
+  drawColor(doc, LINE);
   doc.setLineWidth(0.25);
   doc.rect(boxX, boxY, boxW, 28, 'FD');
 
@@ -101,9 +115,9 @@ export async function downloadCaixinhaExtratoPdf(extrato: CaixinhaExtrato): Prom
     const fechamento = index === resumo.length - 1;
     doc.setFont('helvetica', fechamento ? 'bold' : 'normal');
     doc.setFontSize(8.5);
-    doc.setTextColor(...(fechamento ? INK : MUTED));
+    textColor(doc, fechamento ? INK : MUTED);
     doc.text(label, boxX + 4, y);
-    doc.setTextColor(...INK);
+    textColor(doc, INK);
     doc.text(formatMoney(value), right - 2, y, { align: 'right' });
   });
 
@@ -146,21 +160,21 @@ export async function downloadCaixinhaExtratoPdf(extrato: CaixinhaExtrato): Prom
       font: 'helvetica',
       fontSize: 9,
       cellPadding: { top: 2.4, right: 2, bottom: 2.4, left: 2 },
-      textColor: [...INK],
+      textColor: INK,
       fillColor: [255, 255, 255],
       lineWidth: 0,
       overflow: 'linebreak',
       valign: 'middle',
     },
     headStyles: {
-      fillColor: [...HEAD_BG],
-      textColor: [...MUTED],
+      fillColor: HEAD_BG,
+      textColor: MUTED,
       fontStyle: 'bold',
       fontSize: 9,
     },
     footStyles: {
-      fillColor: [...FOOT_BG],
-      textColor: [...INK],
+      fillColor: FOOT_BG,
+      textColor: INK,
       fontStyle: 'bold',
       fontSize: 9,
     },
@@ -174,25 +188,25 @@ export async function downloadCaixinhaExtratoPdf(extrato: CaixinhaExtrato): Prom
     didParseCell: (data) => {
       if (data.column.index >= 2) data.cell.styles.halign = 'right';
       if (data.section === 'body' && data.row.index === 0) {
-        data.cell.styles.textColor = [...MUTED];
+        data.cell.styles.textColor = MUTED;
       }
     },
     didDrawCell: (data) => {
       const { x, y, width, height } = data.cell;
       if (data.section === 'head') {
-        doc.setDrawColor(...RULE);
+        drawColor(doc, RULE);
         doc.setLineWidth(0.35);
         doc.line(x, y + height, x + width, y + height);
         return;
       }
       if (data.section === 'foot') {
-        doc.setDrawColor(...RULE);
+        drawColor(doc, RULE);
         doc.setLineWidth(0.3);
         doc.line(x, y, x + width, y);
         doc.line(x, y + height, x + width, y + height);
         return;
       }
-      doc.setDrawColor(...LINE);
+      drawColor(doc, LINE);
       doc.setLineWidth(0.15);
       doc.line(x, y + height, x + width, y + height);
     },
