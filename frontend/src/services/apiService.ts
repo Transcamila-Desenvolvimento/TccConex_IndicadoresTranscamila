@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type {
   User, Role, SystemLog, PagarRow, ReceberRow, AgingRow, ReportBatch,
-  BillingRecord, CashAdjustment, BankAccount, BalanceHistoryEntry,
+  BillingRecord, CashAdjustment, CaixinhaLancamento, CaixinhaDescricao, CaixinhaResumo, CaixinhaExtrato, BankAccount, BalanceHistoryEntry,
   MetaFaturamentoConfigPayload, MetaFaturamentoConfigResponse,
   CalendarSystemEventsResponse, CalendarPersonalEvent,
   IndicadorKpi, IndicadorFilialRow,
@@ -14,7 +14,7 @@ import type {
   SendGerencialEmailParams, SendGerencialEmailResponse,
   ReportImportResult, ReportImportType,
   PaginatedResponse, ReportQueryParams, ReportFacets,
-  BillingQueryParams, AdjustmentQueryParams, BalanceHistoryQueryParams,
+  BillingQueryParams, AdjustmentQueryParams, CaixinhaQueryParams, BalanceHistoryQueryParams,
   ReportBatchesResponse,
   PrAnalysisResponse,
   PagarDiffQueryParams,
@@ -572,6 +572,33 @@ function normalizeCashAdjustment(raw: any): CashAdjustment {
     value: Number(raw.value),
     observation: raw.observation ?? '',
     user: raw.user ?? '',
+  };
+}
+
+function normalizeCaixinhaLancamento(raw: any): CaixinhaLancamento {
+  return {
+    id: Number(raw.id),
+    date: raw.date,
+    type: raw.type,
+    value: Number(raw.value),
+    description: raw.description ?? '',
+    user: raw.user ?? '',
+  };
+}
+
+function normalizeCaixinhaDescricao(raw: any): CaixinhaDescricao {
+  return {
+    id: Number(raw.id),
+    type: raw.type,
+    description: raw.description ?? '',
+  };
+}
+
+function normalizeCaixinhaResumo(raw: any): CaixinhaResumo {
+  return {
+    saldo: Number(raw.saldo ?? 0),
+    totalEntradas: Number(raw.totalEntradas ?? raw.total_entradas ?? 0),
+    totalSaidas: Number(raw.totalSaidas ?? raw.total_saidas ?? 0),
   };
 }
 
@@ -1446,6 +1473,70 @@ export const apiService = {
 
   async deleteCashAdjustment(id: number): Promise<void> {
     await api.delete(`/api/financeiro/adjustments/${id}/`);
+  },
+
+  async getCaixinhaLancamentos(params: CaixinhaQueryParams = {}): Promise<PaginatedResponse<CaixinhaLancamento>> {
+    const query = buildAdjustmentQueryParams(params);
+    if (params.ordering) query.ordering = params.ordering;
+    const { data } = await api.get('/api/financeiro/caixinha/', { params: query });
+    return paginatedFromResponse(data, normalizeCaixinhaLancamento);
+  },
+
+  async getCaixinhaResumo(): Promise<CaixinhaResumo> {
+    const { data } = await api.get('/api/financeiro/caixinha/resumo/');
+    return normalizeCaixinhaResumo(data);
+  },
+
+  async getCaixinhaExtrato(startDate: string, endDate: string): Promise<CaixinhaExtrato> {
+    const { data } = await api.get('/api/financeiro/caixinha/extrato/', {
+      params: { start_date: startDate, end_date: endDate },
+    });
+    return {
+      startDate: data.startDate,
+      endDate: data.endDate,
+      saldoAnterior: Number(data.saldoAnterior ?? 0),
+      totalEntradas: Number(data.totalEntradas ?? 0),
+      totalSaidas: Number(data.totalSaidas ?? 0),
+      saldoFinal: Number(data.saldoFinal ?? 0),
+      lancamentos: (data.lancamentos ?? []).map((raw: any) => ({
+        ...normalizeCaixinhaLancamento(raw),
+        saldo: Number(raw.saldo ?? 0),
+      })),
+    };
+  },
+
+  async createCaixinhaLancamento(payload: Omit<CaixinhaLancamento, 'id' | 'user'>): Promise<CaixinhaLancamento> {
+    const { data } = await api.post('/api/financeiro/caixinha/', payload);
+    return normalizeCaixinhaLancamento(data);
+  },
+
+  async updateCaixinhaLancamento(id: number, payload: Partial<Omit<CaixinhaLancamento, 'id' | 'user'>>): Promise<CaixinhaLancamento> {
+    const { data } = await api.patch(`/api/financeiro/caixinha/${id}/`, payload);
+    return normalizeCaixinhaLancamento(data);
+  },
+
+  async deleteCaixinhaLancamento(id: number): Promise<void> {
+    await api.delete(`/api/financeiro/caixinha/${id}/`);
+  },
+
+  async getCaixinhaDescricoes(): Promise<CaixinhaDescricao[]> {
+    const { data } = await api.get('/api/financeiro/caixinha/descricoes/');
+    const rows = Array.isArray(data) ? data : data.results ?? [];
+    return rows.map(normalizeCaixinhaDescricao);
+  },
+
+  async createCaixinhaDescricao(payload: Omit<CaixinhaDescricao, 'id'>): Promise<CaixinhaDescricao> {
+    const { data } = await api.post('/api/financeiro/caixinha/descricoes/', payload);
+    return normalizeCaixinhaDescricao(data);
+  },
+
+  async updateCaixinhaDescricao(id: number, payload: Partial<Omit<CaixinhaDescricao, 'id'>>): Promise<CaixinhaDescricao> {
+    const { data } = await api.patch(`/api/financeiro/caixinha/descricoes/${id}/`, payload);
+    return normalizeCaixinhaDescricao(data);
+  },
+
+  async deleteCaixinhaDescricao(id: number): Promise<void> {
+    await api.delete(`/api/financeiro/caixinha/descricoes/${id}/`);
   },
 
   // ── Calendário Financeiro ────────────────────────────────────────────────

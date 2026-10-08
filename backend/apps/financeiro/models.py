@@ -101,6 +101,34 @@ class CashAdjustment(models.Model):
         ordering = ['-reference_date', '-id']
 
 
+class CaixinhaLancamento(models.Model):
+    """Movimento do cofre (caixinha) da empresa: entrada ou saída de dinheiro."""
+    reference_date = models.DateField()
+    movement_type = models.CharField(max_length=20)
+    value = models.DecimalField(max_digits=14, decimal_places=2)
+    description = models.CharField(max_length=300)
+    created_by = models.CharField(max_length=100, blank=True, default='')
+
+    class Meta:
+        ordering = ['-reference_date', '-id']
+
+
+class CaixinhaDescricao(models.Model):
+    """Descrição padrão usada nos lançamentos de entrada ou saída do cofre."""
+    movement_type = models.CharField(max_length=20)
+    description = models.CharField(max_length=300)
+    created_by = models.CharField(max_length=100, blank=True, default='')
+
+    class Meta:
+        ordering = ['movement_type', 'description', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['movement_type', 'description'],
+                name='uniq_caixinha_descricao_tipo',
+            ),
+        ]
+
+
 class BankAccount(models.Model):
     bank = models.CharField(max_length=100)
     agency = models.CharField(max_length=30)

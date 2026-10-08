@@ -257,6 +257,55 @@ export interface CashAdjustment {
   user: string;
 }
 
+export interface CaixinhaLancamento {
+  id: number;
+  date: string;
+  type: 'Entrada' | 'Saída' | string;
+  value: number;
+  description: string;
+  user: string;
+}
+
+export interface CaixinhaDescricao {
+  id: number;
+  type: 'Entrada' | 'Saída' | string;
+  description: string;
+}
+
+export interface CaixinhaResumo {
+  saldo: number;
+  totalEntradas: number;
+  totalSaidas: number;
+}
+
+export interface CaixinhaExtratoLinha {
+  id: number;
+  date: string;
+  type: string;
+  value: number;
+  description: string;
+  user: string;
+  saldo: number;
+}
+
+export interface CaixinhaExtrato {
+  startDate: string;
+  endDate: string;
+  saldoAnterior: number;
+  totalEntradas: number;
+  totalSaidas: number;
+  saldoFinal: number;
+  lancamentos: CaixinhaExtratoLinha[];
+}
+
+export type CaixinhaOrdering = 'date_asc' | 'date_desc';
+
+export interface CaixinhaQueryParams extends ListQueryParams {
+  date?: string;
+  type?: string;
+  ordering?: CaixinhaOrdering;
+}
+
 /** Título individual dentro de um evento do calendário financeiro. */
 export interface CalendarSystemTitulo {
   doc: string;

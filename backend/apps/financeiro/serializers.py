@@ -1,11 +1,16 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from .billing_import_service import BILLING_BRANCHES
+from .caixinha_service import TIPOS, saldo_apos
 from .models import (
     AgingTitulo,
     BalanceHistoryEntry,
     BankAccount,
     BillingRecord,
+    CaixinhaDescricao,
+    CaixinhaLancamento,
     CalendarioEvento,
     CashAdjustment,
     PagarTitulo,
@@ -119,6 +124,57 @@ class CashAdjustmentSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             validated_data['created_by'] = request.user.username
         return super().create(validated_data)
+
+
+class CaixinhaLancamentoSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
+    date = serializers.DateField(source='reference_date', format='%Y-%m-%d')
+    type = serializers.ChoiceField(source='movement_type', choices=[(item, item) for item in TIPOS])
+    value = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal('0.01'))
+    description = serializers.CharField(max_length=300, trim_whitespace=True)
+    user = serializers.CharField(source='created_by', read_only=True)
+
+    class Meta:
+        model = CaixinhaLancamento
+        fields = ['id', 'date', 'type', 'value', 'description', 'user']
+
+    def validate(self, attrs):
+        tipo = attrs.get('movement_type') or getattr(self.instance, 'movement_type', None)
+        valor = attrs.get('value') if 'value' in attrs else getattr(self.instance, 'value', None)
+        descricao = attrs.get('description') if 'description' in attrs else getattr(self.instance, 'description', '')
+        if not (descricao or '').strip():
+            raise serializers.ValidationError({'description': 'Informe a descrição do lançamento.'})
+        if tipo and valor is not None and saldo_apos(tipo, valor, self.instance.pk if self.instance else None) < 0:
+            raise serializers.ValidationError({
+                'detail': 'Esta saída deixa o cofre negativo. O saldo disponível não é suficiente.',
+            })
+        return attrs
+
+
+class CaixinhaDescricaoSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
+    type = serializers.ChoiceField(source='movement_type', choices=[(item, item) for item in TIPOS])
+    description = serializers.CharField(max_length=300, trim_whitespace=True)
+
+    class Meta:
+        model = CaixinhaDescricao
+        fields = ['id', 'type', 'description']
+
+    def validate(self, attrs):
+        tipo = attrs.get('movement_type') or getattr(self.instance, 'movement_type', None)
+        descricao = attrs.get('description') if 'description' in attrs else getattr(self.instance, 'description', '')
+        descricao = (descricao or '').strip()
+        if not descricao:
+            raise serializers.ValidationError({'description': 'Informe a descrição.'})
+        duplicada = CaixinhaDescricao.objects.filter(movement_type=tipo, description__iexact=descricao)
+        if self.instance:
+            duplicada = duplicada.exclude(pk=self.instance.pk)
+        if duplicada.exists():
+            raise serializers.ValidationError({
+                'description': 'Já existe essa descrição para este tipo.',
+            })
+        attrs['description'] = descricao
+        return attrs
 
 
 class BankAccountSerializer(serializers.ModelSerializer):

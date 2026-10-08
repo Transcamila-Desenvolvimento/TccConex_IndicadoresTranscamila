@@ -3,6 +3,7 @@ from datetime import date
 from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,11 +18,14 @@ from .constants import MAX_REPORT_BATCHES
 from .billing_import_service import import_billing_file
 from .import_service import import_report_file
 from .calendar_service import build_system_events
+from .caixinha_service import ENTRADA, montar_extrato, totais
 from .models import (
     AgingTitulo,
     BalanceHistoryEntry,
     BankAccount,
     BillingRecord,
+    CaixinhaDescricao,
+    CaixinhaLancamento,
     CalendarioEvento,
     CashAdjustment,
     PagarTitulo,
@@ -33,6 +37,7 @@ from .list_filters import (
     filter_adjustments_queryset,
     filter_balance_history_queryset,
     filter_billing_queryset,
+    filter_caixinha_queryset,
 )
 from .pagination import ReportPagination
 from .report_filters import (
@@ -47,6 +52,8 @@ from .serializers import (
     BalanceHistoryEntrySerializer,
     BankAccountSerializer,
     BillingRecordSerializer,
+    CaixinhaDescricaoSerializer,
+    CaixinhaLancamentoSerializer,
     CalendarioEventoSerializer,
     CashAdjustmentSerializer,
     PagarTituloSerializer,
@@ -56,6 +63,16 @@ from .serializers import (
 from .pagar_diff_service import build_pagar_diff_analysis
 from .pr_analysis_service import apply_pr_action, build_pr_analysis
 from .tasks import import_billing_xml_task, import_report_task
+
+
+def _parse_iso_date(value):
+    """Aceita AAAA-MM-DD. Data inválida vira None para a view responder 400."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
 
 
 def _report_import_response(report_type: str, file_name: str, result: dict):
@@ -370,6 +387,102 @@ class CashAdjustmentViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             self.request.user,
             'financeiro.ajuste.excluido',
             f'Ajuste #{instance.pk} excluído.',
+        )
+        super().perform_destroy(instance)
+
+
+class CaixinhaLancamentoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+    permission_module = 'Financeiro'
+    serializer_class = CaixinhaLancamentoSerializer
+    queryset = CaixinhaLancamento.objects.all()
+    pagination_class = ReportPagination
+
+    def get_queryset(self):
+        return filter_caixinha_queryset(CaixinhaLancamento.objects.all(), self.request.query_params)
+
+    @action(detail=False, methods=['get'])
+    def resumo(self, request):
+        entradas, saidas, saldo = totais()
+        return Response({
+            'saldo': saldo,
+            'totalEntradas': entradas,
+            'totalSaidas': saidas,
+        })
+
+    @action(detail=False, methods=['get'])
+    def extrato(self, request):
+        start = _parse_iso_date(request.query_params.get('start_date') or request.query_params.get('startDate'))
+        end = _parse_iso_date(request.query_params.get('end_date') or request.query_params.get('endDate'))
+        if start is None or end is None:
+            return Response(
+                {'detail': 'Informe a data inicial e a data final.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if start > end:
+            return Response(
+                {'detail': 'A data inicial não pode ser maior que a data final.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(montar_extrato(start, end))
+
+    def perform_create(self, serializer):
+        lancamento = serializer.save(created_by=self.request.user.username)
+        record_audit(
+            self.request.user,
+            'financeiro.caixinha.criado',
+            f'Caixinha ({lancamento.movement_type}) R$ {lancamento.value} — {lancamento.description[:80]}',
+        )
+
+    def perform_update(self, serializer):
+        lancamento = serializer.save()
+        record_audit(
+            self.request.user,
+            'financeiro.caixinha.atualizado',
+            f'Lançamento da caixinha #{lancamento.pk} atualizado.',
+        )
+
+    def perform_destroy(self, instance):
+        if instance.movement_type == ENTRADA:
+            _, _, saldo = totais(exclude_pk=instance.pk)
+            if saldo < 0:
+                raise ValidationError({
+                    'detail': 'Não é possível excluir esta entrada: o cofre ficaria sem saldo para as saídas já lançadas.',
+                })
+        record_audit(
+            self.request.user,
+            'financeiro.caixinha.excluido',
+            f'Lançamento da caixinha #{instance.pk} excluído.',
+        )
+        super().perform_destroy(instance)
+
+
+class CaixinhaDescricaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+    permission_module = 'Financeiro'
+    serializer_class = CaixinhaDescricaoSerializer
+    queryset = CaixinhaDescricao.objects.all()
+    pagination_class = None
+
+    def perform_create(self, serializer):
+        descricao = serializer.save(created_by=self.request.user.username)
+        record_audit(
+            self.request.user,
+            'financeiro.caixinha.descricao.criada',
+            f'Descrição padrão ({descricao.movement_type}): {descricao.description[:80]}',
+        )
+
+    def perform_update(self, serializer):
+        descricao = serializer.save()
+        record_audit(
+            self.request.user,
+            'financeiro.caixinha.descricao.atualizada',
+            f'Descrição padrão #{descricao.pk} atualizada.',
+        )
+
+    def perform_destroy(self, instance):
+        record_audit(
+            self.request.user,
+            'financeiro.caixinha.descricao.excluida',
+            f'Descrição padrão #{instance.pk} ({instance.movement_type}) excluída.',
         )
         super().perform_destroy(instance)
 

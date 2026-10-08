@@ -9,6 +9,7 @@ import FinanceiroReports from './FinanceiroReports';
 import FinanceiroBalances from './FinanceiroBalances';
 import FinanceiroAdjustments from './FinanceiroAdjustments';
 import FinanceiroBilling from './FinanceiroBilling';
+import FinanceiroCaixinha from './FinanceiroCaixinha';
 
 const FinanceiroWorkspace: React.FC = () => {
   const { user } = useAuth();
@@ -21,6 +22,7 @@ const FinanceiroWorkspace: React.FC = () => {
       <Route path="reports" element={<AbaRoute module="Financeiro" aba="inclusao-relatorios" fallback={fallback}><FinanceiroReports /></AbaRoute>} />
       <Route path="balances" element={<AbaRoute module="Financeiro" aba="saldos-bancarios" fallback={fallback}><FinanceiroBalances /></AbaRoute>} />
       <Route path="adjustments" element={<AbaRoute module="Financeiro" aba="ajustes-caixa" fallback={fallback}><FinanceiroAdjustments /></AbaRoute>} />
+      <Route path="caixinha" element={<AbaRoute module="Financeiro" aba="caixinha" fallback={fallback}><FinanceiroCaixinha /></AbaRoute>} />
       <Route path="billing" element={<AbaRoute module="Financeiro" aba="faturamento" fallback={fallback}><FinanceiroBilling /></AbaRoute>} />
       <Route path="*" element={<Navigate to={fallback} replace />} />
     </Routes>

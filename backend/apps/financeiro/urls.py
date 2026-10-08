@@ -9,6 +9,8 @@ from .views import (
     BillingRecordViewSet,
     CalendarSystemEventsView,
     CalendarioEventoViewSet,
+    CaixinhaDescricaoViewSet,
+    CaixinhaLancamentoViewSet,
     CashAdjustmentViewSet,
     PagarDiffAnalysisView,
     PrActionView,
@@ -22,6 +24,8 @@ router = DefaultRouter()
 router.register('batches', ReportBatchViewSet, basename='report-batches')
 router.register('billing', BillingRecordViewSet, basename='billing')
 router.register('adjustments', CashAdjustmentViewSet, basename='adjustments')
+router.register('caixinha/descricoes', CaixinhaDescricaoViewSet, basename='caixinha-descricoes')
+router.register('caixinha', CaixinhaLancamentoViewSet, basename='caixinha')
 router.register('bank-accounts', BankAccountViewSet, basename='bank-accounts')
 router.register('balance-history', BalanceHistoryEntryViewSet, basename='balance-history')
 router.register('calendario/eventos', CalendarioEventoViewSet, basename='calendario-eventos')

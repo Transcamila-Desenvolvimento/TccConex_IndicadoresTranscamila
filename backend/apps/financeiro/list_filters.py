@@ -48,6 +48,25 @@ def filter_adjustments_queryset(qs, params):
     return qs
 
 
+def filter_caixinha_queryset(qs, params):
+    search = (params.get('search') or '').strip()
+    ref_date = params.get('date')
+    movement_type = params.get('type') or params.get('tipo')
+
+    if ref_date:
+        qs = qs.filter(reference_date=ref_date)
+    if not _skip_filter(movement_type):
+        qs = qs.filter(movement_type=movement_type)
+    if search:
+        qs = qs.filter(
+            Q(description__icontains=search)
+            | Q(created_by__icontains=search)
+        )
+    if (params.get('ordering') or '').strip() == 'date_asc':
+        return qs.order_by('reference_date', 'id')
+    return qs.order_by('-reference_date', '-id')
+
+
 def filter_balance_history_queryset(qs, params):
     search = (params.get('search') or '').strip()
     bank = params.get('bank')

@@ -1001,3 +1001,193 @@ class CalendarioFinanceiroTests(TestCase):
             **auth_headers(self.user, 'Financeiro'),
         )
         self.assertEqual(delete.status_code, 204)
+
+
+class CaixinhaTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='fin_caixa',
+            password='fin123',
+            role_id='2',
+            environments=['Financeiro'],
+            filiais={'Financeiro': ['Ibiporã (Matriz)']},
+        )
+
+    def _post(self, payload):
+        return self.client.post(
+            '/api/financeiro/caixinha/',
+            payload,
+            format='json',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+
+    def test_entrada_e_saida_atualizam_saldo(self):
+        entrada = self._post({
+            'date': '2026-10-08',
+            'type': 'Entrada',
+            'value': '200.00',
+            'description': 'Abastecimento do cofre',
+        })
+        self.assertEqual(entrada.status_code, 201)
+        self.assertEqual(entrada.data['user'], 'fin_caixa')
+        self.assertTrue(AuditLog.objects.filter(action='financeiro.caixinha.criado').exists())
+
+        saida = self._post({
+            'date': '2026-10-08',
+            'type': 'Saída',
+            'value': '35.50',
+            'description': 'Pagamento de correio',
+        })
+        self.assertEqual(saida.status_code, 201)
+
+        resumo = self.client.get(
+            '/api/financeiro/caixinha/resumo/',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(resumo.status_code, 200)
+        self.assertEqual(Decimal(resumo.data['saldo']), Decimal('164.50'))
+        self.assertEqual(Decimal(resumo.data['totalEntradas']), Decimal('200.00'))
+        self.assertEqual(Decimal(resumo.data['totalSaidas']), Decimal('35.50'))
+
+        lista = self.client.get(
+            '/api/financeiro/caixinha/?page=1&page_size=10',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(lista.status_code, 200)
+        self.assertEqual(lista.data['count'], 2)
+        self.assertEqual(len(lista.data['results']), 2)
+
+    def test_saida_acima_do_saldo_e_recusada(self):
+        self._post({
+            'date': '2026-10-08',
+            'type': 'Entrada',
+            'value': '50.00',
+            'description': 'Troco inicial',
+        })
+        response = self._post({
+            'date': '2026-10-08',
+            'type': 'Saída',
+            'value': '80.00',
+            'description': 'Compra sem saldo',
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_excluir_entrada_que_cobre_saida_e_recusado(self):
+        entrada = self._post({
+            'date': '2026-10-08',
+            'type': 'Entrada',
+            'value': '100.00',
+            'description': 'Abastecimento',
+        })
+        self._post({
+            'date': '2026-10-08',
+            'type': 'Saída',
+            'value': '40.00',
+            'description': 'Despesa',
+        })
+        response = self.client.delete(
+            f"/api/financeiro/caixinha/{entrada.data['id']}/",
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_lista_classifica_por_data(self):
+        self._post({
+            'date': '2026-10-01',
+            'type': 'Entrada',
+            'value': '10.00',
+            'description': 'Lançamento antigo',
+        })
+        self._post({
+            'date': '2026-10-08',
+            'type': 'Entrada',
+            'value': '20.00',
+            'description': 'Lançamento recente',
+        })
+        headers = auth_headers(self.user, 'Financeiro')
+        recente_primeiro = self.client.get('/api/financeiro/caixinha/?ordering=date_desc', **headers)
+        antigo_primeiro = self.client.get('/api/financeiro/caixinha/?ordering=date_asc', **headers)
+        self.assertEqual(recente_primeiro.data['results'][0]['date'], '2026-10-08')
+        self.assertEqual(antigo_primeiro.data['results'][0]['date'], '2026-10-01')
+
+    def test_extrato_do_periodo_traz_saldo_anterior_e_movimentos(self):
+        self._post({
+            'date': '2026-09-30',
+            'type': 'Entrada',
+            'value': '100.00',
+            'description': 'Antes do período',
+        })
+        self._post({
+            'date': '2026-10-02',
+            'type': 'Entrada',
+            'value': '40.00',
+            'description': 'Reforço',
+        })
+        self._post({
+            'date': '2026-10-05',
+            'type': 'Saída',
+            'value': '15.00',
+            'description': 'Despesa do período',
+        })
+        response = self.client.get(
+            '/api/financeiro/caixinha/extrato/?start_date=2026-10-01&end_date=2026-10-08',
+            **auth_headers(self.user, 'Financeiro'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Decimal(response.data['saldoAnterior']), Decimal('100.00'))
+        self.assertEqual(Decimal(response.data['totalEntradas']), Decimal('40.00'))
+        self.assertEqual(Decimal(response.data['totalSaidas']), Decimal('15.00'))
+        self.assertEqual(Decimal(response.data['saldoFinal']), Decimal('125.00'))
+        self.assertEqual([item['description'] for item in response.data['lancamentos']], ['Reforço', 'Despesa do período'])
+        self.assertEqual(response.data['lancamentos'][0]['type'], 'Entrada')
+        self.assertEqual(response.data['lancamentos'][1]['type'], 'Saída')
+
+    def test_descricoes_padrao_por_tipo(self):
+        headers = auth_headers(self.user, 'Financeiro')
+        criada = self.client.post(
+            '/api/financeiro/caixinha/descricoes/',
+            {'type': 'Saída', 'description': 'Lavagem de veículos'},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(criada.status_code, 201)
+        self.assertEqual(criada.data['type'], 'Saída')
+        self.assertEqual(criada.data['description'], 'Lavagem de veículos')
+        self.assertTrue(AuditLog.objects.filter(action='financeiro.caixinha.descricao.criada').exists())
+
+        mesmo_texto_outro_tipo = self.client.post(
+            '/api/financeiro/caixinha/descricoes/',
+            {'type': 'Entrada', 'description': 'Lavagem de veículos'},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(mesmo_texto_outro_tipo.status_code, 201)
+
+        duplicada = self.client.post(
+            '/api/financeiro/caixinha/descricoes/',
+            {'type': 'Saída', 'description': '  lavagem de veículos  '},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(duplicada.status_code, 400)
+
+        lista = self.client.get('/api/financeiro/caixinha/descricoes/', **headers)
+        self.assertEqual(lista.status_code, 200)
+        self.assertEqual(len(lista.data), 2)
+
+        atualizada = self.client.patch(
+            f"/api/financeiro/caixinha/descricoes/{criada.data['id']}/",
+            {'description': 'Lavagem de frota'},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(atualizada.status_code, 200)
+        self.assertEqual(atualizada.data['description'], 'Lavagem de frota')
+
+        excluida = self.client.delete(
+            f"/api/financeiro/caixinha/descricoes/{criada.data['id']}/",
+            **headers,
+        )
+        self.assertEqual(excluida.status_code, 204)
+        self.assertTrue(AuditLog.objects.filter(action='financeiro.caixinha.descricao.excluida').exists())

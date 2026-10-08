@@ -16,6 +16,7 @@ export const ABA_ITEMS = [
   { module: 'Financeiro', key: 'saldos-bancarios', label: 'Saldos Bancários', path: '/financeiro/balances' },
   { module: 'Financeiro', key: 'ajustes-caixa', label: 'Ajustes de caixa', path: '/financeiro/adjustments' },
   { module: 'Financeiro', key: 'faturamento', label: 'Faturamento', path: '/financeiro/billing' },
+  { module: 'Financeiro', key: 'caixinha', label: 'Caixinha', path: '/financeiro/caixinha' },
 
   { module: 'Faturamento', key: 'home', label: 'Home Faturamento', path: '/faturamento' },
   { module: 'Faturamento', key: 'envio-nf-cliente', label: 'Envio NF Cliente', path: '/faturamento/protocolos' },

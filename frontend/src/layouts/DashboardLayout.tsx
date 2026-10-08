@@ -219,6 +219,17 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Financeiro' && canAba('Financeiro', 'ajustes-caixa')
       },
       {
+        title: "Caixinha",
+        path: "Financeiro / Caixinha",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+          </svg>
+        ),
+        action: () => navigate('/financeiro/caixinha'),
+        show: selectedEnvironment === 'Financeiro' && canAba('Financeiro', 'caixinha')
+      },
+      {
         title: "Faturamento",
         path: "Financeiro / Fluxo de Caixa / Faturamento",
         icon: (
@@ -693,6 +704,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/financeiro/reports')) return `${env} / Fluxo de Caixa / Inclusão de Relatórios`;
     if (path.startsWith('/financeiro/balances')) return `${env} / Fluxo de Caixa / Saldos Bancários`;
     if (path.startsWith('/financeiro/adjustments')) return `${env} / Fluxo de Caixa / Ajustes de Caixa`;
+    if (path.startsWith('/financeiro/caixinha')) return `${env} / Caixinha`;
     if (path.startsWith('/financeiro/billing')) return `${env} / Fluxo de Caixa / Faturamento`;
     if (path.startsWith('/faturamento/cadastros/clientes')) return `${env} / Cadastros / Cadastro cliente`;
     if (path.startsWith('/faturamento/protocolos')) return `${env} / Envio de documentos / Envio NF Cliente`;
@@ -1088,6 +1100,19 @@ const DashboardLayout: React.FC = () => {
                   )}
                 </div>
               </div>
+              )}
+
+              {canAba('Financeiro', 'caixinha') && (
+              <Link
+                to="/financeiro/caixinha"
+                className={`nav-btn ${isRouteActive('/financeiro/caixinha') ? 'active' : ''}`}
+                data-tooltip="Caixinha"
+              >
+                <div className="nav-btn-left">
+                  <NavIcon name="cash-stack" />
+                  <span className="nav-text">Caixinha</span>
+                </div>
+              </Link>
               )}
 
               </div>

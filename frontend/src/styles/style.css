@@ -15770,7 +15770,8 @@ button.proposta-status-badge {
   text-overflow: ellipsis;
 }
 
-.comercial-propostas-table thead th.is-sortable {
+.comercial-propostas-table thead th.is-sortable,
+#caixinha-table thead th.is-sortable {
   cursor: pointer;
   user-select: none;
   overflow: visible;

@@ -52,6 +52,7 @@ ABAS_POR_AMBIENTE = {
         'inclusao-relatorios',
         'saldos-bancarios',
         'ajustes-caixa',
+        'caixinha',
         'faturamento',
     }),
     'Faturamento': frozenset({
