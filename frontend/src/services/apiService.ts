@@ -28,7 +28,7 @@ import type {
   RegistrarCompraPayload, RegistrarSaidaPayload,
   ClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft,
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
-  NdPagadoresResponse, NdPagadorSelecionado, NdTitulo,
+  NdPagadoresResponse, NdPagadorSelecionado, NdTitulo, NdTituloOrdering,
   CnpjConsultaResult,
   ProtocoloImportParams, ProtocoloImportResult,
   SgqPesquisa, SgqPesquisaImportPreview, SgqPesquisaImportResult, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
@@ -2367,11 +2367,12 @@ export const apiService = {
     return Array.isArray(data?.selecionados) ? data.selecionados.map(normalizarPagadorNd) : [];
   },
 
-  async getNdTitulos(params: { page?: number; pageSize?: number; search?: string } = {}): Promise<PaginatedResponse<NdTitulo>> {
+  async getNdTitulos(params: { page?: number; pageSize?: number; search?: string; ordering?: NdTituloOrdering } = {}): Promise<PaginatedResponse<NdTitulo>> {
     const query: Record<string, string | number> = {};
     if (params.page) query.page = params.page;
     if (params.pageSize) query.page_size = params.pageSize;
     if (params.search?.trim()) query.search = params.search.trim();
+    if (params.ordering) query.ordering = params.ordering;
     const { data } = await api.get('/api/faturamento/nds/titulos/', { params: query });
     return paginatedFromResponse(data, normalizeNdTitulo);
   },

@@ -193,3 +193,15 @@ class ControleNdsTests(TestCase):
         self.assertTrue(all(row['codCliente'] == '10' for row in resposta.data['results']))
         pagadores = self.client.get('/api/faturamento/nds/pagadores/', **self.headers)
         self.assertEqual(pagadores.data['selecionados'], [{'codCliente': '10', 'nome': 'ACME TRANSPORTES'}])
+
+    def test_classifica_vencimento_pela_data(self):
+        self._selecionar_acme()
+        ReceberTitulo.objects.filter(titulo='1001').update(vencimento_real='01/11/2026')
+        ReceberTitulo.objects.filter(titulo='1002').update(vencimento_real='20/10/2026')
+        resposta = self.client.get(
+            '/api/faturamento/nds/titulos/',
+            {'ordering': 'vencimento_asc'},
+            **self.headers,
+        )
+        ordem = [row['titulo'] for row in resposta.data['results']]
+        self.assertEqual(ordem, ['1002', '1001'])

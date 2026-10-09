@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import { useNdPagadores, useNdTitulos, useSalvarNdPagadores } from '../../hooks/useControleNds';
-import type { NdPagadorDisponivel, NdPagadorSelecionado, NdTituloSituacao } from '../../types/domain';
+import type { NdPagadorDisponivel, NdPagadorSelecionado, NdTituloCampoOrdem, NdTituloOrdering, NdTituloSituacao } from '../../types/domain';
 
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
@@ -15,6 +15,33 @@ const SITUACAO: Record<NdTituloSituacao, { label: string; classe: string }> = {
   a_vencer: { label: 'Em dia', classe: 'success' },
   baixado: { label: 'Baixado', classe: 'inativo' },
 };
+
+const COLUNAS: { id: string; label: string; align?: 'right'; ordena?: NdTituloCampoOrdem }[] = [
+  { id: 'cod', label: 'Cód. cliente' },
+  { id: 'cliente', label: 'Cliente', ordena: 'cliente' },
+  { id: 'titulo', label: 'Título' },
+  { id: 'natureza', label: 'Natureza' },
+  { id: 'emissao', label: 'Emissão', ordena: 'emissao' },
+  { id: 'vencimento', label: 'Vencimento real', ordena: 'vencimento' },
+  { id: 'saldo', label: 'Saldo', align: 'right' },
+  { id: 'historico', label: 'Histórico' },
+  { id: 'situacao', label: 'Situação' },
+];
+
+function nextOrdering(field: NdTituloCampoOrdem, current: NdTituloOrdering): NdTituloOrdering {
+  return current === `${field}_asc` ? `${field}_desc` : `${field}_asc`;
+}
+
+function SortIcon({ field, ordering }: { field: NdTituloCampoOrdem; ordering: NdTituloOrdering }) {
+  const isActive = ordering === `${field}_asc` || ordering === `${field}_desc`;
+  const isAsc = ordering === `${field}_asc`;
+  return (
+    <span style={{ marginLeft: 6, display: 'inline-flex', flexDirection: 'column', gap: 0, verticalAlign: 'middle', lineHeight: 1 }}>
+      <i className="bi bi-caret-up-fill" style={{ fontSize: 11, display: 'block', color: isActive && isAsc ? '#0f85c1' : '#c8d3e0' }} />
+      <i className="bi bi-caret-down-fill" style={{ fontSize: 11, display: 'block', color: isActive && !isAsc ? '#0f85c1' : '#c8d3e0' }} />
+    </span>
+  );
+}
 
 function mensagemErro(error: unknown): string {
   const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
@@ -31,10 +58,11 @@ const FaturamentoControleNds: React.FC = () => {
   const [busca, setBusca] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [ordering, setOrdering] = useState<NdTituloOrdering>('cliente_asc');
   const [modalAberto, setModalAberto] = useState(false);
 
   const titulosQuery = useNdTitulos(
-    { page, pageSize, search: busca },
+    { page, pageSize, search: busca, ordering },
     temPagadores,
   );
   const painelQuery = temPagadores ? titulosQuery : pagadoresQuery;
@@ -85,11 +113,6 @@ const FaturamentoControleNds: React.FC = () => {
               }}
             />
           </div>
-          {temPagadores && (
-            <span style={{ fontSize: '13px', color: '#64748b' }}>
-              {selecionados.map((pagador) => `${pagador.nome || 'Sem nome'} (${pagador.codCliente})`).join(' · ')}
-            </span>
-          )}
         </div>
         <div className="reports-filter-right">
           <span className="reports-records-count">
@@ -110,15 +133,21 @@ const FaturamentoControleNds: React.FC = () => {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Cód. cliente</th>
-                  <th>Cliente</th>
-                  <th>Título</th>
-                  <th>Natureza</th>
-                  <th>Emissão</th>
-                  <th>Vencimento real</th>
-                  <th style={{ textAlign: 'right' }}>Saldo</th>
-                  <th>Histórico</th>
-                  <th>Situação</th>
+                  {COLUNAS.map((coluna) => (
+                    <th
+                      key={coluna.id}
+                      style={coluna.ordena
+                        ? { cursor: 'pointer', userSelect: 'none', textAlign: coluna.align }
+                        : { textAlign: coluna.align }}
+                      onClick={coluna.ordena ? () => {
+                        setOrdering((atual) => nextOrdering(coluna.ordena as NdTituloCampoOrdem, atual));
+                        setPage(1);
+                      } : undefined}
+                    >
+                      {coluna.label}
+                      {coluna.ordena && <SortIcon field={coluna.ordena} ordering={ordering} />}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -304,7 +333,7 @@ function SelecionarPagadoresModal({
 
   return (
     <div
-      className="search-backdrop"
+      className="search-backdrop admin-user-modal-backdrop"
       style={{ display: 'flex', zIndex: 3000 }}
       onClick={(event) => { if (event.target === event.currentTarget && !pending) onClose(); }}
     >

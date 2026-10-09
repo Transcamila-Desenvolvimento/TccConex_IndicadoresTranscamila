@@ -41,7 +41,10 @@ class NdTitulosView(ModuleScopedViewMixin, APIView):
     pagination_class = ReportPagination
 
     def get(self, request):
-        qs = titulos_do_pagador(request.query_params.get('search', ''))
+        qs = titulos_do_pagador(
+            request.query_params.get('search', ''),
+            request.query_params.get('ordering', ''),
+        )
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(qs, request, view=self)
         return paginator.get_paginated_response(TituloNdSerializer(page, many=True).data)

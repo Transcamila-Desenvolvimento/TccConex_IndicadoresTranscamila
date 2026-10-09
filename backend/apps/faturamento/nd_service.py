@@ -2,6 +2,7 @@ from datetime import datetime
 
 from django.db import transaction
 from django.db.models import Count, Q
+from django.db.models.functions import Concat, Substr
 from django.utils import timezone
 
 from apps.financeiro.models import ReceberTitulo, ReportBatch
@@ -198,7 +199,34 @@ def sincronizar_titulos(codigos):
         aplicar_nomes_por_codigo(nomes_atuais_por_codigo(codigos))
 
 
-def titulos_do_pagador(search=''):
+def _ordem_data_br(campo):
+    """dd/mm/aaaa vira aaaammdd para ordenar a data, não o texto."""
+    return Concat(Substr(campo, 7, 4), Substr(campo, 4, 2), Substr(campo, 1, 2))
+
+
+_ORDEM_TITULOS = {
+    'cod_cliente_asc': ('cod_cliente', 'id'),
+    'cod_cliente_desc': ('-cod_cliente', '-id'),
+    'cliente_asc': ('cliente', 'id'),
+    'cliente_desc': ('-cliente', '-id'),
+    'titulo_asc': ('titulo', 'id'),
+    'titulo_desc': ('-titulo', '-id'),
+    'natureza_asc': ('natureza', 'id'),
+    'natureza_desc': ('-natureza', '-id'),
+    'emissao_asc': ('emissao_ordem', 'id'),
+    'emissao_desc': ('-emissao_ordem', '-id'),
+    'vencimento_asc': ('vencimento_ordem', 'id'),
+    'vencimento_desc': ('-vencimento_ordem', '-id'),
+    'saldo_asc': ('saldo', 'id'),
+    'saldo_desc': ('-saldo', '-id'),
+    'historico_asc': ('historico', 'id'),
+    'historico_desc': ('-historico', '-id'),
+    'situacao_asc': ('baixado', 'vencimento_ordem', 'id'),
+    'situacao_desc': ('-baixado', '-vencimento_ordem', '-id'),
+}
+
+
+def titulos_do_pagador(search='', ordering=''):
     codigos = codigos_selecionados()
     if not codigos:
         return TituloNd.objects.none()
@@ -213,4 +241,9 @@ def titulos_do_pagador(search=''):
             | Q(natureza__icontains=term)
             | Q(historico__icontains=term)
         )
-    return qs.order_by('baixado', 'cliente', 'titulo', 'id')
+    qs = qs.annotate(
+        emissao_ordem=_ordem_data_br('emissao'),
+        vencimento_ordem=_ordem_data_br('vencimento_real'),
+    )
+    campos = _ORDEM_TITULOS.get((ordering or '').strip(), _ORDEM_TITULOS['cliente_asc'])
+    return qs.order_by(*campos)

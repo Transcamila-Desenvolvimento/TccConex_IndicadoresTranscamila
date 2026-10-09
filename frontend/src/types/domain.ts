@@ -1318,6 +1318,19 @@ export interface NdPagadoresResponse {
 
 export type NdTituloSituacao = 'vencido' | 'a_vencer' | 'baixado';
 
+export type NdTituloCampoOrdem =
+  | 'cod_cliente'
+  | 'cliente'
+  | 'titulo'
+  | 'natureza'
+  | 'emissao'
+  | 'vencimento'
+  | 'saldo'
+  | 'historico'
+  | 'situacao';
+
+export type NdTituloOrdering = `${NdTituloCampoOrdem}_asc` | `${NdTituloCampoOrdem}_desc`;
+
 export interface NdTitulo {
   id: string;
   codCliente: string;
