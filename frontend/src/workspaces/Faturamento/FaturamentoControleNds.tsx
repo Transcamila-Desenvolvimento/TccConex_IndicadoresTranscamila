@@ -10,10 +10,21 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const formatCurrency = (value: number) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const SITUACAO: Record<NdTituloSituacao, { label: string; classe: string }> = {
-  vencido: { label: 'Vencido', classe: 'danger' },
-  a_vencer: { label: 'Em dia', classe: 'success' },
-  baixado: { label: 'Baixado', classe: 'inativo' },
+const badgeSituacao = (color: string): React.CSSProperties => ({
+  display: 'inline-block',
+  padding: '2px 10px',
+  borderRadius: '9999px',
+  fontSize: '12px',
+  fontWeight: 600,
+  color,
+  border: `1.5px solid ${color}`,
+  backgroundColor: '#ffffff',
+});
+
+const SITUACAO: Record<NdTituloSituacao, { label: string; color: string }> = {
+  vencido: { label: 'Vencido', color: '#dc2626' },
+  a_vencer: { label: 'Em dia', color: '#16a34a' },
+  baixado: { label: 'Baixado', color: '#64748b' },
 };
 
 const COLUNAS: { id: string; label: string; align?: 'right'; ordena?: NdTituloCampoOrdem }[] = [
@@ -180,7 +191,7 @@ const FaturamentoControleNds: React.FC = () => {
                           {row.historico || '—'}
                         </td>
                         <td>
-                          <span className={`status-badge ${situacao.classe}`}>{situacao.label}</span>
+                          <span style={badgeSituacao(situacao.color)}>{situacao.label}</span>
                         </td>
                       </tr>
                     );
