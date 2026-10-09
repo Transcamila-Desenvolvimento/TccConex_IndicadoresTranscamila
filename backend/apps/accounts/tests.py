@@ -310,6 +310,7 @@ class UserManagementPaginationTests(TestCase):
                 'status': 'ativo',
                 'cargo': 'Analista Comercial',
                 'telefone': '(43) 99999-1234',
+                'cpf': '390.533.447-05',
                 'environments': ['Comercial'],
                 'filiais': {'Comercial': ['Ibiporã (Matriz)']},
             },
@@ -319,6 +320,7 @@ class UserManagementPaginationTests(TestCase):
         self.assertEqual(create.status_code, 201, create.content)
         self.assertEqual(create.data['telefone'], '(43) 99999-1234')
         self.assertEqual(create.data['cargo'], 'Analista Comercial')
+        self.assertEqual(create.data['cpf'], '390.533.447-05')
         user_id = create.data['id']
 
         update = self.client.patch(
@@ -329,6 +331,51 @@ class UserManagementPaginationTests(TestCase):
         )
         self.assertEqual(update.status_code, 200, update.content)
         self.assertEqual(update.data['telefone'], '')
+
+    def test_cpf_obrigatorio_na_criacao_e_opcional_em_cadastro_antigo(self):
+        base = {
+            'username': 'oper_cpf',
+            'name': 'Operador CPF',
+            'password': 'senha123',
+            'roleId': '2',
+            'status': 'ativo',
+            'environments': ['Financeiro'],
+            'filiais': {'Financeiro': ['Ibiporã (Matriz)']},
+        }
+        sem_cpf = self.client.post(
+            '/api/auth/users/',
+            base,
+            format='json',
+            **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(sem_cpf.status_code, 400, sem_cpf.content)
+
+        invalido = self.client.post(
+            '/api/auth/users/',
+            {**base, 'cpf': '111.111.111-11'},
+            format='json',
+            **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(invalido.status_code, 400, invalido.content)
+
+        antigo = User.objects.get(username='oper_00')
+        editado = self.client.patch(
+            f'/api/auth/users/{antigo.id}/',
+            {'name': 'Operador Teste 00'},
+            format='json',
+            **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(editado.status_code, 200, editado.content)
+        self.assertEqual(editado.data['cpf'], '')
+
+        com_mascara = self.client.patch(
+            f'/api/auth/users/{antigo.id}/',
+            {'cpf': '141.684.779-08'},
+            format='json',
+            **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(com_mascara.status_code, 200, com_mascara.content)
+        self.assertEqual(com_mascara.data['cpf'], '141.684.779-08')
 
 
 class UserManagementEnvironmentRulesTests(TestCase):

@@ -52,7 +52,8 @@ def sistema_camilo() -> str:
     return (
         f'Você é {config.nome_efetivo}, assistente do ERP TccConex da Transcamila. '
         f'{instrucao} '
-        'Neste chat você não consulta dados do ERP, documentos internos nem números da empresa. '
+        'Neste chat você não consulta dados do ERP. '
+        'Documentos padrão da empresa só entram pela Matriz empresarial, quando o material vier junto da pergunta. '
         'Se pedirem um dado do sistema, diga para usar um agente com essa parte liberada. '
         'Não invente cifras, nomes de clientes ou documentos. '
         + FORMATO_RESPOSTA
@@ -125,11 +126,22 @@ def historico_valido(bruto, limite: int = 24) -> list[dict]:
     return itens
 
 
+def material_matriz_empresarial(pergunta: str) -> str:
+    from apps.camilo.consulta import resumo_documentos
+    from apps.camilo.models import DocumentoMatrizEmpresarial
+
+    if not DocumentoMatrizEmpresarial.objects.exists():
+        return ''
+    return resumo_documentos(None, pergunta, modelo=DocumentoMatrizEmpresarial)
+
+
 def responder_camilo(pergunta: str, historico: list[dict] | None = None) -> dict:
+    material = material_matriz_empresarial(pergunta)[:ORCAMENTO_MATERIAL]
     anteriores = historico_valido(historico)
     sistema = sistema_camilo()
-    orcamento = max(0, LIMITE_CONTEXTO - len(sistema) - len(pergunta))
-    mensagens = [*encaixar_historico(anteriores, orcamento), {'role': 'user', 'text': pergunta}]
+    pedido = pergunta if not material else f'Material da Matriz empresarial:\n{material}\n\nPergunta: {pergunta}'
+    orcamento = max(0, LIMITE_CONTEXTO - len(sistema) - len(pedido))
+    mensagens = [*encaixar_historico(anteriores, orcamento), {'role': 'user', 'text': pedido}]
     resposta = gerar(sistema, mensagens)
     titulo = titulo_da_conversa(pergunta, resposta) if not anteriores else ''
     return {'resposta': resposta, 'titulo': titulo, **medir_contexto(sistema, mensagens)}

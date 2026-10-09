@@ -25,6 +25,14 @@ import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 
 const PAGE_SIZE = 10;
 
+function mascaraCpf(valor: string) {
+  const digitos = valor.replace(/\D/g, '').slice(0, 11);
+  if (digitos.length <= 3) return digitos;
+  if (digitos.length <= 6) return `${digitos.slice(0, 3)}.${digitos.slice(3)}`;
+  if (digitos.length <= 9) return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6)}`;
+  return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`;
+}
+
 const MODULE_ACCESS_GROUPS = [
   { module: 'Financeiro', label: 'Financeiro' },
   { module: 'Faturamento', label: 'Faturamento' },
@@ -98,6 +106,8 @@ const AdminUsersPanel: React.FC = () => {
   const [name, setName] = useState('');
   const [cargo, setCargo] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [cpfObrigatorio, setCpfObrigatorio] = useState(true);
   const [password, setPassword] = useState('');
   const [roleId, setRoleId] = useState('2');
   const [status, setStatus] = useState('ativo');
@@ -158,6 +168,8 @@ const AdminUsersPanel: React.FC = () => {
     setName('');
     setCargo('');
     setTelefone('');
+    setCpf('');
+    setCpfObrigatorio(true);
     setPassword('');
     setRoleId(defaultRoleId);
     setStatus('ativo');
@@ -175,6 +187,8 @@ const AdminUsersPanel: React.FC = () => {
     setName(user.name);
     setCargo(user.cargo || '');
     setTelefone(user.telefone || '');
+    setCpf(user.cpf || '');
+    setCpfObrigatorio(Boolean((user.cpf || '').replace(/\D/g, '')));
     setPassword('');
     setRoleId(user.roleId);
     setStatus(user.status);
@@ -263,6 +277,7 @@ const AdminUsersPanel: React.FC = () => {
       name,
       cargo: cargo.trim(),
       telefone: telefone.trim(),
+      cpf: cpf.trim(),
       roleId,
       status,
       environments,
@@ -283,7 +298,8 @@ const AdminUsersPanel: React.FC = () => {
       }
       setIsModalOpen(false);
     } catch (err: any) {
-      const detail = err?.response?.data?.detail || err?.response?.data?.username?.[0] || err.message || 'Erro ao salvar usuário.';
+      const data = err?.response?.data;
+      const detail = data?.detail || data?.cpf?.[0] || data?.username?.[0] || err.message || 'Erro ao salvar usuário.';
       alert(detail);
     }
   };
@@ -571,6 +587,7 @@ const AdminUsersPanel: React.FC = () => {
                   </th>
                   <th>Usuário</th>
                   <th>Nome Completo</th>
+                  <th>CPF</th>
                   <th>Cargo</th>
                   <th>Conta Google</th>
                   <th>Função</th>
@@ -582,7 +599,7 @@ const AdminUsersPanel: React.FC = () => {
               <tbody>
                 {usersQueryState.canShowEmpty && usersList.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
+                    <td colSpan={10} style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px' }}>
                       Nenhum usuário operacional cadastrado com os filtros ativos.
                     </td>
                   </tr>
@@ -618,6 +635,9 @@ const AdminUsersPanel: React.FC = () => {
                           </div>
                         </td>
                         <td>{u.name}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          {(u.cpf || '').trim() ? u.cpf : <small style={{ color: 'var(--text-muted)' }}>—</small>}
+                        </td>
                         <td>
                           {(u.cargo || '').trim() ? (
                             u.cargo
@@ -736,6 +756,27 @@ const AdminUsersPanel: React.FC = () => {
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
+                <div className="admin-form-row" style={{ marginTop: '10px' }}>
+                  <div className="login-group">
+                    <label htmlFor="admin-user-cpf">
+                      CPF
+                      {!cpfObrigatorio && (
+                        <small style={{ color: 'var(--text-muted)', fontWeight: 400 }}> (opcional neste cadastro antigo)</small>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      id="admin-user-cpf"
+                      inputMode="numeric"
+                      placeholder="000.000.000-00"
+                      required={cpfObrigatorio}
+                      maxLength={14}
+                      value={cpf}
+                      onChange={(e) => setCpf(mascaraCpf(e.target.value))}
                       autoComplete="off"
                     />
                   </div>

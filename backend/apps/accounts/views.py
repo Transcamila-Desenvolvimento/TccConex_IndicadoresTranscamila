@@ -314,7 +314,11 @@ class UserManagementViewSet(viewsets.ModelViewSet):
 
         search = (params.get('search') or '').strip()
         if search:
-            qs = qs.filter(Q(username__icontains=search) | Q(name__icontains=search))
+            consulta = Q(username__icontains=search) | Q(name__icontains=search)
+            digitos = ''.join(caractere for caractere in search if caractere.isdigit())
+            if digitos:
+                consulta |= Q(cpf__icontains=digitos)
+            qs = qs.filter(consulta)
 
         role_id = (params.get('roleId') or '').strip()
         if role_id:

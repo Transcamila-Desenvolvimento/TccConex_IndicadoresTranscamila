@@ -58,7 +58,7 @@ import type {
   RotaDistanciaPayload, RotaDistanciaResult, EnderecoSugestao, GoogleMapsConfigComercial,
   ProdutoComercial, ProdutoComercialPayload, ProdutoComercialLotePayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
   Notificacao, PushNotificacoesConfig, PushInscricaoPayload,
-  CamiloAgente, CamiloAgentePayload, CamiloChatPadrao, CamiloChatPadraoPayload, CamiloConsulta, CamiloParteGrupo,
+  CamiloAgente, CamiloAgentePayload, CamiloChatPadrao, CamiloChatPadraoPayload, CamiloConsulta, CamiloMeuTermo, CamiloParteGrupo, CamiloTermoAceite, CamiloTermoAceiteLista, CamiloTermoPublicacao, CamiloTermoSecao, CamiloTermoVersao,
 } from '../types/domain';
 import {
   cloneTabelaArmazenagem,
@@ -105,6 +105,7 @@ function normalizeUser(raw: any): User {
     name: raw.name,
     cargo: typeof raw.cargo === 'string' ? raw.cargo : '',
     telefone: typeof raw.telefone === 'string' ? raw.telefone : '',
+    cpf: typeof raw.cpf === 'string' ? raw.cpf : '',
     roleId: raw.roleId,
     status: raw.status,
     lastLogin: raw.lastLogin ?? null,
@@ -1139,6 +1140,41 @@ function mapTabelaFrete(raw: any): TabelaFrete {
     linhasCount: Number(raw.linhasCount ?? raw.linhas?.length ?? 0),
     dataCriacao: raw.dataCriacao,
     dataAtualizacao: raw.dataAtualizacao,
+  };
+}
+
+function normalizarSecoesTermo(valor: unknown): CamiloTermoSecao[] {
+  if (!Array.isArray(valor)) return [];
+  return valor
+    .map((item) => {
+      const secao = item && typeof item === 'object' ? item as { titulo?: unknown; texto?: unknown } : {};
+      return {
+        titulo: typeof secao.titulo === 'string' ? secao.titulo : '',
+        texto: typeof secao.texto === 'string' ? secao.texto : '',
+      };
+    })
+    .filter((item) => item.titulo || item.texto);
+}
+
+function normalizarTermoVersao(data: any): CamiloTermoVersao {
+  return {
+    versao: typeof data?.versao === 'string' ? data.versao : 'v1',
+    titulo: typeof data?.titulo === 'string' ? data.titulo : 'Termo de uso do Camilo IA',
+    introducao: typeof data?.introducao === 'string' ? data.introducao : '',
+    assinatura: typeof data?.assinatura === 'string' ? data.assinatura : '',
+    declaracao: typeof data?.declaracao === 'string' ? data.declaracao : 'Li e concordo com o termo de uso do Camilo IA.',
+    secoes: normalizarSecoesTermo(data?.secoes),
+  };
+}
+
+function normalizarMeuTermo(data: any): CamiloMeuTermo {
+  return {
+    ...normalizarTermoVersao(data),
+    aceito: Boolean(data?.aceito),
+    id: typeof data?.id === 'string' ? data.id : undefined,
+    nome: typeof data?.nome === 'string' ? data.nome : undefined,
+    username: typeof data?.username === 'string' ? data.username : undefined,
+    aceitoEm: typeof data?.aceitoEm === 'string' ? data.aceitoEm : undefined,
   };
 }
 
@@ -3501,6 +3537,74 @@ export const apiService = {
     };
   },
 
+  async getCamiloMatrizDocumentos(): Promise<PaginatedResponse<DocumentoRH>> {
+    const { data } = await api.get('/api/camilo/matriz-empresarial/documentos/');
+    return data;
+  },
+
+  async getCamiloMatrizPastas(): Promise<PaginatedResponse<PastaMatrizRH>> {
+    const { data } = await api.get('/api/camilo/matriz-empresarial/pastas/');
+    return data;
+  },
+
+  async createCamiloMatrizPasta(nome: string, parentId?: string | null): Promise<PastaMatrizRH> {
+    const { data } = await api.post('/api/camilo/matriz-empresarial/pastas/', { nome, parentId: parentId || null });
+    return data;
+  },
+
+  async renomearCamiloMatrizPasta(id: string, nome: string): Promise<PastaMatrizRH> {
+    const { data } = await api.post(`/api/camilo/matriz-empresarial/pastas/${id}/renomear/`, { nome });
+    return data;
+  },
+
+  async deleteCamiloMatrizPasta(id: string): Promise<void> {
+    await api.delete(`/api/camilo/matriz-empresarial/pastas/${id}/`);
+  },
+
+  async createCamiloMatrizDocumento(titulo: string, driveFileId: string, pastaId?: string | null): Promise<DocumentoRH> {
+    const { data } = await api.post('/api/camilo/matriz-empresarial/documentos/', { titulo, driveFileId, pastaId: pastaId || null });
+    return data;
+  },
+
+  async renomearCamiloMatrizDocumento(id: string, titulo: string): Promise<DocumentoRH> {
+    const { data } = await api.post(`/api/camilo/matriz-empresarial/documentos/${id}/renomear/`, { titulo });
+    return data;
+  },
+
+  async substituirCamiloMatrizDocumento(id: string, titulo: string, driveFileId: string): Promise<DocumentoRH> {
+    const { data } = await api.post(`/api/camilo/matriz-empresarial/documentos/${id}/substituir/`, { titulo, driveFileId });
+    return data;
+  },
+
+  async deleteCamiloMatrizDocumento(id: string): Promise<void> {
+    await api.delete(`/api/camilo/matriz-empresarial/documentos/${id}/`);
+  },
+
+  async downloadCamiloMatrizDocumento(id: string): Promise<Blob> {
+    const { data } = await api.get(`/api/camilo/matriz-empresarial/documentos/${id}/arquivo/`, { responseType: 'blob' });
+    return data;
+  },
+
+  async moverCamiloMatrizDocumento(id: string, pastaId: string | null): Promise<DocumentoRH> {
+    const { data } = await api.post(`/api/camilo/matriz-empresarial/documentos/${id}/mover/`, { pastaId });
+    return data;
+  },
+
+  async getCamiloMatrizDriveStatus(): Promise<GoogleDriveStatus> {
+    const { data } = await api.get('/api/camilo/matriz-empresarial/drive/status/');
+    return data as GoogleDriveStatus;
+  },
+
+  async browseCamiloMatrizDrive(params: {
+    folderId?: string;
+    pageToken?: string;
+    pageSize?: number;
+    driveId?: string;
+  } = {}): Promise<GoogleDriveBrowseResponse> {
+    const { data } = await api.get('/api/camilo/matriz-empresarial/drive/browse/', { params });
+    return data as GoogleDriveBrowseResponse;
+  },
+
   async salvarCamiloChatPadrao(payload: CamiloChatPadraoPayload): Promise<CamiloChatPadrao> {
     const { data } = await api.put('/api/camilo/chat-padrao/', payload);
     return {
@@ -3526,6 +3630,63 @@ export const apiService = {
   ): Promise<CamiloConsulta> {
     const { data } = await api.post(`/api/camilo/agentes/${id}/consultar/`, { pergunta, historico });
     return data;
+  },
+
+  async getCamiloMeuTermo(): Promise<CamiloMeuTermo> {
+    const { data } = await api.get('/api/camilo/termo/');
+    return normalizarMeuTermo(data);
+  },
+
+  async aceitarCamiloTermo(): Promise<CamiloMeuTermo> {
+    const { data } = await api.post('/api/camilo/termo/', {});
+    return normalizarMeuTermo(data);
+  },
+
+  async getCamiloTermoVigente(): Promise<CamiloTermoVersao> {
+    const { data } = await api.get('/api/camilo/termos/vigente/');
+    return normalizarTermoVersao(data);
+  },
+
+  async publicarCamiloTermo(payload: CamiloTermoPublicacao): Promise<CamiloTermoVersao> {
+    const { data } = await api.post('/api/camilo/termos/vigente/', payload);
+    return normalizarTermoVersao(data);
+  },
+
+  async getCamiloTermosAceitos(
+    search = '',
+    page = 1,
+    pageSize = 10,
+    ordering: 'data_asc' | 'data_desc' = 'data_desc',
+  ): Promise<CamiloTermoAceiteLista> {
+    const params: { search?: string; page: number; page_size: number; ordering: 'data_asc' | 'data_desc' } = {
+      page,
+      page_size: pageSize,
+      ordering,
+    };
+    if (search.trim()) params.search = search.trim();
+    const { data } = await api.get('/api/camilo/termos/', { params });
+    const results = Array.isArray(data?.results) ? data.results : [];
+    return {
+      count: typeof data?.count === 'number' ? data.count : results.length,
+      results: results.map((item: CamiloTermoAceite) => ({
+        id: String(item.id),
+        nome: item.nome || '',
+        username: item.username || '',
+        versao: item.versao || '',
+        aceitoEm: item.aceitoEm || '',
+      })),
+    };
+  },
+
+  async downloadCamiloTermoComprovante(id: string): Promise<Blob> {
+    const { data, headers, status } = await api.get(`/api/camilo/termos/${id}/comprovante/`, {
+      responseType: 'blob',
+      validateStatus: () => true,
+    });
+    if (status < 200 || status >= 300) {
+      throw new Error(await readBlobErrorMessage(data, 'Não foi possível gerar o comprovante.'));
+    }
+    return assertPdfBlob(data, headers);
   },
 
 };

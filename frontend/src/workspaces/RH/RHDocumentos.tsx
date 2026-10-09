@@ -314,6 +314,7 @@ type Acao<TVars, TData = void> = Pick<UseMutationResult<TData, unknown, TVars>, 
 
 export type MatrizConhecimentoProps = {
   raiz: string;
+  embutida?: boolean;
   documentosQuery: UseQueryResult<PaginatedResponse<DocumentoRH>>;
   pastasQuery: UseQueryResult<PaginatedResponse<PastaMatrizRH>>;
   criar: Acao<{ titulo: string; driveFileId: string; pastaId?: string | null }, DocumentoRH>;
@@ -334,6 +335,7 @@ export type MatrizConhecimentoProps = {
 
 export function MatrizConhecimento({
   raiz,
+  embutida = false,
   documentosQuery,
   pastasQuery,
   criar,
@@ -709,12 +711,14 @@ export function MatrizConhecimento({
 
   return (
     <div className="fat-list-compact matriz-conhecimento">
-      <header className="view-header matriz-cabecalho">
-        <div className="matriz-titulo">
-          <div className="matriz-titulo__marca" />
-          <h1 className="view-page-title">Matriz de conhecimento</h1>
-        </div>
-      </header>
+      {!embutida && (
+        <header className="view-header matriz-cabecalho">
+          <div className="matriz-titulo">
+            <div className="matriz-titulo__marca" />
+            <h1 className="view-page-title">Matriz de conhecimento</h1>
+          </div>
+        </header>
+      )}
 
       {formError && <p className="matriz-erro">{formError}</p>}
 

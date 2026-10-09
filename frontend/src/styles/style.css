@@ -20395,6 +20395,148 @@ button.proposta-status-badge {
   color: #047857;
 }
 
+.admin-camilo-matriz {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-camilo-matriz .matriz-conhecimento {
+  flex: 1;
+  padding: 0;
+}
+
+.admin-camilo-termos {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-camilo-versao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.admin-camilo-versao p,
+.admin-camilo-versao-aviso {
+  margin: 0;
+  max-width: 720px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-camilo-versao-aviso {
+  margin-bottom: 14px;
+  color: #047857;
+}
+
+.admin-camilo-termo-modal {
+  width: 720px;
+  max-width: min(96vw, calc(100vw / var(--app-zoom) - 32px));
+}
+
+#admin-camilo-termo-form .login-group {
+  margin-bottom: 12px;
+}
+
+#admin-camilo-termo-form .login-group:last-child {
+  margin-bottom: 0;
+}
+
+#admin-camilo-termo-form .login-group label {
+  margin-bottom: 5px;
+  font-size: 11px;
+}
+
+#admin-camilo-termo-form .login-group input,
+#admin-camilo-termo-form .login-group textarea {
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
+.admin-camilo-secao-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.admin-camilo-secao-topo .admin-form-section-title {
+  margin: 0;
+}
+
+.admin-camilo-secao-topo > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.admin-camilo-secao {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.admin-camilo-secao:last-child {
+  margin-bottom: 0;
+}
+
+.admin-camilo-termo-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-camilo-termo-acoes .btn-login {
+  width: auto;
+  min-width: 180px;
+  padding: 10px 18px;
+}
+
+.admin-camilo-termo-acoes .btn-login:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.admin-camilo-busca {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 360px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.admin-camilo-busca input {
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 400;
+  color: #111827;
+}
+
+.camilo-termo-erro {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
 .camilo-hero h1 {
   margin: 0 0 28px;
   font-size: 28px;
@@ -21296,4 +21438,192 @@ button.proposta-status-badge {
 .olho-vivo-mes-tabela td:last-child,
 .olho-vivo-mes-tabela th:last-child {
   font-weight: 700;
+}
+
+.camilo-termo {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  background: rgba(15, 23, 42, 0.48);
+  animation: camilo-termo-fundo 0.28s ease;
+}
+
+.camilo-termo-sheet {
+  width: min(560px, 100%);
+  max-height: min(84vh, 780px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 28px 28px 22px;
+  box-sizing: border-box;
+  background: #fff;
+  border: 0;
+  border-radius: 22px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+  overflow: auto;
+  animation: camilo-termo-sobe 0.46s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.camilo-termo-logo {
+  width: 148px;
+  height: auto;
+  margin: 4px auto 0;
+}
+
+.camilo-termo-sheet h2 {
+  margin: 0;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 650;
+  color: #111827;
+}
+
+.camilo-termo-lead {
+  margin: -6px 0 0;
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.camilo-termo-powered {
+  margin: -6px 0 0;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.camilo-termo-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.camilo-termo-campo input {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  color: #111827;
+  font: inherit;
+  font-weight: 500;
+}
+
+.camilo-termo-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #f9fafb;
+}
+
+.camilo-termo-corpo h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 650;
+  color: #111827;
+}
+
+.camilo-termo-corpo p {
+  margin: 0;
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.camilo-termo-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  color: #1f2937;
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.camilo-termo-check input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--primary-color);
+}
+
+.camilo-termo-acoes {
+  display: flex;
+  gap: 10px;
+}
+
+.camilo-termo-acoes > button {
+  flex: 1;
+}
+
+.camilo-termo-recusar {
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 12px 16px;
+  background: #fff;
+  color: #374151;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.camilo-termo-recusar:hover {
+  background: #f3f4f6;
+}
+
+.camilo-termo-aceitar {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  background: var(--primary-color);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.camilo-termo-aceitar:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.camilo-termo-aceitar:disabled {
+  background: #d1d5db;
+  cursor: default;
+}
+
+@keyframes camilo-termo-sobe {
+  from { transform: translateY(28px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes camilo-termo-fundo {
+  from { background: rgba(15, 23, 42, 0); }
+  to { background: rgba(15, 23, 42, 0.48); }
+}
+
+@media (max-width: 640px) {
+  .camilo-termo {
+    padding: 16px 12px;
+  }
+
+  .camilo-termo-sheet {
+    width: 100%;
+    padding: 22px 18px 18px;
+    border-radius: 18px;
+  }
 }

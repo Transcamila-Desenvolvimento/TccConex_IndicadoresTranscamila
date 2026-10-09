@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from .cpf import cpf_valido, formatar_cpf, somente_digitos
 from .constants import (
     ADMIN_ENVIRONMENT,
     sanitize_abas,
@@ -24,6 +25,27 @@ class RoleSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         data['permissions'] = sanitize_permissions(data.get('permissions'))
         return data
+
+
+def _cpf_na_resposta(data):
+    data['cpf'] = formatar_cpf(data.get('cpf') or '')
+    return data
+
+
+def _validar_cpf(value, instance=None, obrigatorio=False):
+    digitos = somente_digitos(value)
+    if not digitos:
+        if obrigatorio:
+            raise serializers.ValidationError('Informe o CPF.')
+        return ''
+    if not cpf_valido(digitos):
+        raise serializers.ValidationError('CPF inválido.')
+    duplicado = User.objects.filter(cpf=digitos)
+    if instance is not None:
+        duplicado = duplicado.exclude(pk=instance.pk)
+    if duplicado.exists():
+        raise serializers.ValidationError('Este CPF já está cadastrado.')
+    return digitos
 
 
 def _apply_environment_rules(user):
@@ -50,7 +72,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'name', 'cargo', 'telefone', 'roleId', 'status',
+            'id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status',
             'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'lastLogin',
             'googleEmail', 'googleLinkedAt', 'googlePicture', 'mustChangePassword',
         ]
@@ -65,7 +87,7 @@ class UserSerializer(serializers.ModelSerializer):
         data['indicadores'] = sanitize_indicadores(data.get('indicadores'))
         data['funcoes'] = sanitize_funcoes(data.get('funcoes'))
         data['abas'] = sanitize_abas(data.get('abas'))
-        return data
+        return _cpf_na_resposta(data)
 
 
 class LoginSerializer(serializers.Serializer):
@@ -85,11 +107,18 @@ class UserDirectorySerializer(serializers.ModelSerializer):
 class CreateUserSerializer(serializers.ModelSerializer):
     roleId = serializers.CharField(source='role_id', required=False, default='2')
     password = serializers.CharField(required=True, write_only=True, min_length=6)
+    cpf = serializers.CharField(required=True, allow_blank=False, max_length=14)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
+        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
         read_only_fields = ['id']
+
+    def validate_cpf(self, value):
+        return _validar_cpf(value, obrigatorio=True)
+
+    def to_representation(self, instance):
+        return _cpf_na_resposta(super().to_representation(instance))
 
     def validate_username(self, value):
         if User.objects.filter(username__iexact=value).exists():
@@ -119,11 +148,19 @@ class CreateUserSerializer(serializers.ModelSerializer):
 class UpdateUserSerializer(serializers.ModelSerializer):
     roleId = serializers.CharField(source='role_id', required=False)
     password = serializers.CharField(required=False, write_only=True)
+    cpf = serializers.CharField(required=False, allow_blank=True, max_length=14)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
+        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
         read_only_fields = ['id', 'username']
+
+    def validate_cpf(self, value):
+        ja_tem = bool(somente_digitos(getattr(self.instance, 'cpf', '') or ''))
+        return _validar_cpf(value, instance=self.instance, obrigatorio=ja_tem)
+
+    def to_representation(self, instance):
+        return _cpf_na_resposta(super().to_representation(instance))
 
     def validate_cargo(self, value):
         return str(value or '').strip()[:120]

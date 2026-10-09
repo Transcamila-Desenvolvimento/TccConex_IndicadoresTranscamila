@@ -8,6 +8,8 @@ export interface User {
   cargo: string;
   /** Telefone de contato (opcional) — assinatura do e-mail comercial. */
   telefone: string;
+  /** CPF formatado. Vazio nos cadastros anteriores à obrigatoriedade. */
+  cpf: string;
   roleId: string;
   status: string;
   lastLogin: string | null;
@@ -3581,6 +3583,46 @@ export interface CamiloChatPadrao {
 export interface CamiloChatPadraoPayload {
   nome: string;
   instrucao: string;
+}
+
+export interface CamiloTermoSecao {
+  titulo: string;
+  texto: string;
+}
+
+export interface CamiloTermoPublicacao {
+  declaracao: string;
+  secoes: CamiloTermoSecao[];
+}
+
+export interface CamiloTermoVersao {
+  versao: string;
+  titulo: string;
+  introducao: string;
+  assinatura: string;
+  declaracao: string;
+  secoes: CamiloTermoSecao[];
+}
+
+export interface CamiloMeuTermo extends CamiloTermoVersao {
+  aceito: boolean;
+  id?: string;
+  nome?: string;
+  username?: string;
+  aceitoEm?: string;
+}
+
+export interface CamiloTermoAceite {
+  id: string;
+  nome: string;
+  username: string;
+  versao: string;
+  aceitoEm: string;
+}
+
+export interface CamiloTermoAceiteLista {
+  count: number;
+  results: CamiloTermoAceite[];
 }
 
 
