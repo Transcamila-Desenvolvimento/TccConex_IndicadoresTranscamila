@@ -3,7 +3,8 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from '../components/UserAvatar';
 import NotificacoesBell from '../components/NotificacoesBell';
-import { AGENTE_CAMILO_ENVIRONMENT, environmentRequiresFilial, isAdminEnvironment } from '../constants/environments';
+import { AGENTE_CAMILO_ENVIRONMENT, environmentRequiresFilial, filterActiveEnvironments, isAdminEnvironment } from '../constants/environments';
+import { branchesForModule } from '../constants/filiais';
 import { getAllowedIndicadores } from '../constants/indicadores';
 import { userCanSeeAba } from '../constants/abas';
 import logoExpanded from '../assets/Logo_TccConex.png';
@@ -36,7 +37,7 @@ function ChevronSubmenu({ open }: { open: boolean }) {
 }
 
 const DashboardLayout: React.FC = () => {
-  const { user, selectedEnvironment, selectedFilial, logout, clearEnvironment } = useAuth();
+  const { user, selectedEnvironment, selectedFilial, logout, clearEnvironment, selectEnvironmentAndFilial } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const allowedIndicadores = getAllowedIndicadores(user);
@@ -45,6 +46,9 @@ const DashboardLayout: React.FC = () => {
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [isAmbienteOpen, setIsAmbienteOpen] = useState(false);
+  const [ambienteComFilial, setAmbienteComFilial] = useState<string | null>(null);
+  const [filialMenuTopo, setFilialMenuTopo] = useState(0);
   const [isCashflowSubmenuOpen, setIsCashflowSubmenuOpen] = useState(false);
   const [indOpenGroup, setIndOpenGroup] = useState<IndNavGroup | null>(null);
   const [isEnvioDocumentosSubmenuOpen, setIsEnvioDocumentosSubmenuOpen] = useState(false);
@@ -117,6 +121,9 @@ const DashboardLayout: React.FC = () => {
       if (!target.closest('.header-user')) {
         setIsUserDropdownOpen(false);
       }
+      if (!target.closest('.header-ambiente')) {
+        setIsAmbienteOpen(false);
+      }
     };
     document.addEventListener('click', handleOutsideClick);
     return () => document.removeEventListener('click', handleOutsideClick);
@@ -126,6 +133,40 @@ const DashboardLayout: React.FC = () => {
   const handleChangeEnv = () => {
     clearEnvironment();
     navigate('/select-environment');
+  };
+
+  const ambientesDoUsuario = filterActiveEnvironments(user?.environments);
+  const rotuloAmbiente = (env: string) => {
+    if (env === 'Administração/Manutenção') return 'Administração';
+    if (env === AGENTE_CAMILO_ENVIRONMENT) return 'Camilo IA';
+    return env;
+  };
+
+  const filiaisDoAmbiente = (env: string) => {
+    if (!environmentRequiresFilial(env)) return [];
+    return user?.roleId === '1' ? [...branchesForModule(env)] : (user?.filiais?.[env] ?? []);
+  };
+
+  const trocarAmbiente = (env: string, filial = '') => {
+    setIsAmbienteOpen(false);
+    setAmbienteComFilial(null);
+    if (env === selectedEnvironment && filial === (selectedFilial ?? '')) return;
+    selectEnvironmentAndFilial(env, filial);
+    navigate('/');
+  };
+
+  const mostrarFiliais = (env: string, item: HTMLButtonElement) => {
+    const filiais = filiaisDoAmbiente(env);
+    if (!filiais.length) {
+      setAmbienteComFilial(null);
+      return;
+    }
+    const menus = item.closest('.header-ambiente-menus');
+    const topo = menus
+      ? item.getBoundingClientRect().top - menus.getBoundingClientRect().top
+      : 0;
+    setFilialMenuTopo(topo);
+    setAmbienteComFilial(env);
   };
 
   const getSystemFunctions = () => {
@@ -1698,6 +1739,67 @@ const DashboardLayout: React.FC = () => {
               </div>
             )}
             <NotificacoesBell />
+            {ambientesDoUsuario.length > 1 && selectedEnvironment && (
+              <div className={`header-ambiente${isAmbienteOpen ? ' is-open' : ''}`}>
+                <button
+                  type="button"
+                  className="header-ambiente-btn"
+                  aria-haspopup="listbox"
+                  aria-expanded={isAmbienteOpen}
+                  onClick={() => {
+                    setIsUserDropdownOpen(false);
+                    setAmbienteComFilial(null);
+                    setIsAmbienteOpen((aberto) => !aberto);
+                  }}
+                >
+                  <span>{rotuloAmbiente(selectedEnvironment)}</span>
+                  <i className="bi bi-chevron-down" aria-hidden="true" />
+                </button>
+                {isAmbienteOpen && (
+                  <div className="header-ambiente-menus">
+                    {ambienteComFilial && (
+                      <div className="header-ambiente-filiais" style={{ top: filialMenuTopo }} role="listbox" aria-label="Filiais">
+                        {filiaisDoAmbiente(ambienteComFilial).map((filial) => (
+                          <button
+                            key={filial}
+                            type="button"
+                            role="option"
+                            aria-selected={ambienteComFilial === selectedEnvironment && filial === selectedFilial}
+                            className={`header-ambiente-item${ambienteComFilial === selectedEnvironment && filial === selectedFilial ? ' is-atual' : ''}`}
+                            onClick={() => trocarAmbiente(ambienteComFilial, filial)}
+                          >
+                            {filial}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="header-ambiente-lista" role="listbox" aria-label="Ambientes">
+                      {ambientesDoUsuario.map((env) => {
+                        const pedeFilial = environmentRequiresFilial(env) && filiaisDoAmbiente(env).length > 0;
+                        return (
+                          <button
+                            key={env}
+                            type="button"
+                            role="option"
+                            aria-selected={env === selectedEnvironment}
+                            aria-expanded={pedeFilial ? ambienteComFilial === env : undefined}
+                            className={`header-ambiente-item${env === selectedEnvironment ? ' is-atual' : ''}${ambienteComFilial === env ? ' is-open' : ''}`}
+                            onMouseEnter={(event) => mostrarFiliais(env, event.currentTarget)}
+                            onClick={(event) => {
+                              if (pedeFilial) mostrarFiliais(env, event.currentTarget);
+                              else trocarAmbiente(env);
+                            }}
+                          >
+                            {pedeFilial && <i className="bi bi-chevron-left" aria-hidden="true" />}
+                            <span>{rotuloAmbiente(env)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           <div 
             className="header-user" 
             id="btn-header-user" 

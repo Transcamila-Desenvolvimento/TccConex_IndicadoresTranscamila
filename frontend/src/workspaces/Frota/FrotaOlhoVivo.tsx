@@ -11,8 +11,6 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-const ANO_INICIAL = 2019;
-
 const formatQuando = (iso: string | null) => {
   if (!iso) return '';
   const data = new Date(iso);
@@ -132,11 +130,16 @@ const FrotaOlhoVivo: React.FC = () => {
   const hoje = new Date();
   const anoAtual = hoje.getFullYear();
   const anos = useMemo(
-    () => Array.from({ length: anoAtual - ANO_INICIAL + 1 }, (_, index) => anoAtual - index),
+    () => Array.from({ length: 5 }, (_, index) => anoAtual - index),
     [anoAtual],
   );
   const [ano, setAno] = useState(anoAtual);
   const [mesAberto, setMesAberto] = useState<number | null>(null);
+
+  useEffect(() => {
+    setAno(anoAtual);
+    setMesAberto(null);
+  }, [anoAtual]);
   const anoQuery = useOlhoVivoAno(ano);
   const meses = anoQuery.data?.meses ?? [];
 
