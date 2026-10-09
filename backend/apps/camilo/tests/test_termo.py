@@ -87,6 +87,7 @@ class CamiloTermoTests(TestCase):
         self.assertEqual(pdf.status_code, 200)
         self.assertEqual(pdf['Content-Type'], 'application/pdf')
         self.assertTrue(pdf.content.startswith(b'%PDF'))
+        self.assertIn(b'/Subtype /Image', pdf.content)
 
         self.client.force_authenticate(user=self.usuario)
         negado = self.client.get(f'/api/camilo/termos/{aceite_id}/comprovante/')

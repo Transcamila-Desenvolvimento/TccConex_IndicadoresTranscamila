@@ -14,11 +14,7 @@ from apps.accounts.cpf import formatar_cpf
 from apps.camilo.models import TermoAceite
 from apps.camilo.termo import ASSINATURA
 
-_ASSETS = os.path.abspath(os.path.join(
-    os.path.dirname(__file__),
-    '..', '..', '..',
-    'frontend', 'src', 'assets',
-))
+_ASSETS = os.path.join(os.path.dirname(__file__), 'assets')
 _LOGO_CAMILO = os.path.join(_ASSETS, 'camilo-logo.png')
 _LOGO_TRANSCAMILA = os.path.join(_ASSETS, 'Logo_Indicadores.png')
 
