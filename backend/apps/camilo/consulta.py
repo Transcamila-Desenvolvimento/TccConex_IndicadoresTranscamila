@@ -647,6 +647,8 @@ _SINAIS = {
 }
 
 _LIMITE_RESUMO = 2800
+# Sem palavra-sinal na pergunta, agentes com até estas partes leem todas pelo termo da pergunta.
+_MAXIMO_SEM_SINAL = 3
 
 
 def _tem_sinal(texto: str, sinal: str) -> bool:
@@ -1030,6 +1032,8 @@ def consultar(user, agente, pergunta: str, contexto: str = '') -> dict:
     if not em_foco and (contexto or '').strip():
         leitura = f'{contexto.strip()} {pergunta}'
         em_foco = _partes_em_foco(leitura, efetivos)
+    if not em_foco and len(efetivos) <= _MAXIMO_SEM_SINAL:
+        em_foco = list(efetivos)
     foco = {(item['ambiente'], item['parte']) for item in em_foco}
     fontes = []
     for item in efetivos:

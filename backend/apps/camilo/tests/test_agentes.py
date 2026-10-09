@@ -244,6 +244,12 @@ class CamiloAgenteTests(TestCase):
         self.assertIn('Frete Alfa', geral['material'])
         self.assertNotIn('Ana Lima', geral['material'])
 
+        pessoa = consultar(admin, Agente(), 'Quem é Ana Lima?')
+        self.assertIn('Ana Lima, em 06/2026', pessoa['material'])
+
+        continuacao = consultar(admin, Agente(), 'E qual a situação dela?', contexto='Quem é Ana Lima?')
+        self.assertIn('Ana Lima, em 06/2026', continuacao['material'])
+
     def test_consulta_devolve_o_uso_do_contexto(self):
         from apps.camilo.conversa import LIMITE_CONTEXTO, encaixar_historico
 
