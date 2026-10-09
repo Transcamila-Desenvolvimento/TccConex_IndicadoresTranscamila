@@ -327,6 +327,17 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Faturamento' && canAba('Faturamento', 'cadastro-clientes')
       },
       {
+        title: "Controle de NDs",
+        path: "Faturamento / Controle de NDs",
+        icon: (
+          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 14l2 2 4-4M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" />
+          </svg>
+        ),
+        action: () => navigate('/faturamento/controle-nds'),
+        show: selectedEnvironment === 'Faturamento' && canAba('Faturamento', 'controle-nds')
+      },
+      {
         title: "Home Indicadores",
         path: "Indicadores / Home",
         icon: (
@@ -749,6 +760,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/financeiro/billing')) return `${env} / Fluxo de Caixa / Faturamento`;
     if (path.startsWith('/faturamento/cadastros/clientes')) return `${env} / Cadastros / Cadastro cliente`;
     if (path.startsWith('/faturamento/protocolos')) return `${env} / Envio de documentos / Envio NF Cliente`;
+    if (path.startsWith('/faturamento/controle-nds')) return `${env} / Controle de NDs`;
     if (path.startsWith('/faturamento')) return `${env} / Home`;
     if (path.startsWith('/indicadores/logistica/meta-faturamento')) return `${env} / Logística / Meta de faturamento`;
     if (path.startsWith('/indicadores/rh/movimentacao')) return `${env} / Recursos Humanos / Movimentação de RH`;
@@ -1248,6 +1260,19 @@ const DashboardLayout: React.FC = () => {
                     </Link>
                   </div>
                 </div>
+                )}
+
+                {canAba('Faturamento', 'controle-nds') && (
+                <Link
+                  to="/faturamento/controle-nds"
+                  className={`nav-btn ${isRouteActive('/faturamento/controle-nds') ? 'active' : ''}`}
+                  data-tooltip="Controle de NDs"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="receipt" />
+                    <span className="nav-text">Controle de NDs</span>
+                  </div>
+                </Link>
                 )}
               </div>
             )}

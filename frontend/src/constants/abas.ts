@@ -21,6 +21,7 @@ export const ABA_ITEMS = [
   { module: 'Faturamento', key: 'home', label: 'Home Faturamento', path: '/faturamento' },
   { module: 'Faturamento', key: 'envio-nf-cliente', label: 'Envio NF Cliente', path: '/faturamento/protocolos' },
   { module: 'Faturamento', key: 'cadastro-clientes', label: 'Cadastro cliente', path: '/faturamento/cadastros/clientes' },
+  { module: 'Faturamento', key: 'controle-nds', label: 'Controle de NDs', path: '/faturamento/controle-nds' },
 
   { module: 'Compras', key: 'home', label: 'Home Compras', path: '/compras' },
   { module: 'Compras', key: 'controle-estoque', label: 'Controle de estoque', path: '/compras/controle-estoque' },

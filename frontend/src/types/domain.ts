@@ -1296,6 +1296,41 @@ export interface ProtocoloEnvio {
 
 export type ProtocoloOrdering = 'protocolo_asc' | 'protocolo_desc' | 'data_asc' | 'data_desc';
 
+export interface NdPagadorSelecionado {
+  codCliente: string;
+  nome: string;
+}
+
+export interface NdPagadorDisponivel extends NdPagadorSelecionado {
+  titulos: number;
+}
+
+export interface NdLoteReceber {
+  label: string;
+  referenceDate: string;
+}
+
+export interface NdPagadoresResponse {
+  selecionados: NdPagadorSelecionado[];
+  disponiveis: NdPagadorDisponivel[];
+  lote: NdLoteReceber | null;
+}
+
+export type NdTituloSituacao = 'vencido' | 'a_vencer' | 'baixado';
+
+export interface NdTitulo {
+  id: string;
+  codCliente: string;
+  cliente: string;
+  titulo: string;
+  natureza: string;
+  emissao: string;
+  vencimentoReal: string;
+  saldo: number;
+  historico: string;
+  situacao: NdTituloSituacao;
+}
+
 export interface ProtocoloQueryParams extends ListQueryParams {
   cliente?: string;
   data?: string;

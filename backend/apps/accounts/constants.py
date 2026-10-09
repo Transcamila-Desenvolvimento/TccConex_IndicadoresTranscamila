@@ -59,6 +59,7 @@ ABAS_POR_AMBIENTE = {
         'home',
         'envio-nf-cliente',
         'cadastro-clientes',
+        'controle-nds',
     }),
     'Compras': frozenset({'home', 'controle-estoque'}),
     'RH': frozenset({'home', 'movimentacoes', 'documentos'}),

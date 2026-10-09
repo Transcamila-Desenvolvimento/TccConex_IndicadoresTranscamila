@@ -28,6 +28,7 @@ import type {
   RegistrarCompraPayload, RegistrarSaidaPayload,
   ClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft,
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
+  NdPagadoresResponse, NdPagadorSelecionado, NdTitulo,
   CnpjConsultaResult,
   ProtocoloImportParams, ProtocoloImportResult,
   SgqPesquisa, SgqPesquisaImportPreview, SgqPesquisaImportResult, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
@@ -406,6 +407,29 @@ function normalizePagarRow(raw: any): PagarRow {
     valor: parseReportAmount(raw.valor) ?? 0,
     saldo: parseReportAmount(raw.saldo) ?? 0,
     historico: raw.historico ?? '',
+  };
+}
+
+function normalizarPagadorNd(raw: { codCliente?: string; nome?: string }): NdPagadorSelecionado {
+  return {
+    codCliente: String(raw?.codCliente ?? '').trim(),
+    nome: String(raw?.nome ?? '').trim(),
+  };
+}
+
+function normalizeNdTitulo(raw: any): NdTitulo {
+  const situacao = raw?.situacao === 'baixado' || raw?.situacao === 'vencido' ? raw.situacao : 'a_vencer';
+  return {
+    id: raw.id != null ? String(raw.id) : '',
+    codCliente: raw.codCliente ?? '',
+    cliente: raw.cliente ?? '',
+    titulo: raw.titulo ?? '',
+    natureza: raw.natureza ?? '',
+    emissao: raw.emissao ?? '',
+    vencimentoReal: raw.vencimentoReal ?? '',
+    saldo: parseReportAmount(raw.saldo) ?? 0,
+    historico: raw.historico ?? '',
+    situacao,
   };
 }
 
@@ -2318,6 +2342,38 @@ export const apiService = {
 
   async deleteFilial(clienteId: string, filialId: string): Promise<void> {
     await api.delete(`/api/faturamento/protocolo-clientes/${clienteId}/filiais/${filialId}/`);
+  },
+
+  async getNdPagadores(search = ''): Promise<NdPagadoresResponse> {
+    const { data } = await api.get('/api/faturamento/nds/pagadores/', {
+      params: search.trim() ? { search: search.trim() } : undefined,
+    });
+    return {
+      selecionados: Array.isArray(data?.selecionados) ? data.selecionados.map(normalizarPagadorNd) : [],
+      disponiveis: Array.isArray(data?.disponiveis)
+        ? data.disponiveis.map((item: { codCliente?: string; nome?: string; titulos?: number }) => ({
+          ...normalizarPagadorNd(item),
+          titulos: Number(item.titulos ?? 0),
+        }))
+        : [],
+      lote: data?.lote?.label
+        ? { label: String(data.lote.label), referenceDate: String(data.lote.referenceDate ?? '') }
+        : null,
+    };
+  },
+
+  async salvarNdPagadores(codigos: string[]): Promise<NdPagadorSelecionado[]> {
+    const { data } = await api.put('/api/faturamento/nds/pagadores/', { codigos });
+    return Array.isArray(data?.selecionados) ? data.selecionados.map(normalizarPagadorNd) : [];
+  },
+
+  async getNdTitulos(params: { page?: number; pageSize?: number; search?: string } = {}): Promise<PaginatedResponse<NdTitulo>> {
+    const query: Record<string, string | number> = {};
+    if (params.page) query.page = params.page;
+    if (params.pageSize) query.page_size = params.pageSize;
+    if (params.search?.trim()) query.search = params.search.trim();
+    const { data } = await api.get('/api/faturamento/nds/titulos/', { params: query });
+    return paginatedFromResponse(data, normalizeNdTitulo);
   },
 
   async getProtocolosEnvio(params: ProtocoloQueryParams = {}): Promise<PaginatedResponse<ProtocoloEnvio>> {

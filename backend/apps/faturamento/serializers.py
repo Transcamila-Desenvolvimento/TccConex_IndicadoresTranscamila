@@ -6,11 +6,13 @@ from .models import (
     ClienteProtocolo,
     FilialClienteProtocolo,
     ProtocoloEnvio,
+    TituloNd,
     TIPO_PESSOA_FISICA,
     TIPO_PESSOA_JURIDICA,
     chave_texto_sem_acento,
     loja_controla_flags,
 )
+from .nd_service import situacao_do_titulo
 from .services import gerar_numero_sequencial, separar_expedicoes, validate_protocolo_payload
 
 
@@ -351,3 +353,19 @@ class ProtocoloBulkDeleteSerializer(serializers.Serializer):
         child=serializers.IntegerField(min_value=1),
         allow_empty=False,
     )
+
+
+class TituloNdSerializer(serializers.ModelSerializer):
+    codCliente = serializers.CharField(source='cod_cliente')
+    vencimentoReal = serializers.CharField(source='vencimento_real')
+    situacao = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TituloNd
+        fields = [
+            'id', 'codCliente', 'cliente', 'titulo', 'natureza',
+            'emissao', 'vencimentoReal', 'saldo', 'historico', 'situacao',
+        ]
+
+    def get_situacao(self, obj):
+        return situacao_do_titulo(obj)

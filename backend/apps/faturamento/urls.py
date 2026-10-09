@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from .nd_views import NdPagadoresView, NdTitulosView
 from .views import ClienteProtocoloViewSet, FilialClienteProtocoloViewSet, ProtocoloEnvioViewSet
 
 router = DefaultRouter()
@@ -8,6 +9,8 @@ router.register('protocolo-clientes', ClienteProtocoloViewSet, basename='faturam
 router.register('protocolos', ProtocoloEnvioViewSet, basename='faturamento-protocolos')
 
 urlpatterns = [
+    path('nds/pagadores/', NdPagadoresView.as_view(), name='faturamento-nds-pagadores'),
+    path('nds/titulos/', NdTitulosView.as_view(), name='faturamento-nds-titulos'),
     path('', include(router.urls)),
     path(
         'protocolo-clientes/<int:cliente_pk>/filiais/',

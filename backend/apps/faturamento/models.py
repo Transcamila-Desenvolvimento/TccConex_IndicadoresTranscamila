@@ -256,3 +256,56 @@ class ProtocoloEnvioDraft(models.Model):
 
     def __str__(self):
         return f'Rascunho de {self.usuario}'
+
+
+class PagadorNd(models.Model):
+    """Pagador escolhido no Controle de NDs, amarrado ao código do cliente."""
+
+    cod_cliente = models.CharField(max_length=50, unique=True)
+    nome = models.CharField(max_length=200, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pagadores_nd',
+    )
+
+    class Meta:
+        ordering = ['nome', 'cod_cliente']
+        verbose_name = 'Pagador de ND'
+        verbose_name_plural = 'Pagadores de ND'
+
+    def __str__(self):
+        return f'{self.cod_cliente} — {self.nome}'
+
+
+class TituloNd(models.Model):
+    """Acompanhamento do título no Controle de NDs.
+
+    Espelha o contas a receber do fluxo de caixa, mas vive separado:
+    não entra no cálculo do fluxo. Some do relatório, fica baixado;
+    se o título voltar, deixa de estar baixado.
+    """
+
+    chave = models.CharField(max_length=320, unique=True)
+    filial = models.CharField(max_length=100, blank=True)
+    cod_cliente = models.CharField(max_length=50, blank=True)
+    cliente = models.CharField(max_length=200)
+    titulo = models.CharField(max_length=50)
+    natureza = models.CharField(max_length=20, blank=True)
+    emissao = models.CharField(max_length=20, blank=True)
+    vencimento_real = models.CharField(max_length=20, blank=True)
+    saldo = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    historico = models.CharField(max_length=500, blank=True)
+    baixado = models.BooleanField(default=False)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['baixado', 'cliente', 'titulo', 'id']
+        verbose_name = 'Título de ND'
+        verbose_name_plural = 'Títulos de ND'
+
+    def __str__(self):
+        return f'{self.cliente} — {self.titulo}'
