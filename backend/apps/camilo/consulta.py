@@ -167,6 +167,9 @@ def _trecho(texto: str, termos: list[str], limite: int = 1100) -> str:
     return fatia
 
 
+TRECHOS_LIDOS = 'Trechos lidos da Matriz de conhecimento:'
+
+
 def resumo_documentos(user, pergunta: str = '', modelo=None) -> str:
     from apps.rh.documento_texto import garantir_texto
     from apps.rh.models import DocumentoRH
@@ -211,7 +214,7 @@ def resumo_documentos(user, pergunta: str = '', modelo=None) -> str:
             linhas.append(f'{rotulo}: {_trecho(documento.texto, termos)}')
         else:
             linhas.append(f'{rotulo}: o arquivo não tem texto legível para leitura.')
-    return 'Trechos lidos da Matriz de conhecimento:\n' + '\n'.join(linhas)
+    return f'{TRECHOS_LIDOS}\n' + '\n'.join(linhas)
 
 
 def resumo_matriz_sgq(user, pergunta: str = '') -> str:
@@ -1010,7 +1013,8 @@ def _ler_parte(user, item: dict, pergunta: str, detalhar: bool) -> str:
     return texto
 
 
-def consultar(user, agente, pergunta: str) -> dict:
+def consultar(user, agente, pergunta: str, contexto: str = '') -> dict:
+    """`contexto` traz as perguntas anteriores da conversa, para continuações sem palavra-chave."""
     liberadas = {(item['ambiente'], item['parte']) for item in partes_do_usuario(user)}
     efetivos = []
     ignorados = []
@@ -1021,10 +1025,22 @@ def consultar(user, agente, pergunta: str) -> dict:
         else:
             ignorados.append(item)
 
-    foco = {(item['ambiente'], item['parte']) for item in _partes_em_foco(pergunta, efetivos)}
+    leitura = pergunta
+    em_foco = _partes_em_foco(pergunta, efetivos)
+    if not em_foco and (contexto or '').strip():
+        leitura = f'{contexto.strip()} {pergunta}'
+        em_foco = _partes_em_foco(leitura, efetivos)
+    foco = {(item['ambiente'], item['parte']) for item in em_foco}
     fontes = []
     for item in efetivos:
-        resumo = _ler_parte(user, item, pergunta, (item['ambiente'], item['parte']) in foco)
+        chave = (item['ambiente'], item['parte'])
+        resumo = _ler_parte(user, item, leitura, chave in foco)
+        if (
+            chave in foco and leitura == pergunta and (contexto or '').strip()
+            and chave in {('RH', 'documentos'), ('SGQ', 'matriz')}
+            and not resumo.startswith(TRECHOS_LIDOS)
+        ):
+            resumo = _ler_parte(user, item, f'{contexto.strip()} {pergunta}', True)
         fontes.append({**item, 'resumo': resumo, 'detalhada': (item['ambiente'], item['parte']) in foco})
 
     if not fontes:

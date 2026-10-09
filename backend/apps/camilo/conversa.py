@@ -126,18 +126,25 @@ def historico_valido(bruto, limite: int = 24) -> list[dict]:
     return itens
 
 
-def material_matriz_empresarial(pergunta: str) -> str:
-    from apps.camilo.consulta import resumo_documentos
+def perguntas_anteriores(anteriores: list[dict]) -> str:
+    return ' '.join(item['text'] for item in anteriores if item['role'] == 'user')[-600:]
+
+
+def material_matriz_empresarial(pergunta: str, contexto: str = '') -> str:
+    from apps.camilo.consulta import TRECHOS_LIDOS, resumo_documentos
     from apps.camilo.models import DocumentoMatrizEmpresarial
 
     if not DocumentoMatrizEmpresarial.objects.exists():
         return ''
-    return resumo_documentos(None, pergunta, modelo=DocumentoMatrizEmpresarial)
+    material = resumo_documentos(None, pergunta, modelo=DocumentoMatrizEmpresarial)
+    if not material.startswith(TRECHOS_LIDOS) and contexto.strip():
+        material = resumo_documentos(None, f'{contexto} {pergunta}', modelo=DocumentoMatrizEmpresarial)
+    return material
 
 
 def responder_camilo(pergunta: str, historico: list[dict] | None = None) -> dict:
-    material = material_matriz_empresarial(pergunta)[:ORCAMENTO_MATERIAL]
     anteriores = historico_valido(historico)
+    material = material_matriz_empresarial(pergunta, perguntas_anteriores(anteriores))[:ORCAMENTO_MATERIAL]
     sistema = sistema_camilo()
     pedido = pergunta if not material else f'Material da Matriz empresarial:\n{material}\n\nPergunta: {pergunta}'
     orcamento = max(0, LIMITE_CONTEXTO - len(sistema) - len(pedido))
@@ -148,15 +155,26 @@ def responder_camilo(pergunta: str, historico: list[dict] | None = None) -> dict
 
 
 def responder_agente(user, agente, pergunta: str, historico: list[dict] | None = None) -> dict:
-    resultado = consultar(user, agente, pergunta)
     anteriores = historico_valido(historico)
+    resultado = consultar(user, agente, pergunta, contexto=perguntas_anteriores(anteriores))
     if not anteriores:
         resultado['titulo'] = titulo_local(pergunta)
     material = (resultado.get('material') or '')[:ORCAMENTO_MATERIAL]
     instrucao = (agente.instrucao or '').strip() or 'Responda só com o material consultado.'
+    partes = ', '.join(
+        f"{fonte['ambiente']} / {fonte['rotulo']}" for fonte in resultado.get('fontes') or []
+    )
+    sem_material = (
+        'Nesta pergunta nenhuma parte foi aberta. Se perguntarem o que você consulta, liste as partes acima. '
+        'Se pedirem um dado, diga que não encontrou nas partes liberadas e peça o assunto ou o termo exato. '
+        'Não diga que nenhum documento foi enviado. '
+        if not material else ''
+    )
     sistema = (
         f'Você é {agente.nome}, um agente do ERP TccConex. Responda em português, de forma direta. '
         f'Instrução: {instrucao[:800]} '
+        f'Partes que você consulta: {partes or "nenhuma"}. '
+        f'{sem_material}'
         'Use somente o material enviado com a pergunta. Não invente números nem documentos. '
         'Responda só o que foi perguntado. '
         'Não liste outras funções nem acrescente assunto que não foi pedido. '
