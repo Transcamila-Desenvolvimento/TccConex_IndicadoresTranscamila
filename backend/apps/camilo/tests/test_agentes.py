@@ -250,6 +250,19 @@ class CamiloAgenteTests(TestCase):
         continuacao = consultar(admin, Agente(), 'E qual a situação dela?', contexto='Quem é Ana Lima?')
         self.assertIn('Ana Lima, em 06/2026', continuacao['material'])
 
+    def test_trecho_da_convencao_traz_o_piso_da_funcao(self):
+        from apps.camilo.consulta import _termos_pergunta, _trecho
+
+        cabecalho = 'TERMO ADITIVO A CONVENÇÃO COLETIVA DE TRABALHO 2026/2027. ' * 60
+        corpo = 'Cláusula geral sem valores relevantes para a função. ' * 80
+        tabela = 'PISOS SALARIAIS: Motorista Truck R$ 2.950,00; Motorista Carreta R$ 3.400,00.'
+        texto = f'{cabecalho}{corpo}{tabela}{corpo}'
+
+        pergunta = 'Qual o salario base de motorista Truck? Mas e na convenção?'
+        self.assertIn('Motorista Truck R$ 2.950,00', _trecho(texto, _termos_pergunta(pergunta)))
+        plural = 'Tem salarios base de motorista truck relacionados na convenção?'
+        self.assertIn('Motorista Truck R$ 2.950,00', _trecho(texto, _termos_pergunta(plural)))
+
     def test_consulta_devolve_o_uso_do_contexto(self):
         from apps.camilo.conversa import LIMITE_CONTEXTO, encaixar_historico
 

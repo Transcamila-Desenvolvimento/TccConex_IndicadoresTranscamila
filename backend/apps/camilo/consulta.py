@@ -115,7 +115,7 @@ def _indice_sem_acento(texto: str) -> tuple[str, list[int]]:
     return ''.join(caracteres), mapa
 
 
-def _trecho(texto: str, termos: list[str], limite: int = 1100) -> str:
+def _trecho(texto: str, termos: list[str], limite: int = 1100, janelas: int = 3) -> str:
     import re
     if not texto:
         return ''
@@ -127,6 +127,8 @@ def _trecho(texto: str, termos: list[str], limite: int = 1100) -> str:
     apoio = []
     for termo in termos:
         chave = _sem_acento(termo)
+        if len(chave) > 4 and chave.endswith('s'):
+            chave = chave[:-1]
         if len(chave) < 4 or chave in pedidos:
             continue
         pedidos.append(chave)
@@ -136,11 +138,11 @@ def _trecho(texto: str, termos: list[str], limite: int = 1100) -> str:
     alvos = [(termo, 3) for termo in pedidos] + [(termo, 1) for termo in apoio]
     pede_valor = any(termo in _TERMOS_VALOR for termo in pedidos)
 
-    melhor = None
+    candidatas = []
     for termo, _peso in alvos:
         cursor = 0
         vistos = 0
-        while vistos < 12:
+        while vistos < 40:
             posicao = dobrado.find(termo, cursor)
             if posicao < 0:
                 break
@@ -149,22 +151,35 @@ def _trecho(texto: str, termos: list[str], limite: int = 1100) -> str:
             fim = min(len(dobrado), inicio + limite)
             janela = dobrado[inicio:fim]
             nota = sum(peso for candidato, peso in alvos if candidato in janela)
-            if pede_valor and re.search(r'r\$\s*\d', janela):
+            # Desempate: com valor pedido, a janela com o R$ mais perto do começo mostra a cifra com contexto.
+            desvio = limite
+            valor = re.search(r'r\$\s*\d', janela[:int(limite * 0.7)]) if pede_valor else None
+            if valor:
                 nota += 8
+                desvio = abs(valor.start() - 180)
                 if any(candidato in janela for candidato in pedidos if candidato not in _TERMOS_VALOR):
                     nota += 6
-            if melhor is None or nota > melhor[0]:
-                melhor = (nota, inicio, fim)
+            candidatas.append((nota, desvio, inicio, fim))
             cursor = posicao + max(len(termo), 1)
 
-    if melhor is None:
-        fatia = texto[:limite]
-    else:
-        inicio, fim = melhor[1], melhor[2]
-        fatia = texto[mapa[inicio]:mapa[fim - 1] + 1]
-    if len(texto) > len(fatia):
-        fatia = fatia.rstrip() + '…'
-    return fatia
+    if not candidatas:
+        return texto[:limite].rstrip() + '…'
+
+    escolhidas = []
+    melhor_nota = max(item[0] for item in candidatas)
+    for nota, _desvio, inicio, fim in sorted(candidatas, key=lambda item: (-item[0], item[1], item[2])):
+        if escolhidas and nota < melhor_nota * 0.6:
+            break
+        if any(inicio < outro_fim and fim > outro_inicio for _n, outro_inicio, outro_fim in escolhidas):
+            continue
+        escolhidas.append((nota, inicio, fim))
+        if len(escolhidas) >= janelas:
+            break
+    fatias = [
+        texto[mapa[inicio]:mapa[fim - 1] + 1].strip()
+        for _nota, inicio, fim in sorted(escolhidas, key=lambda item: item[1])
+    ]
+    return '…\n' + '\n…\n'.join(fatias) + '\n…'
 
 
 TRECHOS_LIDOS = 'Trechos lidos da Matriz de conhecimento:'
@@ -185,15 +200,24 @@ def resumo_documentos(user, pergunta: str = '', modelo=None) -> str:
 
     termos = _termos_pergunta(pergunta)
     if termos:
+        chaves = {
+            chave[:-1] if len(chave) > 4 and chave.endswith('s') else chave
+            for chave in (_sem_acento(termo) for termo in termos)
+        }
+        bases = {}
+
         def pontos(documento):
-            pasta = documento.pasta.nome if documento.pasta_id else ''
-            base = f'{pasta} {documento.titulo} {documento.texto}'.lower()
-            return sum(base.count(termo) for termo in termos)
+            if documento.pk not in bases:
+                pasta = documento.pasta.nome if documento.pasta_id else ''
+                bases[documento.pk] = _sem_acento(f'{pasta} {documento.titulo} {documento.texto}'.lower())
+            base = bases[documento.pk]
+            return sum(base.count(chave) for chave in chaves)
         ordenados = sorted(documentos, key=pontos, reverse=True)
         escolhidos = [documento for documento in ordenados if pontos(documento) > 0][:2]
         if not escolhidos:
             for documento in [item for item in documentos if not item.texto_extraido][:2]:
                 garantir_texto(documento)
+                bases.pop(documento.pk, None)
             ordenados = sorted(documentos, key=pontos, reverse=True)
             escolhidos = [documento for documento in ordenados if pontos(documento) > 0][:2]
         if not escolhidos:
@@ -649,6 +673,7 @@ _SINAIS = {
 _LIMITE_RESUMO = 2800
 # Sem palavra-sinal na pergunta, agentes com até estas partes leem todas pelo termo da pergunta.
 _MAXIMO_SEM_SINAL = 3
+_PARTES_DOCUMENTO = frozenset({('RH', 'documentos'), ('SGQ', 'matriz')})
 
 
 def _tem_sinal(texto: str, sinal: str) -> bool:
@@ -1010,6 +1035,8 @@ def _ler_parte(user, item: dict, pergunta: str, detalhar: bool) -> str:
     limite = _LIMITE_RESUMO
     if detalhar and chave in {('RH', 'movimentacoes'), ('Indicadores', 'movimentacao-rh')}:
         limite = 9000
+    elif detalhar and chave in _PARTES_DOCUMENTO:
+        limite = 7000
     if len(texto) > limite:
         texto = texto[:limite].rstrip() + '…'
     return texto
@@ -1038,13 +1065,10 @@ def consultar(user, agente, pergunta: str, contexto: str = '') -> dict:
     fontes = []
     for item in efetivos:
         chave = (item['ambiente'], item['parte'])
-        resumo = _ler_parte(user, item, leitura, chave in foco)
-        if (
-            chave in foco and leitura == pergunta and (contexto or '').strip()
-            and chave in {('RH', 'documentos'), ('SGQ', 'matriz')}
-            and not resumo.startswith(TRECHOS_LIDOS)
-        ):
-            resumo = _ler_parte(user, item, f'{contexto.strip()} {pergunta}', True)
+        if chave in _PARTES_DOCUMENTO and (contexto or '').strip():
+            resumo = _ler_parte(user, item, f'{contexto.strip()} {pergunta}', chave in foco)
+        else:
+            resumo = _ler_parte(user, item, leitura, chave in foco)
         fontes.append({**item, 'resumo': resumo, 'detalhada': (item['ambiente'], item['parte']) in foco})
 
     if not fontes:

@@ -126,8 +126,9 @@ def historico_valido(bruto, limite: int = 24) -> list[dict]:
     return itens
 
 
-def perguntas_anteriores(anteriores: list[dict]) -> str:
-    return ' '.join(item['text'] for item in anteriores if item['role'] == 'user')[-600:]
+def perguntas_anteriores(anteriores: list[dict], quantidade: int = 2) -> str:
+    perguntas = [item['text'][:300] for item in anteriores if item['role'] == 'user']
+    return ' '.join(perguntas[-quantidade:])
 
 
 def material_matriz_empresarial(pergunta: str, contexto: str = '') -> str:
@@ -136,9 +137,10 @@ def material_matriz_empresarial(pergunta: str, contexto: str = '') -> str:
 
     if not DocumentoMatrizEmpresarial.objects.exists():
         return ''
-    material = resumo_documentos(None, pergunta, modelo=DocumentoMatrizEmpresarial)
-    if not material.startswith(TRECHOS_LIDOS) and contexto.strip():
-        material = resumo_documentos(None, f'{contexto} {pergunta}', modelo=DocumentoMatrizEmpresarial)
+    busca = f'{contexto.strip()} {pergunta}' if contexto.strip() else pergunta
+    material = resumo_documentos(None, busca, modelo=DocumentoMatrizEmpresarial)
+    if not material.startswith(TRECHOS_LIDOS) and busca != pergunta:
+        material = resumo_documentos(None, pergunta, modelo=DocumentoMatrizEmpresarial)
     return material
 
 
