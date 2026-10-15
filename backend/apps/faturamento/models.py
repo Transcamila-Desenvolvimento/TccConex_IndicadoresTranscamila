@@ -309,3 +309,54 @@ class TituloNd(models.Model):
 
     def __str__(self):
         return f'{self.cliente} — {self.titulo}'
+
+
+class BipagemImportacao(models.Model):
+    """Base provisória da Fatura por bipagem, importada do relatório Aging Luft (CSV).
+
+    Cada importação substitui a anterior. A relação montada na tela continua sem ser gravada.
+    """
+
+    arquivo = models.CharField(max_length=255, blank=True)
+    linhas = models.PositiveIntegerField(default=0)
+    importado_em = models.DateTimeField(auto_now_add=True)
+    importado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bipagem_importacoes',
+    )
+
+    class Meta:
+        ordering = ['-importado_em', '-id']
+        verbose_name = 'Importação da bipagem'
+        verbose_name_plural = 'Importações da bipagem'
+
+    def __str__(self):
+        return f'{self.arquivo or "Importação"} ({self.linhas})'
+
+
+class BipagemDocumento(models.Model):
+    importacao = models.ForeignKey(BipagemImportacao, on_delete=models.CASCADE, related_name='documentos')
+    cod_cliente = models.CharField(max_length=50)
+    loja = models.CharField(max_length=20, blank=True)
+    cliente = models.CharField(max_length=200, blank=True)
+    origem = models.CharField(max_length=20, blank=True)
+    docto = models.CharField(max_length=50)
+    serie = models.CharField(max_length=20, blank=True)
+    emissao = models.CharField(max_length=20, blank=True)
+    vencimento = models.CharField(max_length=20, blank=True)
+    total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    notas = models.CharField(max_length=255, blank=True)
+    fatura = models.CharField(max_length=50, blank=True)
+
+    class Meta:
+        ordering = ['origem', 'loja', 'docto', 'id']
+        indexes = [
+            models.Index(fields=['importacao', 'docto'], name='fat_bip_doc_docto_idx'),
+            models.Index(fields=['importacao', 'cod_cliente'], name='fat_bip_doc_cli_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.cod_cliente} — {self.docto}'

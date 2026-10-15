@@ -9192,6 +9192,10 @@ button.mkt-drive-browser-row:hover {
   width: 100%;
 }
 
+.sidebar:not(.collapsed) .nav-btn.nav-btn-sep {
+  border-bottom: 1px solid #e5e5e5;
+}
+
 .sub-nav-btn {
   padding-left: 44px !important;
   font-size: 13px !important;
@@ -9579,6 +9583,69 @@ button.mkt-drive-browser-row:hover {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
+}
+
+.bipagem-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.bipagem-pane {
+  min-width: 0;
+  min-height: 0;
+}
+
+.bipagem-pane__titulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.bipagem-pane__meta {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.bipagem-pane .reports-table th,
+.bipagem-pane .reports-table td {
+  font-size: 12px;
+  padding: 7px 8px;
+}
+
+.bipagem-pane .billing-etl-bar {
+  flex-wrap: wrap;
+}
+
+.bipagem-pane > .async-query-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bipagem-pane > .async-query-content > div:last-child {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (max-width: 1100px) {
+  .bipagem-split {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+
+  .bipagem-pane {
+    min-height: 360px;
+  }
 }
 
 .billing-etl-bar__spinner .spinner {
