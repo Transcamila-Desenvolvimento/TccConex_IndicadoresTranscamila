@@ -36,6 +36,8 @@ class Colaborador(models.Model):
         verbose_name="Setor",
     )
     nome = models.CharField(max_length=150, verbose_name="Nome")
+    cargo = models.CharField(max_length=100, blank=True, default='', verbose_name="Cargo")
+    cpf = models.CharField(max_length=11, blank=True, default='', verbose_name="CPF")
 
     class Meta:
         verbose_name = "Colaborador (Compras)"

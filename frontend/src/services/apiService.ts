@@ -24,7 +24,7 @@ import type {
   AuditLogFacets,
   UserQueryParams,
   Colaborador, DocumentoRH, PastaMatrizRH, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
-  UnidadeMedida, Setor, ColaboradorCompras, Fornecedor, ItemEstoque, EntradaEstoque, SaidaEstoque,
+  UnidadeMedida, Setor, ColaboradorCompras, SugestaoRHConsumidor, Fornecedor, ItemEstoque, EntradaEstoque, SaidaEstoque,
   RegistrarCompraPayload, RegistrarSaidaPayload,
   ClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft,
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
@@ -2232,14 +2232,24 @@ export const apiService = {
     return data;
   },
 
-  async createColaboradorCompras(payload: { nome: string; setorId: string }): Promise<ColaboradorCompras> {
+  async getSugestoesRHConsumidor(q: string): Promise<SugestaoRHConsumidor[]> {
+    const { data } = await api.get('/api/compras/colaboradores/sugestoes-rh/', { params: { q } });
+    return data;
+  },
+
+  async createColaboradorCompras(payload: {
+    nome: string;
+    setorId: string;
+    cargo?: string;
+    cpf?: string;
+  }): Promise<ColaboradorCompras> {
     const { data } = await api.post('/api/compras/colaboradores/', payload);
     return data;
   },
 
   async updateColaboradorCompras(
     id: string,
-    payload: { nome: string; setorId?: string },
+    payload: { nome: string; setorId?: string; cargo?: string; cpf?: string },
   ): Promise<ColaboradorCompras> {
     const { data } = await api.patch(`/api/compras/colaboradores/${id}/`, payload);
     return data;

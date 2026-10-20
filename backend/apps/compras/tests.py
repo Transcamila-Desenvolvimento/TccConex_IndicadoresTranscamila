@@ -76,6 +76,60 @@ class CadastrosSimplesCRUDTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
 
+    def test_colaborador_cargo_e_cpf_opcionais(self):
+        setor = Setor.objects.create(nome='Logística')
+        headers = auth_headers(self.user, 'Compras')
+
+        response = self.client.post(
+            '/api/compras/colaboradores/', data={'nome': 'Sem Dados', 'setorId': setor.pk}, format='json', **headers,
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['cargo'], '')
+        self.assertEqual(response.data['cpf'], '')
+
+        response = self.client.post(
+            '/api/compras/colaboradores/',
+            data={'nome': 'Com Dados', 'setorId': setor.pk, 'cargo': ' Motorista ', 'cpf': '123.456.789-01'},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['cargo'], 'Motorista')
+        self.assertEqual(response.data['cpf'], '12345678901')
+
+        response = self.client.post(
+            '/api/compras/colaboradores/',
+            data={'nome': 'CPF Curto', 'setorId': setor.pk, 'cpf': '123'},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_sugestoes_rh_lista_apenas_ativos_nao_cadastrados(self):
+        from apps.rh.models import Colaborador as ColaboradorRH
+
+        ColaboradorRH.objects.create(
+            cpf='111.111.111-11', matricula='1', nome_completo='CARLOS ATIVO', cargo='MOTORISTA',
+            filial='Ibiporã (Matriz)', situacao='SITUACAO NORMAL',
+        )
+        ColaboradorRH.objects.create(cpf='222.222.222-22', matricula='2', nome_completo='CARLA AFASTADA', situacao='AFASTADO TEMP.')
+        ColaboradorRH.objects.create(
+            cpf='333.333.333-33', matricula='3', nome_completo='CARMEM DEMITIDA', situacao='SITUACAO NORMAL',
+            data_demissao='2026-01-10',
+        )
+        ColaboradorRH.objects.create(cpf='444.444.444-44', matricula='4', nome_completo='CARLOTA JA CADASTRADA')
+        Colaborador.objects.create(nome='Carlota', setor=Setor.objects.create(nome='RH'), cpf='44444444444')
+
+        headers = auth_headers(self.user, 'Compras')
+        response = self.client.get('/api/compras/colaboradores/sugestoes-rh/?q=car', **headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, [
+            {'nome': 'CARLOS ATIVO', 'cpf': '11111111111', 'cargo': 'MOTORISTA', 'filial': 'Ibiporã (Matriz)'},
+        ])
+
+        response = self.client.get('/api/compras/colaboradores/sugestoes-rh/?q=c', **headers)
+        self.assertEqual(response.data, [])
+
     def test_nome_duplicado_retorna_erro_400(self):
         Setor.objects.create(nome='Almoxarifado')
         response = self.client.post(

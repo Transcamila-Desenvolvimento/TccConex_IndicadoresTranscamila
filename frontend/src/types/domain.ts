@@ -1144,8 +1144,17 @@ export interface Setor {
 export interface ColaboradorCompras {
   id: string;
   nome: string;
+  cargo: string;
+  cpf: string;
   setorId: string;
   setorNome: string;
+}
+
+export interface SugestaoRHConsumidor {
+  nome: string;
+  cpf: string;
+  cargo: string;
+  filial: string;
 }
 
 export interface Fornecedor {

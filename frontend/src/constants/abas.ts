@@ -25,6 +25,9 @@ export const ABA_ITEMS = [
 
   { module: 'Compras', key: 'home', label: 'Home Compras', path: '/compras' },
   { module: 'Compras', key: 'controle-estoque', label: 'Controle de estoque', path: '/compras/controle-estoque' },
+  { module: 'Compras', key: 'cadastro-consumidores', label: 'Cadastro consumidores', path: '/compras/cadastros/consumidores' },
+  { module: 'Compras', key: 'cadastro-medidas', label: 'Cadastro de medidas', path: '/compras/cadastros/medidas' },
+  { module: 'Compras', key: 'cadastro-fornecedores', label: 'Cadastro fornecedores', path: '/compras/cadastros/fornecedores' },
 
   { module: 'RH', key: 'home', label: 'Home RH', path: '/rh' },
   { module: 'RH', key: 'movimentacoes', label: 'Movimentações', path: '/rh/movimentacoes' },

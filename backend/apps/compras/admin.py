@@ -16,9 +16,9 @@ admin.site.register(Setor)
 
 @admin.register(Colaborador)
 class ColaboradorAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'setor')
+    list_display = ('nome', 'cargo', 'cpf', 'setor')
     list_filter = ('setor',)
-    search_fields = ('nome', 'setor__nome')
+    search_fields = ('nome', 'cargo', 'cpf', 'setor__nome')
 
 
 admin.site.register(Fornecedor)

@@ -8,6 +8,7 @@ from rest_framework.response import Response
 
 from apps.accounts.mixins import ModuleScopedViewMixin
 from apps.audit.services import record_audit
+from apps.rh.models import Colaborador as ColaboradorRH
 
 from .models import (
     UnidadeMedida,
@@ -65,6 +66,37 @@ class ColaboradorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if setor_id:
             qs = qs.filter(setor_id=setor_id)
         return qs.order_by('nome')
+
+    @action(detail=False, methods=['get'], url_path='sugestoes-rh')
+    def sugestoes_rh(self, request):
+        """Colaboradores ativos no RH cujo nome contém `q` e que ainda não estão cadastrados no Compras."""
+        termo = (request.query_params.get('q') or '').strip()
+        if len(termo) < 2:
+            return Response([])
+
+        cpfs_cadastrados = set(Colaborador.objects.exclude(cpf='').values_list('cpf', flat=True))
+        qs = (
+            ColaboradorRH.objects.filter(nome_completo__icontains=termo, data_demissao__isnull=True)
+            .exclude(situacao__icontains='AFASTADO')
+            .exclude(situacao__icontains='DESLIG')
+            .exclude(situacao__icontains='DEMIT')
+            .order_by('nome_completo')
+            .values('nome_completo', 'cpf', 'cargo', 'filial')
+        )
+        sugestoes = []
+        for rh in qs:
+            cpf = ''.join(ch for ch in (rh['cpf'] or '') if ch.isdigit())
+            if cpf in cpfs_cadastrados:
+                continue
+            sugestoes.append({
+                'nome': rh['nome_completo'],
+                'cpf': cpf,
+                'cargo': rh['cargo'] or '',
+                'filial': rh['filial'] or '',
+            })
+            if len(sugestoes) >= 8:
+                break
+        return Response(sugestoes)
 
 
 class FornecedorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):

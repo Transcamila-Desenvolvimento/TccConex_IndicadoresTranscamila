@@ -21713,3 +21713,66 @@ button.proposta-status-badge {
     border-radius: 18px;
   }
 }
+
+/* Compras — sugestões do RH no cadastro de consumidores */
+.compras-sugestoes-rh {
+  position: relative;
+}
+
+.modal-card:has(.compras-sugestoes-rh) {
+  overflow: visible;
+}
+
+.compras-sugestoes-rh-lista {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 1000;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+}
+
+.compras-sugestoes-rh-titulo {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.compras-sugestoes-rh-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.compras-sugestoes-rh-item:hover,
+.compras-sugestoes-rh-item.ativo {
+  background: #f1f5f9;
+}
+
+.compras-sugestoes-rh-nome {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.compras-sugestoes-rh-detalhe {
+  font-size: 11px;
+  color: #64748b;
+}

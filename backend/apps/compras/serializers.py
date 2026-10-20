@@ -32,10 +32,20 @@ class ColaboradorSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='pk', read_only=True)
     setorId = serializers.PrimaryKeyRelatedField(source='setor', queryset=Setor.objects.all())
     setorNome = serializers.CharField(source='setor.nome', read_only=True)
+    cpf = serializers.CharField(required=False, allow_blank=True, max_length=14)
 
     class Meta:
         model = Colaborador
-        fields = ['id', 'nome', 'setorId', 'setorNome']
+        fields = ['id', 'nome', 'cargo', 'cpf', 'setorId', 'setorNome']
+
+    def validate_cargo(self, value):
+        return (value or '').strip()
+
+    def validate_cpf(self, value):
+        digits = ''.join(ch for ch in (value or '') if ch.isdigit())
+        if digits and len(digits) != 11:
+            raise serializers.ValidationError('CPF deve conter 11 dígitos.')
+        return digits
 
 
 class FornecedorSerializer(serializers.ModelSerializer):

@@ -100,10 +100,28 @@ export function useColaboradoresCompras(setorId?: string) {
   });
 }
 
+export function useTodosColaboradoresCompras() {
+  return useQuery({
+    queryKey: [...COMPRAS_KEYS.colaboradores, 'all'],
+    queryFn: () => apiService.getColaboradoresCompras(),
+  });
+}
+
+export function useSugestoesRHConsumidor(termo: string) {
+  const q = termo.trim();
+  return useQuery({
+    queryKey: [...COMPRAS_KEYS.colaboradores, 'sugestoes-rh', q],
+    queryFn: () => apiService.getSugestoesRHConsumidor(q),
+    enabled: q.length >= 2,
+    staleTime: 30_000,
+  });
+}
+
 export function useCreateColaboradorCompras() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { nome: string; setorId: string }) => apiService.createColaboradorCompras(payload),
+    mutationFn: (payload: { nome: string; setorId: string; cargo?: string; cpf?: string }) =>
+      apiService.createColaboradorCompras(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.colaboradores });
       queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.setores });
@@ -114,8 +132,8 @@ export function useCreateColaboradorCompras() {
 export function useUpdateColaboradorCompras() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, nome, setorId }: { id: string; nome: string; setorId?: string }) =>
-      apiService.updateColaboradorCompras(id, { nome, setorId }),
+    mutationFn: ({ id, ...payload }: { id: string; nome: string; setorId?: string; cargo?: string; cpf?: string }) =>
+      apiService.updateColaboradorCompras(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.colaboradores });
       queryClient.invalidateQueries({ queryKey: COMPRAS_KEYS.setores });

@@ -7,19 +7,8 @@ import {
   useItensEstoque,
   useEntradasEstoque,
   useSaidasEstoque,
-  useUnidadesMedida,
-  useFornecedores,
-  useCreateUnidadeMedida,
-  useUpdateUnidadeMedida,
-  useDeleteUnidadeMedida,
-  useCreateFornecedor,
-  useUpdateFornecedor,
-  useDeleteFornecedor,
-  getComprasErrorMessage,
 } from '../../hooks/useCompras';
-import SimpleListModal from './modals/SimpleListModal';
 import ItemsManagerModal from './modals/ItemsManagerModal';
-import SetoresColaboradoresModal from './modals/SetoresColaboradoresModal';
 import EntradaModal from './modals/EntradaModal';
 import SaidaModal from './modals/SaidaModal';
 
@@ -32,9 +21,6 @@ const ComprasControleEstoque: React.FC = () => {
 
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [isItemsManagerOpen, setIsItemsManagerOpen] = useState(false);
-  const [isUnidadesOpen, setIsUnidadesOpen] = useState(false);
-  const [isSetoresColaboradoresOpen, setIsSetoresColaboradoresOpen] = useState(false);
-  const [isFornecedoresOpen, setIsFornecedoresOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
 
   const itensQuery = useItensEstoque();
@@ -48,17 +34,6 @@ const ComprasControleEstoque: React.FC = () => {
   const stockItems = itensQuery.data ?? [];
   const entradas = entradasQuery.data ?? [];
   const saidas = saidasQuery.data ?? [];
-
-  // Cadastros simples (unidades/setores/colaboradores/fornecedores) usados nos modais "Outras Ações"
-  const unidadesQuery = useUnidadesMedida();
-  const createUnidade = useCreateUnidadeMedida();
-  const updateUnidade = useUpdateUnidadeMedida();
-  const deleteUnidade = useDeleteUnidadeMedida();
-
-  const fornecedoresQuery = useFornecedores();
-  const createFornecedor = useCreateFornecedor();
-  const updateFornecedor = useUpdateFornecedor();
-  const deleteFornecedor = useDeleteFornecedor();
 
   // Fechar o menu "Outras Ações" ao clicar fora dele
   useEffect(() => {
@@ -188,10 +163,6 @@ const ComprasControleEstoque: React.FC = () => {
             </button>
             <div className={`reports-dropdown-menu reports-dropdown-menu--wide ${isActionsOpen ? 'show' : ''}`}>
               <span className="reports-dropdown-item" onClick={() => openAction(setIsItemsManagerOpen)}>Gerenciar Itens Cadastrados</span>
-              <div className="reports-dropdown-divider" />
-              <span className="reports-dropdown-item" onClick={() => openAction(setIsUnidadesOpen)}>Cadastrar Medidas</span>
-              <span className="reports-dropdown-item" onClick={() => openAction(setIsSetoresColaboradoresOpen)}>Setores e Colaboradores</span>
-              <span className="reports-dropdown-item" onClick={() => openAction(setIsFornecedoresOpen)}>Cadastrar Fornecedores</span>
               <div className="reports-dropdown-divider" />
               <span className="reports-dropdown-item" onClick={handleExportLowStockPdf}>Relatório PDF: Estoque Baixo/Esgotado</span>
             </div>
@@ -471,42 +442,6 @@ const ComprasControleEstoque: React.FC = () => {
       {/* Modais de gerenciamento (Outras Ações) */}
       {isItemsManagerOpen && (
         <ItemsManagerModal onClose={() => setIsItemsManagerOpen(false)} />
-      )}
-
-      {isUnidadesOpen && (
-        <SimpleListModal
-          title="Cadastrar Medidas"
-          placeholder="Ex: Un, Resma, Caixa..."
-          query={unidadesQuery}
-          onAdd={(nome) => createUnidade.mutate(nome)}
-          onEdit={(id, nome) => updateUnidade.mutate({ id, nome })}
-          onRemove={(id) => deleteUnidade.mutate(id)}
-          isAdding={createUnidade.isPending}
-          isSaving={updateUnidade.isPending}
-          isRemoving={deleteUnidade.isPending}
-          errorMessage={createUnidade.isError ? getComprasErrorMessage(createUnidade.error, 'Não foi possível adicionar a unidade.') : null}
-          onClose={() => setIsUnidadesOpen(false)}
-        />
-      )}
-
-      {isSetoresColaboradoresOpen && (
-        <SetoresColaboradoresModal onClose={() => setIsSetoresColaboradoresOpen(false)} />
-      )}
-
-      {isFornecedoresOpen && (
-        <SimpleListModal
-          title="Cadastrar Fornecedores"
-          placeholder="Ex: Papelaria Exclusiva..."
-          query={fornecedoresQuery}
-          onAdd={(nome) => createFornecedor.mutate(nome)}
-          onEdit={(id, nome) => updateFornecedor.mutate({ id, nome })}
-          onRemove={(id) => deleteFornecedor.mutate(id)}
-          isAdding={createFornecedor.isPending}
-          isSaving={updateFornecedor.isPending}
-          isRemoving={deleteFornecedor.isPending}
-          errorMessage={createFornecedor.isError ? getComprasErrorMessage(createFornecedor.error, 'Não foi possível adicionar o fornecedor.') : null}
-          onClose={() => setIsFornecedoresOpen(false)}
-        />
       )}
 
     </div>
