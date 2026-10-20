@@ -24,6 +24,10 @@ import type {
   AuditLogFacets,
   UserQueryParams,
   Colaborador, DocumentoRH, PastaMatrizRH, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
+  Uniforme, UniformePayload, UniformeLotePayload, ResumoUniformes, MovimentoEstoqueUniformeTipo, MovimentoEstoqueUniformePayload,
+  EntregaUniforme, EntregaUniformeFiltros, RegistrarEntregaUniformePayload, RegistrarDevolucaoUniformePayload,
+  UniformeEmPosse, MovimentacaoUniforme, MovimentacaoUniformeFiltros, ColaboradorUniformes, ColaboradorUniformesFiltros,
+  DevolucaoTotalUniformePayload, DevolucaoTotalUniformeResultado,
   UnidadeMedida, Setor, ColaboradorCompras, SugestaoRHConsumidor, Fornecedor, ItemEstoque, EntradaEstoque, SaidaEstoque,
   RegistrarCompraPayload, RegistrarSaidaPayload,
   ClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft,
@@ -2314,6 +2318,90 @@ export const apiService = {
 
   async registrarSaida(payload: RegistrarSaidaPayload): Promise<SaidaEstoque[]> {
     const { data } = await api.post('/api/compras/saidas/registrar_saida/', payload);
+    return data;
+  },
+
+  // ─── Compras — Controle de Uniformes ────────────────────────────────────────
+
+  async getUniformes(): Promise<Uniforme[]> {
+    const { data } = await api.get('/api/compras/uniformes/');
+    return data;
+  },
+
+  async getResumoUniformes(): Promise<ResumoUniformes> {
+    const { data } = await api.get('/api/compras/uniformes/resumo/');
+    return data;
+  },
+
+  async createUniforme(payload: UniformePayload): Promise<Uniforme> {
+    const { data } = await api.post('/api/compras/uniformes/', payload);
+    return data;
+  },
+
+  async createUniformesLote(payload: UniformeLotePayload): Promise<Uniforme[]> {
+    const { data } = await api.post('/api/compras/uniformes/lote/', payload);
+    return data;
+  },
+
+  async updateUniforme(id: string, payload: Partial<UniformePayload>): Promise<Uniforme> {
+    const { data } = await api.patch(`/api/compras/uniformes/${id}/`, payload);
+    return data;
+  },
+
+  async deleteUniforme(id: string): Promise<void> {
+    await api.delete(`/api/compras/uniformes/${id}/`);
+  },
+
+  async movimentarEstoqueUniforme(
+    id: string,
+    tipo: MovimentoEstoqueUniformeTipo,
+    payload: MovimentoEstoqueUniformePayload,
+  ): Promise<Uniforme> {
+    const { data } = await api.post(`/api/compras/uniformes/${id}/${tipo}/`, payload);
+    return data;
+  },
+
+  async getEntregasUniforme(filtros: EntregaUniformeFiltros): Promise<PaginatedResponse<EntregaUniforme>> {
+    const { page, pageSize, ...rest } = filtros;
+    const { data } = await api.get('/api/compras/uniformes-entregas/', {
+      params: { page, page_size: pageSize, ...rest },
+    });
+    return data;
+  },
+
+  async registrarEntregaUniforme(payload: RegistrarEntregaUniformePayload): Promise<EntregaUniforme> {
+    const { data } = await api.post('/api/compras/uniformes-entregas/', payload);
+    return data;
+  },
+
+  async registrarDevolucaoUniforme(entregaId: string, payload: RegistrarDevolucaoUniformePayload): Promise<EntregaUniforme> {
+    const { data } = await api.post(`/api/compras/uniformes-entregas/${entregaId}/devolver/`, payload);
+    return data;
+  },
+
+  async registrarDevolucaoTotalUniforme(payload: DevolucaoTotalUniformePayload): Promise<DevolucaoTotalUniformeResultado> {
+    const { data } = await api.post('/api/compras/uniformes-entregas/devolucao-total/', payload);
+    return data;
+  },
+
+  async getColaboradoresUniformes(filtros: ColaboradorUniformesFiltros): Promise<PaginatedResponse<ColaboradorUniformes>> {
+    const { page, pageSize, somenteEmPosse, ...rest } = filtros;
+    const { data } = await api.get('/api/compras/uniformes-entregas/por-colaborador/', {
+      params: { page, page_size: pageSize, somenteEmPosse: somenteEmPosse ? 1 : undefined, ...rest },
+    });
+    return data;
+  },
+
+  async getUniformesEmPosse(colaboradorId: string): Promise<UniformeEmPosse[]> {
+    const { data } = await api.get('/api/compras/uniformes-entregas/em-posse/', { params: { colaboradorId } });
+    return data;
+  },
+
+  async getMovimentacoesUniforme(filtros: MovimentacaoUniformeFiltros): Promise<PaginatedResponse<MovimentacaoUniforme>> {
+    const { page, pageSize, ...rest } = filtros;
+    const { data } = await api.get('/api/compras/uniformes-movimentacoes/', {
+      params: { page, page_size: pageSize, ...rest },
+    });
     return data;
   },
 

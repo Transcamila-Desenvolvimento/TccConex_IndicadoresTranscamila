@@ -64,6 +64,7 @@ ABAS_POR_AMBIENTE = {
     'Compras': frozenset({
         'home',
         'controle-estoque',
+        'controle-uniformes',
         'cadastro-consumidores',
         'cadastro-medidas',
         'cadastro-fornecedores',

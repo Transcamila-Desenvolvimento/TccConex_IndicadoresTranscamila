@@ -12,6 +12,14 @@ import logoCollapsed from '../assets/Logo_TccConex_Fechado.png';
 import logoIndicadoresExpanded from '../assets/Logo_Indicadores.png';
 import logoIndicadoresCollapsed from '../assets/Logo_Indicadores_Fechado.png';
 
+function UniformeIcon({ className }: { className: string }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5.5 1.5 2 3.2.8 6.4l2.2.9v7.2h10V7.3l2.2-.9L14 3.2l-3.5-1.7C10.2 2.6 9.2 3.3 8 3.3S5.8 2.6 5.5 1.5Z" />
+    </svg>
+  );
+}
+
 function NavIcon({ name, sub = false }: { name: string; sub?: boolean }) {
   return (
     <i
@@ -438,6 +446,13 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Compras' && canAba('Compras', 'controle-estoque')
       },
       {
+        title: "Controle Uniformes",
+        path: "Compras / Controle Uniformes",
+        icon: <UniformeIcon className="search-item-icon" />,
+        action: () => navigate('/compras/controle-uniformes'),
+        show: selectedEnvironment === 'Compras' && canAba('Compras', 'controle-uniformes')
+      },
+      {
         title: "Cadastro consumidores",
         path: "Compras / Cadastros / Cadastro consumidores",
         icon: <i className="bi bi-people search-item-icon" aria-hidden="true" />,
@@ -744,6 +759,7 @@ const DashboardLayout: React.FC = () => {
 
     if (path === '/') return `${env} / Painel Geral`;
     if (path.startsWith('/compras/controle-estoque')) return `${env} / Controle de estoque`;
+    if (path.startsWith('/compras/controle-uniformes')) return `${env} / Controle Uniformes`;
     if (path.startsWith('/compras/cadastros/consumidores')) return `${env} / Cadastros / Cadastro consumidores`;
     if (path.startsWith('/compras/cadastros/medidas')) return `${env} / Cadastros / Cadastro de medidas`;
     if (path.startsWith('/compras/cadastros/fornecedores')) return `${env} / Cadastros / Cadastro fornecedores`;
@@ -1330,6 +1346,18 @@ const DashboardLayout: React.FC = () => {
                   <div className="nav-btn-left">
                     <NavIcon name="box" />
                     <span className="nav-text">Controle de estoque</span>
+                  </div>
+                </Link>
+                )}
+                {canAba('Compras', 'controle-uniformes') && (
+                <Link
+                  to="/compras/controle-uniformes"
+                  className={`nav-btn ${isRouteActive('/compras/controle-uniformes') ? 'active' : ''}`}
+                  data-tooltip="Controle Uniformes"
+                >
+                  <div className="nav-btn-left">
+                    <UniformeIcon className="nav-icon" />
+                    <span className="nav-text">Controle Uniformes</span>
                   </div>
                 </Link>
                 )}

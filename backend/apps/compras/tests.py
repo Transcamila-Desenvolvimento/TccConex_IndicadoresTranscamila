@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db.models import F
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -11,6 +12,15 @@ from apps.compras.models import (
     ItemEstoque,
     EntradaEstoque,
     SaidaEstoque,
+    Uniforme,
+    DevolucaoUniforme,
+    EntregaUniforme,
+    EntregaUniformeItem,
+    MovimentacaoUniforme,
+    MOV_DEVOLUCAO,
+    MOV_ENTRADA,
+    MOV_ENTREGA,
+    MOV_PERDA,
 )
 
 User = get_user_model()
@@ -295,3 +305,224 @@ class PermissaoModuloComprasTests(TestCase):
     def test_sem_header_de_ambiente_correto_recebe_403(self):
         response = self.client.get('/api/compras/itens/', **auth_headers(self.user_sem_acesso, 'Financeiro'))
         self.assertEqual(response.status_code, 403)
+
+    def test_usuario_sem_ambiente_compras_nao_acessa_uniformes(self):
+        response = self.client.get('/api/compras/uniformes/', **auth_headers(self.user_sem_acesso, 'Compras'))
+        self.assertEqual(response.status_code, 403)
+
+
+class ControleUniformesTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='uniformes_tests', password='teste123', role_id='2',
+            environments=['Compras'], filiais={}, name='Almoxarife Teste',
+        )
+        self.headers = auth_headers(self.user, 'Compras')
+        setor = Setor.objects.create(nome='Operação')
+        self.colaborador = Colaborador.objects.create(
+            nome='Pedro Motorista', setor=setor, cargo='Motorista', cpf='12345678901',
+        )
+        response = self.client.post(
+            '/api/compras/uniformes/',
+            data={'nome': 'Camiseta', 'codigo': 'CAM-01', 'tamanho': 'm', 'estoqueMinimo': 3, 'estoqueInicial': 10},
+            format='json', **self.headers,
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.uniforme_id = response.data['id']
+
+    def _uniforme(self):
+        return Uniforme.objects.get(pk=self.uniforme_id)
+
+    def test_cadastro_em_lote_cria_tamanhos_com_estoque_novo_e_usado(self):
+        response = self.client.post(
+            '/api/compras/uniformes/lote/',
+            data={'nome': 'Camiseta manga longa', 'tamanhos': [
+                {'tamanho': 'p', 'qtdNova': 2, 'qtdUsada': 1, 'estoqueMinimo': 1},
+                {'tamanho': '3G', 'qtdNova': 0, 'qtdUsada': 0},
+            ]},
+            format='json', **self.headers,
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual([u['tamanho'] for u in response.data], ['P', '3G'])
+        p = Uniforme.objects.get(nome='Camiseta manga longa', tamanho='P')
+        self.assertEqual((p.qtd_nova, p.qtd_usada, p.estoque_minimo), (2, 1, 1))
+        self.assertEqual(p.movimentacoes.count(), 2)
+
+    def test_cadastro_em_lote_com_tamanho_existente_nao_cria_nada(self):
+        response = self.client.post(
+            '/api/compras/uniformes/lote/',
+            data={'nome': 'Camiseta', 'tamanhos': [{'tamanho': 'G', 'qtdNova': 3}, {'tamanho': 'M'}]},
+            format='json', **self.headers,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Uniforme.objects.filter(nome='Camiseta', tamanho='G').exists())
+
+    def _entregar(self, quantidade=5, condicao='novo'):
+        response = self.client.post(
+            '/api/compras/uniformes-entregas/',
+            data={
+                'colaboradorId': self.colaborador.pk,
+                'dataEntrega': '2026-10-20',
+                'itens': [{'uniformeId': self.uniforme_id, 'condicao': condicao, 'quantidade': quantidade}],
+            },
+            format='json', **self.headers,
+        )
+        return response
+
+    def _devolver(self, entrega, **qtds):
+        item_id = entrega['itens'][0]['id']
+        observacoes = qtds.pop('observacoes', '')
+        return self.client.post(
+            f"/api/compras/uniformes-entregas/{entrega['id']}/devolver/",
+            data={'dataDevolucao': '2026-10-25', 'observacoes': observacoes, 'itens': [{'entregaItemId': item_id, **qtds}]},
+            format='json', **self.headers,
+        )
+
+    def _devolucao_total(self, itens, observacoes=''):
+        return self.client.post(
+            '/api/compras/uniformes-entregas/devolucao-total/',
+            data={'colaboradorId': self.colaborador.pk, 'dataDevolucao': '2026-10-25', 'observacoes': observacoes, 'itens': itens},
+            format='json', **self.headers,
+        )
+
+    def test_devolucao_total_encerra_todos_os_termos(self):
+        primeira = self._entregar(3).data
+        segunda = self._entregar(2).data
+        response = self._devolucao_total([
+            {'entregaItemId': primeira['itens'][0]['id'], 'qtdBoa': 3},
+            {'entregaItemId': segunda['itens'][0]['id'], 'qtdBoa': 1, 'qtdDanificada': 1},
+        ])
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['totalPecas'], 5)
+        self.assertEqual(sorted(response.data['termos']), sorted([primeira['numero'], segunda['numero']]))
+        uniforme = self._uniforme()
+        self.assertEqual((uniforme.qtd_nova, uniforme.qtd_usada), (5, 4))
+        self.assertFalse(
+            EntregaUniformeItem.objects.filter(entrega__colaborador=self.colaborador)
+            .exclude(quantidade=F('qtd_devolvida') + F('qtd_descartada') + F('qtd_perdida'))
+            .exists()
+        )
+        self.assertEqual(DevolucaoUniforme.objects.filter(observacoes='Devolução total').count(), 2)
+
+    def test_devolucao_total_exige_destino_de_todas_as_pecas(self):
+        primeira = self._entregar(3).data
+        self._entregar(2)
+        response = self._devolucao_total([{'entregaItemId': primeira['itens'][0]['id'], 'qtdBoa': 3}])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('nada pode ficar pendente', response.data['error'])
+        self.assertFalse(DevolucaoUniforme.objects.exists())
+        self.assertEqual(self._uniforme().qtd_usada, 0)
+
+    def test_cadastro_com_estoque_inicial_gera_entrada(self):
+        uniforme = self._uniforme()
+        self.assertEqual((uniforme.tamanho, uniforme.qtd_nova, uniforme.qtd_usada), ('M', 10, 0))
+        mov = MovimentacaoUniforme.objects.get(uniforme=uniforme)
+        self.assertEqual((mov.tipo, mov.variacao_estoque, mov.saldo_novo), (MOV_ENTRADA, 10, 10))
+
+    def test_entrega_diminui_estoque_novo_e_gera_termo(self):
+        response = self._entregar(5)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['numero'], f"TRU-{int(response.data['id']):06d}")
+        self.assertEqual(response.data['colaboradorCpf'], '12345678901')
+        self.assertEqual(response.data['colaboradorSetor'], 'Operação')
+        self.assertEqual(response.data['status'], 'em_posse')
+        self.assertEqual(response.data['usuarioNome'], 'Almoxarife Teste')
+        self.assertEqual(self._uniforme().qtd_nova, 5)
+
+    def test_entrega_acima_do_saldo_nao_altera_nada(self):
+        response = self._entregar(11)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('insuficiente', response.data['error'])
+        self.assertEqual(self._uniforme().qtd_nova, 10)
+        self.assertFalse(EntregaUniforme.objects.exists())
+
+    def test_devolucao_com_divergencia_registra_perda_sem_voltar_ao_estoque(self):
+        entrega = self._entregar(5).data
+
+        sem_justificativa = self._devolver(entrega, qtdBoa=3, qtdPerdida=2)
+        self.assertEqual(sem_justificativa.status_code, 400)
+
+        response = self._devolver(entrega, qtdBoa=3, qtdPerdida=2, observacoes='Colaborador perdeu duas peças.')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['status'], 'encerrada')
+        self.assertEqual(response.data['itens'][0]['qtdPerdida'], 2)
+        self.assertEqual(response.data['itens'][0]['quantidade'], 5)
+
+        uniforme = self._uniforme()
+        self.assertEqual((uniforme.qtd_nova, uniforme.qtd_usada), (5, 3))
+        tipos = list(MovimentacaoUniforme.objects.filter(devolucao__isnull=False).values_list('tipo', 'quantidade', 'variacao_estoque'))
+        self.assertCountEqual(tipos, [(MOV_DEVOLUCAO, 3, 3), (MOV_PERDA, 2, 0)])
+
+        resumo = self.client.get('/api/compras/uniformes/resumo/', **self.headers).data
+        self.assertEqual(
+            {k: resumo[k] for k in ('estoqueNovo', 'estoqueUsado', 'destinados', 'perdidos')},
+            {'estoqueNovo': 5, 'estoqueUsado': 3, 'destinados': 0, 'perdidos': 2},
+        )
+
+    def test_devolucao_parcial_e_pecas_danificadas_sao_descartadas(self):
+        entrega = self._entregar(5).data
+        response = self._devolver(entrega, qtdBoa=1, qtdDanificada=1, qtdSemCondicoes=1)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['status'], 'parcial')
+        self.assertEqual(response.data['totalPendente'], 2)
+        self.assertEqual(self._uniforme().qtd_usada, 1)
+
+        excesso = self._devolver(response.data, qtdBoa=3)
+        self.assertEqual(excesso.status_code, 400)
+
+        em_posse = self.client.get(
+            f'/api/compras/uniformes-entregas/em-posse/?colaboradorId={self.colaborador.pk}', **self.headers,
+        ).data
+        self.assertEqual([(i['entregaNumero'], i['pendente']) for i in em_posse], [(entrega['numero'], 2)])
+
+        lista = self.client.get('/api/compras/uniformes/', **self.headers).data
+        self.assertEqual((lista[0]['destinados'], lista[0]['descartados']), (2, 2))
+
+    def test_entrega_de_peca_usada_sai_do_saldo_usado(self):
+        self.client.post(
+            f'/api/compras/uniformes/{self.uniforme_id}/entrada/',
+            data={'condicao': 'usado', 'quantidade': 2, 'data': '2026-10-20'}, format='json', **self.headers,
+        )
+        response = self._entregar(2, condicao='usado')
+        self.assertEqual(response.status_code, 201, response.data)
+        uniforme = self._uniforme()
+        self.assertEqual((uniforme.qtd_nova, uniforme.qtd_usada), (10, 0))
+
+    def test_ajuste_exige_justificativa_e_nao_deixa_saldo_negativo(self):
+        url = f'/api/compras/uniformes/{self.uniforme_id}/ajuste/'
+        self.assertEqual(self.client.post(url, data={'condicao': 'novo', 'quantidade': -2}, format='json', **self.headers).status_code, 400)
+        self.assertEqual(
+            self.client.post(url, data={'condicao': 'novo', 'quantidade': -20, 'observacao': 'Inventário'}, format='json', **self.headers).status_code,
+            400,
+        )
+        response = self.client.post(url, data={'condicao': 'novo', 'quantidade': -2, 'observacao': 'Inventário'}, format='json', **self.headers)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['qtdNova'], 8)
+
+    def test_uniforme_com_historico_nao_pode_ser_excluido(self):
+        response = self.client.delete(f'/api/compras/uniformes/{self.uniforme_id}/', **self.headers)
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(Uniforme.objects.filter(pk=self.uniforme_id).exists())
+
+    def test_historico_paginado_e_filtrado_por_colaborador(self):
+        self._entregar(2)
+        response = self.client.get(
+            f'/api/compras/uniformes-movimentacoes/?colaboradorId={self.colaborador.pk}', **self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['tipo'], MOV_ENTREGA)
+
+        entregas = self.client.get('/api/compras/uniformes-entregas/?status=abertas&q=pedro', **self.headers).data
+        self.assertEqual(entregas['count'], 1)
+
+    def test_por_colaborador_soma_pecas_em_posse(self):
+        primeira = self._entregar(3).data
+        self._entregar(2)
+        self._devolver(primeira, qtdBoa=1)
+        response = self.client.get('/api/compras/uniformes-entregas/por-colaborador/?somenteEmPosse=1', **self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        linha = response.data['results'][0]
+        self.assertEqual((linha['nome'], linha['pecasEmPosse'], linha['totalEntregas']), ('Pedro Motorista', 4, 2))

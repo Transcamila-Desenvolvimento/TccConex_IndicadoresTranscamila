@@ -1206,6 +1206,204 @@ export interface RegistrarSaidaPayload {
   linhas: Array<{ itemId: string; quantidade: number }>;
 }
 
+// --- COMPRAS: CONTROLE DE UNIFORMES ---
+
+export type CondicaoUniforme = 'novo' | 'usado';
+
+export interface Uniforme {
+  id: string;
+  nome: string;
+  codigo: string;
+  tamanho: string;
+  qtdNova: number;
+  qtdUsada: number;
+  estoqueMinimo: number;
+  destinados: number;
+  perdidos: number;
+  descartados: number;
+}
+
+export interface UniformePayload {
+  nome: string;
+  codigo: string;
+  tamanho: string;
+  estoqueMinimo: number;
+  estoqueInicial?: number;
+}
+
+export interface UniformeLotePayload {
+  nome: string;
+  codigo: string;
+  tamanhos: { tamanho: string; qtdNova: number; qtdUsada: number; estoqueMinimo: number }[];
+}
+
+export interface ResumoUniformes {
+  estoqueNovo: number;
+  estoqueUsado: number;
+  destinados: number;
+  perdidos: number;
+  descartados: number;
+  estoqueBaixo: number;
+  modelos: number;
+}
+
+export type MovimentoEstoqueUniformeTipo = 'entrada' | 'ajuste' | 'descarte';
+
+export interface MovimentoEstoqueUniformePayload {
+  condicao: CondicaoUniforme;
+  quantidade: number;
+  observacao?: string;
+  data?: string;
+}
+
+export interface EntregaUniformeItem {
+  id: string;
+  uniformeId: string | null;
+  uniformeNome: string;
+  uniformeCodigo: string;
+  uniformeTamanho: string;
+  condicao: CondicaoUniforme;
+  quantidade: number;
+  qtdDevolvida: number;
+  qtdDescartada: number;
+  qtdPerdida: number;
+  pendente: number;
+}
+
+export interface DevolucaoUniforme {
+  id: string;
+  dataDevolucao: string;
+  observacoes: string;
+  usuarioNome: string;
+  criadoEm: string;
+  itens: Array<{
+    entregaItemId: string;
+    uniformeNome: string;
+    uniformeTamanho: string;
+    qtdBoa: number;
+    qtdDanificada: number;
+    qtdSemCondicoes: number;
+    qtdPerdida: number;
+  }>;
+}
+
+export type StatusEntregaUniforme = 'em_posse' | 'parcial' | 'encerrada';
+
+export interface EntregaUniforme {
+  id: string;
+  numero: string;
+  colaboradorId: string | null;
+  colaboradorNome: string;
+  colaboradorCpf: string;
+  colaboradorCargo: string;
+  colaboradorSetor: string;
+  dataEntrega: string;
+  observacoes: string;
+  usuarioNome: string;
+  criadoEm: string;
+  itens: EntregaUniformeItem[];
+  devolucoes: DevolucaoUniforme[];
+  status: StatusEntregaUniforme;
+  totalEntregue: number;
+  totalPendente: number;
+}
+
+export interface EntregaUniformeFiltros {
+  page: number;
+  pageSize: number;
+  q?: string;
+  status?: '' | 'abertas' | 'encerradas';
+  colaboradorId?: string;
+  dataInicio?: string;
+  dataFim?: string;
+}
+
+export interface RegistrarEntregaUniformePayload {
+  colaboradorId: string;
+  dataEntrega: string;
+  observacoes: string;
+  itens: Array<{ uniformeId: string; condicao: CondicaoUniforme; quantidade: number }>;
+}
+
+export interface RegistrarDevolucaoUniformePayload {
+  dataDevolucao: string;
+  observacoes: string;
+  itens: Array<{
+    entregaItemId: string;
+    qtdBoa: number;
+    qtdDanificada: number;
+    qtdSemCondicoes: number;
+    qtdPerdida: number;
+  }>;
+}
+
+export interface DevolucaoTotalUniformePayload extends RegistrarDevolucaoUniformePayload {
+  colaboradorId: string;
+}
+
+export interface DevolucaoTotalUniformeResultado {
+  termos: string[];
+  totalPecas: number;
+}
+
+export interface ColaboradorUniformes {
+  colaboradorId: string;
+  nome: string;
+  cpf: string;
+  cargo: string;
+  setorNome: string;
+  pecasEmPosse: number;
+  totalEntregas: number;
+  ultimaEntrega: string | null;
+}
+
+export interface ColaboradorUniformesFiltros {
+  page: number;
+  pageSize: number;
+  q?: string;
+  somenteEmPosse?: boolean;
+}
+
+export interface UniformeEmPosse extends EntregaUniformeItem {
+  entregaId: string;
+  entregaNumero: string;
+  dataEntrega: string;
+}
+
+export type TipoMovimentacaoUniforme = 'entrada' | 'ajuste' | 'entrega' | 'devolucao' | 'descarte' | 'perda';
+
+export interface MovimentacaoUniforme {
+  id: string;
+  tipo: TipoMovimentacaoUniforme;
+  tipoLabel: string;
+  uniformeId: string | null;
+  uniformeNome: string;
+  uniformeTamanho: string;
+  condicao: CondicaoUniforme;
+  quantidade: number;
+  variacaoEstoque: number;
+  saldoNovo: number;
+  saldoUsado: number;
+  data: string;
+  colaboradorNome: string;
+  entregaId: string | null;
+  entregaNumero: string;
+  observacao: string;
+  usuarioNome: string;
+  criadoEm: string;
+}
+
+export interface MovimentacaoUniformeFiltros {
+  page: number;
+  pageSize: number;
+  q?: string;
+  tipo?: '' | TipoMovimentacaoUniforme;
+  uniformeId?: string;
+  colaboradorId?: string;
+  dataInicio?: string;
+  dataFim?: string;
+}
+
 // --- FATURAMENTO (Protocolos de envio de NF) TYPES ---
 
 export const PROTOCOLO_EXPEDICAO_OPTIONS = [

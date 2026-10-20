@@ -10,6 +10,7 @@ from .views import (
     EntradaEstoqueViewSet,
     SaidaEstoqueViewSet,
 )
+from .views_uniformes import EntregaUniformeViewSet, MovimentacaoUniformeViewSet, UniformeViewSet
 
 router = DefaultRouter()
 router.register('unidades', UnidadeMedidaViewSet, basename='compras-unidades')
@@ -19,6 +20,9 @@ router.register('fornecedores', FornecedorViewSet, basename='compras-fornecedore
 router.register('itens', ItemEstoqueViewSet, basename='compras-itens')
 router.register('entradas', EntradaEstoqueViewSet, basename='compras-entradas')
 router.register('saidas', SaidaEstoqueViewSet, basename='compras-saidas')
+router.register('uniformes-entregas', EntregaUniformeViewSet, basename='compras-uniformes-entregas')
+router.register('uniformes-movimentacoes', MovimentacaoUniformeViewSet, basename='compras-uniformes-movimentacoes')
+router.register('uniformes', UniformeViewSet, basename='compras-uniformes')
 
 urlpatterns = [
     path('', include(router.urls)),

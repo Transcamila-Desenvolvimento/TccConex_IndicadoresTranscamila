@@ -21723,6 +21723,11 @@ button.proposta-status-badge {
   overflow: visible;
 }
 
+.modal-card.uniformes-modal {
+  max-height: none;
+  overflow: visible;
+}
+
 .compras-sugestoes-rh-lista {
   position: absolute;
   left: 0;
