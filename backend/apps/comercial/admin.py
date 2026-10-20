@@ -5,12 +5,16 @@ from .models import (
     ClienteComercialProduto,
     GeneralidadeComercial,
     HomologacaoProdutoEvento,
+    MatrizIcmsUf,
+    ParametrosComercial,
     ProdutoComercial,
     PropostaComercial,
     PropostaComercialDraft,
     PropostaFreteLinha,
     TabelaFrete,
     TabelaFreteLinha,
+    VeiculoComercial,
+    VeiculoRotuloCliente,
 )
 
 
@@ -93,3 +97,48 @@ class HomologacaoProdutoEventoAdmin(admin.ModelAdmin):
     list_display = ('cliente', 'status', 'usuario', 'data_criacao')
     list_filter = ('status',)
     search_fields = ('cliente__razao_social', 'justificativa')
+
+
+@admin.register(ClienteComercialProduto)
+class ClienteComercialProdutoAdmin(admin.ModelAdmin):
+    list_display = ('cliente', 'nome', 'produto', 'classe_risco', 'numero_onu', 'grupo_embalagem', 'ordem')
+    list_filter = ('classe_risco', 'grupo_embalagem')
+    search_fields = ('nome', 'numero_onu', 'cliente__razao_social', 'produto__nome')
+
+
+@admin.register(PropostaFreteLinha)
+class PropostaFreteLinhaAdmin(admin.ModelAdmin):
+    list_display = ('proposta', 'ordem', 'origem', 'entrega', 'veiculo', 'modalidade', 'tarifa_frete', 'total_estimado')
+    list_filter = ('modalidade',)
+    search_fields = ('origem', 'entrega', 'veiculo', 'proposta__titulo', 'proposta__cliente_nome')
+
+
+class VeiculoRotuloClienteInline(admin.TabularInline):
+    model = VeiculoRotuloCliente
+    extra = 0
+
+
+@admin.register(VeiculoComercial)
+class VeiculoComercialAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'codigo', 'antt_fixo', 'antt_por_km', 'capacidade_kg', 'ativo', 'ordem')
+    list_filter = ('ativo',)
+    search_fields = ('nome', 'codigo')
+    inlines = [VeiculoRotuloClienteInline]
+
+
+@admin.register(VeiculoRotuloCliente)
+class VeiculoRotuloClienteAdmin(admin.ModelAdmin):
+    list_display = ('veiculo', 'cliente', 'rotulo')
+    search_fields = ('rotulo', 'veiculo__nome', 'cliente__razao_social')
+
+
+@admin.register(MatrizIcmsUf)
+class MatrizIcmsUfAdmin(admin.ModelAdmin):
+    list_display = ('id', 'atualizado_em')
+    readonly_fields = ('atualizado_em',)
+
+
+@admin.register(ParametrosComercial)
+class ParametrosComercialAdmin(admin.ModelAdmin):
+    list_display = ('id', 'validade_padrao', 'faturamento_padrao', 'vigencia_padrao', 'atualizado_em')
+    readonly_fields = ('atualizado_em',)

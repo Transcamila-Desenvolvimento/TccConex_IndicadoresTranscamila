@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import EscopoAnalise, EscopoAnaliseOpcao, PesquisaSatisfacao, PesquisaSatisfacaoFormDraft, PesquisaSatisfacaoLoteDraft
+from .models import (
+    DocumentoSGQ,
+    EscopoAnalise,
+    EscopoAnaliseOpcao,
+    PastaMatrizSGQ,
+    PesquisaSatisfacao,
+    PesquisaSatisfacaoFormDraft,
+    PesquisaSatisfacaoLoteDraft,
+)
 
 
 @admin.register(PesquisaSatisfacao)
@@ -37,3 +45,25 @@ class EscopoAnaliseAdmin(admin.ModelAdmin):
     list_filter = ('ativo',)
     search_fields = ('chave', 'label')
     inlines = [EscopoAnaliseOpcaoInline]
+
+
+@admin.register(EscopoAnaliseOpcao)
+class EscopoAnaliseOpcaoAdmin(admin.ModelAdmin):
+    list_display = ('label', 'chave', 'escopo', 'ordem', 'ativo')
+    list_filter = ('ativo', 'escopo')
+    search_fields = ('label', 'chave')
+
+
+@admin.register(PastaMatrizSGQ)
+class PastaMatrizSGQAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'parent', 'criado_em')
+    search_fields = ('nome',)
+    readonly_fields = ('criado_em',)
+
+
+@admin.register(DocumentoSGQ)
+class DocumentoSGQAdmin(admin.ModelAdmin):
+    list_display = ('titulo', 'pasta', 'nome_original', 'tamanho', 'texto_extraido', 'incluido_por', 'criado_em')
+    list_filter = ('texto_extraido', 'pasta')
+    search_fields = ('titulo', 'nome_original')
+    readonly_fields = ('criado_em',)
