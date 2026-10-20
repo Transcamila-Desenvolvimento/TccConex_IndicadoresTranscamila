@@ -1310,44 +1310,6 @@ export interface NdLoteReceber {
   referenceDate: string;
 }
 
-/** Documento localizado no relatório para o rascunho de bipagem. A relação não é gravada. */
-export interface DocumentoBipagem {
-  id: string;
-  codCliente: string;
-  loja: string;
-  cliente: string;
-  origem: string;
-  docto: string;
-  emissao: string;
-  vencimento: string;
-  total: number;
-  notas: string;
-  fatura: string;
-}
-
-export interface LoteBipagem {
-  label: string;
-  referenceDate: string;
-  updatedAt: string | null;
-}
-
-export interface BuscaBipagemResponse {
-  lote: LoteBipagem | null;
-  encontrados: DocumentoBipagem[];
-  /** Documentos com o mesmo código que pertencem a outro cliente — não podem entrar na relação. */
-  outroCliente: DocumentoBipagem[];
-}
-
-export interface BaseBipagemResponse extends PaginatedResponse<DocumentoBipagem> {
-  lote: LoteBipagem | null;
-}
-
-export interface ImportacaoBipagemResponse {
-  lote: LoteBipagem | null;
-  linhas: number;
-  ignoradas: number;
-}
-
 export interface NdPagadoresResponse {
   selecionados: NdPagadorSelecionado[];
   disponiveis: NdPagadorDisponivel[];
@@ -1380,6 +1342,28 @@ export interface NdTitulo {
   saldo: number;
   historico: string;
   situacao: NdTituloSituacao;
+}
+
+export interface NdTitulosParams {
+  page: number;
+  pageSize: number;
+  search: string;
+  ordering: NdTituloOrdering;
+  situacao: NdTituloSituacao | '';
+  cliente: string;
+}
+
+export interface NdResumoSituacao {
+  quantidade: number;
+  saldo: number;
+}
+
+export interface NdTitulosResponse extends PaginatedResponse<NdTitulo> {
+  totalSaldo: number;
+  resumo: {
+    vencido: NdResumoSituacao;
+    aVencer: NdResumoSituacao;
+  };
 }
 
 export interface ProtocoloQueryParams extends ListQueryParams {

@@ -60,7 +60,6 @@ ABAS_POR_AMBIENTE = {
         'envio-nf-cliente',
         'cadastro-clientes',
         'controle-nds',
-        'fatura-bipagem',
     }),
     'Compras': frozenset({'home', 'controle-estoque'}),
     'RH': frozenset({'home', 'movimentacoes', 'documentos'}),

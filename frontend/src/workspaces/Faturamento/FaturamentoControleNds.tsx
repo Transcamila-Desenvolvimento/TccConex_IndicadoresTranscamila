@@ -2,7 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import { useNdPagadores, useNdTitulos, useSalvarNdPagadores } from '../../hooks/useControleNds';
-import type { NdPagadorDisponivel, NdPagadorSelecionado, NdTituloCampoOrdem, NdTituloOrdering, NdTituloSituacao } from '../../types/domain';
+import type {
+  NdPagadorDisponivel,
+  NdPagadorSelecionado,
+  NdResumoSituacao,
+  NdTituloCampoOrdem,
+  NdTituloOrdering,
+  NdTituloSituacao,
+} from '../../types/domain';
 
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
@@ -70,16 +77,26 @@ const FaturamentoControleNds: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [ordering, setOrdering] = useState<NdTituloOrdering>('cliente_asc');
+  const [situacao, setSituacao] = useState<NdTituloSituacao | ''>('');
+  const [cliente, setCliente] = useState('');
   const [modalAberto, setModalAberto] = useState(false);
+  const clienteFiltro = selecionados.some((item) => item.codCliente === cliente) ? cliente : '';
 
   const titulosQuery = useNdTitulos(
-    { page, pageSize, search: busca, ordering },
+    { page, pageSize, search: busca, ordering, situacao, cliente: clienteFiltro },
     temPagadores,
   );
   const painelQuery = temPagadores ? titulosQuery : pagadoresQuery;
   const { canShowEmpty } = useAsyncQueryState(painelQuery);
   const titulos = titulosQuery.data?.results ?? [];
   const total = temPagadores ? (titulosQuery.data?.count ?? 0) : 0;
+  const totalSaldo = temPagadores ? (titulosQuery.data?.totalSaldo ?? 0) : 0;
+  const resumo = temPagadores ? titulosQuery.data?.resumo : undefined;
+  const resumoVazio: NdResumoSituacao = { quantidade: 0, saldo: 0 };
+  const resumoSituacoes: { situacao: NdTituloSituacao; valores: NdResumoSituacao }[] = [
+    { situacao: 'vencido', valores: resumo?.vencido ?? resumoVazio },
+    { situacao: 'a_vencer', valores: resumo?.aVencer ?? resumoVazio },
+  ];
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const clampedPage = Math.min(page, totalPages);
 
@@ -124,10 +141,56 @@ const FaturamentoControleNds: React.FC = () => {
               }}
             />
           </div>
+          <div className="reports-select-wrapper" style={{ minWidth: '220px' }}>
+            <select
+              value={clienteFiltro}
+              aria-label="Filtrar por cliente"
+              disabled={!temPagadores}
+              style={{ width: '100%' }}
+              onChange={(event) => {
+                setCliente(event.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Cliente: Todos</option>
+              {selecionados.map((item) => (
+                <option key={item.codCliente} value={item.codCliente}>
+                  {item.codCliente} · {item.nome || 'Sem nome'}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="reports-select-wrapper" style={{ minWidth: '160px' }}>
+            <select
+              value={situacao}
+              aria-label="Filtrar por situação"
+              disabled={!temPagadores}
+              onChange={(event) => {
+                setSituacao(event.target.value as NdTituloSituacao | '');
+                setPage(1);
+              }}
+            >
+              <option value="">Situação: Todas</option>
+              {(Object.keys(SITUACAO) as NdTituloSituacao[]).map((chave) => (
+                <option key={chave} value={chave}>{SITUACAO[chave].label}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="reports-filter-right">
           <span className="reports-records-count">
             <strong>{total}</strong> {total === 1 ? 'Título' : 'Títulos'}
+            {resumoSituacoes.map(({ situacao: chave, valores }) => (
+              <React.Fragment key={chave}>
+                {` · ${SITUACAO[chave].label} `}
+                <strong
+                  title={`${valores.quantidade} ${valores.quantidade === 1 ? 'título' : 'títulos'}`}
+                >
+                  {formatCurrency(valores.saldo)}
+                </strong>
+              </React.Fragment>
+            ))}
+            {' · Total '}<strong>{formatCurrency(totalSaldo)}</strong>
             {lote ? ` · ${lote.label}` : ''}
           </span>
         </div>

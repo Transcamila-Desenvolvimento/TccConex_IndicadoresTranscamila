@@ -194,6 +194,59 @@ class ControleNdsTests(TestCase):
         pagadores = self.client.get('/api/faturamento/nds/pagadores/', **self.headers)
         self.assertEqual(pagadores.data['selecionados'], [{'codCliente': '10', 'nome': 'ACME TRANSPORTES'}])
 
+    def _selecionar_todos_com_vencido(self):
+        self.client.put(
+            '/api/faturamento/nds/pagadores/',
+            {'codigos': ['10', '20']},
+            format='json',
+            **self.headers,
+        )
+        passado = (date.today() - timedelta(days=3)).strftime('%d/%m/%Y')
+        futuro = (date.today() + timedelta(days=3)).strftime('%d/%m/%Y')
+        ReceberTitulo.objects.filter(titulo='1001').update(vencimento_real=passado)
+        ReceberTitulo.objects.filter(titulo__in=['1002', '2001']).update(vencimento_real=futuro)
+
+    def test_filtra_por_situacao_e_totaliza_saldo(self):
+        self._selecionar_todos_com_vencido()
+        url = '/api/faturamento/nds/titulos/'
+
+        vencidos = self.client.get(url, {'situacao': 'vencido'}, **self.headers)
+        self.assertEqual([row['titulo'] for row in vencidos.data['results']], ['1001'])
+        self.assertEqual(Decimal(vencidos.data['totalSaldo']), Decimal('150.00'))
+
+        em_dia = self.client.get(url, {'situacao': 'a_vencer'}, **self.headers)
+        self.assertEqual({row['titulo'] for row in em_dia.data['results']}, {'1002', '2001'})
+        self.assertEqual(Decimal(em_dia.data['totalSaldo']), Decimal('120.00'))
+
+        todos = self.client.get(url, {'page_size': 1}, **self.headers)
+        self.assertEqual(todos.data['count'], 3)
+        self.assertEqual(Decimal(todos.data['totalSaldo']), Decimal('270.00'))
+
+    def test_resumo_ignora_filtro_de_situacao_e_respeita_cliente(self):
+        self._selecionar_todos_com_vencido()
+        url = '/api/faturamento/nds/titulos/'
+
+        resumo = self.client.get(url, {'situacao': 'vencido'}, **self.headers).data['resumo']
+        self.assertEqual(resumo['vencido']['quantidade'], 1)
+        self.assertEqual(Decimal(resumo['vencido']['saldo']), Decimal('150.00'))
+        self.assertEqual(resumo['aVencer']['quantidade'], 2)
+        self.assertEqual(Decimal(resumo['aVencer']['saldo']), Decimal('120.00'))
+
+        resumo_beta = self.client.get(url, {'cliente': '20'}, **self.headers).data['resumo']
+        self.assertEqual(resumo_beta['vencido']['quantidade'], 0)
+        self.assertEqual(Decimal(resumo_beta['vencido']['saldo']), Decimal('0'))
+        self.assertEqual(Decimal(resumo_beta['aVencer']['saldo']), Decimal('40.00'))
+
+    def test_filtra_por_cliente(self):
+        self._selecionar_todos_com_vencido()
+        resposta = self.client.get(
+            '/api/faturamento/nds/titulos/',
+            {'cliente': '20'},
+            **self.headers,
+        )
+        self.assertEqual([row['titulo'] for row in resposta.data['results']], ['2001'])
+        self.assertEqual(Decimal(resposta.data['totalSaldo']), Decimal('40.00'))
+
     def test_classifica_vencimento_pela_data(self):
         self._selecionar_acme()
         ReceberTitulo.objects.filter(titulo='1001').update(vencimento_real='01/11/2026')

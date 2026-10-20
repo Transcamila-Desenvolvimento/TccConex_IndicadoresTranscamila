@@ -1,7 +1,8 @@
 from datetime import datetime
+from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.db.models.functions import Concat, Substr
 from django.utils import timezone
 
@@ -226,12 +227,36 @@ _ORDEM_TITULOS = {
 }
 
 
-def titulos_do_pagador(search='', ordering=''):
+def filtrar_situacao(qs, situacao):
+    if situacao == 'baixado':
+        return qs.filter(baixado=True)
+    if situacao not in ('vencido', 'a_vencer'):
+        return qs
+    hoje = timezone.localdate().strftime('%Y%m%d')
+    vencido = Q(vencimento_real__regex=r'^\d{2}/\d{2}/\d{4}$', vencimento_ordem__lt=hoje)
+    qs = qs.filter(baixado=False)
+    return qs.filter(vencido) if situacao == 'vencido' else qs.exclude(vencido)
+
+
+def resumo_por_situacao(qs):
+    resumo = {}
+    for chave, situacao in (('vencido', 'vencido'), ('aVencer', 'a_vencer')):
+        valores = filtrar_situacao(qs, situacao).aggregate(quantidade=Count('id'), saldo=Sum('saldo'))
+        resumo[chave] = {
+            'quantidade': valores['quantidade'] or 0,
+            'saldo': str(valores['saldo'] or Decimal('0')),
+        }
+    return resumo
+
+
+def titulos_do_pagador(search='', ordering='', cliente=''):
     codigos = codigos_selecionados()
-    if not codigos:
-        return TituloNd.objects.none()
-    sincronizar_titulos(codigos)
+    if codigos:
+        sincronizar_titulos(codigos)
     qs = TituloNd.objects.filter(cod_cliente__in=codigos)
+    cod = (cliente or '').strip()
+    if cod:
+        qs = qs.filter(cod_cliente=cod)
     term = (search or '').strip()
     if term:
         qs = qs.filter(

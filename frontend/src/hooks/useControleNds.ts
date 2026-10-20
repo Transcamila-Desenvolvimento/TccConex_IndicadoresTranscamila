@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/apiService';
-import type { NdTituloOrdering } from '../types/domain';
+import type { NdTitulosParams } from '../types/domain';
 
 export const ND_PAGADORES_KEY = ['faturamento', 'nds', 'pagadores'] as const;
 
@@ -23,7 +23,7 @@ export function useSalvarNdPagadores() {
 }
 
 export function useNdTitulos(
-  params: { page: number; pageSize: number; search: string; ordering: NdTituloOrdering },
+  params: NdTitulosParams,
   enabled: boolean,
 ) {
   return useQuery({

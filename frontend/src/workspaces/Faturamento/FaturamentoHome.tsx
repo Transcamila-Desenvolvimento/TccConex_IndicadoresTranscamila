@@ -29,18 +29,6 @@ const QUICK_LINKS = [
     ),
   },
   {
-    title: 'Fatura bipagem',
-    description: 'Ferramenta de bipagem de faturas.',
-    path: '/faturamento/ferramentas/fatura-bipagem',
-    aba: 'fatura-bipagem',
-    badge: 'Ferramentas',
-    icon: (
-      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 8h.01M11 8h2M17 8h.01M7 12h.01M11 12h2M17 12h.01M7 16h.01M11 16h2M17 16h.01" />
-      </svg>
-    ),
-  },
-  {
     title: 'Controle de NDs',
     description: 'Acompanhe as notas de débito do faturamento.',
     path: '/faturamento/controle-nds',

@@ -53,7 +53,6 @@ const DashboardLayout: React.FC = () => {
   const [indOpenGroup, setIndOpenGroup] = useState<IndNavGroup | null>(null);
   const [isEnvioDocumentosSubmenuOpen, setIsEnvioDocumentosSubmenuOpen] = useState(false);
   const [isCadastrosFaturamentoSubmenuOpen, setIsCadastrosFaturamentoSubmenuOpen] = useState(false);
-  const [isFerramentasFaturamentoSubmenuOpen, setIsFerramentasFaturamentoSubmenuOpen] = useState(false);
   const [isCadastrosFrotaSubmenuOpen, setIsCadastrosFrotaSubmenuOpen] = useState(false);
   const [isQuestionariosFrotaSubmenuOpen, setIsQuestionariosFrotaSubmenuOpen] = useState(false);
   const [isCadastrosComercialSubmenuOpen, setIsCadastrosComercialSubmenuOpen] = useState(false);
@@ -100,9 +99,6 @@ const DashboardLayout: React.FC = () => {
     }
     if (location.pathname.startsWith('/faturamento/cadastros')) {
       setIsCadastrosFaturamentoSubmenuOpen(true);
-    }
-    if (location.pathname.startsWith('/faturamento/ferramentas')) {
-      setIsFerramentasFaturamentoSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/frota/cadastros')) {
       setIsCadastrosFrotaSubmenuOpen(true);
@@ -340,17 +336,6 @@ const DashboardLayout: React.FC = () => {
         ),
         action: () => navigate('/faturamento/controle-nds'),
         show: selectedEnvironment === 'Faturamento' && canAba('Faturamento', 'controle-nds')
-      },
-      {
-        title: "Fatura bipagem",
-        path: "Faturamento / Ferramentas / Fatura bipagem",
-        icon: (
-          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M8 8h8M8 12h8M8 16h5" />
-          </svg>
-        ),
-        action: () => navigate('/faturamento/ferramentas/fatura-bipagem'),
-        show: selectedEnvironment === 'Faturamento' && canAba('Faturamento', 'fatura-bipagem')
       },
       {
         title: "Home Indicadores",
@@ -709,7 +694,6 @@ const DashboardLayout: React.FC = () => {
   const IND_FROTA_PATHS = ['/indicadores/frota/custos', '/indicadores/frota/olho-vivo'];
   const FATURAMENTO_ENVIO_PATHS = ['/faturamento/protocolos'];
   const FATURAMENTO_CADASTROS_PATHS = ['/faturamento/cadastros/clientes'];
-  const FATURAMENTO_FERRAMENTAS_PATHS = ['/faturamento/ferramentas/fatura-bipagem'];
   const FROTA_CADASTROS_PATHS = ['/frota/cadastros/condutores', '/frota/cadastros/veiculos'];
   const FROTA_QUESTIONARIOS_PATHS = ['/frota/questionarios/olho-vivo'];
   const COMERCIAL_CADASTROS_PATHS = [
@@ -777,7 +761,6 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/faturamento/cadastros/clientes')) return `${env} / Cadastros / Cadastro cliente`;
     if (path.startsWith('/faturamento/protocolos')) return `${env} / Envio de documentos / Envio NF Cliente`;
     if (path.startsWith('/faturamento/controle-nds')) return `${env} / Controle de NDs`;
-    if (path.startsWith('/faturamento/ferramentas/fatura-bipagem')) return `${env} / Ferramentas / Fatura bipagem`;
     if (path.startsWith('/faturamento')) return `${env} / Home`;
     if (path.startsWith('/indicadores/logistica/meta-faturamento')) return `${env} / Logística / Meta de faturamento`;
     if (path.startsWith('/indicadores/rh/movimentacao')) return `${env} / Recursos Humanos / Movimentação de RH`;
@@ -1282,7 +1265,7 @@ const DashboardLayout: React.FC = () => {
                 {canAba('Faturamento', 'controle-nds') && (
                 <Link
                   to="/faturamento/controle-nds"
-                  className={`nav-btn nav-btn-sep ${isRouteActive('/faturamento/controle-nds') ? 'active' : ''}`}
+                  className={`nav-btn ${isRouteActive('/faturamento/controle-nds') ? 'active' : ''}`}
                   data-tooltip="Controle de NDs"
                 >
                   <div className="nav-btn-left">
@@ -1290,44 +1273,6 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Controle de NDs</span>
                   </div>
                 </Link>
-                )}
-
-                {canAba('Faturamento', 'fatura-bipagem') && (
-                <div className={`nav-group-wrapper${isFerramentasFaturamentoSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-faturamento-ferramentas">
-                  <button
-                    type="button"
-                    className={`nav-btn ${isParentNavActive(FATURAMENTO_FERRAMENTAS_PATHS, isFerramentasFaturamentoSubmenuOpen) ? 'active-parent' : ''}`}
-                    onClick={() => setIsFerramentasFaturamentoSubmenuOpen(!isFerramentasFaturamentoSubmenuOpen)}
-                    data-tooltip="Ferramentas"
-                  >
-                    <div className="nav-btn-left">
-                      <NavIcon name="tools" />
-                      <span className="nav-text">Ferramentas</span>
-                    </div>
-                    <ChevronSubmenu open={isFerramentasFaturamentoSubmenuOpen} />
-                  </button>
-
-                  <div
-                    className="submenu-container"
-                    style={{
-                      display: isSidebarCollapsed ? undefined : 'block',
-                      maxHeight: isSidebarCollapsed ? undefined : (isFerramentasFaturamentoSubmenuOpen ? '80px' : '0px'),
-                      overflow: 'hidden',
-                      transition: 'max-height 0.25s ease',
-                    }}
-                  >
-                    <Link
-                      to="/faturamento/ferramentas/fatura-bipagem"
-                      className={`nav-btn sub-nav-btn ${isRouteActive('/faturamento/ferramentas/fatura-bipagem') ? 'active' : ''}`}
-                      data-tooltip="Fatura bipagem"
-                    >
-                      <div className="nav-btn-left">
-                        <NavIcon name="upc-scan" sub />
-                        <span className="nav-text">Fatura bipagem</span>
-                      </div>
-                    </Link>
-                  </div>
-                </div>
                 )}
               </div>
             )}

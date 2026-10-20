@@ -28,8 +28,7 @@ import type {
   RegistrarCompraPayload, RegistrarSaidaPayload,
   ClienteProtocolo, ProtocoloEnvio, ProtocoloEnvioDraft,
   ProtocoloQueryParams, CreateProtocoloPayload, UpdateProtocoloPayload, ClienteProtocoloPayload,
-  NdPagadoresResponse, NdPagadorSelecionado, NdTitulo, NdTituloOrdering,
-  BuscaBipagemResponse, BaseBipagemResponse, DocumentoBipagem, LoteBipagem, ImportacaoBipagemResponse,
+  NdPagadoresResponse, NdPagadorSelecionado, NdTitulo, NdTitulosParams, NdTitulosResponse, NdResumoSituacao,
   CnpjConsultaResult,
   ProtocoloImportParams, ProtocoloImportResult,
   SgqPesquisa, SgqPesquisaImportPreview, SgqPesquisaImportResult, SgqPesquisaPayload, SgqPesquisaQueryParams, SgqPesquisaStats,
@@ -418,28 +417,10 @@ function normalizarPagadorNd(raw: { codCliente?: string; nome?: string }): NdPag
   };
 }
 
-function normalizarLoteBipagem(raw: { label?: string; referenceDate?: string; updatedAt?: string | null } | null | undefined): LoteBipagem | null {
-  if (!raw?.label) return null;
+function normalizeNdResumo(raw: any): NdResumoSituacao {
   return {
-    label: String(raw.label),
-    referenceDate: String(raw.referenceDate ?? ''),
-    updatedAt: raw.updatedAt ? String(raw.updatedAt) : null,
-  };
-}
-
-function normalizarDocumentoBipagem(raw: Partial<DocumentoBipagem> | null | undefined): DocumentoBipagem {
-  return {
-    id: String(raw?.id ?? ''),
-    codCliente: String(raw?.codCliente ?? '').trim(),
-    loja: String(raw?.loja ?? '').trim(),
-    cliente: String(raw?.cliente ?? '').trim(),
-    origem: String(raw?.origem ?? '').trim(),
-    docto: String(raw?.docto ?? '').trim(),
-    emissao: String(raw?.emissao ?? '').trim(),
-    vencimento: String(raw?.vencimento ?? '').trim(),
-    total: Number(raw?.total ?? 0) || 0,
-    notas: String(raw?.notas ?? '').trim(),
-    fatura: String(raw?.fatura ?? '').trim(),
+    quantidade: Number(raw?.quantidade ?? 0),
+    saldo: parseReportAmount(raw?.saldo) ?? 0,
   };
 }
 
@@ -2370,45 +2351,6 @@ export const apiService = {
     await api.delete(`/api/faturamento/protocolo-clientes/${clienteId}/filiais/${filialId}/`);
   },
 
-  async listarBaseBipagem(params: { page?: number; pageSize?: number; search?: string; codCliente?: string } = {}): Promise<BaseBipagemResponse> {
-    const query: Record<string, string | number> = {};
-    if (params.page) query.page = params.page;
-    if (params.pageSize) query.page_size = params.pageSize;
-    if (params.search?.trim()) query.search = params.search.trim();
-    if (params.codCliente?.trim()) query.codCliente = params.codCliente.trim();
-    const { data } = await api.get('/api/faturamento/bipagem/base/', { params: query });
-    const pagina = paginatedFromResponse(data, normalizarDocumentoBipagem);
-    return {
-      ...pagina,
-      lote: normalizarLoteBipagem(data?.lote),
-    };
-  },
-
-  async buscarDocumentoBipagem(params: { codigo: string; codCliente?: string }): Promise<BuscaBipagemResponse> {
-    const query: Record<string, string> = { codigo: params.codigo.trim() };
-    if (params.codCliente?.trim()) query.codCliente = params.codCliente.trim();
-    const { data } = await api.get('/api/faturamento/bipagem/documento/', { params: query });
-    return {
-      lote: normalizarLoteBipagem(data?.lote),
-      encontrados: Array.isArray(data?.encontrados) ? data.encontrados.map(normalizarDocumentoBipagem) : [],
-      outroCliente: Array.isArray(data?.outroCliente) ? data.outroCliente.map(normalizarDocumentoBipagem) : [],
-    };
-  },
-
-  async importarBaseBipagem(file: File): Promise<ImportacaoBipagemResponse> {
-    const form = new FormData();
-    form.append('file', file);
-    const { data } = await api.post('/api/faturamento/bipagem/importar/', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120000,
-    });
-    return {
-      lote: normalizarLoteBipagem(data?.lote),
-      linhas: Number(data?.linhas ?? 0),
-      ignoradas: Number(data?.ignoradas ?? 0),
-    };
-  },
-
   async getNdPagadores(search = ''): Promise<NdPagadoresResponse> {
     const { data } = await api.get('/api/faturamento/nds/pagadores/', {
       params: search.trim() ? { search: search.trim() } : undefined,
@@ -2432,14 +2374,23 @@ export const apiService = {
     return Array.isArray(data?.selecionados) ? data.selecionados.map(normalizarPagadorNd) : [];
   },
 
-  async getNdTitulos(params: { page?: number; pageSize?: number; search?: string; ordering?: NdTituloOrdering } = {}): Promise<PaginatedResponse<NdTitulo>> {
+  async getNdTitulos(params: Partial<NdTitulosParams> = {}): Promise<NdTitulosResponse> {
     const query: Record<string, string | number> = {};
     if (params.page) query.page = params.page;
     if (params.pageSize) query.page_size = params.pageSize;
     if (params.search?.trim()) query.search = params.search.trim();
     if (params.ordering) query.ordering = params.ordering;
+    if (params.situacao) query.situacao = params.situacao;
+    if (params.cliente) query.cliente = params.cliente;
     const { data } = await api.get('/api/faturamento/nds/titulos/', { params: query });
-    return paginatedFromResponse(data, normalizeNdTitulo);
+    return {
+      ...paginatedFromResponse(data, normalizeNdTitulo),
+      totalSaldo: parseReportAmount(data?.totalSaldo) ?? 0,
+      resumo: {
+        vencido: normalizeNdResumo(data?.resumo?.vencido),
+        aVencer: normalizeNdResumo(data?.resumo?.aVencer),
+      },
+    };
   },
 
   async getProtocolosEnvio(params: ProtocoloQueryParams = {}): Promise<PaginatedResponse<ProtocoloEnvio>> {
