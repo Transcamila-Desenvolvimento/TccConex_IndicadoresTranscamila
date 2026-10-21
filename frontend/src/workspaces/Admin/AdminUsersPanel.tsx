@@ -8,6 +8,7 @@ import {
   useDeleteUser,
   useToggleUserStatus,
   useForcePasswordChange,
+  useIndicadorFiliaisOpcoes,
 } from '../../hooks/useUsers';
 import { useRoles } from '../../hooks/useRoles';
 import {
@@ -15,7 +16,7 @@ import {
   environmentRequiresFilial,
   normalizeEnvironment,
 } from '../../constants/environments';
-import { INDICADOR_ITEMS, type IndicadorKey } from '../../constants/indicadores';
+import { INDICADOR_ITEMS, INDICADORES_COM_FILIAL, type IndicadorKey } from '../../constants/indicadores';
 import { funcoesDaAba, funcoesDoModulo, isFuncaoOptIn, type FuncaoKey } from '../../constants/funcoes';
 import { abasDoModulo, HOME_ABA_KEY, rotinasConfiguraveisDoModulo } from '../../constants/abas';
 import { branchesForModule } from '../../constants/filiais';
@@ -113,11 +114,13 @@ const AdminUsersPanel: React.FC = () => {
   const [status, setStatus] = useState('ativo');
   const [moduleAccess, setModuleAccess] = useState<Record<string, string[]>>({});
   const [selectedIndicadores, setSelectedIndicadores] = useState<IndicadorKey[]>([]);
+  const [indicadorFiliais, setIndicadorFiliais] = useState<Record<string, string[]>>({});
   const [funcoes, setFuncoes] = useState<Record<string, string[]>>({});
   const [selectedAbas, setSelectedAbas] = useState<Record<string, string[]>>({});
   const [selectedModule, setSelectedModule] = useState<string>(MODULE_ACCESS_GROUPS[0].module);
 
   const isSelectedAdmin = roleId === '1';
+  const { data: indicadorFiliaisOpcoes = {} } = useIndicadorFiliaisOpcoes(isModalOpen);
   const isEditingSelf = !!editingUserId && editingUserId === currentUser?.id;
 
   useEffect(() => {
@@ -175,6 +178,7 @@ const AdminUsersPanel: React.FC = () => {
     setStatus('ativo');
     setModuleAccess({});
     setSelectedIndicadores([]);
+    setIndicadorFiliais({});
     setFuncoes({});
     setSelectedAbas({});
     setSelectedModule(MODULE_ACCESS_GROUPS[0].module);
@@ -207,6 +211,7 @@ const AdminUsersPanel: React.FC = () => {
       (key): key is IndicadorKey => INDICADOR_ITEMS.some((item) => item.key === key),
     );
     setSelectedIndicadores(userIndicadores);
+    setIndicadorFiliais(user.indicadorFiliais ?? {});
     setFuncoes(user.funcoes ?? {});
     const nextAbas: Record<string, string[]> = {};
     MODULE_ACCESS_GROUPS.forEach((group) => {
@@ -255,6 +260,15 @@ const AdminUsersPanel: React.FC = () => {
       ? selectedIndicadores
       : [];
 
+    // Recorte de filiais só vale para indicadores visíveis ao usuário.
+    const indicadorFiliaisFiltradas = Object.fromEntries(
+      Object.entries(indicadorFiliais).filter(([key, lista]) => (
+        hasIndicadoresModule
+        && lista.length > 0
+        && (indicadores.length === 0 || indicadores.includes(key as IndicadorKey))
+      )),
+    );
+
     const abas: Record<string, string[]> = {};
     for (const group of MODULE_ACCESS_GROUPS) {
       if (group.module === 'Indicadores' || !environments.includes(group.module)) continue;
@@ -283,6 +297,7 @@ const AdminUsersPanel: React.FC = () => {
       environments,
       filiais,
       indicadores,
+      indicadorFiliais: indicadorFiliaisFiltradas,
       funcoes: funcoesFiltradas,
       abas,
     };
@@ -401,6 +416,14 @@ const AdminUsersPanel: React.FC = () => {
       if (turningOff && current.length <= 1) return prev;
       const next = turningOff ? current.filter((k) => k !== key) : [...current, key];
       return next.length === catalog.length ? [] : next;
+    });
+  };
+
+  const handleToggleIndicadorFilial = (indicador: IndicadorKey, filial: string) => {
+    setIndicadorFiliais((prev) => {
+      const atual = prev[indicador] ?? [];
+      const proximo = atual.includes(filial) ? atual.filter((f) => f !== filial) : [...atual, filial];
+      return { ...prev, [indicador]: proximo };
     });
   };
 
@@ -1050,7 +1073,31 @@ const AdminUsersPanel: React.FC = () => {
                                               <span className="perm-switch-slider" />
                                             </label>
                                           </td>
-                                          <td className="perm-matrix-muted">Consulta do indicador</td>
+                                          {visible && INDICADORES_COM_FILIAL.includes(item.key) ? (
+                                            <td>
+                                              {isSelectedAdmin ? (
+                                                <span className="perm-matrix-muted">Administrador vê todas as filiais</span>
+                                              ) : (
+                                                <div className="perm-check-row" title="Nenhuma marcada = todas as filiais">
+                                                  <span className="perm-matrix-muted">
+                                                    {(indicadorFiliais[item.key]?.length ?? 0) === 0 ? 'Todas as filiais ·' : 'Só as filiais:'}
+                                                  </span>
+                                                  {(indicadorFiliaisOpcoes[item.key] ?? []).map((filial) => (
+                                                    <label key={filial} className="perm-check">
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={(indicadorFiliais[item.key] ?? []).includes(filial)}
+                                                        onChange={() => handleToggleIndicadorFilial(item.key, filial)}
+                                                      />
+                                                      {filial}
+                                                    </label>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </td>
+                                          ) : (
+                                            <td className="perm-matrix-muted">Consulta do indicador</td>
+                                          )}
                                         </tr>
                                       );
                                     })}

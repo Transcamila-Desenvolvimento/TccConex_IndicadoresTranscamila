@@ -42,6 +42,10 @@ class CustomUser(AbstractUser):
     # constants.INDICADORES_KEYS). Lista vazia = acesso a todos.
     indicadores = models.JSONField(default=list, blank=True)
 
+    # Recorte de filiais por indicador (chaves de constants.INDICADORES_COM_FILIAL).
+    # Example: {"movimentacao-rh": ["MATRIZ"]}. Ausente/vazio = todas as filiais.
+    indicador_filiais = models.JSONField(default=dict, blank=True)
+
     # Funções extras liberadas por ambiente para operadores.
     # Example: {"Faturamento": ["excluir-protocolos", "gerenciar-clientes"]}
     funcoes = models.JSONField(default=dict, blank=True)
@@ -74,6 +78,12 @@ class CustomUser(AbstractUser):
     @property
     def is_currently_active(self):
         return self.status == 'ativo'
+
+    def filiais_do_indicador(self, indicador: str) -> list[str] | None:
+        """Filiais liberadas no indicador; None = sem recorte (admin ou não configurado)."""
+        if self.is_admin:
+            return None
+        return (self.indicador_filiais or {}).get(indicador) or None
 
     def has_funcao(self, module: str, funcao: str) -> bool:
         """Admin tem todas as funções; operador só as liberadas em `funcoes`."""

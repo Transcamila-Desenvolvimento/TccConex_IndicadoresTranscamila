@@ -8,6 +8,7 @@ from .constants import (
     sanitize_environments,
     sanitize_filiais,
     sanitize_funcoes,
+    sanitize_indicador_filiais,
     sanitize_indicadores,
     sanitize_permissions,
 )
@@ -55,6 +56,7 @@ def _apply_environment_rules(user):
     user.environments = sanitize_environments(user.environments)
     user.filiais = sanitize_filiais(user.filiais)
     user.indicadores = sanitize_indicadores(user.indicadores)
+    user.indicador_filiais = sanitize_indicador_filiais(user.indicador_filiais)
     user.funcoes = sanitize_funcoes(user.funcoes)
     user.abas = sanitize_abas(user.abas)
     if user.role_id == '1' and ADMIN_ENVIRONMENT not in user.environments:
@@ -68,12 +70,13 @@ class UserSerializer(serializers.ModelSerializer):
     googleLinkedAt = serializers.DateTimeField(source='google_linked_at', read_only=True, allow_null=True)
     googlePicture = serializers.URLField(source='google_picture_url', read_only=True, allow_blank=True, allow_null=True)
     mustChangePassword = serializers.BooleanField(source='must_change_password', read_only=True)
+    indicadorFiliais = serializers.JSONField(source='indicador_filiais', required=False)
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status',
-            'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'lastLogin',
+            'environments', 'filiais', 'indicadores', 'indicadorFiliais', 'funcoes', 'abas', 'lastLogin',
             'googleEmail', 'googleLinkedAt', 'googlePicture', 'mustChangePassword',
         ]
         read_only_fields = [
@@ -85,6 +88,7 @@ class UserSerializer(serializers.ModelSerializer):
         data['environments'] = sanitize_environments(data.get('environments'))
         data['filiais'] = sanitize_filiais(data.get('filiais'))
         data['indicadores'] = sanitize_indicadores(data.get('indicadores'))
+        data['indicadorFiliais'] = sanitize_indicador_filiais(data.get('indicadorFiliais'))
         data['funcoes'] = sanitize_funcoes(data.get('funcoes'))
         data['abas'] = sanitize_abas(data.get('abas'))
         return _cpf_na_resposta(data)
@@ -108,10 +112,11 @@ class CreateUserSerializer(serializers.ModelSerializer):
     roleId = serializers.CharField(source='role_id', required=False, default='2')
     password = serializers.CharField(required=True, write_only=True, min_length=6)
     cpf = serializers.CharField(required=True, allow_blank=False, max_length=14)
+    indicadorFiliais = serializers.JSONField(source='indicador_filiais', required=False)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
+        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'indicadorFiliais', 'funcoes', 'abas', 'password']
         read_only_fields = ['id']
 
     def validate_cpf(self, value):
@@ -149,10 +154,11 @@ class UpdateUserSerializer(serializers.ModelSerializer):
     roleId = serializers.CharField(source='role_id', required=False)
     password = serializers.CharField(required=False, write_only=True)
     cpf = serializers.CharField(required=False, allow_blank=True, max_length=14)
+    indicadorFiliais = serializers.JSONField(source='indicador_filiais', required=False)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'funcoes', 'abas', 'password']
+        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'indicadorFiliais', 'funcoes', 'abas', 'password']
         read_only_fields = ['id', 'username']
 
     def validate_cpf(self, value):

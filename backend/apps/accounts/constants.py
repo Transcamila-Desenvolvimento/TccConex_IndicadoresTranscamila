@@ -39,6 +39,11 @@ INDICADORES_KEYS = frozenset({
     'olho-vivo',
 })
 
+# Indicadores que aceitam recorte de filiais por usuário (CustomUser.indicador_filiais).
+# As filiais são as do próprio domínio do indicador (ex.: filial da folha do RH),
+# não ALL_BRANCHES.
+INDICADORES_COM_FILIAL = frozenset({'movimentacao-rh'})
+
 # Abas de menu liberáveis por ambiente (Indicadores continua em INDICADORES_KEYS).
 # Lista vazia em CustomUser.abas[modulo] = todas as abas daquele ambiente.
 # A aba "home" é obrigatória: quem tem o ambiente sempre acessa a home.
@@ -159,6 +164,17 @@ def sanitize_filiais(filiais: dict | None) -> dict[str, list]:
 
 def sanitize_indicadores(indicadores: list | None) -> list[str]:
     return [key for key in (indicadores or []) if key in INDICADORES_KEYS]
+
+
+def sanitize_indicador_filiais(indicador_filiais: dict | None) -> dict[str, list]:
+    result: dict[str, list] = {}
+    for indicador, filiais in (indicador_filiais or {}).items():
+        if indicador not in INDICADORES_COM_FILIAL:
+            continue
+        valid = list(dict.fromkeys(str(f).strip() for f in (filiais or []) if str(f).strip()))
+        if valid:
+            result[indicador] = valid
+    return result
 
 
 def sanitize_funcoes(funcoes: dict | None) -> dict[str, list]:

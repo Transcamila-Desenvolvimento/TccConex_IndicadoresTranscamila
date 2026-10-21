@@ -168,10 +168,13 @@ def _colaboradores_filtrados(
     excluidos: set[str],
     situacao_grupo: str = _SITUACAO_GRUPO_TODOS,
     cargos: tuple[str, ...] = (),
+    filiais_permitidas: list[str] | None = None,
 ):
     qs = lote.colaboradores.exclude(cpf__in=excluidos)
     if filial:
         qs = qs.filter(filial=filial)
+    elif filiais_permitidas:
+        qs = qs.filter(filial__in=filiais_permitidas)
     if cargos:
         qs = qs.filter(funcao__in=cargos)
     if categoria:
@@ -221,8 +224,20 @@ def _empty_summary() -> dict:
     }
 
 
-def build_rh_movimentacao_payload(params) -> dict:
+def listar_filiais_rh() -> list[str]:
+    return sorted({
+        f for f in MovimentacaoColaborador.objects
+        .exclude(filial__isnull=True).exclude(filial='')
+        .values_list('filial', flat=True).distinct()
+    })
+
+
+def build_rh_movimentacao_payload(params, filiais_permitidas: list[str] | None = None) -> dict:
+    """`filiais_permitidas` = recorte do usuário (None = todas). Filial fora do
+    recorte levanta PermissionError."""
     filial = (params.get('filial') or '').strip()
+    if filial and filiais_permitidas and filial not in filiais_permitidas:
+        raise PermissionError(filial)
     # `cargo` pode vir repetido na query string (seleção múltipla).
     cargos_brutos = params.getlist('cargo') if hasattr(params, 'getlist') else [params.get('cargo')]
     cargos = tuple(c for c in cargos_brutos if c)
@@ -239,19 +254,19 @@ def build_rh_movimentacao_payload(params) -> dict:
         {'mes': lote.mes, 'ano': lote.ano, 'label': _label(lote.mes, lote.ano)}
         for lote in todos_lotes
     ]
-    filiais_disponiveis = sorted({
-        f for f in MovimentacaoColaborador.objects
-        .exclude(filial__isnull=True).exclude(filial='')
-        .values_list('filial', flat=True).distinct()
-    })
+    filiais_disponiveis = listar_filiais_rh()
+    cargos_qs = MovimentacaoColaborador.objects.exclude(funcao__isnull=True).exclude(funcao='')
+    if filiais_permitidas:
+        filiais_disponiveis = [f for f in filiais_disponiveis if f in filiais_permitidas]
+        cargos_qs = cargos_qs.filter(filial__in=filiais_permitidas)
 
-    cargos_disponiveis = sorted({
-        c for c in MovimentacaoColaborador.objects
-        .exclude(funcao__isnull=True).exclude(funcao='')
-        .values_list('funcao', flat=True).distinct()
-    }, key=str.casefold)
+    cargos_disponiveis = sorted(
+        set(cargos_qs.values_list('funcao', flat=True).distinct()),
+        key=str.casefold,
+    )
 
     meta_base = {
+        'filiaisRestritas': bool(filiais_permitidas),
         'filiaisDisponiveis': filiais_disponiveis,
         'cargosDisponiveis': cargos_disponiveis,
         'lotesDisponiveis': lotes_disponiveis,
@@ -312,6 +327,7 @@ def build_rh_movimentacao_payload(params) -> dict:
         'excluidos': excluidos,
         'situacao_grupo': situacao_grupo,
         'cargos': cargos,
+        'filiais_permitidas': filiais_permitidas,
     }
 
     series = []
@@ -433,7 +449,9 @@ def parse_mes_ano_export_params(params) -> tuple[int, int]:
     return ano, mes
 
 
-def build_rh_movimentacao_export(mes: int, ano: int) -> tuple[bytes, str]:
+def build_rh_movimentacao_export(
+    mes: int, ano: int, filiais_permitidas: list[str] | None = None,
+) -> tuple[bytes, str]:
     """Gera planilha Excel com dados brutos do lote mensal (base do indicador)."""
     lote = LoteMovimentacaoRH.objects.filter(mes=mes, ano=ano).first()
     if not lote:
@@ -442,11 +460,10 @@ def build_rh_movimentacao_export(mes: int, ano: int) -> tuple[bytes, str]:
     excluidos = set(
         Colaborador.objects.filter(desconsiderado=True).values_list('cpf', flat=True)
     )
-    colaboradores = (
-        lote.colaboradores
-        .exclude(cpf__in=excluidos)
-        .order_by('filial', 'categoria', 'nome')
-    )
+    colaboradores = lote.colaboradores.exclude(cpf__in=excluidos)
+    if filiais_permitidas:
+        colaboradores = colaboradores.filter(filial__in=filiais_permitidas)
+    colaboradores = colaboradores.order_by('filial', 'categoria', 'nome')
 
     import openpyxl
     from openpyxl.styles import Alignment, Font, PatternFill

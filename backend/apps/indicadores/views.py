@@ -112,8 +112,14 @@ class RHMovimentacaoIndicadorView(ModuleScopedViewMixin, APIView):
     permission_requires_filial = False
 
     def get(self, request):
-        # QueryDict (e não .dict()) para preservar `cargo` repetido na seleção múltipla.
-        payload = build_rh_movimentacao_payload(request.query_params)
+        try:
+            # QueryDict (e não .dict()) para preservar `cargo` repetido na seleção múltipla.
+            payload = build_rh_movimentacao_payload(
+                request.query_params,
+                filiais_permitidas=request.user.filiais_do_indicador('movimentacao-rh'),
+            )
+        except PermissionError:
+            return Response({'detail': 'Filial não autorizada.'}, status=status.HTTP_403_FORBIDDEN)
         return Response(payload)
 
 
@@ -124,7 +130,9 @@ class RHMovimentacaoExportView(ModuleScopedViewMixin, APIView):
     def get(self, request):
         try:
             ano, mes = parse_mes_ano_export_params(request.query_params)
-            content, filename = build_rh_movimentacao_export(mes, ano)
+            content, filename = build_rh_movimentacao_export(
+                mes, ano, filiais_permitidas=request.user.filiais_do_indicador('movimentacao-rh'),
+            )
         except ValueError as exc:
             detail = str(exc)
             status_code = (

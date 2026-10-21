@@ -78,6 +78,10 @@ const IndicadoresRHMovimentacao: React.FC = () => {
     return Array.from(anos).sort((a, b) => b - a);
   }, [data?.meta.lotesDisponiveis]);
 
+  const filialUnica = data?.meta.filiaisRestritas && data.meta.filiaisDisponiveis.length === 1
+    ? data.meta.filiaisDisponiveis[0]
+    : null;
+
   const mesesComLote = useMemo(
     () => (data?.meta.lotesDisponiveis ?? []).filter((lote) => String(lote.ano) === ano).map((lote) => lote.mes),
     [data?.meta.lotesDisponiveis, ano],
@@ -143,12 +147,18 @@ const IndicadoresRHMovimentacao: React.FC = () => {
 
           <RHMesesPicker value={meses} onChange={setMeses} disponiveis={mesesComLote} />
 
-          <select className="rh-period-select" value={filial} onChange={(e) => setFilial(e.target.value)}>
-            <option value="">Todas as filiais</option>
-            {(data?.meta.filiaisDisponiveis ?? []).map((nome) => (
-              <option key={nome} value={nome}>{nome}</option>
-            ))}
-          </select>
+          {filialUnica ? (
+            <select className="rh-period-select" value="" disabled title="Filial liberada para o seu usuário">
+              <option value="">{filialUnica}</option>
+            </select>
+          ) : (
+            <select className="rh-period-select" value={filial} onChange={(e) => setFilial(e.target.value)}>
+              <option value="">{data?.meta.filiaisRestritas ? 'Todas as minhas filiais' : 'Todas as filiais'}</option>
+              {(data?.meta.filiaisDisponiveis ?? []).map((nome) => (
+                <option key={nome} value={nome}>{nome}</option>
+              ))}
+            </select>
+          )}
 
           <RHCargosPicker value={cargos} onChange={setCargos} disponiveis={data?.meta.cargosDisponiveis ?? []} />
 

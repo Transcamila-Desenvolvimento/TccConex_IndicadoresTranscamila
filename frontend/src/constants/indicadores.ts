@@ -18,6 +18,12 @@ export type IndicadorKey = (typeof INDICADOR_ITEMS)[number]['key'];
 
 export const ALL_INDICADOR_KEYS = INDICADOR_ITEMS.map((item) => item.key);
 
+/**
+ * Indicadores com recorte de filiais por usuário (user.indicadorFiliais).
+ * Mantém paridade com backend/apps/accounts/constants.py (INDICADORES_COM_FILIAL).
+ */
+export const INDICADORES_COM_FILIAL: readonly IndicadorKey[] = ['movimentacao-rh'];
+
 /** Conjunto de indicadores liberados para o usuário (lista vazia = todos). */
 export function getAllowedIndicadores(user: User | null): Set<IndicadorKey> {
   const selected = (user?.indicadores ?? []).filter(

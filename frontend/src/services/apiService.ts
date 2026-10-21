@@ -119,6 +119,7 @@ function normalizeUser(raw: any): User {
       Object.entries(raw.filiais ?? {}).filter(([module]) => activeEnvSet.has(module)),
     ) as Record<string, string[]>,
     indicadores: Array.isArray(raw.indicadores) ? raw.indicadores : [],
+    indicadorFiliais: raw.indicadorFiliais && typeof raw.indicadorFiliais === 'object' ? raw.indicadorFiliais : {},
     funcoes: raw.funcoes && typeof raw.funcoes === 'object' ? raw.funcoes : {},
     abas: raw.abas && typeof raw.abas === 'object' ? raw.abas : {},
     googleEmail: raw.googleEmail ?? null,
@@ -840,6 +841,7 @@ function normalizeRHIndicadorPorCategoria(raw: any): RHIndicadorPorCategoria {
 function normalizeRHIndicadorResponse(raw: any): RHIndicadorResponse {
   return {
     meta: {
+      filiaisRestritas: Boolean(raw?.meta?.filiaisRestritas),
       filiaisDisponiveis: raw?.meta?.filiaisDisponiveis ?? [],
       cargosDisponiveis: raw?.meta?.cargosDisponiveis ?? [],
       lotesDisponiveis: (raw?.meta?.lotesDisponiveis ?? []).map((lote: any) => ({
@@ -1297,6 +1299,11 @@ export const apiService = {
   async updateUser(id: string, userData: any): Promise<User> {
     const { data } = await api.patch(`/api/auth/users/${id}/`, userData);
     return normalizeUser(data);
+  },
+
+  async getIndicadorFiliaisOpcoes(): Promise<Record<string, string[]>> {
+    const { data } = await api.get('/api/auth/users/indicador-filiais-opcoes/');
+    return data && typeof data === 'object' ? data : {};
   },
 
   async deleteUser(id: string): Promise<void> {

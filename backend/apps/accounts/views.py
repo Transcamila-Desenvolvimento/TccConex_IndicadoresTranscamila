@@ -339,6 +339,13 @@ class UserManagementViewSet(viewsets.ModelViewSet):
                 message="Acesso negado. Apenas administradores possuem acesso a este recurso."
             )
 
+    @action(detail=False, methods=['get'], url_path='indicador-filiais-opcoes')
+    def indicador_filiais_opcoes(self, request):
+        """Filiais que podem ser recortadas por indicador (ver INDICADORES_COM_FILIAL)."""
+        from apps.indicadores.rh_indicador_service import listar_filiais_rh
+
+        return Response({'movimentacao-rh': listar_filiais_rh()})
+
     def perform_create(self, serializer):
         user = serializer.save()
         record_audit(

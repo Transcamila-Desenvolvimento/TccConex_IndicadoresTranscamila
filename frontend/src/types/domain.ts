@@ -17,6 +17,8 @@ export interface User {
   filiais: Record<string, string[]>;
   /** Indicadores liberados no ambiente Indicadores; lista vazia = todos. */
   indicadores: string[];
+  /** Recorte de filiais por indicador (ex.: {"movimentacao-rh": ["MATRIZ"]}); ausente = todas. */
+  indicadorFiliais: Record<string, string[]>;
   /** Funções extras liberadas por ambiente (ex.: {"Faturamento": ["excluir-protocolos"]}). */
   funcoes: Record<string, string[]>;
   /** Abas de menu liberadas por ambiente (exceto Indicadores). Vazio no módulo = todas. */
@@ -608,6 +610,8 @@ export interface RHIndicadorSummary {
 
 export interface RHIndicadorResponse {
   meta: {
+    /** Usuário com recorte de filiais no Admin: `filiaisDisponiveis` traz só as liberadas. */
+    filiaisRestritas: boolean;
     filiaisDisponiveis: string[];
     cargosDisponiveis: string[];
     lotesDisponiveis: RHIndicadorLoteOption[];

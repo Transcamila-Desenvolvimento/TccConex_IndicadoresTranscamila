@@ -498,6 +498,32 @@ class UserManagementEnvironmentRulesTests(TestCase):
         self.assertEqual(response.data['abas']['Financeiro'], ['home', 'calendario'])
         self.assertNotIn('Indicadores', response.data['abas'])
 
+    def test_admin_restringe_filiais_do_indicador(self):
+        operator = User.objects.create_user(
+            username='op_ind_filial',
+            password='oper123',
+            role_id='2',
+            environments=['Indicadores'],
+            filiais={'Indicadores': ['Ibiporã (Matriz)']},
+        )
+        response = self.client.patch(
+            f'/api/auth/users/{operator.id}/',
+            {'indicadorFiliais': {'movimentacao-rh': ['MATRIZ', ' MATRIZ', ''], 'fluxo-caixa': ['X']}},
+            format='json',
+            **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['indicadorFiliais'], {'movimentacao-rh': ['MATRIZ']})
+        operator.refresh_from_db()
+        self.assertEqual(operator.filiais_do_indicador('movimentacao-rh'), ['MATRIZ'])
+        self.assertIsNone(self.admin.filiais_do_indicador('movimentacao-rh'))
+
+        opcoes = self.client.get(
+            '/api/auth/users/indicador-filiais-opcoes/', **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(opcoes.status_code, 200)
+        self.assertIn('movimentacao-rh', opcoes.data)
+
 
 class ResetUserPasswordCommandTests(TestCase):
     def test_reset_password_and_activate(self):

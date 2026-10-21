@@ -13,6 +13,16 @@ export function useUsers(params: UserQueryParams = {}, enabled = true) {
   });
 }
 
+/** Filiais disponíveis para recorte por indicador (Admin > Usuários). */
+export function useIndicadorFiliaisOpcoes(enabled = true) {
+  return useQuery({
+    queryKey: [...USERS_QUERY_KEY, 'indicador-filiais-opcoes'],
+    queryFn: () => apiService.getIndicadorFiliaisOpcoes(),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useCreateUser() {
   const queryClient = useQueryClient();
   return useMutation({

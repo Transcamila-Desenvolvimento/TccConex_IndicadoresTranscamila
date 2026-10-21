@@ -1254,6 +1254,29 @@ class IndicadoresRHMovimentacaoTests(TestCase):
             ('Mai/2026', 'DESLIGADO', 'COLAB A2'),
         ])
 
+    def test_recorte_de_filiais_do_usuario(self):
+        self.user.indicador_filiais = {'movimentacao-rh': ['São Paulo (Filial)']}
+        self.user.save()
+        headers = auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)')
+
+        response = self.client.get('/api/indicadores/rh/movimentacao/?start=2026-04&end=2026-06', **headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['meta']['filiaisRestritas'])
+        self.assertEqual(response.data['meta']['filiaisDisponiveis'], ['São Paulo (Filial)'])
+        self.assertEqual([p['headcount'] for p in response.data['series']], [0, 1, 1])
+        self.assertEqual({m['nome'] for m in response.data['movimentacoes']}, {'COLAB A3'})
+
+        negado = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-04&end=2026-06&filial=Ibipor%C3%A3+%28Matriz%29',
+            **headers,
+        )
+        self.assertEqual(negado.status_code, 403)
+
+        export = self.client.get('/api/indicadores/rh/movimentacao/exportar/?referencia=2026-06', **headers)
+        self.assertEqual(export.status_code, 200)
+        planilha = openpyxl.load_workbook(BytesIO(export.content)).active
+        self.assertEqual([row[1] for row in planilha.iter_rows(min_row=2, values_only=True)], ['COLAB A3'])
+
     def test_filtra_por_cargo(self):
         MovimentacaoColaborador.objects.filter(cpf='111.111.111-11').update(funcao='ANALISTA')
         MovimentacaoColaborador.objects.filter(cpf='333.333.333-33').update(funcao='MOTORISTA CARRETEIRO')
