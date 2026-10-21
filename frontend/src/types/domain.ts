@@ -547,7 +547,10 @@ export type RHIndicadorSituacaoGrupo = '' | 'AFASTADOS' | 'FERIAS' | 'SITUACAO_N
 export interface RHIndicadorQueryParams {
   start?: string;
   end?: string;
+  /** Meses avulsos (YYYY-MM); quando informado, tem prioridade sobre start/end. */
+  meses?: string[];
   filial?: string;
+  cargos?: string[];
   categoria?: string;
   situacaoGrupo?: RHIndicadorSituacaoGrupo;
 }
@@ -606,12 +609,28 @@ export interface RHIndicadorSummary {
 export interface RHIndicadorResponse {
   meta: {
     filiaisDisponiveis: string[];
+    cargosDisponiveis: string[];
     lotesDisponiveis: RHIndicadorLoteOption[];
     periodoInicio: string | null;
     periodoFim: string | null;
   };
   summary: RHIndicadorSummary;
   series: RHIndicadorSeriePonto[];
+  movimentacoes: RHIndicadorMovimentacao[];
+}
+
+export interface RHIndicadorMovimentacao {
+  tipo: 'ADMITIDO' | 'DESLIGADO';
+  mes: number;
+  ano: number;
+  /** Mês em que a movimentação foi detectada (ex.: "Mai/2026"). */
+  label: string;
+  nome: string;
+  cargo: string;
+  filial: string;
+  categoria: string;
+  situacao: string;
+  dataAdmissao: string | null;
 }
 
 export interface MetaFaturamentoQueryParams {

@@ -167,10 +167,13 @@ def _colaboradores_filtrados(
     categoria: str,
     excluidos: set[str],
     situacao_grupo: str = _SITUACAO_GRUPO_TODOS,
+    cargos: tuple[str, ...] = (),
 ):
     qs = lote.colaboradores.exclude(cpf__in=excluidos)
     if filial:
         qs = qs.filter(filial=filial)
+    if cargos:
+        qs = qs.filter(funcao__in=cargos)
     if categoria:
         qs = qs.filter(categoria=categoria)
     if situacao_grupo == _SITUACAO_GRUPO_AFASTADOS:
@@ -180,6 +183,21 @@ def _colaboradores_filtrados(
     elif situacao_grupo == _SITUACAO_GRUPO_NORMAL:
         qs = qs.exclude(situacao__icontains=_AFASTADO_TEMP_TOKEN).exclude(_FERIAS_Q)
     return qs
+
+
+def _movimentacao_item(tipo: str, lote: LoteMovimentacaoRH, colaborador: MovimentacaoColaborador) -> dict:
+    return {
+        'tipo': tipo,
+        'mes': lote.mes,
+        'ano': lote.ano,
+        'label': _label(lote.mes, lote.ano),
+        'nome': (colaborador.nome or '').upper(),
+        'cargo': colaborador.funcao or '',
+        'filial': colaborador.filial or '',
+        'categoria': colaborador.categoria or '',
+        'situacao': colaborador.situacao or '',
+        'dataAdmissao': colaborador.data_admissao.isoformat() if colaborador.data_admissao else None,
+    }
 
 
 def _variacao_percentual(atual, anterior):
@@ -205,6 +223,9 @@ def _empty_summary() -> dict:
 
 def build_rh_movimentacao_payload(params) -> dict:
     filial = (params.get('filial') or '').strip()
+    # `cargo` pode vir repetido na query string (seleção múltipla).
+    cargos_brutos = params.getlist('cargo') if hasattr(params, 'getlist') else [params.get('cargo')]
+    cargos = tuple(c for c in cargos_brutos if c)
     categoria = (params.get('categoria') or '').strip().upper()
     if categoria not in _CATEGORIAS_VALIDAS:
         categoria = ''
@@ -224,8 +245,15 @@ def build_rh_movimentacao_payload(params) -> dict:
         .values_list('filial', flat=True).distinct()
     })
 
+    cargos_disponiveis = sorted({
+        c for c in MovimentacaoColaborador.objects
+        .exclude(funcao__isnull=True).exclude(funcao='')
+        .values_list('funcao', flat=True).distinct()
+    }, key=str.casefold)
+
     meta_base = {
         'filiaisDisponiveis': filiais_disponiveis,
+        'cargosDisponiveis': cargos_disponiveis,
         'lotesDisponiveis': lotes_disponiveis,
     }
 
@@ -234,19 +262,29 @@ def build_rh_movimentacao_payload(params) -> dict:
             'meta': {**meta_base, 'periodoInicio': None, 'periodoFim': None},
             'summary': _empty_summary(),
             'series': [],
+            'movimentacoes': [],
         }
 
     inicio = _parse_periodo(params.get('start'))
     fim = _parse_periodo(params.get('end'))
+    meses = {
+        _chave_periodo(*periodo)
+        for periodo in (_parse_periodo(v) for v in str(params.get('meses') or '').split(','))
+        if periodo
+    }
 
     lotes_periodo = todos_lotes
+    if meses:
+        # Seleção de meses avulsos tem prioridade sobre o intervalo start/end.
+        lotes_periodo = [l for l in lotes_periodo if _chave_periodo(l.ano, l.mes) in meses]
+        inicio = fim = None
     if fim:
         fim_chave = _chave_periodo(*fim)
         lotes_periodo = [l for l in lotes_periodo if _chave_periodo(l.ano, l.mes) <= fim_chave]
     if inicio:
         inicio_chave = _chave_periodo(*inicio)
         lotes_periodo = [l for l in lotes_periodo if _chave_periodo(l.ano, l.mes) >= inicio_chave]
-    if not inicio and not fim:
+    if not inicio and not fim and not meses:
         lotes_periodo = lotes_periodo[-JANELA_PADRAO_MESES:]
 
     if not lotes_periodo:
@@ -254,6 +292,7 @@ def build_rh_movimentacao_payload(params) -> dict:
             'meta': {**meta_base, 'periodoInicio': None, 'periodoFim': None},
             'summary': _empty_summary(),
             'series': [],
+            'movimentacoes': [],
         }
 
     # Mapa lote -> lote cronologicamente anterior (pode estar fora do período
@@ -272,21 +311,26 @@ def build_rh_movimentacao_payload(params) -> dict:
         'categoria': categoria,
         'excluidos': excluidos,
         'situacao_grupo': situacao_grupo,
+        'cargos': cargos,
     }
 
     series = []
+    movimentacoes = []
     for lote in lotes_periodo:
         colaboradores_lote = list(_colaboradores_filtrados(lote, **filtro_lote))
         cpfs_atual = {c.cpf for c in colaboradores_lote}
 
         lote_ant = lote_anterior_por_id.get(lote.id)
         if lote_ant is not None:
-            cpfs_anterior = set(
-                _colaboradores_filtrados(lote_ant, **filtro_lote)
-                .values_list('cpf', flat=True)
-            )
-            admitidos = len(cpfs_atual - cpfs_anterior)
-            desligados = len(cpfs_anterior - cpfs_atual)
+            colaboradores_anterior = list(_colaboradores_filtrados(lote_ant, **filtro_lote))
+            cpfs_anterior = {c.cpf for c in colaboradores_anterior}
+            lista_admitidos = [c for c in colaboradores_lote if c.cpf not in cpfs_anterior]
+            # Desligado não aparece no lote atual: os dados vêm do último lote em que constava.
+            lista_desligados = [c for c in colaboradores_anterior if c.cpf not in cpfs_atual]
+            admitidos = len(lista_admitidos)
+            desligados = len(lista_desligados)
+            for tipo, lista in (('ADMITIDO', lista_admitidos), ('DESLIGADO', lista_desligados)):
+                movimentacoes.extend(_movimentacao_item(tipo, lote, c) for c in lista)
         else:
             # Primeiro lote da história — não há base de comparação.
             admitidos = 0
@@ -348,10 +392,13 @@ def build_rh_movimentacao_payload(params) -> dict:
         'porCategoriaAtual': por_categoria_atual,
     }
 
+    movimentacoes.sort(key=lambda m: (-m['ano'], -m['mes'], m['tipo'], m['nome']))
+
     return {
         'meta': {**meta_base, 'periodoInicio': primeiro['label'], 'periodoFim': ultimo['label']},
         'summary': summary,
         'series': series,
+        'movimentacoes': movimentacoes,
     }
 
 

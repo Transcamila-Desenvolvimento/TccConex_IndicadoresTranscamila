@@ -12668,6 +12668,240 @@ button.mkt-drive-browser-row:hover {
   font-family: inherit;
 }
 
+.rh-meses-picker {
+  position: relative;
+}
+
+.rh-mov-quadro-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.rh-mov-quadro-header .cashflow-section-title {
+  margin: 0;
+}
+
+.rh-mov-quadro-filtros {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rh-mov-quadro-scroll {
+  max-height: 420px;
+  overflow-y: auto;
+  background: transparent;
+}
+
+.rh-mov-quadro-card .reports-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.reports-table td.rh-mov-quadro-nome {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.rh-mov-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rh-mov-badge.is-admitido {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.rh-mov-badge.is-desligado {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.reports-action-btn-icon.rh-export-btn {
+  border-width: 1px;
+  border-radius: 6px !important;
+}
+
+.rh-cargos-picker-trigger {
+  max-width: 220px;
+}
+
+.rh-cargos-picker-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rh-cargos-picker-panel {
+  width: 300px;
+}
+
+.rh-cargos-picker-busca {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: #334155;
+  outline: none;
+}
+
+.rh-cargos-picker-busca:focus {
+  border-color: #118CC4;
+}
+
+.rh-cargos-picker-lista {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.rh-cargos-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: #334155;
+  cursor: pointer;
+}
+
+.rh-cargos-picker-item:hover {
+  background: #f1f5f9;
+}
+
+.rh-cargos-picker-item input {
+  flex-shrink: 0;
+  accent-color: #118CC4;
+  cursor: pointer;
+}
+
+.rh-cargos-picker-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rh-cargos-picker-todos {
+  margin: 8px 0 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+  border-radius: 0;
+  font-weight: 600;
+}
+
+.rh-cargos-picker-vazio {
+  padding: 12px 4px;
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.rh-meses-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 130px;
+  cursor: pointer;
+}
+
+.rh-meses-picker-trigger .bi {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.rh-meses-picker-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: 252px;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.rh-meses-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.rh-meses-picker-mes {
+  height: 32px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.rh-meses-picker-mes:hover {
+  border-color: #118CC4;
+  color: #118CC4;
+}
+
+.rh-meses-picker-mes.is-vazio {
+  color: #cbd5e1;
+}
+
+.rh-meses-picker-mes.is-selected {
+  background: #118CC4;
+  border-color: #118CC4;
+  color: #ffffff;
+}
+
+.rh-meses-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.rh-meses-picker-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #118CC4;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rh-meses-picker-link:disabled {
+  color: #cbd5e1;
+  cursor: default;
+}
+
+.rh-meses-picker-ok {
+  height: 30px;
+  padding: 0 14px;
+  font-size: 12px;
+}
+
 .rh-salary-blur {
   filter: blur(5px);
   user-select: none;

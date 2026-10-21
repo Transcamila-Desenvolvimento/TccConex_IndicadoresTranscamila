@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 from decimal import Decimal
 from .models import (
@@ -60,7 +61,7 @@ class MovimentacaoColaboradorSerializer(serializers.ModelSerializer):
     dataAdmissao = serializers.DateField(source='data_admissao', format='%d/%m/%Y', read_only=True)
     dataNascimento = serializers.DateField(source='data_nascimento', format='%d/%m/%Y', read_only=True)
     idadeStr = serializers.CharField(source='idade', read_only=True)
-    tempoEmpresaStr = serializers.CharField(source='tempo_empresa', read_only=True)
+    tempoEmpresaStr = serializers.SerializerMethodField()
     pisPasep = serializers.CharField(source='pis_pasep', required=False, allow_null=True, allow_blank=True)
 
     class Meta:
@@ -70,6 +71,12 @@ class MovimentacaoColaboradorSerializer(serializers.ModelSerializer):
             'dataAdmissao', 'dataNascimento', 'cpf', 'pisPasep', 'rg', 'salario', 
             'categoria', 'idadeStr', 'tempoEmpresaStr'
         ]
+
+    def get_tempoEmpresaStr(self, obj):
+        # No lote mais recente o colaborador segue ativo: o tempo de empresa corre até hoje.
+        if obj.lote_id == self.context.get('lote_atual_id'):
+            return obj.tempo_empresa_em(timezone.localdate())
+        return obj.tempo_empresa
 
 
 class InconsistenciaColaboradorSerializer(serializers.ModelSerializer):

@@ -6,6 +6,9 @@ import RHPayrollChart from './RHPayrollChart';
 import RHHeadcountChart from './RHHeadcountChart';
 import RHAdmissoesChart from './RHAdmissoesChart';
 import RHMovimentacaoExportModal from './RHMovimentacaoExportModal';
+import RHMesesPicker from './RHMesesPicker';
+import RHCargosPicker from './RHCargosPicker';
+import RHMovimentacoesTabela from './RHMovimentacoesTabela';
 
 const CATEGORIA_OPTIONS = [
   { value: '', label: 'Todas' },
@@ -21,43 +24,11 @@ const SITUACAO_OPTIONS: { value: RHIndicadorSituacaoGrupo; label: string }[] = [
   { value: 'FERIAS', label: 'Férias' },
 ];
 
-type PeriodoKey = 'ano' | 't1' | 't2' | 't3' | 't4' | 's1' | 's2' | 'custom';
-
-const PERIODO_OPTIONS: { value: PeriodoKey; label: string }[] = [
-  { value: 'ano', label: 'Ano inteiro' },
-  { value: 't1', label: '1º Trimestre' },
-  { value: 't2', label: '2º Trimestre' },
-  { value: 't3', label: '3º Trimestre' },
-  { value: 't4', label: '4º Trimestre' },
-  { value: 's1', label: '1º Semestre' },
-  { value: 's2', label: '2º Semestre' },
-  { value: 'custom', label: 'Personalizado' },
-];
-
-/** Meses início/fim (YYYY-MM) — o indicador de RH trabalha por lote mensal. */
-const PERIODO_RANGES: Record<Exclude<PeriodoKey, 'custom'>, [string, string]> = {
-  ano: ['01', '12'],
-  t1: ['01', '03'],
-  t2: ['04', '06'],
-  t3: ['07', '09'],
-  t4: ['10', '12'],
-  s1: ['01', '06'],
-  s2: ['07', '12'],
-};
-
 function currentYearStr(): string {
   return String(new Date().getFullYear());
 }
 
-function rangeForPeriodo(ano: number, periodo: Exclude<PeriodoKey, 'custom'>): { start: string; end: string } {
-  const [inicio, fim] = PERIODO_RANGES[periodo];
-  return { start: `${ano}-${inicio}`, end: `${ano}-${fim}` };
-}
-
-function defaultAnoInteiro() {
-  const year = currentYearStr();
-  return { year, ...rangeForPeriodo(Number(year), 'ano') };
-}
+const mesIso = (ano: string, mes: number) => `${ano}-${String(mes).padStart(2, '0')}`;
 
 const formatCurrency = (value: number) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -75,23 +46,24 @@ const CATEGORIA_KEYS = [
 ] as const;
 
 const IndicadoresRHMovimentacao: React.FC = () => {
-  const defaults = useMemo(() => defaultAnoInteiro(), []);
-  const [ano, setAno] = useState(defaults.year);
-  const [periodo, setPeriodo] = useState<PeriodoKey>('ano');
-  const [startPeriod, setStartPeriod] = useState(defaults.start);
-  const [endPeriod, setEndPeriod] = useState(defaults.end);
+  const [ano, setAno] = useState(currentYearStr);
+  const [meses, setMeses] = useState<number[]>([]);
   const [filial, setFilial] = useState('');
+  const [cargos, setCargos] = useState<string[]>([]);
   const [categoria, setCategoria] = useState('');
   const [situacaoGrupo, setSituacaoGrupo] = useState<RHIndicadorSituacaoGrupo>('');
   const [exportOpen, setExportOpen] = useState(false);
 
+  const startPeriod = mesIso(ano, 1);
+  const endPeriod = mesIso(ano, 12);
+
   const queryParams = useMemo(() => ({
-    ...(startPeriod ? { start: startPeriod } : {}),
-    ...(endPeriod ? { end: endPeriod } : {}),
+    ...(meses.length ? { meses: meses.map((mes) => mesIso(ano, mes)) } : { start: startPeriod, end: endPeriod }),
     ...(filial ? { filial } : {}),
+    ...(cargos.length ? { cargos } : {}),
     ...(categoria ? { categoria } : {}),
     ...(situacaoGrupo ? { situacaoGrupo } : {}),
-  }), [startPeriod, endPeriod, filial, categoria, situacaoGrupo]);
+  }), [ano, meses, startPeriod, endPeriod, filial, cargos, categoria, situacaoGrupo]);
 
   const rhQuery = useIndicadorRHMovimentacao(queryParams);
   const { data } = rhQuery;
@@ -106,40 +78,13 @@ const IndicadoresRHMovimentacao: React.FC = () => {
     return Array.from(anos).sort((a, b) => b - a);
   }, [data?.meta.lotesDisponiveis]);
 
-  const applyPeriodo = (nextAno: string, nextPeriodo: Exclude<PeriodoKey, 'custom'>) => {
-    const yearNum = Number(nextAno);
-    if (!yearNum) return;
-    const range = rangeForPeriodo(yearNum, nextPeriodo);
-    setStartPeriod(range.start);
-    setEndPeriod(range.end);
-  };
-
-  const handleAnoChange = (value: string) => {
-    setAno(value);
-    const nextPeriodo: Exclude<PeriodoKey, 'custom'> = periodo === 'custom' ? 'ano' : periodo;
-    if (periodo === 'custom') setPeriodo('ano');
-    applyPeriodo(value, nextPeriodo);
-  };
-
-  const handlePeriodoChange = (value: PeriodoKey) => {
-    setPeriodo(value);
-    if (value === 'custom') return;
-    const year = ano || currentYearStr();
-    if (!ano) setAno(year);
-    applyPeriodo(year, value);
-  };
-
-  const handleStartChange = (value: string) => {
-    setStartPeriod(value);
-    setPeriodo('custom');
-  };
-
-  const handleEndChange = (value: string) => {
-    setEndPeriod(value);
-    setPeriodo('custom');
-  };
+  const mesesComLote = useMemo(
+    () => (data?.meta.lotesDisponiveis ?? []).filter((lote) => String(lote.ano) === ano).map((lote) => lote.mes),
+    [data?.meta.lotesDisponiveis, ano],
+  );
 
   const periodoLabel = (() => {
+    if (meses.length && series.length) return series.map((ponto) => ponto.label).join(', ');
     const inicio = data?.meta.periodoInicio;
     const fim = data?.meta.periodoFim;
     if (!inicio || !fim) return '—';
@@ -156,14 +101,12 @@ const IndicadoresRHMovimentacao: React.FC = () => {
   }, [data?.meta.lotesDisponiveis, endPeriod, startPeriod]);
 
   const handleResetFilters = () => {
-    const reset = defaultAnoInteiro();
     setFilial('');
+    setCargos([]);
     setCategoria('');
     setSituacaoGrupo('');
-    setAno(reset.year);
-    setPeriodo('ano');
-    setStartPeriod(reset.start);
-    setEndPeriod(reset.end);
+    setAno(currentYearStr());
+    setMeses([]);
   };
 
   return (
@@ -192,34 +135,13 @@ const IndicadoresRHMovimentacao: React.FC = () => {
             <span>Filtrar</span>
           </div>
 
-          <select className="rh-period-select" value={ano} onChange={(e) => handleAnoChange(e.target.value)}>
+          <select className="rh-period-select" value={ano} onChange={(e) => setAno(e.target.value)}>
             {anosDisponiveis.map((y) => (
               <option key={y} value={String(y)}>{y}</option>
             ))}
           </select>
 
-          <select
-            className="rh-period-select"
-            value={periodo}
-            onChange={(e) => handlePeriodoChange(e.target.value as PeriodoKey)}
-          >
-            {PERIODO_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-
-          {periodo === 'custom' && (
-            <div className="cashflow-date-filter">
-              <label>
-                <span>De</span>
-                <input type="month" value={startPeriod} onChange={(e) => handleStartChange(e.target.value)} />
-              </label>
-              <label>
-                <span>Até</span>
-                <input type="month" value={endPeriod} onChange={(e) => handleEndChange(e.target.value)} />
-              </label>
-            </div>
-          )}
+          <RHMesesPicker value={meses} onChange={setMeses} disponiveis={mesesComLote} />
 
           <select className="rh-period-select" value={filial} onChange={(e) => setFilial(e.target.value)}>
             <option value="">Todas as filiais</option>
@@ -227,6 +149,8 @@ const IndicadoresRHMovimentacao: React.FC = () => {
               <option key={nome} value={nome}>{nome}</option>
             ))}
           </select>
+
+          <RHCargosPicker value={cargos} onChange={setCargos} disponiveis={data?.meta.cargosDisponiveis ?? []} />
 
           <select className="rh-period-select" value={categoria} onChange={(e) => setCategoria(e.target.value)}>
             {CATEGORIA_OPTIONS.map((opt) => (
@@ -253,7 +177,7 @@ const IndicadoresRHMovimentacao: React.FC = () => {
         <div className="reports-filter-right">
           <button
             type="button"
-            className="reports-action-btn-icon"
+            className="reports-action-btn-icon rh-export-btn"
             style={{ width: 36, height: 36 }}
             onClick={() => setExportOpen(true)}
             title="Baixar planilha com dados brutos do indicador"
@@ -341,6 +265,7 @@ const IndicadoresRHMovimentacao: React.FC = () => {
                 <h2 className="cashflow-section-title">Admissões × Desligamentos</h2>
                 <RHAdmissoesChart key={`adm-${situacaoGrupo}-${summary.admitidosPeriodo}-${summary.desligadosPeriodo}`} series={series} />
               </div>
+              <RHMovimentacoesTabela movimentacoes={data.movimentacoes} />
             </div>
           </>
         )}

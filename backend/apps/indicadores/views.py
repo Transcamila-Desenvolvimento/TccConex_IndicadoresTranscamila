@@ -112,8 +112,8 @@ class RHMovimentacaoIndicadorView(ModuleScopedViewMixin, APIView):
     permission_requires_filial = False
 
     def get(self, request):
-        # dict() evita surpresas com QueryDict mutável entre reloads no Windows.
-        payload = build_rh_movimentacao_payload(request.query_params.dict())
+        # QueryDict (e não .dict()) para preservar `cargo` repetido na seleção múltipla.
+        payload = build_rh_movimentacao_payload(request.query_params)
         return Response(payload)
 
 

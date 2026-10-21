@@ -1245,6 +1245,45 @@ class IndicadoresRHMovimentacaoTests(TestCase):
         self.assertEqual(junho['admitidos'], 1)
         self.assertEqual(junho['desligados'], 0)
 
+        movimentacoes = [
+            (m['label'], m['tipo'], m['nome']) for m in response.data['movimentacoes']
+        ]
+        self.assertEqual(movimentacoes, [
+            ('Jun/2026', 'ADMITIDO', 'COLAB A4'),
+            ('Mai/2026', 'ADMITIDO', 'COLAB A3'),
+            ('Mai/2026', 'DESLIGADO', 'COLAB A2'),
+        ])
+
+    def test_filtra_por_cargo(self):
+        MovimentacaoColaborador.objects.filter(cpf='111.111.111-11').update(funcao='ANALISTA')
+        MovimentacaoColaborador.objects.filter(cpf='333.333.333-33').update(funcao='MOTORISTA CARRETEIRO')
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-04&end=2026-06&cargo=ANALISTA',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([p['headcount'] for p in response.data['series']], [1, 1, 1])
+        self.assertEqual(response.data['meta']['cargosDisponiveis'], ['ANALISTA', 'MOTORISTA CARRETEIRO'])
+
+        varios = self.client.get(
+            '/api/indicadores/rh/movimentacao/?start=2026-04&end=2026-06&cargo=ANALISTA&cargo=MOTORISTA+CARRETEIRO',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual([p['headcount'] for p in varios.data['series']], [1, 2, 2])
+
+    def test_filtra_meses_avulsos(self):
+        response = self.client.get(
+            '/api/indicadores/rh/movimentacao/?meses=2026-04,2026-06&start=2026-05&end=2026-05',
+            **auth_headers(self.user, 'Indicadores', 'Ibiporã (Matriz)'),
+        )
+        self.assertEqual(response.status_code, 200)
+        series = response.data['series']
+        self.assertEqual([p['label'] for p in series], ['Abr/2026', 'Jun/2026'])
+        # Junho continua comparado com o lote cronologicamente anterior (maio).
+        self.assertEqual(series[1]['admitidos'], 1)
+        self.assertEqual(response.data['meta']['periodoInicio'], 'Abr/2026')
+        self.assertEqual(response.data['meta']['periodoFim'], 'Jun/2026')
+
     def test_por_categoria_breakdown(self):
         response = self.client.get(
             '/api/indicadores/rh/movimentacao/?start=2026-06&end=2026-06',

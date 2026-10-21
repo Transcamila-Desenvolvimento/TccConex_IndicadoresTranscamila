@@ -841,6 +841,7 @@ function normalizeRHIndicadorResponse(raw: any): RHIndicadorResponse {
   return {
     meta: {
       filiaisDisponiveis: raw?.meta?.filiaisDisponiveis ?? [],
+      cargosDisponiveis: raw?.meta?.cargosDisponiveis ?? [],
       lotesDisponiveis: (raw?.meta?.lotesDisponiveis ?? []).map((lote: any) => ({
         mes: Number(lote?.mes ?? 0),
         ano: Number(lote?.ano ?? 0),
@@ -875,16 +876,30 @@ function normalizeRHIndicadorResponse(raw: any): RHIndicadorResponse {
       desligados: Number(ponto?.desligados ?? 0),
       porCategoria: normalizeRHIndicadorPorCategoria(ponto?.porCategoria),
     })),
+    movimentacoes: (raw?.movimentacoes ?? []).map((item: any) => ({
+      tipo: item?.tipo === 'DESLIGADO' ? 'DESLIGADO' : 'ADMITIDO',
+      mes: Number(item?.mes ?? 0),
+      ano: Number(item?.ano ?? 0),
+      label: item?.label ?? '',
+      nome: item?.nome ?? '',
+      cargo: item?.cargo ?? '',
+      filial: item?.filial ?? '',
+      categoria: item?.categoria ?? '',
+      situacao: item?.situacao ?? '',
+      dataAdmissao: item?.dataAdmissao ?? null,
+    })),
   };
 }
 
 function buildRHIndicadorQueryParams(params: RHIndicadorQueryParams = {}) {
-  const query: Record<string, string> = {};
-  if (params.start) query.start = params.start;
-  if (params.end) query.end = params.end;
-  if (params.filial && params.filial !== 'Todas') query.filial = params.filial;
-  if (params.categoria && params.categoria !== 'Todas') query.categoria = params.categoria;
-  if (params.situacaoGrupo) query.situacaoGrupo = params.situacaoGrupo;
+  const query = new URLSearchParams();
+  if (params.start) query.set('start', params.start);
+  if (params.end) query.set('end', params.end);
+  if (params.meses?.length) query.set('meses', params.meses.join(','));
+  if (params.filial && params.filial !== 'Todas') query.set('filial', params.filial);
+  params.cargos?.forEach((cargo) => query.append('cargo', cargo));
+  if (params.categoria && params.categoria !== 'Todas') query.set('categoria', params.categoria);
+  if (params.situacaoGrupo) query.set('situacaoGrupo', params.situacaoGrupo);
   return query;
 }
 

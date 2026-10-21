@@ -470,8 +470,15 @@ _MOVIMENTACAO_ORDERING_MAP = {
 class MovimentacaoColaboradorViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):
     permission_module = 'RH'
     serializer_class = MovimentacaoColaboradorSerializer
-    queryset = MovimentacaoColaborador.objects.all()
+    queryset = MovimentacaoColaborador.objects.select_related('lote')
     pagination_class = RHPagination
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['lote_atual_id'] = (
+            LoteMovimentacaoRH.objects.order_by('-ano', '-mes').values_list('pk', flat=True).first()
+        )
+        return context
 
     def get_queryset(self):
         qs = super().get_queryset()

@@ -1,7 +1,9 @@
+import calendar
+from datetime import date
+
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-from datetime import date
 
 
 class Colaborador(models.Model):
@@ -96,10 +98,16 @@ class MovimentacaoColaborador(models.Model):
 
     @property
     def tempo_empresa(self):
+        ultimo_dia = calendar.monthrange(self.lote.ano, self.lote.mes)[1]
+        return self.tempo_empresa_em(date(self.lote.ano, self.lote.mes, ultimo_dia))
+
+    def tempo_empresa_em(self, ref):
         if not self.data_admissao:
             return "-"
-        ref = date(self.lote.ano, self.lote.mes, 1)
         diff = (ref.year - self.data_admissao.year) * 12 + ref.month - self.data_admissao.month
+        if ref.day < self.data_admissao.day:
+            diff -= 1
+        diff = max(diff, 0)
         anos = diff // 12
         meses = diff % 12
         if anos > 0:
