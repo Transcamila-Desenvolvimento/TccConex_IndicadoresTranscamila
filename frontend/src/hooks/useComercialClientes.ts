@@ -39,6 +39,13 @@ export function bumpPropostaDraftGen(queryClient: ReturnType<typeof useQueryClie
   return next;
 }
 
+/** 409: outro usuário alterou ou está enviando a proposta — recarrega a lista para mostrar a versão atual. */
+function recarregarSeConflito(queryClient: ReturnType<typeof useQueryClient>, err: unknown) {
+  if ((err as { response?: { status?: number } })?.response?.status === 409) {
+    queryClient.invalidateQueries({ queryKey: COMERCIAL_PROPOSTAS_KEY });
+  }
+}
+
 export const COMERCIAL_TABELA_FRETE_KEY = ['comercial', 'tabela-frete'] as const;
 export const COMERCIAL_GENERALIDADES_KEY = ['comercial', 'generalidades'] as const;
 export const COMERCIAL_ICMS_UFS_KEY = ['comercial', 'icms-ufs'] as const;
@@ -241,6 +248,7 @@ export function useUpdatePropostaComercial() {
       queryClient.invalidateQueries({ queryKey: COMERCIAL_CLIENTES_KEY });
       queryClient.invalidateQueries({ queryKey: COMERCIAL_GENERALIDADES_KEY });
     },
+    onError: (err) => recarregarSeConflito(queryClient, err),
   });
 }
 
@@ -330,6 +338,7 @@ export function useEnviarEmailPropostaComercial() {
       cc?: string[];
       pdfs: Blob[];
       revisoes?: string[];
+      versoes?: string[];
       observacao?: string;
       confirmacaoLeitura?: boolean;
     }) => apiService.enviarEmailPropostasComerciais(ids, payload),
@@ -337,6 +346,25 @@ export function useEnviarEmailPropostaComercial() {
       queryClient.invalidateQueries({ queryKey: COMERCIAL_PROPOSTAS_KEY });
       queryClient.invalidateQueries({ queryKey: COMERCIAL_CLIENTES_KEY });
     },
+    onError: (err) => recarregarSeConflito(queryClient, err),
+  });
+}
+
+export function useEnviarRepassePropostaComercial() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...payload }: {
+      id: string;
+      to: string[];
+      cc?: string[];
+      pdf: Blob;
+      observacao?: string;
+      versao?: string;
+    }) => apiService.enviarRepassePropostaComercial(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: COMERCIAL_PROPOSTAS_KEY });
+    },
+    onError: (err) => recarregarSeConflito(queryClient, err),
   });
 }
 

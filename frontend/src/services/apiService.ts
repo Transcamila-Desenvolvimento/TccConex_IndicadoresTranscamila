@@ -326,6 +326,7 @@ function normalizePropostaComercial(raw: any): PropostaComercial {
     incluiArmazenagem: Boolean(raw.incluiArmazenagem) || tipo === 'armazenagem',
     incluiOpPortuaria: Boolean(raw.incluiOpPortuaria),
     incluiSpot: Boolean(raw.incluiSpot),
+    incluiCargaFechada: Boolean(raw.incluiCargaFechada),
     margensVeiculo: Array.isArray(raw.margensVeiculo) ? raw.margensVeiculo : [],
     tabelaDistribuicao: raw.tabelaDistribuicao && typeof raw.tabelaDistribuicao === 'object' ? raw.tabelaDistribuicao : null,
     historicoRevisoes: Array.isArray(raw.historicoRevisoes) ? raw.historicoRevisoes : [],
@@ -351,6 +352,7 @@ function normalizePropostaComercial(raw: any): PropostaComercial {
     dataCriacao: raw.dataCriacao,
     dataAtualizacao: raw.dataAtualizacao,
     dataVencimento: raw.dataVencimento ?? null,
+    dataRespostaCliente: raw.dataRespostaCliente ?? null,
     situacao: raw.situacao,
   };
 }
@@ -3384,6 +3386,7 @@ export const apiService = {
       cc?: string[];
       pdfs: Blob[];
       revisoes?: string[];
+      versoes?: string[];
       observacao?: string;
       confirmacaoLeitura?: boolean;
     },
@@ -3393,10 +3396,29 @@ export const apiService = {
     (payload.to ?? []).forEach((email) => form.append('to', email));
     (payload.cc ?? []).forEach((email) => form.append('cc', email));
     (payload.revisoes ?? []).forEach((revisao) => form.append('revisoes', revisao));
+    (payload.versoes ?? []).forEach((versao) => form.append('versoes', versao));
     if (payload.observacao?.trim()) form.append('observacao', payload.observacao.trim());
     if (payload.confirmacaoLeitura) form.append('confirmacaoLeitura', 'true');
     payload.pdfs.forEach((pdf, index) => form.append('pdf', pdf, `Proposta_comercial_${index + 1}.pdf`));
     const { data } = await api.post('/api/comercial/propostas/enviar-email-lote/', form, {
+      timeout: 180_000,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    });
+    return data;
+  },
+
+  async enviarRepassePropostaComercial(
+    id: string,
+    payload: { to: string[]; cc?: string[]; pdf: Blob; observacao?: string; versao?: string },
+  ): Promise<{ success: boolean; message: string; to: string[]; cc: string[] }> {
+    const form = new FormData();
+    payload.to.forEach((email) => form.append('to', email));
+    (payload.cc ?? []).forEach((email) => form.append('cc', email));
+    if (payload.observacao?.trim()) form.append('observacao', payload.observacao.trim());
+    if (payload.versao) form.append('versao', payload.versao);
+    form.append('pdf', payload.pdf, 'Proposta_comercial.pdf');
+    const { data } = await api.post(`/api/comercial/propostas/${id}/enviar-repasse/`, form, {
       timeout: 180_000,
       maxBodyLength: Infinity,
       maxContentLength: Infinity,

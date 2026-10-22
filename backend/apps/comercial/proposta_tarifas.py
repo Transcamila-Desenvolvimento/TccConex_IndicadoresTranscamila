@@ -134,7 +134,7 @@ def tabela_distribuicao_do_cliente(cliente_id):
             status=STATUS_TABELA_PUBLICADA,
             clientes__pk=cliente_id,
         )
-        .order_by('-vigencia_inicio', '-revisao', '-pk')
+        .order_by('-revisao', '-pk')
         .first()
     )
 
@@ -667,7 +667,7 @@ def ajustes_iniciais_frete(proposta, fretes_originais: dict | None = None) -> li
     linhas = list(proposta.linhas.all().order_by('ordem', 'pk'))
     for indice, linha in enumerate(linhas, start=1):
         modalidade = (getattr(linha, 'modalidade', None) or 'transferencia').strip() or 'transferencia'
-        if modalidade not in ('transferencia', 'op_portuaria', 'spot'):
+        if modalidade not in ('transferencia', 'carga_fechada', 'op_portuaria', 'spot'):
             continue
         veiculo_key = (getattr(linha, 'veiculo_key', None) or '').strip()
         if not veiculo_key or linha.km in (None, ''):
@@ -788,6 +788,7 @@ CAMPOS_CONTEUDO_PDF = (
     'inclui_armazenagem',
     'inclui_op_portuaria',
     'inclui_spot',
+    'inclui_carga_fechada',
 )
 
 

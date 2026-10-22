@@ -19,7 +19,7 @@ _STATUS = {
     STATUS_PROPOSTA_RECUSADA,
 }
 _FORMATOS = {'moeda', 'percentual', 'tonelada', 'hora', 'quantidade'}
-_ABAS = {'transferencia', 'distribuicao', 'armazenagem', 'portuaria', 'spot'}
+_ABAS = {'transferencia', 'distribuicao', 'armazenagem', 'portuaria', 'spot', 'carga_fechada'}
 _MAX_LINHAS = 80
 _MAX_CONDICOES = 80
 
@@ -183,6 +183,7 @@ def sanitize_draft_payload(raw):
             or tipo == TIPO_PROPOSTA_ARMAZENAGEM,
             'incluiOpPortuaria': _as_bool(form.get('incluiOpPortuaria') or form.get('inclui_op_portuaria')),
             'incluiSpot': _as_bool(form.get('incluiSpot') or form.get('inclui_spot')),
+            'incluiCargaFechada': _as_bool(form.get('incluiCargaFechada') or form.get('inclui_carga_fechada')),
             'margensVeiculo': form.get('margensVeiculo') if isinstance(form.get('margensVeiculo'), list) else [],
             'condicoes': _sanitize_lista(form.get('condicoes'), _sanitize_condicao, _MAX_CONDICOES),
             'condicoesTransferencia': _sanitize_lista(form.get('condicoesTransferencia'), _sanitize_condicao, _MAX_CONDICOES),
@@ -199,7 +200,7 @@ def has_meaningful_draft(payload):
     form = payload.get('form') if isinstance(payload.get('form'), dict) else payload
     if form.get('clienteId') or form.get('titulo') or form.get('observacoes') or form.get('propostaReferente'):
         return True
-    if form.get('incluiTransferencia') or form.get('incluiDistribuicao') or form.get('incluiArmazenagem') or form.get('incluiOpPortuaria') or form.get('incluiSpot'):
+    if form.get('incluiTransferencia') or form.get('incluiDistribuicao') or form.get('incluiArmazenagem') or form.get('incluiOpPortuaria') or form.get('incluiSpot') or form.get('incluiCargaFechada'):
         return True
     if form.get('tipo') == TIPO_PROPOSTA_ARMAZENAGEM:
         return True

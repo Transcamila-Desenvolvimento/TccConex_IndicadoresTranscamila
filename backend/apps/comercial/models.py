@@ -2,7 +2,7 @@ from datetime import datetime, time, timedelta
 import re
 
 from django.conf import settings
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import Max, Q
 from django.db.models.functions import Lower
 from django.utils import timezone
@@ -570,6 +570,7 @@ def tipos_servico_generalidade(
     inclui_armazenagem=False,
     inclui_op_portuaria=False,
     inclui_spot=False,
+    inclui_carga_fechada=False,
 ):
     if (
         tipo_proposta == TIPO_PROPOSTA_ARMAZENAGEM
@@ -577,12 +578,13 @@ def tipos_servico_generalidade(
         and not inclui_distribuicao
         and not inclui_op_portuaria
         and not inclui_spot
+        and not inclui_carga_fechada
     ):
         return [TIPO_GENERALIDADE_ARMAZENAGEM]
     tipos = []
     if inclui_distribuicao:
         tipos.append(TIPO_GENERALIDADE_DISTRIBUICAO)
-    if inclui_transferencia or inclui_spot:
+    if inclui_transferencia or inclui_spot or inclui_carga_fechada:
         tipos.append(TIPO_GENERALIDADE_FRETE)
     if inclui_op_portuaria:
         tipos.append(TIPO_GENERALIDADE_OP_PORTUARIA)
@@ -780,6 +782,7 @@ class PropostaComercial(models.Model):
     inclui_armazenagem = models.BooleanField(default=False, verbose_name='Armazenagem')
     inclui_op_portuaria = models.BooleanField(default=False, verbose_name='Op. Portuária')
     inclui_spot = models.BooleanField(default=False, verbose_name='Spot')
+    inclui_carga_fechada = models.BooleanField(default=False, verbose_name='Carga Fechada')
     condicoes = models.JSONField(default=list, blank=True, verbose_name='Generalidades e condições')
     tabela_armazenagem = models.JSONField(
         default=dict,
@@ -793,6 +796,12 @@ class PropostaComercial(models.Model):
     aviso_reprogramacao_pendente = models.BooleanField(
         default=False,
         verbose_name='Aviso de reprogramação pendente',
+    )
+    envio_iniciado_em = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name='Envio por e-mail em andamento desde',
     )
     ajustes_iniciais = models.JSONField(
         default=list,
@@ -835,7 +844,7 @@ class PropostaComercial(models.Model):
             return
         ano = self._ano_numeracao()
         ultimo = (
-            PropostaComercial.objects.select_for_update()
+            PropostaComercial.objects
             .filter(ano=ano)
             .aggregate(ultimo=Max('numero'))
             .get('ultimo')
@@ -864,6 +873,7 @@ class PropostaComercial(models.Model):
                     self.inclui_armazenagem,
                     self.inclui_op_portuaria,
                     self.inclui_spot,
+                    self.inclui_carga_fechada,
                 ),
             )
         if self.cliente_id:
@@ -874,9 +884,23 @@ class PropostaComercial(models.Model):
             super().save(*args, **kwargs)
             self._promover_cliente_se_aceita()
             return
-        with transaction.atomic():
-            self._atribuir_numero()
-            super().save(*args, **kwargs)
+        # MAX+1 não trava a tabela: dois cadastros simultâneos podem colidir na constraint (ano, numero).
+        tentativas = 5
+        for tentativa in range(tentativas):
+            try:
+                with transaction.atomic():
+                    self._atribuir_numero()
+                    super().save(*args, **kwargs)
+                break
+            except IntegrityError:
+                colidiu = (
+                    self.numero
+                    and PropostaComercial.objects.filter(ano=self.ano, numero=self.numero).exists()
+                )
+                if not colidiu or tentativa == tentativas - 1:
+                    raise
+                self.numero = None
+                self.ano = None
         self._promover_cliente_se_aceita()
 
     def _promover_cliente_se_aceita(self):
@@ -937,6 +961,29 @@ class PropostaComercial(models.Model):
         })
         self.historico_situacoes = historico[-80:]
         return self.historico_situacoes
+
+    def data_resposta_cliente(self):
+        """Data em que a proposta passou à situação atual de aceita/recusada (registros seguidos, como repasses, não contam)."""
+        if self.status not in (STATUS_PROPOSTA_APROVADA, STATUS_PROPOSTA_RECUSADA):
+            return None
+        momento = None
+        anterior = None
+        for item in self.historico_situacoes or []:
+            if not isinstance(item, dict):
+                continue
+            situacao = item.get('situacao')
+            if situacao == self.status and anterior != self.status:
+                momento = item.get('em')
+            anterior = situacao
+        if not momento:
+            return None
+        try:
+            quando = datetime.fromisoformat(str(momento))
+        except (TypeError, ValueError):
+            return None
+        if timezone.is_aware(quando):
+            quando = timezone.localtime(quando)
+        return quando.date()
 
     def historico_situacoes_exibicao(self):
         itens = [item for item in (self.historico_situacoes or []) if isinstance(item, dict)]
@@ -1126,20 +1173,10 @@ class TabelaFrete(models.Model):
             self.clientes_vinculo_key = key
             TabelaFrete.objects.filter(pk=self.pk).update(clientes_vinculo_key=key)
 
-    def sincronizar_status_vigencia(self):
-        from django.utils import timezone
-
-        if self.status == STATUS_TABELA_ARQUIVADA:
-            return
-        hoje = timezone.localdate()
-        if self.vigencia_fim and self.vigencia_fim < hoje and self.status == STATUS_TABELA_PUBLICADA:
-            self.status = STATUS_TABELA_EXPIRADA
-
     def publicar(self):
         if self.status not in (STATUS_TABELA_RASCUNHO, STATUS_TABELA_EXPIRADA):
             raise ValueError('Somente tabelas em rascunho ou expiradas podem ser publicadas.')
         self.status = STATUS_TABELA_PUBLICADA
-        self.sincronizar_status_vigencia()
 
     def arquivar(self):
         self.status = STATUS_TABELA_ARQUIVADA
@@ -1221,7 +1258,6 @@ class TabelaFrete(models.Model):
             restaurada = TabelaFrete.objects.get(pk=anterior_id)
             if restaurada.status == STATUS_TABELA_ARQUIVADA:
                 restaurada.status = STATUS_TABELA_PUBLICADA
-                restaurada.sincronizar_status_vigencia()
                 restaurada.save(update_fields=['status', 'data_atualizacao'])
             return restaurada
 
@@ -1236,17 +1272,13 @@ class TabelaFrete(models.Model):
 
 
 def cliente_tem_tabela_distribuicao_vigente(cliente_id) -> bool:
+    """Vigente = publicada e vinculada ao cliente (não há controle por datas de vigência)."""
     if not cliente_id:
         return False
-    hoje = timezone.localdate()
     return TabelaFrete.objects.filter(
         tipo=TIPO_TABELA_DISTRIBUICAO,
         clientes__pk=cliente_id,
         status=STATUS_TABELA_PUBLICADA,
-    ).filter(
-        Q(vigencia_inicio__isnull=True) | Q(vigencia_inicio__lte=hoje),
-    ).filter(
-        Q(vigencia_fim__isnull=True) | Q(vigencia_fim__gte=hoje),
     ).exists()
 
 

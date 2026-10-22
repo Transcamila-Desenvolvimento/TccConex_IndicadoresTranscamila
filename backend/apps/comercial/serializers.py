@@ -1023,6 +1023,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
     incluiArmazenagem = serializers.BooleanField(source='inclui_armazenagem', required=False)
     incluiOpPortuaria = serializers.BooleanField(source='inclui_op_portuaria', required=False)
     incluiSpot = serializers.BooleanField(source='inclui_spot', required=False)
+    incluiCargaFechada = serializers.BooleanField(source='inclui_carga_fechada', required=False)
     condicoes = serializers.JSONField(required=False)
     tabelaArmazenagem = serializers.JSONField(source='tabela_armazenagem', required=False)
     margensVeiculo = serializers.JSONField(source='margens_veiculo', required=False)
@@ -1034,6 +1035,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
     dataCriacao = serializers.DateTimeField(source='data_criacao', read_only=True)
     dataAtualizacao = serializers.DateTimeField(source='data_atualizacao', read_only=True)
     dataVencimento = serializers.SerializerMethodField()
+    dataRespostaCliente = serializers.SerializerMethodField()
     situacao = serializers.SerializerMethodField()
     ajustesIniciais = serializers.SerializerMethodField()
     emissor = serializers.SerializerMethodField()
@@ -1070,6 +1072,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             'incluiArmazenagem',
             'incluiOpPortuaria',
             'incluiSpot',
+            'incluiCargaFechada',
             'condicoes',
             'tabelaArmazenagem',
             'margensVeiculo',
@@ -1081,6 +1084,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             'dataCriacao',
             'dataAtualizacao',
             'dataVencimento',
+            'dataRespostaCliente',
             'situacao',
             'ajustesIniciais',
             'emissor',
@@ -1214,6 +1218,10 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             'inclui_spot',
             getattr(self.instance, 'inclui_spot', False) if self.instance else False,
         )
+        inclui_carga_fechada = attrs.get(
+            'inclui_carga_fechada',
+            getattr(self.instance, 'inclui_carga_fechada', False) if self.instance else False,
+        )
         inclui_armazenagem = attrs.get(
             'inclui_armazenagem',
             getattr(self.instance, 'inclui_armazenagem', False) if self.instance else False,
@@ -1225,10 +1233,12 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             attrs['inclui_distribuicao'] = False
             attrs['inclui_op_portuaria'] = False
             attrs['inclui_spot'] = False
+            attrs['inclui_carga_fechada'] = False
             inclui_transferencia = False
             inclui_distribuicao = False
             inclui_op_portuaria = False
             inclui_spot = False
+            inclui_carga_fechada = False
 
         erros = {}
         if tipo in SERVICOS_TRANSPORTE:
@@ -1239,16 +1249,18 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
                 ('incluiDistribuicao', inclui_distribuicao),
                 ('incluiOpPortuaria', inclui_op_portuaria),
                 ('incluiSpot', inclui_spot),
+                ('incluiCargaFechada', inclui_carga_fechada),
             ]
             ativas = [chave for chave, ativa in operacoes if ativa]
             if len(ativas) == 0:
                 erros['incluiTransferencia'] = (
-                    'Selecione um tipo de operação: Transferência, Distribuição, Logística Retroportuária ou Spot.'
+                    'Selecione um tipo de operação: Transferência, Distribuição, Logística Retroportuária, '
+                    'Spot ou Carga Fechada.'
                 )
             elif len(ativas) > 1:
                 erros['incluiTransferencia'] = (
                     'Cada proposta de transporte deve ter apenas um tipo de operação '
-                    '(Transferência, Distribuição, Logística Retroportuária ou Spot).'
+                    '(Transferência, Distribuição, Logística Retroportuária, Spot ou Carga Fechada).'
                 )
         if inclui_armazenagem or tipo == TIPO_PROPOSTA_ARMAZENAGEM:
             atual = attrs.get('tabela_armazenagem')
@@ -1263,15 +1275,18 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
         elif 'tabela_armazenagem' not in attrs and not self.instance:
             attrs['tabela_armazenagem'] = {}
         if tipo in SERVICOS_TRANSPORTE and (
-            inclui_distribuicao or inclui_transferencia or inclui_op_portuaria or inclui_spot
+            inclui_distribuicao or inclui_transferencia or inclui_op_portuaria or inclui_spot or inclui_carga_fechada
         ):
             cliente = attrs['cliente'] if 'cliente' in attrs else getattr(self.instance, 'cliente', None)
             if not cliente_tem_tabela_distribuicao_vigente(getattr(cliente, 'pk', None)):
                 erros['clienteId'] = (
-                    'Vincule uma tabela de frete vigente a este cliente '
-                    'para criar proposta de Transferência, Distribuição, Logística Retroportuária ou Spot.'
+                    'Vincule uma tabela de frete vigente a este cliente para criar proposta de '
+                    'Transferência, Distribuição, Logística Retroportuária, Spot ou Carga Fechada.'
                 )
-        if tipo in SERVICOS_TRANSPORTE and (inclui_transferencia or inclui_op_portuaria or inclui_spot):
+        bandas_trechos = None
+        if tipo in SERVICOS_TRANSPORTE and (
+            inclui_transferencia or inclui_op_portuaria or inclui_spot or inclui_carga_fechada
+        ):
             if 'linhas' in attrs:
                 linhas = attrs.get('linhas') or []
             elif self.instance is not None:
@@ -1279,8 +1294,15 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             else:
                 linhas = []
             relevantes = [linha for linha in linhas if not _linha_destino_vazia(linha)]
+            bandas_trechos = {
+                (linha.get('veiculo_key') if isinstance(linha, dict) else linha.veiculo_key) or ''
+                for linha in relevantes
+            }
             if not relevantes or any(not _linha_destino_preenchida(linha) for linha in relevantes):
-                erros['linhas'] = 'Preencha origem, destino, veículo, km e prazo para Transferência, Spot ou Logística Retroportuária.'
+                erros['linhas'] = (
+                    'Preencha origem, destino, veículo, km e prazo para Transferência, Carga Fechada, '
+                    'Spot ou Logística Retroportuária.'
+                )
         if erros:
             raise serializers.ValidationError(erros)
         if 'margens_veiculo' in attrs:
@@ -1290,6 +1312,15 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
                 getattr(cliente, 'pk', None),
                 attrs.get('margens_veiculo'),
             )
+        if bandas_trechos is not None and ('margens_veiculo' in attrs or 'linhas' in attrs):
+            # Margem de veículo fora dos trechos não afeta preço; não deve constar como alterada.
+            margens = attrs['margens_veiculo'] if 'margens_veiculo' in attrs else (
+                getattr(self.instance, 'margens_veiculo', None) or []
+            )
+            attrs['margens_veiculo'] = [
+                item for item in (margens or [])
+                if str(item.get('bandaKey') or '') in bandas_trechos
+            ]
         return attrs
 
     def _save_linhas(self, proposta, linhas_data):
@@ -1349,51 +1380,30 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
 
     def _aplicar_modalidades(self, validated_data, instance=None):
         tipo = validated_data.get('tipo') or (instance.tipo if instance else None)
+        # Ordem = prioridade se payload legado trouxer mais de um flag.
+        flags = (
+            'inclui_transferencia',
+            'inclui_distribuicao',
+            'inclui_op_portuaria',
+            'inclui_spot',
+            'inclui_carga_fechada',
+        )
         if tipo not in SERVICOS_TRANSPORTE:
-            validated_data['inclui_transferencia'] = False
-            validated_data['inclui_distribuicao'] = False
-            validated_data['inclui_op_portuaria'] = False
-            validated_data['inclui_spot'] = False
+            for flag in flags:
+                validated_data[flag] = False
             validated_data['inclui_armazenagem'] = True
             return validated_data
         validated_data['inclui_armazenagem'] = False
-        inclui_transferencia = validated_data.get(
-            'inclui_transferencia',
-            getattr(instance, 'inclui_transferencia', False) if instance else False,
+        ativa = next(
+            (
+                flag for flag in flags
+                if validated_data.get(flag, getattr(instance, flag, False) if instance else False)
+            ),
+            None,
         )
-        inclui_distribuicao = validated_data.get(
-            'inclui_distribuicao',
-            getattr(instance, 'inclui_distribuicao', False) if instance else False,
-        )
-        inclui_op_portuaria = validated_data.get(
-            'inclui_op_portuaria',
-            getattr(instance, 'inclui_op_portuaria', False) if instance else False,
-        )
-        inclui_spot = validated_data.get(
-            'inclui_spot',
-            getattr(instance, 'inclui_spot', False) if instance else False,
-        )
-        # Prioridade se payload legado trouxer mais de um flag.
-        if inclui_transferencia:
-            validated_data['inclui_transferencia'] = True
-            validated_data['inclui_distribuicao'] = False
-            validated_data['inclui_op_portuaria'] = False
-            validated_data['inclui_spot'] = False
-        elif inclui_distribuicao:
-            validated_data['inclui_transferencia'] = False
-            validated_data['inclui_distribuicao'] = True
-            validated_data['inclui_op_portuaria'] = False
-            validated_data['inclui_spot'] = False
-        elif inclui_op_portuaria:
-            validated_data['inclui_transferencia'] = False
-            validated_data['inclui_distribuicao'] = False
-            validated_data['inclui_op_portuaria'] = True
-            validated_data['inclui_spot'] = False
-        elif inclui_spot:
-            validated_data['inclui_transferencia'] = False
-            validated_data['inclui_distribuicao'] = False
-            validated_data['inclui_op_portuaria'] = False
-            validated_data['inclui_spot'] = True
+        if ativa:
+            for flag in flags:
+                validated_data[flag] = flag == ativa
         return validated_data
 
     def _aplicar_snapshot_distribuicao(self, proposta):
@@ -1450,6 +1460,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
                     validated_data.get('inclui_armazenagem', False),
                     validated_data.get('inclui_op_portuaria', False),
                     validated_data.get('inclui_spot', False),
+                    validated_data.get('inclui_carga_fechada', False),
                 ),
             )
         valor = validated_data.get('valor_estimado')
@@ -1577,6 +1588,7 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
             proposta.inclui_armazenagem,
             proposta.inclui_op_portuaria,
             proposta.inclui_spot,
+            proposta.inclui_carga_fechada,
         )
         condicoes = proposta.condicoes or []
         for tipo in tipos:
@@ -1688,6 +1700,10 @@ class PropostaComercialSerializer(serializers.ModelSerializer):
 
     def get_dataVencimento(self, instance):
         value = instance.data_vencimento()
+        return value.isoformat() if value else None
+
+    def get_dataRespostaCliente(self, instance):
+        value = instance.data_resposta_cliente()
         return value.isoformat() if value else None
 
     def get_situacao(self, instance):

@@ -2816,13 +2816,15 @@ export const PROPOSTA_COMERCIAL_TIPO_LABEL: Record<PropostaComercialTipo, string
 };
 
 /** Filtro "Serviço" da listagem: operações do transporte rodoviário + armazenagem. */
-export type PropostaComercialServicoFiltro = 'transferencia' | 'distribuicao' | 'portuaria' | 'spot' | 'armazenagem';
+export type PropostaComercialServicoFiltro =
+  'transferencia' | 'distribuicao' | 'portuaria' | 'spot' | 'carga_fechada' | 'armazenagem';
 
 export const PROPOSTA_COMERCIAL_SERVICO_FILTRO_LABEL: Record<PropostaComercialServicoFiltro, string> = {
   transferencia: 'Transferência',
   distribuicao: 'Distribuição',
   portuaria: 'Logística Retroportuária',
   spot: 'Spot',
+  carga_fechada: 'Carga Fechada',
   armazenagem: 'Armazenagem',
 };
 
@@ -2909,11 +2911,15 @@ export function tiposGeneralidadeDaProposta(
   incluiArmazenagem = false,
   incluiOpPortuaria = false,
   incluiSpot = false,
+  incluiCargaFechada = false,
 ): TipoGeneralidadeComercial[] {
-  if (tipo === 'armazenagem' && !incluiTransferencia && !incluiDistribuicao && !incluiOpPortuaria && !incluiSpot) return ['armazenagem'];
+  if (
+    tipo === 'armazenagem'
+    && !incluiTransferencia && !incluiDistribuicao && !incluiOpPortuaria && !incluiSpot && !incluiCargaFechada
+  ) return ['armazenagem'];
   const tipos: TipoGeneralidadeComercial[] = [];
   if (incluiDistribuicao) tipos.push('distribuicao');
-  if (incluiTransferencia || incluiSpot) tipos.push('frete');
+  if (incluiTransferencia || incluiSpot || incluiCargaFechada) tipos.push('frete');
   if (incluiOpPortuaria) tipos.push('op_portuaria');
   if (incluiArmazenagem || tipo === 'armazenagem') tipos.push('armazenagem');
   return tipos;
@@ -2932,6 +2938,7 @@ export function tipoPropostaDasOperacoes(ops: {
   incluiArmazenagem: boolean;
   incluiOpPortuaria?: boolean;
   incluiSpot?: boolean;
+  incluiCargaFechada?: boolean;
 }): PropostaComercialTipo {
   if (
     ops.incluiArmazenagem
@@ -2939,13 +2946,14 @@ export function tipoPropostaDasOperacoes(ops: {
     && !ops.incluiDistribuicao
     && !ops.incluiOpPortuaria
     && !ops.incluiSpot
+    && !ops.incluiCargaFechada
   ) {
     return 'armazenagem';
   }
   return 'transporte_rodoviario';
 }
 
-export type PropostaOperacaoAba = 'transferencia' | 'distribuicao' | 'armazenagem' | 'portuaria' | 'spot';
+export type PropostaOperacaoAba = 'transferencia' | 'distribuicao' | 'armazenagem' | 'portuaria' | 'spot' | 'carga_fechada';
 
 export interface PropostaCondicaoComercial {
   rotulo: string;
@@ -2968,7 +2976,7 @@ export interface PropostaFreteLinha {
   entrega: string;
   veiculo: string;
   veiculoKey?: string;
-  modalidade?: 'transferencia' | 'op_portuaria' | 'spot' | string;
+  modalidade?: 'transferencia' | 'carga_fechada' | 'op_portuaria' | 'spot' | string;
   km?: string;
   devolucaoContainer: string;
   observacoes: string;
@@ -3313,6 +3321,7 @@ export interface PropostaComercial {
   incluiArmazenagem: boolean;
   incluiOpPortuaria?: boolean;
   incluiSpot?: boolean;
+  incluiCargaFechada?: boolean;
   margensVeiculo?: PropostaMargemVeiculo[];
   tabelaDistribuicao?: PropostaTabelaDistribuicaoSnapshot | null;
   historicoRevisoes?: PropostaHistoricoRevisao[];
@@ -3327,6 +3336,8 @@ export interface PropostaComercial {
   dataCriacao?: string;
   dataAtualizacao?: string;
   dataVencimento?: string | null;
+  /** Data em que o cliente aceitou/recusou (situação atual). */
+  dataRespostaCliente?: string | null;
   situacao?: PropostaComercialSituacao;
   avisoReprogramacaoPendente?: boolean;
 }
@@ -3368,12 +3379,15 @@ export interface PropostaComercialPayload {
   incluiArmazenagem?: boolean;
   incluiOpPortuaria?: boolean;
   incluiSpot?: boolean;
+  incluiCargaFechada?: boolean;
   margensVeiculo?: PropostaMargemVeiculo[];
   tabelaDistribuicao?: PropostaTabelaDistribuicaoSnapshot | null;
   condicoes?: PropostaCondicaoComercial[];
   tabelaArmazenagem?: TabelaArmazenagem;
   modoEnvio?: string;
   linhas?: Array<Omit<PropostaFreteLinha, 'id' | 'totalEstimado'> & { totalEstimado?: string | null }>;
+  /** Versão que a tela carregou; o servidor recusa (409) se outro usuário salvou depois. */
+  dataAtualizacao?: string;
 }
 
 export type PropostaComercialOrdering =
@@ -3445,6 +3459,7 @@ export interface PropostaComercialFormDraft {
     incluiArmazenagem: boolean;
     incluiOpPortuaria?: boolean;
     incluiSpot?: boolean;
+    incluiCargaFechada?: boolean;
     margensVeiculo?: PropostaMargemVeiculo[];
     condicoes: PropostaCondicaoComercial[];
     condicoesTransferencia: PropostaCondicaoComercial[];

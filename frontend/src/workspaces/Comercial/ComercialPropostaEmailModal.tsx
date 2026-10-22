@@ -94,6 +94,7 @@ const ComercialPropostaEmailModal: React.FC<ComercialPropostaEmailModalProps> = 
     const payloadBase = {
       ids: propostas.map((item) => item.id),
       revisoes: propostas.map((item) => item.revisao || ''),
+      versoes: propostas.map((item) => item.dataAtualizacao || ''),
       to,
       cc: ccTags.map((tag) => tag.email).filter((email) => email.toLowerCase() !== googleEmailNorm),
       observacao,

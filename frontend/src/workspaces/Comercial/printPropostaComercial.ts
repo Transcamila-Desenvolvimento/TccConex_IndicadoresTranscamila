@@ -99,11 +99,12 @@ const field = (label: string, value: string) => `
 `;
 
 /** Status só no PDF quando a proposta foi aceita ou recusada. */
-const fieldStatusProposta = (proposta: PropostaComercial) => (
-  proposta.status === 'aprovada' || proposta.status === 'recusada'
-    ? field('Status da proposta', dash(PROPOSTA_COMERCIAL_STATUS_LABEL[proposta.status]))
-    : ''
-);
+const fieldStatusProposta = (proposta: PropostaComercial) => {
+  if (proposta.status !== 'aprovada' && proposta.status !== 'recusada') return '';
+  const status = dash(PROPOSTA_COMERCIAL_STATUS_LABEL[proposta.status]);
+  const data = proposta.dataRespostaCliente ? formatDateBr(proposta.dataRespostaCliente) : '';
+  return field('Status da proposta', data ? `${status}: ${data}` : status);
+};
 
 const destinosGrisAdvUnificado = (proposta: PropostaComercial) => {
   if (proposta.tabelaDistribuicao?.grisAdvUnificado) return true;
@@ -144,7 +145,11 @@ const buildDestinosTable = (proposta: PropostaComercial, modalidade: 'transferen
     </tr>
   `).join('');
   const colunas = (portuaria ? 12 : 10) + (spot ? 1 : 0) - (grisAdvUnificado ? 1 : 0);
-  const titulo = spot ? 'SPOT' : portuaria ? 'Logística Retroportuária/Rodoviária' : 'Transferência';
+  const titulo = spot
+    ? 'SPOT'
+    : portuaria
+      ? 'Logística Retroportuária/Rodoviária'
+      : proposta.incluiCargaFechada ? 'Carga Fechada' : 'Transferência';
 
   return `
     <section class="block">
@@ -653,7 +658,7 @@ type HtmlOpcoes = {
 
 const secoesDaProposta = (proposta: PropostaComercial): PrintSecao[] => {
   if (proposta.tipo !== 'transporte_rodoviario') return ['geral'];
-  const transferencia = proposta.incluiTransferencia;
+  const transferencia = proposta.incluiTransferencia || Boolean(proposta.incluiCargaFechada);
   const distribuicao = proposta.incluiDistribuicao;
   const portuaria = Boolean(proposta.incluiOpPortuaria);
   const spot = Boolean(proposta.incluiSpot);
@@ -827,7 +832,7 @@ const buildHtml = (
       : secao === 'spot'
         ? 'SPOT'
         : secao === 'transferencia'
-          ? 'Transferência'
+          ? (proposta.incluiCargaFechada ? 'Carga Fechada' : 'Transferência')
           : '';
   const closingHtml = `
   ${opcoes.includeCondicoes ? buildCondicoesTable(proposta, secao, 3, opcoes.condicoesPagina) : ''}
@@ -1744,6 +1749,7 @@ export async function generatePropostaComercialPdfBlob(
       && !proposta.incluiDistribuicao
       && !proposta.incluiOpPortuaria
       && !proposta.incluiSpot
+      && !proposta.incluiCargaFechada
     ) {
       return await generateArmazenagemPdfBlob(proposta, cliente);
     }

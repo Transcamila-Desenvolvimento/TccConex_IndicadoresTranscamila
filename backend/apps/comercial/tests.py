@@ -1,4 +1,5 @@
 import base64
+from io import BytesIO
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -22,6 +23,30 @@ PAYLOAD = {
     'uf': 'pr',
     'situacao': 'cliente',
 }
+
+
+class NumeracaoPropostaTests(TestCase):
+    def test_numero_em_uso_por_cadastro_simultaneo_tenta_o_proximo(self):
+        from datetime import date
+
+        from .models import PropostaComercial
+
+        hoje = date(2026, 10, 22)
+        primeira = PropostaComercial.objects.create(tipo='armazenagem', data_proposta=hoje)
+        original = PropostaComercial._atribuir_numero
+        chamadas = []
+
+        def concorrente_leu_antes(proposta):
+            chamadas.append(1)
+            if len(chamadas) == 1:
+                proposta.ano, proposta.numero = primeira.ano, primeira.numero
+                return
+            original(proposta)
+
+        with patch.object(PropostaComercial, '_atribuir_numero', concorrente_leu_antes):
+            segunda = PropostaComercial.objects.create(tipo='armazenagem', data_proposta=hoje)
+        self.assertEqual(len(chamadas), 2)
+        self.assertEqual((segunda.ano, segunda.numero), (primeira.ano, primeira.numero + 1))
 
 
 class ConsolidarAlteracoesRevisaoTests(TestCase):
@@ -368,6 +393,22 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(created.json()['titulo'], 'Tabela SP-PR')
         self.assertEqual(created.json()['clienteNome'], 'EMPRESA TESTE LTDA')
 
+        from openpyxl import load_workbook
+
+        from .models import PropostaComercial
+        from .proposta_excel_export import build_proposta_excel
+
+        excel, nome_excel = build_proposta_excel(PropostaComercial.objects.get(pk=created.json()['id']))
+        self.assertTrue(nome_excel.endswith('.xlsx'))
+        workbook = load_workbook(BytesIO(excel))
+        self.assertEqual(workbook.active.title, 'Trechos')
+        self.assertNotIn('Resumo', workbook.sheetnames)
+        trechos = workbook['Trechos']
+        linha = dict(zip([c.value for c in trechos[1]], [c.value for c in trechos[2]]))
+        self.assertEqual(linha['Origem'], 'Ibiporã-PR')
+        self.assertEqual(linha['Destino'], 'Curitiba-PR')
+        self.assertEqual(float(linha['Frete (R$)']), 1500.5)
+
         self.api.post(
             '/api/comercial/propostas/',
             {'tipo': 'armazenagem', 'titulo': 'Palete mensal', 'status': 'rascunho'},
@@ -551,6 +592,153 @@ class ClienteComercialTests(TestCase):
         self.assertFalse(armazenagem.json()['incluiTransferencia'])
         self.assertFalse(armazenagem.json()['incluiDistribuicao'])
         self.assertTrue(armazenagem.json()['incluiArmazenagem'])
+
+    def test_margem_de_veiculo_fora_dos_trechos_nao_e_salva(self):
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self._publicar_tabela_distribuicao(cliente.json()['id'])
+        linha = {
+            'origem': 'Ibiporã-PR', 'entrega': 'Curitiba-PR', 'veiculo': 'Truck',
+            'veiculoKey': 'de9000', 'km': '380', 'tarifaFrete': '1000.00', 'prazoDias': '2 dias úteis',
+        }
+        criada = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente.json()['id'],
+                'incluiCargaFechada': True,
+                'status': 'rascunho',
+                'margensVeiculo': [
+                    {'bandaKey': 'de9000', 'rotulo': 'Truck', 'margem': '0.40'},
+                    {'bandaKey': 'de14001', 'rotulo': 'Carreta 6 eixos', 'margem': '0.45'},
+                ],
+                'linhas': [linha],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(criada.status_code, 201, criada.content)
+        self.assertEqual([m['bandaKey'] for m in criada.json()['margensVeiculo']], ['de9000'])
+
+        trocada = self.api.patch(
+            f"/api/comercial/propostas/{criada.json()['id']}/",
+            {'linhas': [{**linha, 'veiculo': 'Carreta 6 eixos', 'veiculoKey': 'de14001'}]},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(trocada.status_code, 200, trocada.content)
+        self.assertEqual(trocada.json()['margensVeiculo'], [])
+
+    def test_planilha_transferencia_mostra_calculo_e_margem_alterada(self):
+        from openpyxl import load_workbook
+
+        from .models import PropostaComercial
+        from .proposta_excel_export import build_proposta_excel
+
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self._publicar_tabela_distribuicao(cliente.json()['id'])
+        criada = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente.json()['id'],
+                'incluiTransferencia': True,
+                'status': 'rascunho',
+                'margensVeiculo': [{'bandaKey': 'de9000', 'rotulo': 'Truck', 'margem': '0.40'}],
+                'linhas': [{
+                    'origem': 'Ibiporã-PR', 'entrega': 'Curitiba-PR', 'veiculo': 'Truck',
+                    'veiculoKey': 'de9000', 'km': '380', 'tarifaFrete': '9999.99', 'prazoDias': '2 dias úteis',
+                }],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(criada.status_code, 201, criada.content)
+        excel, _nome = build_proposta_excel(PropostaComercial.objects.get(pk=criada.json()['id']))
+        workbook = load_workbook(BytesIO(excel))
+        self.assertEqual(workbook.sheetnames, ['Trechos', 'Grade de cálculo', 'Generalidades'])
+        trecho = workbook['Trechos']
+        cabecalho = [cell.value for cell in trecho[1]]
+        linha = dict(zip(cabecalho, [cell.value for cell in trecho[2]]))
+        self.assertEqual(linha['Margem aplicada'], 0.4)
+        self.assertNotEqual(linha['Margem padrão'], linha['Margem aplicada'])
+        self.assertNotEqual(linha['Tarifa tabela padrão (R$)'], linha['Tarifa calculada c/ margem (R$)'])
+        self.assertEqual(float(linha['Frete (R$)']), 9999.99)
+        self.assertEqual(linha['Ajuste manual no frete'], 'Sim')
+        for coluna in ('Retirada CTNR (R$)', 'Desova CTNR (R$)', 'Outros valores', 'Operação', 'Peso'):
+            self.assertNotIn(coluna, cabecalho)
+        self.assertEqual(cabecalho[:6], ['Origem', 'Destino', 'Veículo', 'KM', 'Frete (R$)', 'Pedágio (R$)'])
+        self.assertEqual(cabecalho[-7], 'Faixa usada (até km)')
+        self.assertEqual(cabecalho[-1], 'Ajuste manual no frete')
+        self.assertNotEqual(trecho.cell(row=1, column=1).fill.fgColor.rgb, trecho.cell(row=1, column=len(cabecalho)).fill.fgColor.rgb)
+        grade = list(workbook['Grade de cálculo'].iter_rows(values_only=True))
+        self.assertEqual(grade[0][0], 'Margens por veículo')
+        margens = {row[0]: row for row in grade[2:] if row[0] == 'Truck'}
+        self.assertEqual(margens['Truck'][3], 'Sim')
+        self.assertTrue(any(row[0] == 'KM de' for row in grade))
+
+    def test_planilha_retroportuaria_mostra_retirada_e_desova(self):
+        from openpyxl import load_workbook
+
+        from .models import PropostaComercial
+        from .proposta_excel_export import build_proposta_excel
+
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self._publicar_tabela_distribuicao(cliente.json()['id'])
+        criada = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente.json()['id'],
+                'incluiOpPortuaria': True,
+                'status': 'rascunho',
+                'linhas': [{
+                    'origem': 'Paranaguá-PR', 'entrega': 'Curitiba-PR', 'veiculo': 'Carreta',
+                    'veiculoKey': 'de14001', 'km': '90', 'tarifaFrete': '1200.00', 'retiradaCtnt': '200.00',
+                    'desovaCtnt': '150.00', 'modalidade': 'op_portuaria', 'prazoDias': '2 dias úteis',
+                }],
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(criada.status_code, 201, criada.content)
+        excel, _nome = build_proposta_excel(PropostaComercial.objects.get(pk=criada.json()['id']))
+        trecho = load_workbook(BytesIO(excel))['Trechos']
+        linha = dict(zip([c.value for c in trecho[1]], [c.value for c in trecho[2]]))
+        self.assertEqual(float(linha['Retirada CTNR (R$)']), 200.0)
+        self.assertEqual(float(linha['Desova CTNR (R$)']), 150.0)
+        self.assertNotIn('Outros valores', linha)
+
+    def test_planilha_da_proposta_traz_tabela_distribuicao_sem_snapshot(self):
+        from openpyxl import load_workbook
+
+        from .models import PropostaComercial
+        from .proposta_excel_export import build_proposta_excel
+
+        self._auth(self.admin)
+        cliente = self.api.post('/api/comercial/clientes/', PAYLOAD, format='json', **HEADERS)
+        self._publicar_tabela_distribuicao(cliente.json()['id'])
+        criada = self.api.post(
+            '/api/comercial/propostas/',
+            {
+                'tipo': 'transporte_rodoviario',
+                'clienteId': cliente.json()['id'],
+                'incluiDistribuicao': True,
+                'status': 'rascunho',
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(criada.status_code, 201, criada.content)
+        PropostaComercial.objects.filter(pk=criada.json()['id']).update(tabela_distribuicao={})
+        excel, _nome = build_proposta_excel(PropostaComercial.objects.get(pk=criada.json()['id']))
+        workbook = load_workbook(BytesIO(excel))
+        self.assertNotIn('Trechos', workbook.sheetnames)
+        grade = list(workbook['Grade de cálculo'].iter_rows(values_only=True))
+        inicio = next(i for i, row in enumerate(grade) if row[0] == 'KM de')
+        self.assertGreater(len(grade), inicio + 1)
 
     def test_recusa_transferencia_sem_destinos_preenchidos(self):
         self._auth(self.admin)
@@ -2141,6 +2329,7 @@ class ClienteComercialTests(TestCase):
             ('distribuicao', 'inclui_distribuicao'),
             ('portuaria', 'inclui_op_portuaria'),
             ('spot', 'inclui_spot'),
+            ('carga_fechada', 'inclui_carga_fechada'),
         ):
             proposta = PropostaComercial.objects.create(
                 tipo='transporte_rodoviario', cliente_id=cliente_id, **{flag: True},
@@ -2276,6 +2465,157 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(atual['status'], 'enviada')
         self.assertEqual(atual['modoEnvio'], '')
         self.assertEqual(atual['revisao'], '01')
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+    def test_repasse_operacional_envia_pdf_e_planilha_da_proposta_aceita(self, mock_send):
+        from openpyxl import load_workbook
+
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        proposta_id = self._proposta_armazenagem_enviada()
+        self.api.patch(f'/api/comercial/propostas/{proposta_id}/', {'status': 'aprovada'}, format='json', **HEADERS)
+        response = self.api.post(
+            f'/api/comercial/propostas/{proposta_id}/enviar-repasse/',
+            {
+                'pdfBase64': PDF_BASE64,
+                'to': ['operacao@transcamila.com.br'],
+                'cc': ['gerente@transcamila.com.br', 'operacao@transcamila.com.br'],
+                'observacao': 'Iniciar operação em 01/11.',
+            },
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()['to'], ['operacao@transcamila.com.br'])
+        self.assertEqual(response.json()['cc'], ['gerente@transcamila.com.br'])
+        email_obj = mock_send.call_args[0][1]
+        self.assertIn('Repasse operacional', email_obj.subject)
+        self.assertIn('Iniciar operação em 01/11.', email_obj.body)
+        self.assertIn('Repasse Operacional', email_obj.body)
+        self.assertIn('Proposta aceita em', email_obj.body)
+        from django.utils import timezone
+
+        self.assertIn(timezone.localdate().strftime('%d/%m/%Y'), email_obj.body)
+        anexos = {item[0]: item[1] for item in email_obj.attachments if isinstance(item, tuple)}
+        self.assertTrue(any(nome.endswith('.pdf') for nome in anexos))
+        excel = next(conteudo for nome, conteudo in anexos.items() if nome.endswith('.xlsx'))
+        workbook = load_workbook(BytesIO(excel))
+        self.assertEqual(workbook.sheetnames[0], 'Tabela Armazenagem')
+        self.assertNotIn('Resumo', workbook.sheetnames)
+        atual = self.api.get(f'/api/comercial/propostas/{proposta_id}/', **HEADERS).json()
+        self.assertEqual(atual['status'], 'aprovada')
+        self.assertEqual(atual['dataRespostaCliente'], timezone.localdate().isoformat())
+        historico = self.api.get(f'/api/comercial/propostas/{proposta_id}/historico-situacoes/', **HEADERS).json()
+        self.assertTrue(any('Repasse' in (item.get('resumo') or '') for item in historico['itens']))
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+    def test_repasse_operacional_exige_proposta_aceita_e_destinatario(self, mock_send):
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        proposta_id = self._proposta_armazenagem_enviada()
+        url = f'/api/comercial/propostas/{proposta_id}/enviar-repasse/'
+        nao_aceita = self.api.post(
+            url, {'pdfBase64': PDF_BASE64, 'to': ['operacao@transcamila.com.br']}, format='json', **HEADERS,
+        )
+        self.assertEqual(nao_aceita.status_code, 400)
+        self.assertIn('aceitas', nao_aceita.json()['detail'])
+        self.api.patch(f'/api/comercial/propostas/{proposta_id}/', {'status': 'aprovada'}, format='json', **HEADERS)
+        sem_destinatario = self.api.post(url, {'pdfBase64': PDF_BASE64}, format='json', **HEADERS)
+        self.assertEqual(sem_destinatario.status_code, 400)
+        self.assertIn('destinatário', sem_destinatario.json()['detail'])
+        mock_send.assert_not_called()
+
+    def test_edicao_com_versao_desatualizada_nao_desfaz_aceite_de_outro_usuario(self):
+        proposta_id = self._proposta_armazenagem_enviada()
+        url = f'/api/comercial/propostas/{proposta_id}/'
+        versao_aberta = self.api.get(url, **HEADERS).json()['dataAtualizacao']
+
+        aceita = self.api.patch(url, {'status': 'aprovada', 'dataAtualizacao': versao_aberta}, format='json', **HEADERS)
+        self.assertEqual(aceita.status_code, 200, aceita.content)
+
+        atrasada = self.api.patch(
+            url, {'observacoes': 'Ajuste do outro usuário', 'dataAtualizacao': versao_aberta}, format='json', **HEADERS,
+        )
+        self.assertEqual(atrasada.status_code, 409, atrasada.content)
+        self.assertIn('outro usuário', atrasada.json()['detail'])
+        atual = self.api.get(url, **HEADERS).json()
+        self.assertEqual(atual['status'], 'aprovada')
+        self.assertNotEqual(atual['observacoes'], 'Ajuste do outro usuário')
+
+        recarregada = self.api.patch(
+            url,
+            {'observacoes': 'Ajuste do outro usuário', 'dataAtualizacao': atual['dataAtualizacao']},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(recarregada.status_code, 200, recarregada.content)
+        self.assertEqual(recarregada.json()['status'], 'aprovada')
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+    def test_envio_em_andamento_bloqueia_outro_envio_e_edicao(self, mock_send):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.comercial.models import PropostaComercial
+
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        proposta_id = self._proposta_armazenagem_enviada()
+        PropostaComercial.objects.filter(pk=proposta_id).update(envio_iniciado_em=timezone.now())
+
+        def enviar():
+            return self.api.post(
+                '/api/comercial/propostas/enviar-email-lote/',
+                {'ids': [proposta_id], 'pdf': [self._pdf_upload()]},
+                format='multipart',
+                **HEADERS,
+            )
+
+        em_envio = enviar()
+        self.assertEqual(em_envio.status_code, 409, em_envio.content)
+        self.assertIn('sendo enviada', em_envio.json()['detail'])
+        edicao = self.api.patch(
+            f'/api/comercial/propostas/{proposta_id}/', {'observacoes': 'x'}, format='json', **HEADERS,
+        )
+        self.assertEqual(edicao.status_code, 409, edicao.content)
+        mock_send.assert_not_called()
+
+        # Trava de um processo que caiu no meio do envio expira sozinha.
+        PropostaComercial.objects.filter(pk=proposta_id).update(
+            envio_iniciado_em=timezone.now() - timedelta(minutes=10),
+        )
+        liberado = enviar()
+        self.assertEqual(liberado.status_code, 200, liberado.content)
+        mock_send.assert_called_once()
+        self.assertIsNone(PropostaComercial.objects.get(pk=proposta_id).envio_iniciado_em)
+
+    @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
+    def test_envio_recusa_pdf_de_versao_alterada_por_outro_usuario(self, mock_send):
+        self.admin.google_email = 'miguel.ribeiro@transcamila.com.br'
+        self.admin.save(update_fields=['google_email'])
+        proposta_id = self._proposta_armazenagem_enviada()
+        url = f'/api/comercial/propostas/{proposta_id}/'
+        versao_pdf = self.api.get(url, **HEADERS).json()['dataAtualizacao']
+        self.api.patch(url, {'observacoes': 'Alterado por outro usuário'}, format='json', **HEADERS)
+
+        response = self.api.post(
+            '/api/comercial/propostas/enviar-email-lote/',
+            {'ids': [proposta_id], 'versoes': [versao_pdf], 'pdf': [self._pdf_upload()]},
+            format='multipart',
+            **HEADERS,
+        )
+        self.assertEqual(response.status_code, 409, response.content)
+        mock_send.assert_not_called()
+
+        repasse = self.api.post(
+            f'{url}enviar-repasse/',
+            {'pdfBase64': PDF_BASE64, 'to': ['operacao@transcamila.com.br'], 'versao': versao_pdf},
+            format='json',
+            **HEADERS,
+        )
+        self.assertEqual(repasse.status_code, 409, repasse.content)
+        mock_send.assert_not_called()
 
     @patch('apps.comercial.proposta_email_service.send_gmail_as_user')
     def test_envio_recusa_pdf_com_revisao_desatualizada(self, mock_send):
@@ -3820,6 +4160,23 @@ class RevisaoPorTipoOperacaoTests(TestCase):
             lambda _p: {'linhas': [{**linha, 'tarifaFrete': '950.00'}]},
             conferir,
         )
+
+    def test_carga_fechada(self, _mock):
+        linha = {'origem': 'Ibiporã-PR', 'entrega': 'Rondonópolis-MT', 'veiculo': 'Carreta',
+                 'veiculoKey': 'de14001', 'km': '100', 'tarifaFrete': '1000.00', 'prazoDias': '3 dias úteis'}
+
+        def conferir(campos):
+            frete = campos['Trecho 1 (Ibiporã-PR → Rondonópolis-MT) · Frete']
+            self.assertEqual((frete['de'], frete['para']), ('R$ 1.000,00', 'R$ 950,00 (desconto de 5%)'))
+
+        rev2 = self._ciclo(
+            {'tipo': 'transporte_rodoviario', 'incluiCargaFechada': True, 'linhas': [linha]},
+            'frete',
+            lambda _p: {'linhas': [{**linha, 'tarifaFrete': '950.00'}]},
+            conferir,
+        )
+        self.assertTrue(rev2['incluiCargaFechada'])
+        self.assertFalse(rev2['incluiTransferencia'])
 
     def test_logistica_retroportuaria(self, _mock):
         linha = {'origem': 'Paranaguá-PR', 'entrega': 'Curitiba-PR', 'veiculo': 'Carreta',

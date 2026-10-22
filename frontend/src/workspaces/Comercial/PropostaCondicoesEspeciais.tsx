@@ -10,6 +10,8 @@ const VEICULOS_PADRAO: PropostaMargemVeiculo[] = [
 type Props = {
   margensVeiculo: PropostaMargemVeiculo[];
   veiculosTarifa?: PropostaMargemVeiculo[] | null;
+  /** Quando informado, exibe só as margens destes veículos (ex.: os usados nos trechos). */
+  bandasVisiveis?: string[];
   canEdit: boolean;
   onChange: (margens: PropostaMargemVeiculo[]) => void;
 };
@@ -40,6 +42,7 @@ const pctParaFator = (pctTexto: string): string | null => {
 export default function PropostaCondicoesEspeciais({
   margensVeiculo,
   veiculosTarifa,
+  bandasVisiveis,
   canEdit,
   onChange,
 }: Props) {
@@ -52,6 +55,9 @@ export default function PropostaCondicoesEspeciais({
     rotulo: item.rotulo || item.bandaKey,
     margem: (item.margem || '').trim() || '0.33',
   }));
+  const visiveis = bandasVisiveis
+    ? base.filter((item) => bandasVisiveis.includes(item.bandaKey))
+    : base;
 
   const aplicarMargens = (bandaKey: string, fator: string) => {
     const next = base.map((veiculo) => {
@@ -91,8 +97,11 @@ export default function PropostaCondicoesEspeciais({
           <p className="proposta-condicoes-especiais-hint">
             Ajuste as margens só nesta proposta (aceita decimais, ex.: 33,5). A tabela de frete cadastrada permanece igual.
           </p>
+          {!visiveis.length ? (
+            <p className="proposta-condicoes-especiais-hint">Selecione o veículo nos trechos para ajustar a margem.</p>
+          ) : null}
           <div className="proposta-condicoes-especiais-grid">
-            {base.map((item) => {
+            {visiveis.map((item) => {
               const salva = margensVeiculo.find((m) => m.bandaKey === item.bandaKey)?.margem;
               const atual = (salva || '').trim() || item.margem;
               const valorExibido = rascunhos[item.bandaKey] ?? fatorParaPct(atual);

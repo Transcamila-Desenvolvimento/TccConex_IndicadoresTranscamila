@@ -8,10 +8,13 @@ import re
 from email.mime.image import MIMEImage
 
 from django.core.mail import EmailMessage
+from django.db import transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 
 from apps.accounts.google_gmail_service import send_gmail_as_user
+
+from .proposta_concorrencia import exigir_versao, reservar_envio
 
 from .models import (
     STATUS_PROPOSTA_ENVIADA,
@@ -202,6 +205,8 @@ def _tipo_label(tipo: str) -> str:
 def _servico_label(proposta) -> str:
     if getattr(proposta, 'inclui_spot', False):
         return 'SPOT'
+    if getattr(proposta, 'inclui_carga_fechada', False):
+        return 'Carga Fechada'
     tipos = tipos_servico_generalidade(
         proposta.tipo,
         inclui_transferencia=bool(getattr(proposta, 'inclui_transferencia', False)),
@@ -296,6 +301,7 @@ def send_proposta_comercial_email(
     cc_emails: list[str] | None = None,
     pdf_bytes: bytes | None = None,
     revisoes_pdf: list[str] | None = None,
+    versoes: list[str] | None = None,
     observacao: str = '',
     confirmacao_leitura: bool = False,
 ) -> dict:
@@ -305,6 +311,7 @@ def send_proposta_comercial_email(
         to_emails=to_emails,
         cc_emails=cc_emails,
         revisoes_pdf=revisoes_pdf,
+        versoes=versoes,
         observacao=observacao,
         confirmacao_leitura=confirmacao_leitura,
     )
@@ -343,6 +350,7 @@ def send_propostas_comerciais_email(
     to_emails: list[str] | None = None,
     cc_emails: list[str] | None = None,
     revisoes_pdf: list[str] | None = None,
+    versoes: list[str] | None = None,
     observacao: str = '',
     confirmacao_leitura: bool = False,
 ) -> dict:
@@ -357,6 +365,39 @@ def send_propostas_comerciais_email(
     validar_envio_conjunto(propostas)
     if any(not pdf for pdf in pdfs) or len(pdfs) != len(propostas):
         raise ValueError('Não foi possível receber o PDF da proposta gerado na tela. Tente novamente.')
+    with reservar_envio(propostas):
+        return _enviar_propostas_reservadas(
+            user,
+            google_from,
+            propostas,
+            pdfs,
+            to_emails=to_emails,
+            cc_emails=cc_emails,
+            revisoes_pdf=revisoes_pdf,
+            versoes=versoes,
+            observacao=observacao,
+            confirmacao_leitura=confirmacao_leitura,
+        )
+
+
+def _enviar_propostas_reservadas(
+    user,
+    google_from,
+    propostas,
+    pdfs,
+    *,
+    to_emails,
+    cc_emails,
+    revisoes_pdf,
+    versoes,
+    observacao,
+    confirmacao_leitura,
+) -> dict:
+    from .models import PropostaComercial
+
+    if versoes is not None and len(versoes) == len(propostas):
+        for item, versao in zip(propostas, versoes):
+            exigir_versao(item, versao)
     if revisoes_pdf is not None and len(revisoes_pdf) == len(propostas):
         for item, rev_pdf in zip(propostas, revisoes_pdf):
             if (rev_pdf or '').strip() != (item.revisao or '').strip():
@@ -388,7 +429,7 @@ def send_propostas_comerciais_email(
     html_body = render_to_string('comercial/emails/proposta.html', context)
     cliente_nome = context['cliente_nome']
     remetente = f'{_usuario_display(user)} <{google_from}>'
-    from .proposta_tarifas import assunto_envio_propostas, marcar_envio_historico
+    from .proposta_tarifas import assunto_envio_propostas
     assunto = assunto_envio_propostas(propostas)
 
     email_obj = EmailMessage(
@@ -414,36 +455,10 @@ def send_propostas_comerciais_email(
     # Só marca como enviada depois do Gmail aceitar; falha no envio mantém a revisão pendente.
     send_gmail_as_user(user, email_obj)
 
-    from .proposta_tarifas import ajustes_iniciais_proposta
-
-    for item in propostas:
-        if not item.ajustes_iniciais:
-            # Primeiro envio fixa a comparação com a tabela; revisões não a recalculam.
-            item.ajustes_iniciais = ajustes_iniciais_proposta(item)
-        modo = getattr(item, 'modo_envio', '') or ''
-        status_antes = item.status
-        # Nova revisão enviada substitui a resposta anterior do cliente (aceite/recusa era da versão antiga).
-        if item.status == STATUS_PROPOSTA_RASCUNHO or modo:
-            item.status = STATUS_PROPOSTA_ENVIADA
-        if modo:
-            marcar_envio_historico(
-                item,
-                modo,
-                user,
-                'Errata enviada ao cliente' if modo == 'errata' else 'Revisão enviada ao cliente',
-            )
-            item.modo_envio = ''
-        if item.status != status_antes or modo:
-            if modo == 'errata':
-                resumo = 'Errata enviada ao cliente'
-            elif modo == 'revisao':
-                resumo = 'Revisão enviada ao cliente'
-            else:
-                resumo = 'Proposta enviada ao cliente'
-            item.registrar_situacao('enviada', user, resumo)
-        item.save(update_fields=[
-            'status', 'modo_envio', 'historico_revisoes', 'historico_situacoes', 'ajustes_iniciais', 'data_atualizacao',
-        ])
+    # Grava sobre a linha atual travada, não sobre a cópia lida antes do Gmail.
+    with transaction.atomic():
+        for enviada in propostas:
+            _marcar_proposta_enviada(PropostaComercial.objects.select_for_update().get(pk=enviada.pk), user)
 
     return {
         'to': destinarios,
@@ -451,6 +466,38 @@ def send_propostas_comerciais_email(
         'numero': context['numero'],
         'cliente': cliente_nome,
     }
+
+
+def _marcar_proposta_enviada(item, user):
+    from .proposta_tarifas import ajustes_iniciais_proposta, marcar_envio_historico
+
+    if not item.ajustes_iniciais:
+        # Primeiro envio fixa a comparação com a tabela; revisões não a recalculam.
+        item.ajustes_iniciais = ajustes_iniciais_proposta(item)
+    modo = getattr(item, 'modo_envio', '') or ''
+    status_antes = item.status
+    # Nova revisão enviada substitui a resposta anterior do cliente (aceite/recusa era da versão antiga).
+    if item.status == STATUS_PROPOSTA_RASCUNHO or modo:
+        item.status = STATUS_PROPOSTA_ENVIADA
+    if modo:
+        marcar_envio_historico(
+            item,
+            modo,
+            user,
+            'Errata enviada ao cliente' if modo == 'errata' else 'Revisão enviada ao cliente',
+        )
+        item.modo_envio = ''
+    if item.status != status_antes or modo:
+        if modo == 'errata':
+            resumo = 'Errata enviada ao cliente'
+        elif modo == 'revisao':
+            resumo = 'Revisão enviada ao cliente'
+        else:
+            resumo = 'Proposta enviada ao cliente'
+        item.registrar_situacao('enviada', user, resumo)
+    item.save(update_fields=[
+        'status', 'modo_envio', 'historico_revisoes', 'historico_situacoes', 'ajustes_iniciais', 'data_atualizacao',
+    ])
 
 
 def send_aviso_reprogramacao(user, propostas, *, prazo: str = '', pdfs: list[bytes] | None = None) -> dict:
@@ -518,3 +565,106 @@ def send_aviso_reprogramacao(user, propostas, *, prazo: str = '', pdfs: list[byt
         enviados += 1
         ids_enviados.extend(str(item.pk) for item in itens)
     return {'enviados': enviados, 'falhas': falhas, 'idsEnviados': ids_enviados}
+
+
+def _email_sem_link(email: str):
+    """E-mail como texto: o Gmail não cria link quando '@' e '.' ficam em spans separados."""
+    from django.utils.html import escape
+    from django.utils.safestring import mark_safe
+
+    email = (email or '').strip()
+    if not email:
+        return '—'
+    partes = re.split(r'([@.])', email)
+    return mark_safe(''.join(
+        f'<span>{escape(parte)}</span>' if parte in ('@', '.') else escape(parte)
+        for parte in partes
+    ))
+
+
+def send_repasse_operacional(
+    user,
+    proposta,
+    *,
+    to_emails: list[str] | None = None,
+    cc_emails: list[str] | None = None,
+    pdf_bytes: bytes | None = None,
+    observacao: str = '',
+    versao: str = '',
+) -> dict:
+    """Repassa a proposta aceita pelo cliente para a operação (PDF + planilha da proposta)."""
+    google_from = _google_email(user)
+    if not google_from:
+        raise ValueError('Vincule sua conta Google no perfil para enviar o repasse pelo seu e-mail.')
+    if not pdf_bytes:
+        raise ValueError('Não foi possível receber o PDF da proposta gerado na tela. Tente novamente.')
+    destinatarios = parse_emails(to_emails)
+    if not destinatarios:
+        raise ValueError('Informe ao menos um destinatário da operação.')
+    cc = [email for email in parse_emails(cc_emails) if email not in destinatarios and email != google_from]
+    with reservar_envio([proposta]):
+        exigir_versao(proposta, versao)
+        return _enviar_repasse_reservado(user, google_from, proposta, destinatarios, cc, pdf_bytes, observacao)
+
+
+def _enviar_repasse_reservado(user, google_from, proposta, destinatarios, cc, pdf_bytes, observacao) -> dict:
+    from .models import STATUS_PROPOSTA_APROVADA, PropostaComercial
+    from .proposta_excel_export import build_proposta_excel
+
+    if proposta.status != STATUS_PROPOSTA_APROVADA:
+        raise ValueError('Somente propostas aceitas pelo cliente podem ser repassadas para a operação.')
+
+    context = _build_context(proposta, user)
+    context['observacao'] = (observacao or '').strip()
+    context['linhas_resumo'] = [
+        ('Proposta', context['numero']),
+        ('Cliente', context['cliente_nome']),
+        ('CNPJ', context['cliente_cnpj']),
+        ('Contato do cliente (A/C)', proposta.att or '—'),
+        ('E-mail do cliente', _email_sem_link(getattr(proposta.cliente, 'email', None))),
+        ('Serviço', context['servico']),
+        ('Emissão', context['emissao']),
+        ('Proposta aceita em', _fmt_date(proposta.data_resposta_cliente())),
+        ('Responsável comercial', proposta.responsavel or context['enviado_por']),
+    ]
+    excel_bytes, excel_nome = build_proposta_excel(proposta)
+    pdf_nome = proposta_pdf_filename(context['numero'], context['cliente_nome'])
+    context['anexos'] = [pdf_nome, excel_nome]
+    html_body = render_to_string('comercial/emails/repasse_operacional.html', context)
+
+    email_obj = EmailMessage(
+        subject=f"Repasse operacional — Proposta {context['numero']} aceita — {context['cliente_nome']}",
+        body=html_body,
+        from_email=f'{_usuario_display(user)} <{google_from}>',
+        to=destinatarios,
+        cc=cc,
+        reply_to=[google_from],
+    )
+    email_obj.content_subtype = 'html'
+    logo_bytes = _logo_png_bytes()
+    if logo_bytes:
+        subtype = _logo_mime_subtype()
+        logo = MIMEImage(logo_bytes, _subtype=subtype)
+        logo.add_header('Content-ID', f'<{LOGO_CID}>')
+        logo.add_header('Content-Disposition', 'inline', filename=f'logo-proposta.{subtype if subtype != "jpeg" else "jpg"}')
+        email_obj.attach(logo)
+    email_obj.attach(pdf_nome, pdf_bytes, 'application/pdf')
+    email_obj.attach(
+        excel_nome,
+        excel_bytes,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
+    send_gmail_as_user(user, email_obj)
+
+    with transaction.atomic():
+        atual = PropostaComercial.objects.select_for_update().get(pk=proposta.pk)
+        atual.registrar_situacao(STATUS_PROPOSTA_APROVADA, user, 'Repasse Operacional enviado')
+        atual.save(update_fields=['historico_situacoes', 'data_atualizacao'])
+
+    return {
+        'to': destinatarios,
+        'cc': cc,
+        'numero': context['numero'],
+        'cliente': context['cliente_nome'],
+    }

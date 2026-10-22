@@ -57,6 +57,7 @@ import {
 import { generatePropostaComercialPdfBlob, printPropostaComercial } from './printPropostaComercial';
 import { isGrisAdvUnificado } from './formatTabelaFrete';
 import ComercialPropostaEmailModal from './ComercialPropostaEmailModal';
+import ComercialPropostaRepasseModal from './ComercialPropostaRepasseModal';
 import ComercialPropostaReprogramarModal from './ComercialPropostaReprogramarModal';
 import ComercialPropostaSituacaoHistoricoModal from './ComercialPropostaSituacaoHistoricoModal';
 import { addDaysISO, complementoProrrogacao, prazoParaVencimento, vencimentoDoPrazo } from './validadeProposta';
@@ -171,6 +172,7 @@ type PropostaForm = {
   incluiArmazenagem: boolean;
   incluiOpPortuaria: boolean;
   incluiSpot: boolean;
+  incluiCargaFechada: boolean;
   margensVeiculo: PropostaMargemVeiculo[];
   condicoes: PropostaCondicaoComercial[];
   condicoesTransferencia: PropostaCondicaoComercial[];
@@ -179,17 +181,21 @@ type PropostaForm = {
   linhas: LinhaForm[];
 };
 
-const MENSAGEM_DESTINOS_OBRIGATORIOS = 'Preencha origem, destino, veículo, km e prazo para Transferência, Spot ou Logística Retroportuária.';
+const MENSAGEM_DESTINOS_OBRIGATORIOS = 'Preencha origem, destino, veículo, km e prazo para Transferência, Carga Fechada, Spot ou Logística Retroportuária.';
 const MENSAGEM_TARIFAS_ARMAZENAGEM = 'Informe o valor de cada tarifa de armazenagem ou coloque um traço (-).';
-const MENSAGEM_OPERACAO_OBRIGATORIA = 'Selecione o tipo de operação (Transferência, Distribuição, Logística Retroportuária ou Spot).';
+const MENSAGEM_OPERACAO_OBRIGATORIA = 'Selecione o tipo de operação (Transferência, Distribuição, Logística Retroportuária, Spot ou Carga Fechada).';
 const MENSAGEM_SERVICO_OBRIGATORIO = 'Selecione o tipo de serviço.';
 
-type OperacaoTransporte = 'transferencia' | 'distribuicao' | 'portuaria' | 'spot';
+type OperacaoTransporte = 'transferencia' | 'distribuicao' | 'portuaria' | 'spot' | 'carga_fechada';
 
 type FlagsOperacao = Pick<
   PropostaForm,
-  'incluiTransferencia' | 'incluiDistribuicao' | 'incluiArmazenagem' | 'incluiOpPortuaria' | 'incluiSpot'
+  'incluiTransferencia' | 'incluiDistribuicao' | 'incluiArmazenagem' | 'incluiOpPortuaria' | 'incluiSpot' | 'incluiCargaFechada'
 >;
+
+/** Carga Fechada usa exatamente o fluxo da Transferência (trechos, tabela, margens e generalidades de frete). */
+const usaFluxoTransferencia = (flags: Pick<FlagsOperacao, 'incluiTransferencia' | 'incluiCargaFechada'>) =>
+  Boolean(flags.incluiTransferencia || flags.incluiCargaFechada);
 
 const flagsExclusivos = (
   tipo: PropostaComercialTipo,
@@ -201,6 +207,7 @@ const flagsExclusivos = (
       incluiDistribuicao: false,
       incluiOpPortuaria: false,
       incluiSpot: false,
+      incluiCargaFechada: false,
       incluiArmazenagem: true,
     };
   }
@@ -209,6 +216,7 @@ const flagsExclusivos = (
     incluiDistribuicao: operacao === 'distribuicao',
     incluiOpPortuaria: operacao === 'portuaria',
     incluiSpot: operacao === 'spot',
+    incluiCargaFechada: operacao === 'carga_fechada',
     incluiArmazenagem: false,
   };
 };
@@ -219,6 +227,7 @@ const operacaoFromFlags = (flags: FlagsOperacao): OperacaoTransporte | null => {
   if (flags.incluiDistribuicao) return 'distribuicao';
   if (flags.incluiOpPortuaria) return 'portuaria';
   if (flags.incluiSpot) return 'spot';
+  if (flags.incluiCargaFechada) return 'carga_fechada';
   return null;
 };
 
@@ -231,6 +240,7 @@ const normalizarFlagsExclusivos = (
     && !flags.incluiDistribuicao
     && !flags.incluiOpPortuaria
     && !flags.incluiSpot
+    && !flags.incluiCargaFechada
     && flags.incluiArmazenagem
   )) {
     return flagsExclusivos('armazenagem', null);
@@ -253,7 +263,7 @@ const linhaDestinoPreenchida = (linha: LinhaForm) =>
   );
 
 const destinosProntosParaSalvar = (form: PropostaForm) => {
-  if (!form.incluiTransferencia && !form.incluiOpPortuaria && !form.incluiSpot) return true;
+  if (!usaFluxoTransferencia(form) && !form.incluiOpPortuaria && !form.incluiSpot) return true;
   const relevantes = form.linhas.filter((linha) => !linhaDestinoVazia(linha));
   return relevantes.length > 0 && relevantes.every(linhaDestinoPreenchida);
 };
@@ -350,6 +360,7 @@ const emptyForm = (
   incluiArmazenagem: false,
   incluiOpPortuaria: false,
   incluiSpot: false,
+  incluiCargaFechada: false,
   margensVeiculo: [],
   condicoes: (condicoes ?? []).map((item) => ({ ...item })),
   condicoesTransferencia: [],
@@ -426,6 +437,7 @@ const formFromDraft = (
         incluiArmazenagem: Boolean(draftForm.incluiArmazenagem) || draftForm.tipo === 'armazenagem',
         incluiOpPortuaria: Boolean(draftForm.incluiOpPortuaria),
         incluiSpot: Boolean(draftForm.incluiSpot),
+        incluiCargaFechada: Boolean(draftForm.incluiCargaFechada),
       },
     ),
     margensVeiculo: Array.isArray(draftForm.margensVeiculo) ? draftForm.margensVeiculo : [],
@@ -445,7 +457,7 @@ const condicoesDoFormulario = (form: PropostaForm): PropostaCondicaoComercial[] 
       'distribuicao',
     ));
   }
-  if (form.incluiTransferencia || form.incluiSpot) {
+  if (usaFluxoTransferencia(form) || form.incluiSpot) {
     items.push(...marcarCondicoesTipo(
       form.condicoesTransferencia.filter((item) => item.rotulo.trim() || item.valor.trim()),
       'frete',
@@ -466,17 +478,20 @@ const condicoesDoFormulario = (form: PropostaForm): PropostaCondicaoComercial[] 
   return items;
 };
 
-const primeiraAbaOperacao = (form: Pick<PropostaForm, 'incluiTransferencia' | 'incluiDistribuicao' | 'incluiArmazenagem' | 'incluiOpPortuaria' | 'incluiSpot'>): PropostaOperacaoAba => {
+const primeiraAbaOperacao = (form: FlagsOperacao): PropostaOperacaoAba => {
   if (form.incluiTransferencia) return 'transferencia';
   if (form.incluiDistribuicao) return 'distribuicao';
   if (form.incluiOpPortuaria) return 'portuaria';
   if (form.incluiSpot) return 'spot';
+  if (form.incluiCargaFechada) return 'carga_fechada';
   if (form.incluiArmazenagem) return 'armazenagem';
   return 'transferencia';
 };
 
 const abaDoDraft = (aba?: string): PropostaOperacaoAba => (
-  aba === 'distribuicao' || aba === 'armazenagem' || aba === 'portuaria' || aba === 'spot' ? aba : 'transferencia'
+  aba === 'distribuicao' || aba === 'armazenagem' || aba === 'portuaria' || aba === 'spot' || aba === 'carga_fechada'
+    ? aba
+    : 'transferencia'
 );
 
 const linhaTotal = (linha: LinhaForm) => {
@@ -636,12 +651,15 @@ const ComercialPropostas: React.FC = () => {
   const [ordering, setOrdering] = useState<PropostaComercialOrdering>('data_criacao_desc');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** Versão e situação da proposta no momento em que o modal abriu (a lista pode recarregar enquanto edita). */
+  const [edicaoBase, setEdicaoBase] = useState<{ versao: string; status: PropostaComercialStatus } | null>(null);
   const [form, setForm] = useState<PropostaForm>(emptyForm);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const [emailPropostas, setEmailPropostas] = useState<PropostaComercial[]>([]);
   const [reprogramarPropostas, setReprogramarPropostas] = useState<PropostaComercial[]>([]);
   const [historicoProposta, setHistoricoProposta] = useState<PropostaComercial | null>(null);
+  const [repasseProposta, setRepasseProposta] = useState<PropostaComercial | null>(null);
   const [enviandoAviso, setEnviandoAviso] = useState(false);
   const enviarAvisoReprogramacao = useEnviarAvisoReprogramacao();
   const [abaOperacao, setAbaOperacao] = useState<PropostaOperacaoAba>('transferencia');
@@ -681,7 +699,7 @@ const ComercialPropostas: React.FC = () => {
   const faturamentoPadrao = parametrosQuery.data?.faturamentoPadrao || FATURAMENTO_PADRAO_FALLBACK;
   const formPadroes = { validade: validadePadrao, vigencia: vigenciaPadrao, faturamento: faturamentoPadrao };
   const generalidadesTransferencia = useComercialGeneralidades(
-    isModalOpen && form.clienteId && (form.incluiTransferencia || form.incluiSpot)
+    isModalOpen && form.clienteId && (usaFluxoTransferencia(form) || form.incluiSpot)
       ? form.clienteId
       : null,
     'frete',
@@ -722,7 +740,7 @@ const ComercialPropostas: React.FC = () => {
   const tabelaFretePronta = !form.clienteId || tabelaDistribuicaoCliente.listQuery.isFetched;
   const podeUsarTabelaFrete = Boolean(form.clienteId) && tabelaFretePronta && temTabelaFrete;
   const MENSAGEM_TABELA_FRETE = form.clienteId
-    ? 'Vincule uma tabela de frete vigente a este cliente para criar proposta de Transferência, Distribuição, Logística Retroportuária ou Spot.'
+    ? 'Vincule uma tabela de frete vigente a este cliente para criar proposta de Transferência, Distribuição, Logística Retroportuária, Spot ou Carga Fechada.'
     : 'Selecione o cliente e vincule uma tabela de frete para habilitar as operações de transporte.';
   const selectedPropostas = useMemo(
     () => propostas.filter((item) => selectedIds.includes(item.id)),
@@ -775,7 +793,7 @@ const ComercialPropostas: React.FC = () => {
       }
     }
     if (!form.clienteId) return;
-    if ((form.incluiTransferencia || form.incluiSpot) && generalidadesTransferencia.isSuccess) {
+    if ((form.incluiTransferencia || form.incluiCargaFechada || form.incluiSpot) && generalidadesTransferencia.isSuccess) {
       const chave = `${editingId ?? 'novo'}:${form.clienteId}:frete`;
       if (catalogoTransferenciaRef.current !== chave) {
         catalogoTransferenciaRef.current = chave;
@@ -820,6 +838,7 @@ const ComercialPropostas: React.FC = () => {
     form.incluiOpPortuaria,
     form.incluiSpot,
     form.incluiTransferencia,
+    form.incluiCargaFechada,
     generalidadesArmazenagem.data?.items,
     generalidadesArmazenagem.isSuccess,
     generalidadesDistribuicao.data?.items,
@@ -926,6 +945,7 @@ const ComercialPropostas: React.FC = () => {
 
   const startEdit = (proposta: PropostaComercial) => {
     setEditingId(proposta.id);
+    setEdicaoBase({ versao: proposta.dataAtualizacao ?? '', status: proposta.status });
     const tipo: PropostaComercialTipo = proposta.tipo === 'armazenagem' ? 'armazenagem' : 'transporte_rodoviario';
     const flags = normalizarFlagsExclusivos(tipo, {
       incluiTransferencia: proposta.incluiTransferencia,
@@ -933,6 +953,7 @@ const ComercialPropostas: React.FC = () => {
       incluiArmazenagem: propostaIncluiArmazenagem(proposta),
       incluiOpPortuaria: Boolean(proposta.incluiOpPortuaria),
       incluiSpot: Boolean(proposta.incluiSpot),
+      incluiCargaFechada: Boolean(proposta.incluiCargaFechada),
     });
     setForm({
       tipo,
@@ -968,7 +989,7 @@ const ComercialPropostas: React.FC = () => {
         proposta.condicoes,
         flags.incluiOpPortuaria ? 'op_portuaria' : 'frete',
         [],
-        Boolean(flags.incluiTransferencia || flags.incluiOpPortuaria || flags.incluiSpot),
+        Boolean(usaFluxoTransferencia(flags) || flags.incluiOpPortuaria || flags.incluiSpot),
       ),
       condicoesDistribuicao: separarCondicoesProposta(
         proposta.condicoes,
@@ -1014,6 +1035,7 @@ const ComercialPropostas: React.FC = () => {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
+    setEdicaoBase(null);
     setSnapshotDistribuicao(null);
     setForm(emptyForm(undefined, formPadroes));
     setDraftHydrated(true);
@@ -1053,7 +1075,7 @@ const ComercialPropostas: React.FC = () => {
     const flags = flagsExclusivos('transporte_rodoviario', operacao);
     setForm((current) => {
       let linhas = current.linhas;
-      if (operacao === 'transferencia') {
+      if (operacao === 'transferencia' || operacao === 'carga_fechada') {
         const transf = linhas.filter((linha) => {
           const tipo = linha.modalidade || 'transferencia';
           return tipo !== 'op_portuaria' && tipo !== 'spot';
@@ -1075,17 +1097,9 @@ const ComercialPropostas: React.FC = () => {
         linhas,
       };
     });
-    if (operacao === 'transferencia') catalogoTransferenciaRef.current = '';
+    if (operacao === 'transferencia' || operacao === 'carga_fechada') catalogoTransferenciaRef.current = '';
     if (operacao === 'distribuicao') catalogoDistribuicaoRef.current = '';
-    setAbaOperacao(
-      operacao === 'transferencia'
-        ? 'transferencia'
-        : operacao === 'distribuicao'
-          ? 'distribuicao'
-          : operacao === 'spot'
-            ? 'spot'
-            : 'portuaria',
-    );
+    setAbaOperacao(primeiraAbaOperacao(flags));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1098,7 +1112,8 @@ const ComercialPropostas: React.FC = () => {
       && !form.incluiTransferencia
       && !form.incluiDistribuicao
       && !form.incluiOpPortuaria
-      && !form.incluiSpot) {
+      && !form.incluiSpot
+      && !form.incluiCargaFechada) {
       alert(MENSAGEM_OPERACAO_OBRIGATORIA);
       return;
     }
@@ -1109,7 +1124,7 @@ const ComercialPropostas: React.FC = () => {
     const flags = normalizarFlagsExclusivos(form.tipo, form);
     const tipo = tipoPropostaDasOperacoes(flags);
     if (
-      (flags.incluiTransferencia || flags.incluiDistribuicao || flags.incluiOpPortuaria || flags.incluiSpot)
+      (usaFluxoTransferencia(flags) || flags.incluiDistribuicao || flags.incluiOpPortuaria || flags.incluiSpot)
       && !podeUsarTabelaFrete
     ) {
       alert(MENSAGEM_TABELA_FRETE);
@@ -1143,7 +1158,7 @@ const ComercialPropostas: React.FC = () => {
       vigencia: form.vigencia.trim(),
       faturamento: form.faturamento.trim(),
       localEmissao: form.localEmissao.trim(),
-      valorEstimado: (flags.incluiTransferencia || flags.incluiOpPortuaria || flags.incluiSpot)
+      valorEstimado: (usaFluxoTransferencia(flags) || flags.incluiOpPortuaria || flags.incluiSpot)
         ? (subtotalGeral ? subtotalGeral.toFixed(2) : moneyOrEmpty(form.valorEstimado))
         : moneyOrEmpty(form.valorEstimado),
       observacoes: form.observacoes.trim(),
@@ -1152,10 +1167,11 @@ const ComercialPropostas: React.FC = () => {
       incluiArmazenagem: flags.incluiArmazenagem,
       incluiOpPortuaria: flags.incluiOpPortuaria,
       incluiSpot: flags.incluiSpot,
+      incluiCargaFechada: flags.incluiCargaFechada,
       margensVeiculo: form.margensVeiculo,
       condicoes: condicoesDoFormulario({ ...form, ...flags }),
       tabelaArmazenagem: flags.incluiArmazenagem ? cloneTabelaArmazenagem(form.tabelaArmazenagem) : undefined,
-      linhas: (flags.incluiTransferencia || flags.incluiOpPortuaria || flags.incluiSpot)
+      linhas: (usaFluxoTransferencia(flags) || flags.incluiOpPortuaria || flags.incluiSpot)
         ? form.linhas.filter((linha) => !linhaDestinoVazia(linha)).map((linha, ordem) => ({
             ordem,
             origem: linha.origem.trim(),
@@ -1197,9 +1213,20 @@ const ComercialPropostas: React.FC = () => {
         alert(getComercialErrorMessage(err));
       },
     };
-    editingId
-      ? updateProposta.mutate({ id: editingId, payload }, callbacks)
-      : createProposta.mutate(payload, callbacks);
+    if (editingId) {
+      // Situação só vai quando alterada aqui: o formulário aberto não desfaz um aceite feito por outro usuário.
+      const { status: statusForm, ...semStatus } = payload;
+      updateProposta.mutate({
+        id: editingId,
+        payload: {
+          ...semStatus,
+          ...(statusForm !== edicaoBase?.status ? { status: statusForm } : {}),
+          dataAtualizacao: edicaoBase?.versao || undefined,
+        },
+      }, callbacks);
+      return;
+    }
+    createProposta.mutate(payload, callbacks);
   };
 
   const clienteDaProposta = (proposta: PropostaComercial) =>
@@ -1235,6 +1262,7 @@ const ComercialPropostas: React.FC = () => {
     incluiArmazenagem: form.incluiArmazenagem,
     incluiOpPortuaria: form.incluiOpPortuaria,
     incluiSpot: form.incluiSpot,
+    incluiCargaFechada: form.incluiCargaFechada,
     margensVeiculo: form.margensVeiculo,
     tabelaDistribuicao: snapshotDistribuicao,
     historicoRevisoes: editingId
@@ -1316,11 +1344,11 @@ const ComercialPropostas: React.FC = () => {
     setReprogramarPropostas(selectedPropostas);
   };
 
-  const handleHistoricoSelected = () => {
+  const handleRepasseSelected = () => {
     const proposta = selectedPropostas[0];
     if (!proposta) return;
     setIsActionsMenuOpen(false);
-    setHistoricoProposta(proposta);
+    setRepasseProposta(proposta);
   };
 
   const handleEnviarAvisoReprogramacao = async () => {
@@ -1411,9 +1439,9 @@ const ComercialPropostas: React.FC = () => {
   );
   const destinosOk = destinosProntosParaSalvar(form);
   const armazenagemOk = !form.incluiArmazenagem || tabelaArmazenagemProntaParaSalvar(form.tabelaArmazenagem);
-  const temOperacao = form.incluiTransferencia || form.incluiDistribuicao || form.incluiArmazenagem || form.incluiOpPortuaria || form.incluiSpot;
+  const temOperacao = usaFluxoTransferencia(form) || form.incluiDistribuicao || form.incluiArmazenagem || form.incluiOpPortuaria || form.incluiSpot;
   const operacaoFreteOk = !(
-    form.incluiTransferencia || form.incluiDistribuicao || form.incluiOpPortuaria || form.incluiSpot
+    usaFluxoTransferencia(form) || form.incluiDistribuicao || form.incluiOpPortuaria || form.incluiSpot
   ) || podeUsarTabelaFrete;
   /** Em rascunho ou após enviada: edita tudo. Situação Enviada só pelo e-mail. */
   const jaEnviada = Boolean(editingId) && form.status !== 'rascunho';
@@ -1473,7 +1501,7 @@ const ComercialPropostas: React.FC = () => {
                 <span className="reports-dropdown-item" onClick={handleEmailSelected}>
                   <span className="reports-dropdown-item-left">
                     <i className="bi bi-envelope" />
-                    Enviar e-mail
+                    Envio Cliente
                   </span>
                 </span>
               )}
@@ -1493,11 +1521,11 @@ const ComercialPropostas: React.FC = () => {
                   </span>
                 </span>
               )}
-              {selectedPropostas.length === 1 && (
-                <span className="reports-dropdown-item" onClick={handleHistoricoSelected}>
+              {selectedPropostas.length === 1 && selectedPropostas[0].status === 'aprovada' && (
+                <span className="reports-dropdown-item" onClick={handleRepasseSelected}>
                   <span className="reports-dropdown-item-left">
-                    <i className="bi bi-clock-history" />
-                    Histórico da situação
+                    <i className="bi bi-send-check" />
+                    Repasse Operacional
                   </span>
                 </span>
               )}
@@ -1661,7 +1689,9 @@ const ComercialPropostas: React.FC = () => {
                                       ? ' · Logística Retroportuária'
                                       : proposta.incluiSpot
                                         ? ' · SPOT'
-                                        : ''}
+                                        : proposta.incluiCargaFechada
+                                          ? ' · Carga Fechada'
+                                          : ''}
                               </span>
                             ) : null}
                           </span>
@@ -1857,6 +1887,7 @@ const ComercialPropostas: React.FC = () => {
                           incluiDistribuicao: keepDistribuicao,
                           incluiOpPortuaria: clienteId ? form.incluiOpPortuaria : false,
                           incluiSpot: clienteId ? form.incluiSpot : false,
+                          incluiCargaFechada: clienteId ? form.incluiCargaFechada : false,
                           incluiArmazenagem: clienteId ? form.incluiArmazenagem : false,
                           condicoes: [],
                           condicoesTransferencia: [],
@@ -1873,6 +1904,7 @@ const ComercialPropostas: React.FC = () => {
                             incluiArmazenagem: clienteId ? form.incluiArmazenagem : false,
                             incluiOpPortuaria: clienteId ? form.incluiOpPortuaria : false,
                             incluiSpot: clienteId ? form.incluiSpot : false,
+                            incluiCargaFechada: clienteId ? form.incluiCargaFechada : false,
                           }));
                         }
                       }}
@@ -1940,14 +1972,28 @@ const ComercialPropostas: React.FC = () => {
                         />
                         Spot
                       </label>
+                      <label className={!canEdit || (!form.incluiCargaFechada && !podeUsarTabelaFrete) ? 'is-disabled' : undefined}>
+                        <input
+                          type="radio"
+                          name="proposta-operacao"
+                          checked={form.incluiCargaFechada}
+                          disabled={!canEdit || (!form.incluiCargaFechada && !podeUsarTabelaFrete)}
+                          title={podeUsarTabelaFrete ? undefined : MENSAGEM_TABELA_FRETE}
+                          onChange={() => setOperacaoTransporte('carga_fechada')}
+                        />
+                        Carga Fechada
+                      </label>
                     </div>
                     {!podeUsarTabelaFrete ? (
                       <p className="proposta-modalidades-hint">{MENSAGEM_TABELA_FRETE}</p>
                     ) : null}
-                    {(form.incluiTransferencia || form.incluiDistribuicao || form.incluiOpPortuaria || form.incluiSpot) ? (
+                    {(usaFluxoTransferencia(form) || form.incluiDistribuicao || form.incluiOpPortuaria || form.incluiSpot) ? (
                       <PropostaCondicoesEspeciais
                         margensVeiculo={form.margensVeiculo}
                         veiculosTarifa={tabelaDistribuicaoCliente.tabela?.config?.veiculosTarifa}
+                        bandasVisiveis={form.incluiDistribuicao
+                          ? undefined
+                          : form.linhas.map((linha) => linha.veiculoKey || '').filter(Boolean)}
                         canEdit={canEdit}
                         onChange={(margens) => {
                           setForm((current) => ({ ...current, margensVeiculo: margens }));
@@ -2070,12 +2116,12 @@ const ComercialPropostas: React.FC = () => {
                   </IncludeField>
                 </div>
 
-                {(form.incluiTransferencia || form.incluiDistribuicao || form.incluiArmazenagem || form.incluiOpPortuaria || form.incluiSpot) && (
+                {(usaFluxoTransferencia(form) || form.incluiDistribuicao || form.incluiArmazenagem || form.incluiOpPortuaria || form.incluiSpot) && (
                   <section className="proposta-destinos">
-                    {form.incluiTransferencia ? (
+                    {usaFluxoTransferencia(form) ? (
                       <>
                         <PropostaTrechosOperacao
-                          titulo="Trechos — Transferência"
+                          titulo={form.incluiCargaFechada ? 'Trechos — Carga Fechada' : 'Trechos — Transferência'}
                           linhas={form.linhas.filter((linha) => {
                             const tipo = linha.modalidade || 'transferencia';
                             return tipo !== 'op_portuaria' && tipo !== 'spot';
@@ -2094,10 +2140,10 @@ const ComercialPropostas: React.FC = () => {
                           }))}
                         />
                         <PropostaGeneralidadesRevisao
-                          titulo="Generalidades — Transferência"
+                          titulo={form.incluiCargaFechada ? 'Generalidades — Carga Fechada' : 'Generalidades — Transferência'}
                           items={form.condicoesTransferencia}
                           canEdit={canEdit}
-                          emptyHint={form.clienteId ? 'Nenhuma generalidade de transferência para revisar.' : 'Selecione o cliente para revisar as generalidades de transferência.'}
+                          emptyHint={form.clienteId ? 'Nenhuma generalidade de frete para revisar.' : 'Selecione o cliente para revisar as generalidades de frete.'}
                           onChange={(items) => setForm((current) => ({ ...current, condicoesTransferencia: items }))}
                         />
                       </>
@@ -2210,6 +2256,14 @@ const ComercialPropostas: React.FC = () => {
           propostas={emailPropostas}
           clienteFor={clienteDaProposta}
           onClose={() => setEmailPropostas([])}
+        />
+      ) : null}
+
+      {repasseProposta ? (
+        <ComercialPropostaRepasseModal
+          proposta={repasseProposta}
+          cliente={clienteDaProposta(repasseProposta)}
+          onClose={() => setRepasseProposta(null)}
         />
       ) : null}
 

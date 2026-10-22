@@ -72,6 +72,13 @@ from .distancia_rota import RotaDistanciaError, buscar_cidades, buscar_enderecos
 from .homologacao import q_produto_com_impeditivo
 from .icms_uf import REGIOES_BR, UFS_BRASIL, aliquotas_por_uf_padrao, normalizar_aliquotas
 from .pagination import ClienteComercialPagination
+from .proposta_concorrencia import (
+    PropostaConflito,
+    exigir_sem_envio,
+    exigir_versao,
+    request_versoes,
+    reservar_envio,
+)
 from .proposta_draft import draft_payload, has_meaningful_draft, sanitize_draft_payload
 from .proposta_email_service import (
     read_proposta_pdf,
@@ -84,6 +91,7 @@ from .proposta_email_service import (
     send_aviso_reprogramacao,
     send_proposta_comercial_email,
     send_propostas_comerciais_email,
+    send_repasse_operacional,
     validar_envio_conjunto,
 )
 from .tabela_distribuicao import gerar_faixas_distribuicao, merge_config, preset_config_albaugh, preset_config_ccab, simular_cotacao_distribuicao
@@ -127,6 +135,7 @@ _PROPOSTA_OPERACAO_FLAG = {
     'distribuicao': 'inclui_distribuicao',
     'portuaria': 'inclui_op_portuaria',
     'spot': 'inclui_spot',
+    'carga_fechada': 'inclui_carga_fechada',
 }
 
 
@@ -739,13 +748,23 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         denied = _funcao_required_response(request, 'gerenciar-propostas', _GERENCIAR_PROPOSTAS_DETAIL)
         if denied:
             return denied
-        return super().create(request, *args, **kwargs)
+        with transaction.atomic():
+            return super().create(request, *args, **kwargs)
 
     def update(self, request, *args, **kwargs):
         denied = _funcao_required_response(request, 'gerenciar-propostas', _GERENCIAR_PROPOSTAS_DETAIL)
         if denied:
             return denied
-        return super().update(request, *args, **kwargs)
+        # Trava a linha até o fim do save: trechos, históricos e situação não se misturam entre usuários.
+        with transaction.atomic():
+            atual = PropostaComercial.objects.select_for_update().filter(pk=kwargs.get('pk')).first()
+            if atual is not None:
+                try:
+                    exigir_sem_envio(atual)
+                    exigir_versao(atual, request.data.get('dataAtualizacao'))
+                except PropostaConflito as exc:
+                    return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
+            return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         denied = _funcao_required_response(request, 'gerenciar-propostas', _GERENCIAR_PROPOSTAS_DETAIL)
@@ -908,9 +927,12 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 cc_emails=request_email_list(request.data, 'cc', 'emailCopia'),
                 pdf_bytes=read_proposta_pdf(request),
                 revisoes_pdf=request_revisoes_pdf(request.data),
+                versoes=request_versoes(request.data),
                 observacao=request_observacao(request.data),
                 confirmacao_leitura=request_confirmacao_leitura(request.data),
             )
+        except PropostaConflito as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
@@ -930,6 +952,33 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             'to': resultado['to'],
             'cc': resultado['cc'],
         })
+
+    @action(detail=True, methods=['post'], url_path='enviar-repasse')
+    def enviar_repasse(self, request, pk=None):
+        proposta = self.get_object()
+        try:
+            resultado = send_repasse_operacional(
+                request.user,
+                proposta,
+                to_emails=request_email_list(request.data, 'to'),
+                cc_emails=request_email_list(request.data, 'cc'),
+                pdf_bytes=read_proposta_pdf(request),
+                observacao=request_observacao(request.data),
+                versao=str(request.data.get('versao') or ''),
+            )
+        except PropostaConflito as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response(
+                {'detail': f'Falha ao enviar o repasse: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        mensagem = f'Repasse Operacional da proposta {resultado["numero"]} enviado para {", ".join(resultado["to"])}.'
+        record_audit(request.user, 'comercial.proposta.repasse_operacional', mensagem)
+        return Response({'success': True, 'message': mensagem, 'to': resultado['to'], 'cc': resultado['cc']})
 
     @action(detail=False, methods=['post'], url_path='enviar-email-lote')
     def enviar_email_lote(self, request):
@@ -955,9 +1004,12 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 to_emails=request_email_list(request.data, 'to', 'email'),
                 cc_emails=request_email_list(request.data, 'cc', 'emailCopia'),
                 revisoes_pdf=request_revisoes_pdf(request.data),
+                versoes=request_versoes(request.data),
                 observacao=request_observacao(request.data),
                 confirmacao_leitura=request_confirmacao_leitura(request.data),
             )
+        except PropostaConflito as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
@@ -1012,13 +1064,54 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 )
             dias = validade_texto_em_dias(novo_prazo)
 
+        enviar_aviso = _flag_verdadeiro(request.data, 'enviarAviso')
+        with transaction.atomic():
+            resposta, propostas, planos = self._reprogramar_travado(request, ids, dias, data_manual, hoje, enviar_aviso)
+        if resposta is not None:
+            return resposta
+
+        numeros = ', '.join(item.numero_identificacao or str(item.pk) for item in propostas)
+        datas = {nova for _, nova in planos}
+        data_unica = next(iter(datas)) if len(datas) == 1 else None
+        if data_unica:
+            resumo_auditoria = f'Vencimento prorrogado para {data_unica.strftime("%d/%m/%Y")} nas propostas {numeros}.'
+        else:
+            resumo_auditoria = f'Vencimento prorrogado nas propostas {numeros}.'
+        record_audit(
+            request.user,
+            'comercial.proposta.validade_reprogramada',
+            resumo_auditoria,
+        )
+
+        aviso = None
+        if enviar_aviso:
+            enviadas = [item for item in propostas if item.status != STATUS_PROPOSTA_RASCUNHO]
+            if enviadas:
+                aviso = _enviar_aviso_reprogramacao(request, enviadas, prazo='')
+
+        return Response({
+            'dataVencimento': data_unica.isoformat() if data_unica else '',
+            'aviso': aviso,
+            'propostas': self.get_serializer(propostas, many=True).data,
+        })
+
+    def _reprogramar_travado(self, request, ids, dias, data_manual, hoje, enviar_aviso):
+        """Lê, valida e grava as propostas com as linhas travadas (dentro de transaction.atomic)."""
+        list(PropostaComercial.objects.select_for_update().filter(pk__in=ids).values_list('pk', flat=True))
         queryset = self.filter_queryset(self.get_queryset())
         encontradas = {str(item.pk): item for item in queryset.filter(pk__in=ids).select_related('cliente')}
         propostas = []
         for item_id in ids:
             proposta = encontradas.get(item_id)
             if not proposta:
-                return Response({'detail': 'Uma das propostas selecionadas não foi encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+                return (
+                    Response({'detail': 'Uma das propostas selecionadas não foi encontrada.'}, status=status.HTTP_404_NOT_FOUND),
+                    [], [],
+                )
+            try:
+                exigir_sem_envio(proposta)
+            except PropostaConflito as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT), [], []
             propostas.append(proposta)
 
         planos = []
@@ -1026,10 +1119,9 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             try:
                 nova_data = prorrogar_vencimento(proposta, dias=dias, data=data_manual, hoje=hoje)
             except ValueError as exc:
-                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST), [], []
             planos.append((proposta, nova_data))
 
-        enviar_aviso = _flag_verdadeiro(request.data, 'enviarAviso')
         for proposta, nova_data in planos:
             situacao_antes = proposta.situacao()
             vencimento_antes = proposta.data_vencimento()
@@ -1057,31 +1149,7 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 'vencimento_reprogramado',
                 'historico_situacoes', 'aviso_reprogramacao_pendente', 'data_atualizacao',
             ])
-
-        numeros = ', '.join(item.numero_identificacao or str(item.pk) for item in propostas)
-        datas = {nova for _, nova in planos}
-        data_unica = next(iter(datas)) if len(datas) == 1 else None
-        if data_unica:
-            resumo_auditoria = f'Vencimento prorrogado para {data_unica.strftime("%d/%m/%Y")} nas propostas {numeros}.'
-        else:
-            resumo_auditoria = f'Vencimento prorrogado nas propostas {numeros}.'
-        record_audit(
-            request.user,
-            'comercial.proposta.validade_reprogramada',
-            resumo_auditoria,
-        )
-
-        aviso = None
-        if enviar_aviso:
-            enviadas = [item for item in propostas if item.status != STATUS_PROPOSTA_RASCUNHO]
-            if enviadas:
-                aviso = _enviar_aviso_reprogramacao(request, enviadas, prazo='')
-
-        return Response({
-            'dataVencimento': data_unica.isoformat() if data_unica else '',
-            'aviso': aviso,
-            'propostas': self.get_serializer(propostas, many=True).data,
-        })
+        return None, propostas, planos
 
     @action(detail=False, methods=['post'], url_path='enviar-aviso-reprogramacao')
     def enviar_aviso_reprogramacao(self, request):
@@ -1106,7 +1174,7 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             propostas.append(proposta)
         prazos = {(item.validade or '').strip() for item in propostas}
         prazo = next(iter(prazos)) if len(prazos) == 1 else ''
-        aviso = _enviar_aviso_reprogramacao(request, propostas, prazo=prazo)
+        aviso = _enviar_aviso_reprogramacao(request, propostas, prazo=prazo, exigir_pendente=True)
         return Response({
             'aviso': aviso,
             'propostas': self.get_serializer(propostas, many=True).data,
@@ -1118,31 +1186,44 @@ class PropostaComercialViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return Response({'itens': proposta.historico_situacoes_exibicao()})
 
 
-def _enviar_aviso_reprogramacao(request, propostas, *, prazo: str):
+def _enviar_aviso_reprogramacao(request, propostas, *, prazo: str, exigir_pendente: bool = False):
     try:
-        pdfs = read_proposta_pdfs(request)
-        aviso = send_aviso_reprogramacao(request.user, propostas, prazo=prazo, pdfs=pdfs)
-    except ValueError as exc:
-        for proposta in propostas:
-            if proposta.status != STATUS_PROPOSTA_RASCUNHO:
-                proposta.aviso_reprogramacao_pendente = True
-                proposta.save(update_fields=['aviso_reprogramacao_pendente', 'data_atualizacao'])
+        with reservar_envio(propostas):
+            if exigir_pendente and any(not item.aviso_reprogramacao_pendente for item in propostas):
+                # Outro usuário enviou o aviso enquanto esta tela estava aberta.
+                return {
+                    'enviados': 0,
+                    'falhas': ['O aviso destas propostas já foi enviado por outro usuário. Atualize a lista.'],
+                    'idsEnviados': [],
+                }
+            pdfs = read_proposta_pdfs(request)
+            aviso = send_aviso_reprogramacao(request.user, propostas, prazo=prazo, pdfs=pdfs)
+            enviados = {str(item) for item in aviso.get('idsEnviados') or []}
+            with transaction.atomic():
+                for item in propostas:
+                    proposta = PropostaComercial.objects.select_for_update().get(pk=item.pk)
+                    if str(proposta.pk) in enviados:
+                        proposta.aviso_reprogramacao_pendente = False
+                        proposta.registrar_situacao(
+                            STATUS_PROPOSTA_ENVIADA,
+                            request.user,
+                            'Aviso de reprogramação enviado ao cliente.',
+                        )
+                        proposta.save(update_fields=[
+                            'aviso_reprogramacao_pendente', 'historico_situacoes', 'data_atualizacao',
+                        ])
+                    elif proposta.status != STATUS_PROPOSTA_RASCUNHO:
+                        proposta.aviso_reprogramacao_pendente = True
+                        proposta.save(update_fields=['aviso_reprogramacao_pendente', 'data_atualizacao'])
+    except PropostaConflito as exc:
         return {'enviados': 0, 'falhas': [str(exc)], 'idsEnviados': []}
-    enviados = {str(item) for item in aviso.get('idsEnviados') or []}
-    for proposta in propostas:
-        if str(proposta.pk) in enviados:
-            proposta.aviso_reprogramacao_pendente = False
-            proposta.registrar_situacao(
-                STATUS_PROPOSTA_ENVIADA,
-                request.user,
-                'Aviso de reprogramação enviado ao cliente.',
-            )
-            proposta.save(update_fields=[
-                'aviso_reprogramacao_pendente', 'historico_situacoes', 'data_atualizacao',
-            ])
-        elif proposta.status != STATUS_PROPOSTA_RASCUNHO:
-            proposta.aviso_reprogramacao_pendente = True
-            proposta.save(update_fields=['aviso_reprogramacao_pendente', 'data_atualizacao'])
+    except ValueError as exc:
+        PropostaComercial.objects.filter(
+            pk__in=[item.pk for item in propostas],
+        ).exclude(status=STATUS_PROPOSTA_RASCUNHO).update(aviso_reprogramacao_pendente=True)
+        return {'enviados': 0, 'falhas': [str(exc)], 'idsEnviados': []}
+    for item in propostas:
+        item.refresh_from_db()
     record_audit(
         request.user,
         'comercial.proposta.aviso_reprogramacao',
@@ -1187,14 +1268,7 @@ class TabelaFreteViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             qs = qs.filter(status=status)
         vigente = (self.request.query_params.get('vigente') or '').strip().lower()
         if vigente in ('1', 'true', 'yes'):
-            from django.utils import timezone
-
-            hoje = timezone.localdate()
-            qs = qs.filter(status=STATUS_TABELA_PUBLICADA).filter(
-                Q(vigencia_inicio__isnull=True) | Q(vigencia_inicio__lte=hoje)
-            ).filter(
-                Q(vigencia_fim__isnull=True) | Q(vigencia_fim__gte=hoje)
-            )
+            qs = qs.filter(status=STATUS_TABELA_PUBLICADA)
         if getattr(self, 'action', None) == 'list':
             qs = _queryset_ultima_revisao_listagem(qs)
         qs = qs.annotate(linhas_count=Count('linhas', distinct=True)).order_by('-data_atualizacao', 'nome')
@@ -1225,15 +1299,6 @@ class TabelaFreteViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if denied:
             return denied
         return super().destroy(request, *args, **kwargs)
-
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        status_anterior = instance.status
-        instance.sincronizar_status_vigencia()
-        if instance.status != status_anterior:
-            instance.save(update_fields=['status'])
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
 
     def perform_create(self, serializer):
         tabela = serializer.save(criado_por=self.request.user, atualizado_por=self.request.user)
