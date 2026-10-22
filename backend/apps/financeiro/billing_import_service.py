@@ -1,6 +1,6 @@
 import re
 import unicodedata
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from html import unescape
 from io import BytesIO
@@ -133,7 +133,12 @@ def _resolve_billing_columns(headers: list[str]) -> dict[str, int | None]:
         return None
 
     return {
-        'transportadora': find_first(lambda h: 'transportadora' in h),
+        # O ERP exporta também "id_Transportadora" (código numérico), que não identifica a filial.
+        'transportadora': find_first(
+            lambda h: h == 'transportadora',
+            lambda h: 'transportadora' in h and not h.startswith('id'),
+            lambda h: 'transportadora' in h,
+        ),
         'valor_frete': find_first(
             lambda h: 'valor' in h and 'frete' in h and 'peso' not in h,
         ),
@@ -189,6 +194,13 @@ def _accumulate_billing_row(
     bucket['count'] += 1
 
 
+def _tabular_cell_text(cell) -> str:
+    # Planilhas editadas no Excel trazem Coleta/Emissão como data real, não texto.
+    if isinstance(cell, (datetime, date)):
+        return cell.strftime('%d/%m/%Y')
+    return str(cell).strip() if cell is not None else ''
+
+
 def _parse_billing_tabular_rows(headers: list[str], rows: list[list]) -> dict[str, dict[str, dict[str, Decimal | int]]]:
     columns = _resolve_billing_columns(headers)
     required = ('transportadora', 'valor_frete')
@@ -208,7 +220,7 @@ def _parse_billing_tabular_rows(headers: list[str], rows: list[list]) -> dict[st
     for row in rows:
         if not row:
             continue
-        cells = [str(cell).strip() if cell is not None else '' for cell in row]
+        cells = [_tabular_cell_text(cell) for cell in row]
         if len(cells) <= max(v for v in columns.values() if v is not None):
             continue
         _accumulate_billing_row(

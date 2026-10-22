@@ -1,5 +1,6 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from io import BytesIO
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -761,6 +762,24 @@ class BillingImportBranchTests(TestCase):
         armazem = BillingRecord.objects.get(reference_date=date(2026, 6, 10), branch='Armazém')
         self.assertEqual(barueri.value, Decimal('1000.50'))
         self.assertEqual(armazem.value, Decimal('500.00'))
+
+    def test_xlsx_editado_no_excel_com_id_transportadora_e_datas_reais(self):
+        import openpyxl
+
+        from apps.financeiro.billing_import_service import parse_billing_file
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['id_Transportadora', 'Coleta', 'Transportadora', 'Valor Frete', 'Usuário cadastro'])
+        ws.append([13231, datetime(2026, 9, 18), '09 - TRANSCAMILA - BARUERI', 1000.5, 'OPERADOR IBIPORA'])
+        ws.append([19395, datetime(2026, 9, 18), '10 - TRANSCAMILA - RONDONOPOLIS', 200, 'OPERADOR'])
+        buffer = BytesIO()
+        wb.save(buffer)
+
+        parsed = parse_billing_file(buffer.getvalue(), 'faturamento.xlsx')
+        self.assertEqual(parsed['18/09/2026']['Barueri']['value'], Decimal('1000.5'))
+        self.assertEqual(parsed['18/09/2026']['Armazém']['count'], 1)
+        self.assertNotIn('Ibiporã', parsed['18/09/2026'])
 
     def test_coleta_date_takes_priority_over_emissao_cte(self):
         from apps.financeiro.billing_import_service import parse_billing_file
