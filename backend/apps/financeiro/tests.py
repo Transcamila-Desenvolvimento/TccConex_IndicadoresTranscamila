@@ -781,19 +781,33 @@ class BillingImportBranchTests(TestCase):
         self.assertEqual(parsed['18/09/2026']['Armazém']['count'], 1)
         self.assertNotIn('Ibiporã', parsed['18/09/2026'])
 
-    def test_coleta_date_takes_priority_over_emissao_cte(self):
+    def test_emissao_cte_takes_priority_over_coleta(self):
         from apps.financeiro.billing_import_service import parse_billing_file
 
         html = (
             '<html><table><tr>'
             '<th>Transportadora</th><th>Valor Frete</th><th>Coleta</th><th>Emissão CT-e</th>'
             '</tr><tr>'
-            '<td>09 - TRANSCAMILA - BARUERI</td><td>100,00</td><td>07/07/2026</td><td>08/07/2026</td>'
+            '<td>09 - TRANSCAMILA - BARUERI</td><td>100,00</td><td>31/07/2026</td><td>03/08/2026</td>'
             '</tr></table></html>'
         )
         parsed = parse_billing_file(html.encode('latin-1'), 'relatorio.xls')
-        self.assertEqual(parsed['07/07/2026']['Barueri']['value'], Decimal('100'))
-        self.assertNotIn('08/07/2026', parsed)
+        self.assertEqual(parsed['03/08/2026']['Barueri']['value'], Decimal('100'))
+        self.assertNotIn('31/07/2026', parsed)
+
+    def test_xml_emissao_cte_takes_priority_over_coleta(self):
+        from apps.financeiro.billing_import_service import parse_billing_xml
+
+        parsed = parse_billing_xml(
+            '<Row>'
+            '<Coleta>31/07/2026</Coleta>'
+            '<Emissão_x0020_CT_x002d_e>03/08/2026</Emissão_x0020_CT_x002d_e>'
+            '<Transportadora>09 - TRANSCAMILA - BARUERI</Transportadora>'
+            '<Valor_x0020_Frete>100,00</Valor_x0020_Frete>'
+            '</Row>'
+        )
+        self.assertEqual(parsed['03/08/2026']['Barueri']['count'], 1)
+        self.assertNotIn('31/07/2026', parsed)
 
     def test_import_teste_xls_matches_erp_coleta_totals_for_08_07(self):
         from pathlib import Path

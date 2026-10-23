@@ -162,8 +162,8 @@ def _resolve_billing_columns(headers: list[str]) -> dict[str, int | None]:
 
 
 def _resolve_row_date(cells: list[str], columns: dict[str, int | None]) -> str:
-    # Faturamento diário segue a data de Coleta (como no ERP); Emissão CT-e é fallback.
-    for key in ('data_coleta', 'emissao', 'data_cadastro'):
+    # Faturamento diário segue a Emissão CT-e (o relatório do ERP é fechado por ela); Coleta é fallback.
+    for key in ('emissao', 'data_coleta', 'data_cadastro'):
         index = columns.get(key)
         if index is None or index >= len(cells):
             continue
@@ -309,7 +309,7 @@ def parse_billing_xml(xml_text: str) -> dict[str, dict[str, dict[str, Decimal | 
             or re.search(r'<Emiss.*_x002d_e>(.*?)</Emiss.*_x002d_e>', row_content, re.IGNORECASE)
         )
         emissao_str = date_match.group(1).strip() if date_match else ''
-        date_str = coleta_str or emissao_str
+        date_str = emissao_str or coleta_str
         if not date_str:
             continue
 
