@@ -1,5 +1,7 @@
 /** Voz do Camilo no navegador: captura da pergunta e leitura da resposta, em português. */
 
+import { apiService } from '../../services/apiService';
+
 interface AlternativaVoz {
   transcript: string;
 }
@@ -60,10 +62,18 @@ export function prepararSintese(): void {
 
 let leituraAtual = 0;
 const emFala: SpeechSynthesisUtterance[] = [];
+let audioAtual: HTMLAudioElement | null = null;
 
 export function pararFala(): void {
   leituraAtual += 1;
   emFala.length = 0;
+  if (audioAtual) {
+    audioAtual.pause();
+    const endereco = audioAtual.src;
+    audioAtual.src = '';
+    audioAtual = null;
+    if (endereco.startsWith('blob:')) URL.revokeObjectURL(endereco);
+  }
   if (!window.speechSynthesis) return;
   if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
     window.speechSynthesis.cancel();
@@ -100,95 +110,157 @@ function fatiar(texto: string): string[] {
   return partes;
 }
 
+function notaDaVoz(voz: SpeechSynthesisVoice): number {
+  const nome = voz.name.toLowerCase();
+  const idioma = voz.lang.toLowerCase();
+  if (idioma !== 'pt-br' && !idioma.startsWith('pt')) return -1;
+  let nota = idioma === 'pt-br' ? 40 : 16;
+  if (/natural|neural|wavenet|premium/.test(nome)) nota += 36;
+  if (nome.includes('google')) nota += 24;
+  if (/francisca|antonio|thalita|lelo/.test(nome)) nota += 12;
+  if (/espeak|compact/.test(nome)) nota -= 30;
+  return nota;
+}
+
 function vozPortugues(): SpeechSynthesisVoice | null {
   const lista = window.speechSynthesis.getVoices();
-  return lista.find((voz) => voz.lang.toLowerCase() === 'pt-br')
-    ?? lista.find((voz) => voz.lang.toLowerCase().startsWith('pt'))
-    ?? null;
+  let melhor: SpeechSynthesisVoice | null = null;
+  let notaMelhor = -1;
+  lista.forEach((voz) => {
+    const nota = notaDaVoz(voz);
+    if (nota > notaMelhor) {
+      notaMelhor = nota;
+      melhor = voz;
+    }
+  });
+  return melhor;
+}
+
+function textoFalado(markdown: string): string {
+  const limpo = textoParaFala(markdown);
+  if (limpo.length <= 500) return limpo;
+  const corte = limpo.slice(0, 500);
+  const ponto = Math.max(corte.lastIndexOf('.'), corte.lastIndexOf('!'), corte.lastIndexOf('?'));
+  return (ponto > 80 ? corte.slice(0, ponto + 1) : corte).trim();
+}
+
+function tocarAudio(blob: Blob, token: number, eventos: { onStart?: () => void; onEnd?: () => void }): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (token !== leituraAtual) {
+      resolve();
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audioAtual = audio;
+    let terminou = false;
+    const fechar = (erro?: unknown) => {
+      if (terminou) return;
+      terminou = true;
+      if (audioAtual === audio) audioAtual = null;
+      URL.revokeObjectURL(url);
+      if (erro) reject(erro);
+      else resolve();
+    };
+    audio.onplay = () => {
+      if (token !== leituraAtual) {
+        audio.pause();
+        fechar();
+        return;
+      }
+      eventos.onStart?.();
+    };
+    audio.onended = () => {
+      fechar();
+      if (token === leituraAtual) eventos.onEnd?.();
+    };
+    audio.onerror = () => fechar(new Error('audio'));
+    audio.play().catch((erro) => fechar(erro));
+  });
+}
+
+function falarNoNavegador(
+  texto: string,
+  token: number,
+  eventos: { onStart?: () => void; onEnd?: () => void },
+): void {
+  if (!sinteseVozDisponivel() || token !== leituraAtual) {
+    if (token === leituraAtual) eventos.onEnd?.();
+    return;
+  }
+  const partes = fatiar(texto);
+  if (!partes.length) {
+    eventos.onEnd?.();
+    return;
+  }
+  window.speechSynthesis.resume();
+  const voz = vozPortugues();
+  let indice = 0;
+  let tentativas = 0;
+  let encerrou = false;
+  const encerrar = () => {
+    if (encerrou || token !== leituraAtual) return;
+    encerrou = true;
+    emFala.length = 0;
+    eventos.onEnd?.();
+  };
+  const proxima = () => {
+    if (token !== leituraAtual) return;
+    if (indice >= partes.length) {
+      encerrar();
+      return;
+    }
+    const fala = new SpeechSynthesisUtterance(partes[indice]);
+    fala.lang = 'pt-BR';
+    fala.rate = 0.94;
+    fala.pitch = 1;
+    fala.volume = 1;
+    if (voz) fala.voice = voz;
+    fala.onend = () => {
+      if (token !== leituraAtual) return;
+      indice += 1;
+      tentativas = 0;
+      proxima();
+    };
+    fala.onerror = () => {
+      if (token !== leituraAtual) return;
+      if (tentativas < 1) {
+        tentativas += 1;
+        window.setTimeout(() => {
+          window.speechSynthesis.resume();
+          proxima();
+        }, 150);
+        return;
+      }
+      indice += 1;
+      tentativas = 0;
+      proxima();
+    };
+    emFala.push(fala);
+    window.speechSynthesis.resume();
+    window.speechSynthesis.speak(fala);
+  };
+  eventos.onStart?.();
+  proxima();
 }
 
 export function falarTexto(
   markdown: string,
   eventos: { onStart?: () => void; onEnd?: () => void } = {},
 ): void {
-  if (!sinteseVozDisponivel()) {
-    eventos.onEnd?.();
-    return;
-  }
   pararFala();
   const token = leituraAtual;
-  const partes = fatiar(textoParaFala(markdown));
-  if (!partes.length) {
+  const texto = textoFalado(markdown);
+  if (!texto) {
     eventos.onEnd?.();
     return;
   }
-
-  let comecou = false;
-  const comecar = () => {
-    if (comecou || token !== leituraAtual) return;
-    comecou = true;
-    window.speechSynthesis.resume();
-    const voz = vozPortugues();
-    let indice = 0;
-    let tentativas = 0;
-    let encerrou = false;
-    const encerrar = () => {
-      if (encerrou || token !== leituraAtual) return;
-      encerrou = true;
-      emFala.length = 0;
-      eventos.onEnd?.();
-    };
-    const proxima = () => {
+  apiService.sintetizarVozCamilo(texto)
+    .then((blob) => tocarAudio(blob, token, eventos))
+    .catch(() => {
       if (token !== leituraAtual) return;
-      if (indice >= partes.length) {
-        encerrar();
-        return;
-      }
-      const fala = new SpeechSynthesisUtterance(partes[indice]);
-      fala.lang = 'pt-BR';
-      fala.rate = 1;
-      fala.volume = 1;
-      if (voz) fala.voice = voz;
-      fala.onend = () => {
-        if (token !== leituraAtual) return;
-        indice += 1;
-        tentativas = 0;
-        proxima();
-      };
-      fala.onerror = () => {
-        if (token !== leituraAtual) return;
-        if (tentativas < 1) {
-          tentativas += 1;
-          window.setTimeout(() => {
-            window.speechSynthesis.resume();
-            proxima();
-          }, 150);
-          return;
-        }
-        indice += 1;
-        tentativas = 0;
-        proxima();
-      };
-      emFala.push(fala);
-      window.speechSynthesis.resume();
-      window.speechSynthesis.speak(fala);
-    };
-    eventos.onStart?.();
-    proxima();
-  };
-
-  const agendar = () => window.setTimeout(comecar, 150);
-  if (window.speechSynthesis.getVoices().length > 0) {
-    agendar();
-    return;
-  }
-  const seguir = () => {
-    window.speechSynthesis.removeEventListener('voiceschanged', seguir);
-    agendar();
-  };
-  window.speechSynthesis.addEventListener('voiceschanged', seguir);
-  window.speechSynthesis.getVoices();
-  window.setTimeout(seguir, 500);
+      falarNoNavegador(texto, token, eventos);
+    });
 }
 
 export interface SessaoCaptura {
@@ -271,6 +343,8 @@ function apararRepeticao(texto: string): string {
 export function iniciarCaptura(eventos: {
   onTexto: (confirmado: string, parcial: string) => void;
   onErro: (mensagem: string) => void;
+  /** Na conversa ao vivo, a pausa na fala envia sozinha. */
+  onSilencio?: (texto: string) => void;
 }): SessaoCaptura | null {
   const Construtor = construtorReconhecimento();
   if (!Construtor) {
@@ -290,12 +364,18 @@ export function iniciarCaptura(eventos: {
   let geracao = 0;
   let reinicio: number | null = null;
   let vigia: number | null = null;
+  let silencio: number | null = null;
   let ultimoSinal = Date.now();
+  let ultimoTextoEm = Date.now();
 
   const textoAtual = () => apararRepeticao(juntar(acumulado, [sessaoFinal, parcialAtual].filter(Boolean).join(' ')));
   const publicar = () => eventos.onTexto(apararRepeticao(juntar(acumulado, sessaoFinal)), parcialAtual);
   const marcar = () => {
     ultimoSinal = Date.now();
+  };
+  const marcarFala = () => {
+    ultimoSinal = Date.now();
+    ultimoTextoEm = Date.now();
   };
   const limparReinicio = () => {
     if (reinicio === null) return;
@@ -331,6 +411,10 @@ export function iniciarCaptura(eventos: {
       window.clearInterval(vigia);
       vigia = null;
     }
+    if (silencio !== null) {
+      window.clearInterval(silencio);
+      silencio = null;
+    }
     document.removeEventListener('visibilitychange', aoVoltar);
     window.removeEventListener('online', aoVoltar);
     window.removeEventListener('pageshow', aoVoltar);
@@ -364,7 +448,8 @@ export function iniciarCaptura(eventos: {
     if (minha !== geracao || !ativo) return;
     sessaoFinal = finais;
     parcialAtual = parcial;
-    marcar();
+    if (`${finais} ${parcial}`.trim()) marcarFala();
+    else marcar();
     publicar();
   };
   reconhecimento.onerror = (event) => {
@@ -413,6 +498,17 @@ export function iniciarCaptura(eventos: {
   document.addEventListener('visibilitychange', aoVoltar);
   window.addEventListener('online', aoVoltar);
   window.addEventListener('pageshow', aoVoltar);
+
+  if (eventos.onSilencio) {
+    let avisou = false;
+    silencio = window.setInterval(() => {
+      if (!ativo || avisou) return;
+      const texto = textoAtual().trim();
+      if (texto.length < 8 || Date.now() - ultimoTextoEm < 1400) return;
+      avisou = true;
+      eventos.onSilencio?.(texto);
+    }, 300);
+  }
 
   try {
     prepararSintese();

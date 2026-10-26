@@ -54,6 +54,7 @@ interface ChatThread {
   agentName?: string;
   contextoUsado?: number;
   contextoLimite?: number;
+  modo?: 'chat' | 'transcricao';
 }
 
 function newId() {
@@ -67,6 +68,7 @@ function isThread(value: unknown): value is ChatThread {
   if (thread.agentName != null && typeof thread.agentName !== 'string') return false;
   if (thread.contextoUsado != null && typeof thread.contextoUsado !== 'number') return false;
   if (thread.contextoLimite != null && typeof thread.contextoLimite !== 'number') return false;
+  if (thread.modo != null && thread.modo !== 'chat' && thread.modo !== 'transcricao') return false;
   return typeof thread.id === 'string'
     && typeof thread.title === 'string'
     && typeof thread.updatedAt === 'number'
@@ -115,6 +117,7 @@ function rememberThread(
   agent?: { id: string; nome: string },
   titulo?: string,
   contexto?: { usado: number; limite: number },
+  modo?: 'chat' | 'transcricao',
 ): ChatThread[] {
   const now = Date.now();
   const existing = current.find((thread) => thread.id === threadId);
@@ -133,6 +136,7 @@ function rememberThread(
       title: tituloLimpo || threadTitle(message.text),
       messages: [message],
       updatedAt: now,
+      modo: modo ?? 'chat',
       ...(agent ? { agentId: agent.id, agentName: agent.nome } : {}),
     };
   return [next, ...current.filter((thread) => thread.id !== threadId)];
@@ -174,7 +178,7 @@ const AgenteCamiloChat: React.FC = () => {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [panel, setPanel] = useState<'chat' | 'agentes'>('chat');
+  const [panel, setPanel] = useState<'chat' | 'transcricao' | 'agentes' | 'voz'>('chat');
   const [ataEmail, setAtaEmail] = useState<CamiloAta | null>(null);
   const [formMode, setFormMode] = useState<'create' | string | null>(null);
   const [agentName, setAgentName] = useState('');
@@ -205,6 +209,11 @@ const AgenteCamiloChat: React.FC = () => {
   const veioDaVoz = useRef(false);
   const sendRef = useRef<(texto: string, falarResposta?: boolean) => void>(() => {});
   const pendingRef = useRef<string | null>(null);
+  const panelRef = useRef(panel);
+  const falandoRef = useRef(false);
+  const ouvirConversaRef = useRef<() => void>(() => {});
+  panelRef.current = panel;
+  falandoRef.current = falando;
 
   const active = useMemo(
     () => threads.find((thread) => thread.id === activeId) ?? null,
@@ -263,7 +272,7 @@ const AgenteCamiloChat: React.FC = () => {
     capturaRef.current = null;
     setOuvindo(false);
     setPickerOpen(false);
-    setPanel('chat');
+    setPanel((atual) => (atual === 'voz' || atual === 'transcricao' ? atual : 'chat'));
     setActiveId(null);
     setDraftAgentId(agent?.id ?? null);
     inputRef.current?.focus();
@@ -284,6 +293,21 @@ const AgenteCamiloChat: React.FC = () => {
     inputRef.current?.focus();
   };
 
+  const abrirTranscricao = () => {
+    pararFala();
+    setFalando(false);
+    capturaRef.current?.cancelar();
+    capturaRef.current = null;
+    setOuvindo(false);
+    setPickerOpen(false);
+    setMenuAberto(false);
+    setPanel('transcricao');
+    setDraftAgentId(null);
+    setActiveId(null);
+    setDraft('');
+    inputRef.current?.focus();
+  };
+
   const openThread = (thread: ChatThread) => {
     pararFala();
     setFalando(false);
@@ -291,7 +315,7 @@ const AgenteCamiloChat: React.FC = () => {
     capturaRef.current = null;
     setOuvindo(false);
     setMenuAberto(false);
-    setPanel('chat');
+    setPanel(thread.modo === 'transcricao' ? 'transcricao' : 'chat');
     setDraftAgentId(null);
     setActiveId(thread.id);
   };
@@ -370,9 +394,11 @@ const AgenteCamiloChat: React.FC = () => {
     setVozAviso('');
 
     const speakingAgent = activeAgent;
-    const continua = speakingAgent
+    const modoAtual = panel === 'transcricao' ? 'transcricao' : 'chat';
+    const mesmoModo = (active?.modo ?? 'chat') === modoAtual;
+    const continua = mesmoModo && (speakingAgent
       ? active?.agentId === speakingAgent.id
-      : Boolean(active && !active.agentId);
+      : Boolean(active && !active.agentId));
     const threadId = continua && active ? active.id : (speakingAgent ? newId() : (activeId ?? newId()));
     const anteriores = continua && active ? active.messages : [];
     const historico = anteriores.slice(-24).map((message) => ({
@@ -390,9 +416,20 @@ const AgenteCamiloChat: React.FC = () => {
       setThreads((current) => rememberThread(current, threadId, reply, undefined, titulo, contexto));
       setPendingId((current) => (current === threadId ? null : current));
       if (deveFalar) {
+        falandoRef.current = true;
+        setFalando(true);
         falarTexto(texto, {
-          onStart: () => setFalando(true),
-          onEnd: () => setFalando(false),
+          onStart: () => {
+            falandoRef.current = true;
+            setFalando(true);
+          },
+          onEnd: () => {
+            falandoRef.current = false;
+            setFalando(false);
+            if (panelRef.current === 'voz') {
+              window.setTimeout(() => ouvirConversaRef.current(), 450);
+            }
+          },
         });
       }
     };
@@ -407,11 +444,15 @@ const AgenteCamiloChat: React.FC = () => {
       threadId,
       userMessage,
       speakingAgent ? { id: speakingAgent.id, nome: speakingAgent.nome } : undefined,
+      undefined,
+      undefined,
+      modoAtual,
     ));
     setActiveId(threadId);
     setDraftAgentId(null);
     setDraft('');
     setPendingId(threadId);
+    pendingRef.current = threadId;
 
     if (speakingAgent) {
       consultarAgent.mutate(
@@ -494,6 +535,63 @@ const AgenteCamiloChat: React.FC = () => {
     setOuvindo(true);
   };
 
+  const ouvirConversa = () => {
+    if (panelRef.current !== 'voz' || pendingRef.current || falandoRef.current || capturaRef.current) return;
+    veioDaVoz.current = true;
+    const sessao = iniciarCaptura({
+      onTexto: (confirmado, parcial) => {
+        setDraft([confirmado, parcial].filter(Boolean).join(' '));
+      },
+      onSilencio: (texto) => {
+        const dito = (capturaRef.current?.parar() || texto).trim();
+        capturaRef.current = null;
+        setOuvindo(false);
+        setDraft('');
+        if (panelRef.current !== 'voz') return;
+        if (dito.length < 8 || pendingRef.current || falandoRef.current) {
+          window.setTimeout(() => ouvirConversaRef.current(), 400);
+          return;
+        }
+        sendRef.current(dito, true);
+      },
+      onErro: (mensagem) => {
+        capturaRef.current = null;
+        setOuvindo(false);
+        setVozAviso(mensagem);
+      },
+    });
+    if (!sessao) return;
+    capturaRef.current = sessao;
+    setOuvindo(true);
+  };
+  ouvirConversaRef.current = ouvirConversa;
+
+  const abrirConversaVoz = () => {
+    pararFala();
+    falandoRef.current = false;
+    setFalando(false);
+    capturaRef.current?.cancelar();
+    capturaRef.current = null;
+    setOuvindo(false);
+    setVozAviso('');
+    setMenuAberto(false);
+    setPickerOpen(false);
+    panelRef.current = 'voz';
+    setPanel('voz');
+    ouvirConversa();
+  };
+
+  const sairConversaVoz = () => {
+    panelRef.current = 'chat';
+    pararFala();
+    falandoRef.current = false;
+    setFalando(false);
+    capturaRef.current?.cancelar();
+    capturaRef.current = null;
+    setOuvindo(false);
+    setPanel('chat');
+  };
+
   sendRef.current = send;
   pendingRef.current = pendingId;
 
@@ -509,7 +607,11 @@ const AgenteCamiloChat: React.FC = () => {
     campo.scrollTop = campo.scrollHeight;
   }, [draft, ouvindo]);
 
+  const modoLista = panel === 'transcricao' ? 'transcricao' : 'chat';
+  const threadsVisiveis = threads.filter((thread) => (thread.modo ?? 'chat') === modoLista);
   const openingChat = (!active || active.messages.length === 0) && !agentGone;
+  const vozEstado = ouvindo ? 'ouvindo' : pendingId ? 'pensando' : falando ? 'falando' : 'pronto';
+  const ultimaFala = active?.messages[active.messages.length - 1];
 
   const chatPicker = (
     <div className="camilo-picker" ref={pickerRef}>
@@ -560,6 +662,12 @@ const AgenteCamiloChat: React.FC = () => {
 
   const composer = (
     <div className="camilo-composer-wrap">
+      {panel === 'chat' && (
+        <button type="button" className="camilo-voz-atalho" onClick={abrirConversaVoz}>
+          <i className="bi bi-soundwave" aria-hidden="true" />
+          Conversa em tempo real
+        </button>
+      )}
       <form className={`camilo-composer${ouvindo ? ' is-ouvindo' : ''}`} onSubmit={onSubmit}>
         <textarea
           ref={inputRef}
@@ -567,7 +675,9 @@ const AgenteCamiloChat: React.FC = () => {
           value={draft}
           placeholder={ouvindo
             ? 'Ouvindo…'
-            : (activeAgent ? `Pergunte ao ${activeAgent.nome}` : `Pergunte ao ${chatNome}`)}
+            : panel === 'transcricao'
+              ? 'Fale ou escreva a reunião'
+              : (activeAgent ? `Pergunte ao ${activeAgent.nome}` : `Pergunte ao ${chatNome}`)}
           aria-label={activeAgent ? `Mensagem para ${activeAgent.nome}` : `Mensagem para ${chatNome}`}
           disabled={agentGone}
           onChange={(event) => {
@@ -602,7 +712,12 @@ const AgenteCamiloChat: React.FC = () => {
         </button>
       </form>
       {vozAviso && <p className="camilo-voz-status is-erro" role="status">{vozAviso}</p>}
-      {!vozAviso && falando && <p className="camilo-voz-status" role="status">Lendo a resposta…</p>}
+      {!vozAviso && falando && panel !== 'voz' && (
+        <p className="camilo-voz-status">
+          <span className="camilo-onda" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+          Falando…
+        </p>
+      )}
     </div>
   );
 
@@ -643,6 +758,13 @@ const AgenteCamiloChat: React.FC = () => {
         </button>
         <button
           type="button"
+          className={`camilo-side-menu${panel === 'transcricao' ? ' is-active' : ''}`}
+          onClick={abrirTranscricao}
+        >
+          Transcrição
+        </button>
+        <button
+          type="button"
           className={`camilo-side-menu${panel === 'agentes' ? ' is-active' : ''}`}
           onClick={() => {
             setPanel('agentes');
@@ -651,17 +773,19 @@ const AgenteCamiloChat: React.FC = () => {
         >
           Meus agentes
         </button>
-        <p className="camilo-side-label">Recentes</p>
+        <p className="camilo-side-label">{panel === 'transcricao' ? 'Reuniões' : 'Recentes'}</p>
         <div className="camilo-thread-list">
-          {threads.length === 0 ? (
-            <p className="camilo-side-empty">Nenhuma conversa ainda.</p>
+          {threadsVisiveis.length === 0 ? (
+            <p className="camilo-side-empty">
+              {panel === 'transcricao' ? 'Nenhuma transcrição ainda.' : 'Nenhuma conversa ainda.'}
+            </p>
           ) : (
-            threads.map((thread) => {
+            threadsVisiveis.map((thread) => {
               const threadAgent = thread.agentId
                 ? (agents.find((agent) => agent.id === thread.agentId)?.nome ?? thread.agentName)
                 : null;
               return (
-                <div key={thread.id} className={`camilo-thread${thread.id === activeId && panel === 'chat' ? ' is-active' : ''}`}>
+                <div key={thread.id} className={`camilo-thread${thread.id === activeId && (panel === (thread.modo ?? 'chat') || (panel === 'voz' && (thread.modo ?? 'chat') === 'chat')) ? ' is-active' : ''}`}>
                   <button type="button" className="camilo-thread-open" onClick={() => openThread(thread)}>
                     <span>{thread.title}</span>
                     {threadAgent && <small>{threadAgent}</small>}
@@ -693,7 +817,15 @@ const AgenteCamiloChat: React.FC = () => {
             <i className="bi bi-list" aria-hidden="true" />
             <span>Conversas</span>
           </button>
-          <strong>{panel === 'agentes' ? 'Meus agentes' : (active?.title || chatNome)}</strong>
+          <strong>
+            {panel === 'agentes'
+              ? 'Meus agentes'
+              : panel === 'voz'
+                ? 'Conversa em tempo real'
+                : panel === 'transcricao'
+                  ? (active?.title || 'Transcrição')
+                  : (active?.title || chatNome)}
+          </strong>
         </div>
         {panel === 'agentes' ? (
           <div className="camilo-agents">
@@ -879,11 +1011,48 @@ const AgenteCamiloChat: React.FC = () => {
               ) : null}
             </QueryDataPanel>
           </div>
+        ) : panel === 'voz' ? (
+          <div className="camilo-voz-sala">
+            <header className="camilo-voz-topo">
+              <button type="button" className="camilo-voz-voltar" onClick={sairConversaVoz}>
+                <i className="bi bi-chevron-left" aria-hidden="true" />
+                Chat
+              </button>
+              {chatPicker}
+            </header>
+            <div className={`camilo-voz-palco is-${vozEstado}`}>
+              <div className="camilo-voz-orb" aria-hidden="true">
+                <span className="camilo-voz-anel" />
+                <span className="camilo-voz-anel" />
+                <img src={camiloLogo} alt="" />
+              </div>
+              <div className="camilo-onda is-grande" aria-hidden="true">
+                <i /><i /><i /><i /><i />
+              </div>
+              <p className="camilo-voz-estado">
+                {vozEstado === 'ouvindo'
+                  ? 'Ouvindo você'
+                  : vozEstado === 'pensando'
+                    ? 'Pensando'
+                    : vozEstado === 'falando'
+                      ? `${authorName} está falando`
+                      : 'Pode falar'}
+              </p>
+              {vozEstado === 'ouvindo' && draft ? <p className="camilo-voz-fala">{draft}</p> : null}
+              {vozEstado !== 'ouvindo' && ultimaFala?.role === 'assistant' && (active?.modo ?? 'chat') === 'chat' ? (
+                <p className="camilo-voz-fala">{ultimaFala.text}</p>
+              ) : null}
+              {vozAviso ? <p className="camilo-voz-status is-erro">{vozAviso}</p> : null}
+            </div>
+          </div>
         ) : openingChat ? (
           <div className="camilo-hero">
-            <h1>Por onde devemos começar?</h1>
+            <h1>{panel === 'transcricao' ? 'Transcreva a reunião' : 'Por onde devemos começar?'}</h1>
+            {panel === 'transcricao' && (
+              <p className="camilo-hero-lead">Fale no microfone. Toque de novo para enviar e, se quiser, peça a ata.</p>
+            )}
             {composer}
-            {!activeAgent && (
+            {panel !== 'transcricao' && !activeAgent && (
               <div className="camilo-suggestions">
                 {SUGGESTIONS.map((item) => (
                   <button

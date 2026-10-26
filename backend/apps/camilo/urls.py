@@ -13,6 +13,7 @@ from .views import (
     AgenteDetailView,
     AgenteListCreateView,
     CamiloConversarView,
+    CamiloVozView,
     ChatPadraoView,
     MeuTermoView,
     PartesDisponiveisView,
@@ -27,6 +28,7 @@ router.register('matriz-empresarial/pastas', PastaMatrizEmpresarialViewSet, base
 
 urlpatterns = [
     path('conversar/', CamiloConversarView.as_view(), name='camilo-conversar'),
+    path('voz/', CamiloVozView.as_view(), name='camilo-voz'),
     path('atas/enviar-email/', CamiloAtaEmailView.as_view(), name='camilo-ata-email'),
     path('chat-padrao/', ChatPadraoView.as_view(), name='camilo-chat-padrao'),
     path('termo/', MeuTermoView.as_view(), name='camilo-termo'),

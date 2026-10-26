@@ -3944,6 +3944,18 @@ export const apiService = {
     };
   },
 
+  async sintetizarVozCamilo(texto: string): Promise<Blob> {
+    const { data, headers, status } = await api.post('/api/camilo/voz/', { texto }, {
+      responseType: 'blob',
+      validateStatus: () => true,
+    });
+    const tipo = String(headers['content-type'] || '');
+    if (status < 200 || status >= 300 || !tipo.includes('audio')) {
+      throw new Error('sem audio');
+    }
+    return data as Blob;
+  },
+
   async downloadCamiloTermoComprovante(id: string): Promise<Blob> {
     const { data, headers, status } = await api.get(`/api/camilo/termos/${id}/comprovante/`, {
       responseType: 'blob',

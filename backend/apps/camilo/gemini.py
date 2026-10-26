@@ -92,3 +92,89 @@ def gerar(sistema: str, mensagens: list[dict], max_tokens: int = 8192, limite_te
     if not textos:
         raise GeminiErro('O Gemini não devolveu texto. Tente de novo.')
     return '\n'.join(textos).strip()
+
+
+def _wav_pcm(pcm: bytes, taxa: int) -> bytes:
+    import struct
+    taxa = taxa if taxa > 0 else 24000
+    cabecalho = struct.pack(
+        '<4sI4s4sIHHIIHH4sI',
+        b'RIFF',
+        36 + len(pcm),
+        b'WAVE',
+        b'fmt ',
+        16,
+        1,
+        1,
+        taxa,
+        taxa * 2,
+        2,
+        16,
+        b'data',
+        len(pcm),
+    )
+    return cabecalho + pcm
+
+
+def sintetizar_voz(texto: str) -> bytes:
+    """Áudio natural em português. O navegador só entra se esta chamada falhar."""
+    import base64
+    import re
+
+    chave = getattr(settings, 'GEMINI_API_KEY', '')
+    if not chave:
+        raise GeminiErro(
+            'O Gemini ainda não está configurado. Defina GEMINI_API_KEY no servidor.',
+            status=503,
+        )
+    fala = ' '.join((texto or '').split())[:1200]
+    if len(fala) < 2:
+        raise GeminiErro('Nada para falar.', status=400)
+    modelo = getattr(settings, 'GEMINI_TTS_MODEL', '') or 'gemini-2.5-flash-preview-tts'
+    url = f'https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent'
+    corpo = json.dumps({
+        'contents': [{'role': 'user', 'parts': [{'text': fala}]}],
+        'generationConfig': {
+            'responseModalities': ['AUDIO'],
+            'speechConfig': {
+                'voiceConfig': {
+                    'prebuiltVoiceConfig': {'voiceName': 'Sulafat'},
+                },
+            },
+        },
+    }).encode('utf-8')
+    pedido = urllib.request.Request(
+        url,
+        data=corpo,
+        headers={'Content-Type': 'application/json', 'x-goog-api-key': chave},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(pedido, timeout=45) as resposta:
+            payload = json.loads(resposta.read().decode('utf-8'))
+    except urllib.error.HTTPError as exc:
+        detalhe = exc.read().decode('utf-8', errors='replace')
+        try:
+            mensagem = json.loads(detalhe).get('error', {}).get('message') or ''
+        except json.JSONDecodeError:
+            mensagem = ''
+        raise GeminiErro(mensagem or 'A voz não respondeu. Tente de novo.') from exc
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise GeminiErro('A voz não respondeu. Tente de novo.') from exc
+
+    for candidato in payload.get('candidates') or []:
+        for parte in (candidato.get('content') or {}).get('parts') or []:
+            inline = parte.get('inlineData') or parte.get('inline_data') or {}
+            bruto = inline.get('data')
+            if not bruto:
+                continue
+            audio = base64.b64decode(bruto)
+            if audio[:4] == b'RIFF':
+                return audio
+            mime = str(inline.get('mimeType') or inline.get('mime_type') or '')
+            taxa = 24000
+            achado = re.search(r'rate=(\d+)', mime)
+            if achado:
+                taxa = int(achado.group(1))
+            return _wav_pcm(audio, taxa)
+    raise GeminiErro('A voz não devolveu áudio. Tente de novo.')

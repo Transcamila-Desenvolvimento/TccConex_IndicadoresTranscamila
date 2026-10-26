@@ -118,3 +118,43 @@ class CamiloGeminiTests(TestCase):
             )
         self.assertEqual(response.status_code, 503)
         self.assertIn('GEMINI_API_KEY', response.json()['detail'])
+
+    @patch('apps.camilo.gemini.urllib.request.urlopen')
+    def test_voz_devolve_wav(self, urlopen):
+        import base64
+
+        pcm = b'\x00\x01' * 40
+        corpo = json.dumps({
+            'candidates': [{
+                'content': {
+                    'parts': [{
+                        'inlineData': {
+                            'mimeType': 'audio/L16;rate=24000',
+                            'data': base64.b64encode(pcm).decode('ascii'),
+                        },
+                    }],
+                },
+            }],
+        }).encode('utf-8')
+
+        class _Audio:
+            def read(self):
+                return corpo
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        urlopen.return_value = _Audio()
+        resposta = self.client.post('/api/camilo/voz/', {'texto': 'Olá, podemos conversar.'}, format='json')
+        self.assertEqual(resposta.status_code, 200, resposta.content[:200])
+        self.assertEqual(resposta['Content-Type'], 'audio/wav')
+        self.assertTrue(resposta.content.startswith(b'RIFF'))
+        pedido = json.loads(urlopen.call_args.args[0].data.decode('utf-8'))
+        self.assertEqual(pedido['generationConfig']['responseModalities'], ['AUDIO'])
+        self.assertEqual(
+            pedido['generationConfig']['speechConfig']['voiceConfig']['prebuiltVoiceConfig']['voiceName'],
+            'Sulafat',
+        )

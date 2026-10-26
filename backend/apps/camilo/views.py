@@ -17,7 +17,7 @@ from apps.camilo.comprovante import comprovante_pdf
 from apps.camilo.ata_email import enviar_ata_por_email
 from apps.camilo.conversa import historico_valido, responder_agente, responder_camilo
 from apps.camilo.transcricao import colapsar_transcricao
-from apps.camilo.gemini import GeminiErro
+from apps.camilo.gemini import GeminiErro, sintetizar_voz
 from apps.camilo.models import Agente, ChatPadrao, TermoAceite
 from apps.camilo.serializers import AgenteSerializer, ChatPadraoSerializer
 from apps.camilo.termo import publicar_versao, termo_publico, texto_da_versao, versao_vigente
@@ -157,6 +157,18 @@ class CamiloAtaEmailView(CamiloAccessMixin, APIView):
             'to': resultado['to'],
             'cc': resultado['cc'],
         })
+
+
+class CamiloVozView(CamiloAccessMixin, APIView):
+    def post(self, request):
+        texto = ' '.join(str(request.data.get('texto') or '').split())
+        if len(texto) < 2:
+            return Response({'detail': 'Nada para falar.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            audio = sintetizar_voz(texto[:1200])
+        except GeminiErro as exc:
+            return Response({'detail': str(exc)}, status=exc.status)
+        return HttpResponse(audio, content_type='audio/wav')
 
 
 class ChatPadraoView(APIView):

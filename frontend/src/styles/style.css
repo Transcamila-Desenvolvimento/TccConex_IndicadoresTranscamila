@@ -22204,6 +22204,229 @@ button.proposta-status-badge {
   color: #b91c1c;
 }
 
+.camilo-voz-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.camilo-onda {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 14px;
+}
+
+.camilo-onda i {
+  display: block;
+  width: 3px;
+  height: 100%;
+  border-radius: 99px;
+  background: #118CC4;
+  transform-origin: center bottom;
+  animation: camilo-onda 1s ease-in-out infinite;
+}
+
+.camilo-onda i:nth-child(2) { animation-delay: 0.12s; }
+.camilo-onda i:nth-child(3) { animation-delay: 0.24s; }
+.camilo-onda i:nth-child(4) { animation-delay: 0.36s; }
+.camilo-onda i:nth-child(5) { animation-delay: 0.48s; }
+
+.camilo-onda.is-grande {
+  height: 26px;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.camilo-onda.is-grande i {
+  width: 4px;
+  background: #cbd5e1;
+  animation: none;
+  transform: scaleY(0.35);
+}
+
+.camilo-voz-palco.is-ouvindo .camilo-onda.is-grande i,
+.camilo-voz-palco.is-falando .camilo-onda.is-grande i {
+  background: #118CC4;
+  animation: camilo-onda 1s ease-in-out infinite;
+}
+
+.camilo-hero-lead {
+  margin: -12px 0 22px;
+  max-width: 420px;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.camilo-voz-atalho {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 8px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.camilo-voz-atalho:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.camilo-voz-sala {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+}
+
+.camilo-voz-topo {
+  width: min(720px, 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.camilo-voz-voltar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: #374151;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.camilo-voz-palco {
+  flex: 1;
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.camilo-voz-orb {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  display: grid;
+  place-items: center;
+}
+
+.camilo-voz-orb img {
+  position: relative;
+  z-index: 1;
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+
+.camilo-voz-anel {
+  position: absolute;
+  inset: 16px;
+  border: 1px solid rgba(17, 140, 196, 0.28);
+  border-radius: 50%;
+}
+
+.camilo-voz-palco.is-ouvindo .camilo-voz-anel,
+.camilo-voz-palco.is-falando .camilo-voz-anel {
+  animation: camilo-anel 2.6s ease-out infinite;
+}
+
+.camilo-voz-palco.is-ouvindo .camilo-voz-anel:nth-child(2),
+.camilo-voz-palco.is-falando .camilo-voz-anel:nth-child(2) {
+  animation-delay: 1.3s;
+}
+
+.camilo-voz-palco.is-pensando .camilo-voz-orb img {
+  animation: camilo-respira 1.6s ease-in-out infinite;
+}
+
+.camilo-voz-estado {
+  margin: 14px 0 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.camilo-voz-fala {
+  margin: 8px 0 0;
+  max-width: 460px;
+  color: #4b5563;
+  font-size: 15px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.camilo-voz-falar {
+  width: min(280px, 100%);
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: #111827;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.camilo-voz-falar.is-ouvindo {
+  background: #b91c1c;
+}
+
+.camilo-voz-falar:disabled {
+  background: #d1d5db;
+  cursor: default;
+}
+
+@keyframes camilo-onda {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+@keyframes camilo-anel {
+  0% { transform: scale(0.7); opacity: 0.5; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+@keyframes camilo-respira {
+  0%, 100% { transform: scale(1); opacity: 0.75; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .camilo-onda i,
+  .camilo-voz-anel,
+  .camilo-voz-orb img {
+    animation: none;
+  }
+}
+
 .camilo-mobile-bar,
 .camilo-side-close,
 .camilo-side-backdrop {
