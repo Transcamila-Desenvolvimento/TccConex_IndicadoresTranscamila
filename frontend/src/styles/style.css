@@ -22081,6 +22081,31 @@ button.proposta-status-badge {
   color: #c2410c;
 }
 
+.camilo-ata-resumo {
+  margin-top: 8px;
+  color: #1f2937;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.camilo-ata-bloco.is-registro {
+  background: #f8fafc;
+  border: 1px solid #dbe3ee;
+}
+
+.camilo-ata-bloco.is-registro h4 {
+  color: #0f5f86;
+}
+
+.camilo-ata-bloco.is-decisao {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.camilo-ata-bloco.is-decisao h4 {
+  color: #166534;
+}
+
 .camilo-ata-aviso {
   margin-top: 8px;
   color: #9a3412;

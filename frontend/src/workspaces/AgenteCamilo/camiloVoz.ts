@@ -215,7 +215,11 @@ function juntar(base: string, extra: string): string {
   return `${esquerda} ${direita}`.trim();
 }
 
-/** Ouve até `parar` ou `cancelar`. O navegador pode encerrar sozinho; nesse caso a escuta recomeça. */
+/**
+ * Ouve até `parar` ou `cancelar`.
+ * Silêncio, queda de rede, troca de aba ou outro app no microfone encerram a escuta do Chrome.
+ * O texto já escrito fica guardado e o microfone religa sozinho.
+ */
 export function iniciarCaptura(eventos: {
   onTexto: (confirmado: string, parcial: string) => void;
   onErro: (mensagem: string) => void;
@@ -233,12 +237,69 @@ export function iniciarCaptura(eventos: {
   let sessaoFinal = '';
   let parcialAtual = '';
   let ativo = true;
+  let escutando = false;
+  let ligando = false;
   let geracao = 0;
+  let reinicio: number | null = null;
+  let vigia: number | null = null;
+  let ultimoSinal = Date.now();
 
   const textoAtual = () => juntar(acumulado, [sessaoFinal, parcialAtual].filter(Boolean).join(' '));
   const publicar = () => eventos.onTexto(juntar(acumulado, sessaoFinal), parcialAtual);
+  const marcar = () => {
+    ultimoSinal = Date.now();
+  };
+  const limparReinicio = () => {
+    if (reinicio === null) return;
+    window.clearTimeout(reinicio);
+    reinicio = null;
+  };
+  const religar = () => {
+    if (!ativo || escutando || ligando) return;
+    ligando = true;
+    marcar();
+    try {
+      reconhecimento.start();
+    } catch {
+      ligando = false;
+      agendarReinicio(700);
+    }
+  };
+  const agendarReinicio = (atraso: number) => {
+    if (!ativo || reinicio !== null) return;
+    reinicio = window.setTimeout(() => {
+      reinicio = null;
+      religar();
+    }, atraso);
+  };
+  const aoVoltar = () => {
+    if (!ativo || document.visibilityState === 'hidden') return;
+    if (!escutando) agendarReinicio(300);
+  };
+  const soltar = () => {
+    ativo = false;
+    limparReinicio();
+    if (vigia !== null) {
+      window.clearInterval(vigia);
+      vigia = null;
+    }
+    document.removeEventListener('visibilitychange', aoVoltar);
+    window.removeEventListener('online', aoVoltar);
+    window.removeEventListener('pageshow', aoVoltar);
+  };
+  const guardarSessao = () => {
+    geracao += 1;
+    acumulado = juntar(acumulado, sessaoFinal);
+    sessaoFinal = '';
+    parcialAtual = '';
+    publicar();
+    marcar();
+  };
 
   reconhecimento.onstart = () => {
+    ligando = false;
+    escutando = true;
+    marcar();
     sessaoFinal = '';
     parcialAtual = '';
   };
@@ -255,55 +316,88 @@ export function iniciarCaptura(eventos: {
     if (minha !== geracao || !ativo) return;
     sessaoFinal = finais;
     parcialAtual = parcial;
+    marcar();
     publicar();
   };
   reconhecimento.onerror = (event) => {
-    if (event.error === 'aborted' || event.error === 'no-speech') return;
+    ligando = false;
+    if (!ativo) return;
     if (event.error === 'not-allowed') {
-      ativo = false;
+      soltar();
+      try {
+        reconhecimento.abort();
+      } catch {
+        /* o navegador já encerrou */
+      }
       eventos.onErro('Permita o microfone para perguntar por voz.');
       return;
     }
-    if (!ativo) return;
-    eventos.onErro('Não foi possível ouvir. Tente de novo.');
+    marcar();
+    window.setTimeout(() => {
+      if (!ativo || escutando || ligando || document.visibilityState === 'hidden') return;
+      religar();
+    }, 400);
   };
   reconhecimento.onend = () => {
+    ligando = false;
+    escutando = false;
     if (!ativo) return;
-    geracao += 1;
-    acumulado = textoAtual();
-    sessaoFinal = '';
-    parcialAtual = '';
-    publicar();
-    try {
-      reconhecimento.start();
-    } catch {
-      ativo = false;
-      eventos.onErro('A escuta foi interrompida. Aperte o microfone para continuar.');
-    }
+    guardarSessao();
+    if (document.visibilityState === 'hidden') return;
+    agendarReinicio(280);
   };
+
+  vigia = window.setInterval(() => {
+    if (!ativo || document.visibilityState === 'hidden' || Date.now() - ultimoSinal < 20000) return;
+    ligando = false;
+    if (escutando) {
+      try {
+        reconhecimento.abort();
+      } catch {
+        escutando = false;
+        religar();
+      }
+      return;
+    }
+    religar();
+  }, 4000);
+
+  document.addEventListener('visibilitychange', aoVoltar);
+  window.addEventListener('online', aoVoltar);
+  window.addEventListener('pageshow', aoVoltar);
 
   try {
     prepararSintese();
-    reconhecimento.start();
   } catch {
-    eventos.onErro('Não foi possível abrir o microfone.');
-    return null;
+    /* a leitura da resposta pode esperar o próximo toque */
   }
+  window.setTimeout(() => {
+    if (!ativo) return;
+    religar();
+  }, 250);
 
   return {
     parar: () => {
-      ativo = false;
       const texto = textoAtual();
+      soltar();
       try {
         reconhecimento.stop();
       } catch {
-        reconhecimento.abort();
+        try {
+          reconhecimento.abort();
+        } catch {
+          /* já estava parado */
+        }
       }
       return texto;
     },
     cancelar: () => {
-      ativo = false;
-      reconhecimento.abort();
+      soltar();
+      try {
+        reconhecimento.abort();
+      } catch {
+        /* já estava parado */
+      }
     },
   };
 }

@@ -483,7 +483,11 @@ const AgenteCamiloChat: React.FC = () => {
       onTexto: (confirmado, parcial) => {
         setDraft([confirmado, parcial].filter(Boolean).join(' '));
       },
-      onErro: (mensagem) => setVozAviso(mensagem),
+      onErro: (mensagem) => {
+        capturaRef.current = null;
+        setOuvindo(false);
+        setVozAviso(mensagem);
+      },
     });
     if (!sessao) return;
     capturaRef.current = sessao;
@@ -911,7 +915,9 @@ const AgenteCamiloChat: React.FC = () => {
                 {active.messages.map((message) => (
                   <article key={message.id} className={`camilo-message is-${message.role}`}>
                     {message.role === 'assistant' && <span className="camilo-message-author">{authorName}</span>}
-                    {message.role === 'assistant' ? <CamiloTexto texto={message.text} /> : <p>{message.text}</p>}
+                    {message.role === 'assistant'
+                      ? (message.text !== message.ata?.resumo && <CamiloTexto texto={message.text} />)
+                      : <p>{message.text}</p>}
                     {message.ata && (
                       <div className="camilo-ata">
                         <strong>{message.ata.titulo}</strong>
@@ -921,11 +927,28 @@ const AgenteCamiloChat: React.FC = () => {
                             ? `Participantes: ${message.ata.participantes.join(', ')}`
                             : 'Nenhum participante citado'}
                         </p>
+                        {message.ata.resumo ? <p className="camilo-ata-resumo">{message.ata.resumo}</p> : null}
+                        {(message.ata.registro ?? []).length > 0 && (
+                          <section className="camilo-ata-bloco is-registro">
+                            <h4>Registro da ata</h4>
+                            <ul>
+                              {(message.ata.registro ?? []).map((item, indice) => <li key={`registro-${indice}`}>{item}</li>)}
+                            </ul>
+                          </section>
+                        )}
+                        {(message.ata.deliberacoes ?? []).length > 0 && (
+                          <section className="camilo-ata-bloco is-decisao">
+                            <h4>Decisões e próximos passos</h4>
+                            <ul>
+                              {(message.ata.deliberacoes ?? []).map((item, indice) => <li key={`decisao-${indice}`}>{item}</li>)}
+                            </ul>
+                          </section>
+                        )}
                         {(message.ata.assuntos ?? []).length > 0 && (
                           <section className="camilo-ata-bloco is-dito">
                             <h4>O que foi dito</h4>
                             <ul>
-                              {(message.ata.assuntos ?? []).map((assunto) => <li key={assunto}>{assunto}</li>)}
+                              {(message.ata.assuntos ?? []).map((assunto, indice) => <li key={`dito-${indice}`}>{assunto}</li>)}
                             </ul>
                           </section>
                         )}

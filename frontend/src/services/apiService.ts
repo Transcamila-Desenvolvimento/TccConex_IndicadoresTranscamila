@@ -1245,6 +1245,8 @@ function normalizarCamiloAta(raw: unknown): CamiloAta | undefined {
     titulo: ata.titulo.trim(),
     data: typeof ata.data === 'string' ? ata.data : '',
     participantes: textosDaAta(ata.participantes),
+    resumo: typeof ata.resumo === 'string' ? ata.resumo.trim() : '',
+    registro: textosDaAta(ata.registro),
     assuntos: textosDaAta(ata.assuntos),
     deliberacoes: textosDaAta(ata.deliberacoes),
     documentos,

@@ -89,6 +89,9 @@ export async function blobCamiloAtaPdf(ata: CamiloAta): Promise<Blob> {
   };
 
   bloco('Participantes', [ata.participantes.length ? ata.participantes.join(', ') : 'Não citados']);
+  if (ata.resumo) bloco('Resumo', [ata.resumo]);
+  bloco('Registro da ata', ata.registro ?? []);
+  bloco('Decisões e próximos passos', ata.deliberacoes ?? []);
   bloco('O que foi dito na reunião', ata.assuntos ?? []);
   bloco('Considerações do documento', ata.consideracoes ?? []);
   if (ata.aviso) bloco('Observação', [ata.aviso]);

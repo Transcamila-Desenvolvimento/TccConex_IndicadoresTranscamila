@@ -3889,6 +3889,8 @@ export interface CamiloAta {
   titulo: string;
   data: string;
   participantes: string[];
+  resumo: string;
+  registro: string[];
   assuntos: string[];
   deliberacoes: string[];
   documentos: CamiloAtaDocumento[];

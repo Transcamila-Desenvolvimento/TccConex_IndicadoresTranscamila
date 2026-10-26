@@ -121,6 +121,55 @@ class CamiloAtaTests(TestCase):
         self.assertIn('doca', assuntos)
         self.assertGreater(len(resposta.json()['ata']['assuntos']), 8)
 
+    def test_transcricao_sem_pedido_pergunta_o_que_fazer(self):
+        agente_id = self._agente(self.sgq, 'Qualidade', [{'ambiente': 'SGQ', 'parte': 'matriz'}])
+        fala = (
+            'Estamos alinhando a saída do caminhão. '
+            'O Igor liberou o tempo para carregar e o assoalho foi conferido. '
+            'O motorista está com a documentação e o veículo está com as luzes em ordem. '
+            'A carga segue com o piso seco e a lona presa. '
+            'Vou passar o portão agora e seguir para a doca sem outra parada no pátio.'
+        )
+        self.assertGreater(len(fala), 220)
+        resposta = self.client.post(
+            f'/api/camilo/agentes/{agente_id}/consultar/',
+            {'pergunta': fala},
+            format='json',
+        )
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        corpo = resposta.json()
+        self.assertEqual(corpo['resposta'], 'O que devo fazer com isso?')
+        self.assertNotIn('ata', corpo)
+
+    def test_pedido_depois_da_transcricao_monta_a_ata(self):
+        agente_id = self._agente(self.sgq, 'Qualidade', [{'ambiente': 'SGQ', 'parte': 'matriz'}])
+        transcricao = (
+            'Estamos alinhando a logística. Participantes: Ana Lima e João Souza. '
+            'Ficou combinado conferir a doca antes da carga. '
+            'O motorista segue com a documentação em dia e o veículo está regular.'
+        )
+        pedido = (
+            'Faça considerações finais sobre essa reunião relacionando ao documento '
+            'do procedimento da logística do SGQ e crie uma ata de reunião.'
+        )
+        resposta = self.client.post(
+            f'/api/camilo/agentes/{agente_id}/consultar/',
+            {
+                'pergunta': pedido,
+                'historico': [{'papel': 'user', 'texto': transcricao}],
+            },
+            format='json',
+        )
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        ata = resposta.json()['ata']
+        self.assertEqual(ata['participantes'], ['Ana Lima', 'João Souza'])
+        self.assertTrue(any('doca' in item.lower() for item in ata['assuntos']))
+        self.assertTrue(ata['registro'])
+        self.assertTrue(any('doca' in item.lower() for item in ata['registro']))
+        self.assertTrue(any('combinado' in item.lower() for item in ata['deliberacoes']))
+        self.assertTrue(any('Procedimento de logística' in item for item in ata['consideracoes']))
+        self.assertIn('Procedimento de logística', resposta.json()['resposta'])
+
     def test_email_exige_google_vinculado(self):
         self.client.force_authenticate(user=self.sgq)
         pdf = SimpleUploadedFile('ata.pdf', b'%PDF-1.4 ata', content_type='application/pdf')

@@ -1,6 +1,15 @@
 """Monta o pedido ao Gemini. O chat padrão não vê o ERP; o agente só vê a consulta."""
 
-from apps.camilo.ata import pedido_de_ata, redigir_ata
+import re
+
+from apps.camilo.ata import (
+    PERGUNTA_O_QUE_FAZER,
+    fala_da_reuniao,
+    pedido_de_ata,
+    pediu_documento,
+    redigir_ata,
+    transcricao_sem_instrucao,
+)
 from apps.camilo.consulta import consultar
 from apps.camilo.gemini import GeminiErro, configurado, gerar
 from apps.camilo.models import INSTRUCAO_CHAT_PADRAO, ChatPadrao
@@ -109,7 +118,7 @@ def titulo_da_conversa(pergunta: str, resposta: str) -> str:
     return titulo
 
 
-def historico_valido(bruto, limite: int = 24) -> list[dict]:
+def historico_valido(bruto, limite: int = 24, tamanho: int = 200000) -> list[dict]:
     itens = []
     if not isinstance(bruto, list):
         return itens
@@ -122,9 +131,29 @@ def historico_valido(bruto, limite: int = 24) -> list[dict]:
             continue
         itens.append({
             'role': 'user' if papel == 'user' else 'model',
-            'text': texto[:2000],
+            'text': texto[:tamanho],
         })
     return itens
+
+
+def _pista_documento(texto: str) -> str:
+    frases = re.split(r'(?<=[.!?]|\n)\s+', texto or '')
+    uteis = [
+        ' '.join(frase.split())
+        for frase in frases
+        if pediu_documento(frase) or 'sgq' in frase.lower()
+    ]
+    return ' '.join(uteis)[:1500]
+
+
+def _transcricao_sem_pedido(pergunta: str, anteriores: list[dict]) -> dict:
+    return {
+        'resposta': PERGUNTA_O_QUE_FAZER,
+        'titulo': '' if anteriores else 'Transcrição da reunião',
+        'fontes': [],
+        'material': '',
+        **medir_contexto('', [{'text': pergunta}, {'text': PERGUNTA_O_QUE_FAZER}]),
+    }
 
 
 def perguntas_anteriores(anteriores: list[dict], quantidade: int = 2) -> str:
@@ -147,15 +176,18 @@ def material_matriz_empresarial(pergunta: str, contexto: str = '') -> str:
 
 def responder_camilo(pergunta: str, historico: list[dict] | None = None) -> dict:
     anteriores = historico_valido(historico)
-    material = material_matriz_empresarial(pergunta, perguntas_anteriores(anteriores))[:ORCAMENTO_MATERIAL]
+    if transcricao_sem_instrucao(pergunta):
+        return _transcricao_sem_pedido(pergunta, anteriores)
+    fala = fala_da_reuniao(pergunta, anteriores) if pedido_de_ata(pergunta) else pergunta
+    material = material_matriz_empresarial(pergunta, _pista_documento(fala) or perguntas_anteriores(anteriores))[:ORCAMENTO_MATERIAL]
     if pedido_de_ata(pergunta):
-        ata = redigir_ata(pergunta, material, chat_padrao=True)
-        resumo = ata.pop('resumo')
+        ata = redigir_ata(fala, material, chat_padrao=True)
+        resumo = ata.get('resumo') or ''
         return {
             'resposta': resumo,
             'titulo': '' if anteriores else ata['titulo'],
             'ata': ata,
-            **medir_contexto(material, [{'text': pergunta}, {'text': resumo}]),
+            **medir_contexto(material, [{'text': fala}, {'text': resumo}]),
         }
     sistema = sistema_camilo()
     pedido = pergunta if not material else f'Material da Matriz empresarial:\n{material}\n\nPergunta: {pergunta}'
@@ -168,18 +200,22 @@ def responder_camilo(pergunta: str, historico: list[dict] | None = None) -> dict
 
 def responder_agente(user, agente, pergunta: str, historico: list[dict] | None = None) -> dict:
     anteriores = historico_valido(historico)
-    resultado = consultar(user, agente, pergunta, contexto=perguntas_anteriores(anteriores))
+    if transcricao_sem_instrucao(pergunta):
+        return _transcricao_sem_pedido(pergunta, anteriores)
+    fala = fala_da_reuniao(pergunta, anteriores) if pedido_de_ata(pergunta) else pergunta
+    contexto = _pista_documento(fala) or perguntas_anteriores(anteriores)
+    resultado = consultar(user, agente, pergunta, contexto=contexto)
     if not anteriores:
         resultado['titulo'] = titulo_local(pergunta)
     material = (resultado.get('material') or '')[:ORCAMENTO_MATERIAL]
     if pedido_de_ata(pergunta):
-        ata = redigir_ata(pergunta, material, chat_padrao=False)
-        resumo = ata.pop('resumo')
+        ata = redigir_ata(fala, material, chat_padrao=False)
+        resumo = ata.get('resumo') or ''
         resultado['resposta'] = resumo
         resultado['ata'] = ata
         if not anteriores:
             resultado['titulo'] = ata['titulo']
-        resultado.update(medir_contexto(material, [{'text': pergunta}, {'text': resumo}]))
+        resultado.update(medir_contexto(material, [{'text': fala}, {'text': resumo}]))
         return resultado
     instrucao = (agente.instrucao or '').strip() or 'Responda só com o material consultado.'
     partes = ', '.join(
