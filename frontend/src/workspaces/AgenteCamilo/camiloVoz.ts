@@ -198,21 +198,69 @@ export interface SessaoCaptura {
   cancelar: () => void;
 }
 
-/** Junta o trecho novo sem repetir o que o navegador devolve de novo ao reiniciar a escuta. */
+function espacos(texto: string): string {
+  return texto.replace(/\s+/g, ' ').trim();
+}
+
+/** O trecho novo é a mesma fala que já está no fim do texto. */
+function repetido(base: string, extra: string): boolean {
+  const trecho = espacos(extra);
+  if (trecho.length < 48) return false;
+  const amostra = trecho.slice(0, Math.min(160, trecho.length));
+  if (amostra.length < 48) return false;
+  return base.slice(-Math.max(trecho.length * 2, amostra.length)).includes(amostra);
+}
+
+/** Junta o trecho novo sem repetir o que o navegador devolve de novo ao religar a escuta. */
 function juntar(base: string, extra: string): string {
-  const esquerda = base.trim();
-  const direita = extra.trim();
+  const esquerda = espacos(base);
+  const direita = espacos(extra);
   if (!direita) return esquerda;
   if (!esquerda) return direita;
-  if (direita.startsWith(esquerda)) return direita;
-  if (esquerda.endsWith(direita)) return esquerda;
+  if (direita.startsWith(esquerda)) {
+    const acrescimo = direita.slice(esquerda.length).trim();
+    if (!acrescimo || repetido(esquerda, acrescimo)) return esquerda;
+    return `${esquerda} ${acrescimo}`.trim();
+  }
+  if (esquerda.endsWith(direita) || repetido(esquerda, direita)) return esquerda;
   const limite = Math.min(esquerda.length, direita.length, 4000);
   for (let tamanho = limite; tamanho >= 24; tamanho -= 1) {
     if (esquerda.slice(-tamanho) === direita.slice(0, tamanho)) {
+      const acrescimo = direita.slice(tamanho).trim();
+      if (!acrescimo || repetido(esquerda, acrescimo)) return esquerda;
       return `${esquerda}${direita.slice(tamanho)}`.trim();
     }
   }
+  if (repetido(esquerda, direita)) return esquerda;
   return `${esquerda} ${direita}`.trim();
+}
+
+/** Se a fala inteira foi colada de novo no fim, fica uma cópia. */
+function apararRepeticao(texto: string): string {
+  const palavras = espacos(texto).split(' ').filter(Boolean);
+  if (palavras.length < 16) return palavras.join(' ');
+  let fim = palavras.length;
+  let mudou = true;
+  while (mudou && fim >= 16) {
+    mudou = false;
+    let k = Math.floor(fim / 2);
+    while (k >= 8) {
+      let igual = true;
+      for (let j = 0; j < k; j += 1) {
+        if (palavras[fim - (k * 2) + j].toLowerCase() !== palavras[fim - k + j].toLowerCase()) {
+          igual = false;
+          break;
+        }
+      }
+      if (igual) {
+        fim -= k;
+        mudou = true;
+        break;
+      }
+      k = k > 64 ? Math.floor(k / 2) : k - 1;
+    }
+  }
+  return palavras.slice(0, fim).join(' ');
 }
 
 /**
@@ -244,8 +292,8 @@ export function iniciarCaptura(eventos: {
   let vigia: number | null = null;
   let ultimoSinal = Date.now();
 
-  const textoAtual = () => juntar(acumulado, [sessaoFinal, parcialAtual].filter(Boolean).join(' '));
-  const publicar = () => eventos.onTexto(juntar(acumulado, sessaoFinal), parcialAtual);
+  const textoAtual = () => apararRepeticao(juntar(acumulado, [sessaoFinal, parcialAtual].filter(Boolean).join(' ')));
+  const publicar = () => eventos.onTexto(apararRepeticao(juntar(acumulado, sessaoFinal)), parcialAtual);
   const marcar = () => {
     ultimoSinal = Date.now();
   };
@@ -289,7 +337,7 @@ export function iniciarCaptura(eventos: {
   };
   const guardarSessao = () => {
     geracao += 1;
-    acumulado = juntar(acumulado, sessaoFinal);
+    acumulado = apararRepeticao(juntar(acumulado, sessaoFinal));
     sessaoFinal = '';
     parcialAtual = '';
     publicar();
@@ -310,8 +358,8 @@ export function iniciarCaptura(eventos: {
     for (let indice = 0; indice < event.results.length; indice += 1) {
       const resultado = event.results[indice];
       const texto = resultado[0]?.transcript ?? '';
-      if (resultado.isFinal) finais = `${finais} ${texto}`.trim();
-      else parcial = `${parcial} ${texto}`.trim();
+      if (resultado.isFinal) finais = juntar(finais, texto);
+      else parcial = texto;
     }
     if (minha !== geracao || !ativo) return;
     sessaoFinal = finais;

@@ -105,7 +105,10 @@ class CamiloAtaTests(TestCase):
 
     def test_reuniao_longa_nao_esbarra_no_limite_antigo(self):
         agente_id = self._agente(self.sgq, 'Qualidade', [{'ambiente': 'SGQ', 'parte': 'matriz'}])
-        miolo = 'Ficou combinado revisar a doca antes de liberar a carga. ' * 500
+        miolo = ' '.join(
+            f'No ponto {indice} ficou combinado revisar a doca {indice} antes de liberar a carga.'
+            for indice in range(220)
+        )
         fala = (
             f'{miolo} Participantes: Ana Lima e João Souza. '
             'Crie uma ata desta reunião relacionando com o documento do procedimento da logística do SGQ.'
@@ -120,6 +123,29 @@ class CamiloAtaTests(TestCase):
         assuntos = ' '.join(resposta.json()['ata']['assuntos']).lower()
         self.assertIn('doca', assuntos)
         self.assertGreater(len(resposta.json()['ata']['assuntos']), 8)
+
+    def test_transcricao_colada_varias_vezes_vira_uma_ata(self):
+        from apps.camilo.transcricao import colapsar_transcricao
+
+        agente_id = self._agente(self.sgq, 'Qualidade', [{'ambiente': 'SGQ', 'parte': 'matriz'}])
+        bloco = 'Ficou combinado revisar a doca antes de liberar a carga do motorista de Ibipora. '
+        repetida = bloco * 4000
+        self.assertGreater(len(repetida), 200000)
+        self.assertLess(len(colapsar_transcricao(repetida)), 500)
+        fala = (
+            f'{repetida} Participantes: Ana Lima e João Souza. '
+            'Crie uma ata desta reunião relacionando com o documento do procedimento da logística do SGQ.'
+        )
+        resposta = self.client.post(
+            f'/api/camilo/agentes/{agente_id}/consultar/',
+            {'pergunta': fala},
+            format='json',
+        )
+        self.assertEqual(resposta.status_code, 200, resposta.content[:300])
+        assuntos = ' '.join(resposta.json()['ata']['assuntos']).lower()
+        self.assertIn('doca', assuntos)
+        self.assertLess(assuntos.count('ibipora'), 3)
+        self.assertIn('Procedimento de logística', ' '.join(resposta.json()['ata']['consideracoes']))
 
     def test_transcricao_sem_pedido_pergunta_o_que_fazer(self):
         agente_id = self._agente(self.sgq, 'Qualidade', [{'ambiente': 'SGQ', 'parte': 'matriz'}])

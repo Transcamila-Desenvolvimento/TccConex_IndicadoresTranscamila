@@ -12,6 +12,7 @@ from apps.camilo.ata import (
 )
 from apps.camilo.consulta import consultar
 from apps.camilo.gemini import GeminiErro, configurado, gerar
+from apps.camilo.transcricao import colapsar_transcricao
 from apps.camilo.models import INSTRUCAO_CHAT_PADRAO, ChatPadrao
 
 
@@ -126,7 +127,7 @@ def historico_valido(bruto, limite: int = 24, tamanho: int = 200000) -> list[dic
         if not isinstance(item, dict):
             continue
         papel = str(item.get('papel') or item.get('role') or '').strip()
-        texto = str(item.get('texto') or item.get('text') or '').strip()
+        texto = colapsar_transcricao(str(item.get('texto') or item.get('text') or '').strip())
         if papel not in {'user', 'assistant', 'model'} or not texto:
             continue
         itens.append({

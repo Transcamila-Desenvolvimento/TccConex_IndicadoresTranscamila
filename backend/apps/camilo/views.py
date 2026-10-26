@@ -16,6 +16,7 @@ from apps.camilo.catalogo import grupos_do_usuario
 from apps.camilo.comprovante import comprovante_pdf
 from apps.camilo.ata_email import enviar_ata_por_email
 from apps.camilo.conversa import historico_valido, responder_agente, responder_camilo
+from apps.camilo.transcricao import colapsar_transcricao
 from apps.camilo.gemini import GeminiErro
 from apps.camilo.models import Agente, ChatPadrao, TermoAceite
 from apps.camilo.serializers import AgenteSerializer, ChatPadraoSerializer
@@ -88,7 +89,7 @@ class AgenteDetailView(CamiloAccessMixin, APIView):
 
 
 def _pergunta(request):
-    pergunta = str(request.data.get('pergunta') or '').strip()
+    pergunta = colapsar_transcricao(str(request.data.get('pergunta') or '').strip())
     if not pergunta:
         return None, Response({'detail': 'Escreva a pergunta.'}, status=status.HTTP_400_BAD_REQUEST)
     if len(pergunta) > 200000:
