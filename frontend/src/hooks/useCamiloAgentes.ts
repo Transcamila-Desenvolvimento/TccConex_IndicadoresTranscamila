@@ -86,14 +86,14 @@ export function useEnviarEmailCamiloAta() {
 
 export function useConversarCamilo() {
   return useMutation({
-    mutationFn: ({ pergunta, historico }: { pergunta: string; historico: CamiloHistorico }) =>
-      apiService.conversarCamilo(pergunta, historico),
+    mutationFn: ({ pergunta, historico, voz }: { pergunta: string; historico: CamiloHistorico; voz?: boolean }) =>
+      apiService.conversarCamilo(pergunta, historico, Boolean(voz)),
   });
 }
 
 export function useConsultarCamiloAgente() {
   return useMutation({
-    mutationFn: ({ id, pergunta, historico }: { id: string; pergunta: string; historico: CamiloHistorico }) =>
-      apiService.consultarCamiloAgente(id, pergunta, historico),
+    mutationFn: ({ id, pergunta, historico, voz }: { id: string; pergunta: string; historico: CamiloHistorico; voz?: boolean }) =>
+      apiService.consultarCamiloAgente(id, pergunta, historico, Boolean(voz)),
   });
 }

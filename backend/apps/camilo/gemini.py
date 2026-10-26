@@ -33,7 +33,13 @@ def _alternar(mensagens: list[dict], limite_texto: int = 8000) -> list[dict]:
     return saida
 
 
-def gerar(sistema: str, mensagens: list[dict], max_tokens: int = 8192, limite_texto: int = 8000) -> str:
+def gerar(
+    sistema: str,
+    mensagens: list[dict],
+    max_tokens: int = 8192,
+    limite_texto: int = 8000,
+    pensar: str = 'low',
+) -> str:
     chave = getattr(settings, 'GEMINI_API_KEY', '')
     if not chave:
         raise GeminiErro(
@@ -56,7 +62,7 @@ def gerar(sistema: str, mensagens: list[dict], max_tokens: int = 8192, limite_te
         # padrão pensa o bastante para cortar a resposta no meio da tabela.
         'generationConfig': {
             'maxOutputTokens': max_tokens,
-            'thinkingConfig': {'thinkingLevel': 'low'},
+            'thinkingConfig': {'thinkingLevel': pensar},
         },
     }).encode('utf-8')
     pedido = urllib.request.Request(

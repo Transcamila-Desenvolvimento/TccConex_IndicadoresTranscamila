@@ -62,6 +62,24 @@ class CamiloGeminiTests(TestCase):
         self.assertEqual(pedido['contents'][-1]['parts'][0]['text'], 'Escreva um recado curto.')
 
     @patch('apps.camilo.gemini.urllib.request.urlopen')
+    def test_voz_responde_curto_sem_segunda_chamada(self, urlopen):
+        urlopen.return_value = _RespostaGemini('O prazo é de dois dias.')
+        resposta = self.client.post(
+            '/api/camilo/conversar/',
+            {'pergunta': 'Pode confirmar o prazo?', 'historico': [], 'voz': True},
+            format='json',
+        )
+        self.assertEqual(resposta.status_code, 200, resposta.data)
+        self.assertEqual(resposta.json()['resposta'], 'O prazo é de dois dias.')
+        self.assertEqual(resposta.json()['titulo'], 'Pode confirmar o prazo?')
+        self.assertEqual(urlopen.call_count, 1)
+        pedido = json.loads(urlopen.call_args.args[0].data.decode('utf-8'))
+        sistema = pedido['systemInstruction']['parts'][0]['text']
+        self.assertIn('uma ou duas frases curtas', sistema)
+        self.assertEqual(pedido['generationConfig']['maxOutputTokens'], 512)
+        self.assertEqual(pedido['generationConfig']['thinkingConfig']['thinkingLevel'], 'minimal')
+
+    @patch('apps.camilo.gemini.urllib.request.urlopen')
     def test_admin_configura_o_chat_padrao(self, urlopen):
         urlopen.side_effect = [
             _RespostaGemini('Texto pronto.'),

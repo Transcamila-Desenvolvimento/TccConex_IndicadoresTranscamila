@@ -427,7 +427,7 @@ const AgenteCamiloChat: React.FC = () => {
             falandoRef.current = false;
             setFalando(false);
             if (panelRef.current === 'voz') {
-              window.setTimeout(() => ouvirConversaRef.current(), 450);
+              window.setTimeout(() => ouvirConversaRef.current(), 200);
             }
           },
         });
@@ -454,9 +454,10 @@ const AgenteCamiloChat: React.FC = () => {
     setPendingId(threadId);
     pendingRef.current = threadId;
 
+    const aoVivo = panelRef.current === 'voz';
     if (speakingAgent) {
       consultarAgent.mutate(
-        { id: speakingAgent.id, pergunta: trimmed, historico },
+        { id: speakingAgent.id, pergunta: trimmed, historico, voz: aoVivo },
         {
           onSuccess: (data) => guardarResposta(data.resposta, data.titulo, contextoDaResposta(data), data.ata),
           onError: (error) => guardarResposta(erroApi(error)),
@@ -466,7 +467,7 @@ const AgenteCamiloChat: React.FC = () => {
     }
 
     conversarCamilo.mutate(
-      { pergunta: trimmed, historico },
+      { pergunta: trimmed, historico, voz: aoVivo },
       {
         onSuccess: (data) => guardarResposta(data.resposta, data.titulo, contextoDaResposta(data), data.ata),
         onError: (error) => guardarResposta(erroApi(error)),

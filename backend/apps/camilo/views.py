@@ -106,7 +106,11 @@ class CamiloConversarView(CamiloAccessMixin, APIView):
         if erro:
             return erro
         try:
-            resultado = responder_camilo(pergunta, historico_valido(request.data.get('historico')))
+            resultado = responder_camilo(
+                pergunta,
+                historico_valido(request.data.get('historico')),
+                voz=bool(request.data.get('voz')),
+            )
         except GeminiErro as exc:
             return Response({'detail': str(exc)}, status=exc.status)
         record_audit(request.user, 'camilo.conversar', pergunta[:160])
@@ -127,6 +131,7 @@ class AgenteConsultarView(CamiloAccessMixin, APIView):
                 agente,
                 pergunta,
                 historico_valido(request.data.get('historico')),
+                voz=bool(request.data.get('voz')),
             )
         except GeminiErro as exc:
             return Response({'detail': str(exc)}, status=exc.status)

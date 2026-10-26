@@ -3867,8 +3867,13 @@ export const apiService = {
   async conversarCamilo(
     pergunta: string,
     historico: { papel: 'user' | 'assistant'; texto: string }[] = [],
+    voz = false,
   ): Promise<{ resposta: string; titulo?: string; contextoUsado?: number; contextoLimite?: number; ata?: CamiloAta }> {
-    const { data } = await api.post('/api/camilo/conversar/', { pergunta, historico });
+    const { data } = await api.post('/api/camilo/conversar/', {
+      pergunta,
+      historico,
+      ...(voz ? { voz: true } : {}),
+    });
     return { ...data, ata: normalizarCamiloAta(data?.ata) };
   },
 
@@ -3876,8 +3881,13 @@ export const apiService = {
     id: string,
     pergunta: string,
     historico: { papel: 'user' | 'assistant'; texto: string }[] = [],
+    voz = false,
   ): Promise<CamiloConsulta> {
-    const { data } = await api.post(`/api/camilo/agentes/${id}/consultar/`, { pergunta, historico });
+    const { data } = await api.post(`/api/camilo/agentes/${id}/consultar/`, {
+      pergunta,
+      historico,
+      ...(voz ? { voz: true } : {}),
+    });
     return { ...data, ata: normalizarCamiloAta(data?.ata) };
   },
 

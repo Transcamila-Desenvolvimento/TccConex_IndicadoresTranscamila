@@ -138,8 +138,8 @@ function vozPortugues(): SpeechSynthesisVoice | null {
 
 function textoFalado(markdown: string): string {
   const limpo = textoParaFala(markdown);
-  if (limpo.length <= 500) return limpo;
-  const corte = limpo.slice(0, 500);
+  if (limpo.length <= 280) return limpo;
+  const corte = limpo.slice(0, 280);
   const ponto = Math.max(corte.lastIndexOf('.'), corte.lastIndexOf('!'), corte.lastIndexOf('?'));
   return (ponto > 80 ? corte.slice(0, ponto + 1) : corte).trim();
 }
@@ -504,10 +504,10 @@ export function iniciarCaptura(eventos: {
     silencio = window.setInterval(() => {
       if (!ativo || avisou) return;
       const texto = textoAtual().trim();
-      if (texto.length < 8 || Date.now() - ultimoTextoEm < 1400) return;
+      if (texto.length < 8 || Date.now() - ultimoTextoEm < 700) return;
       avisou = true;
       eventos.onSilencio?.(texto);
-    }, 300);
+    }, 200);
   }
 
   try {

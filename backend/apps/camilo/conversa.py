@@ -175,12 +175,23 @@ def material_matriz_empresarial(pergunta: str, contexto: str = '') -> str:
     return material
 
 
-def responder_camilo(pergunta: str, historico: list[dict] | None = None) -> dict:
+VOZ_CURTA = (
+    'A pessoa está falando ao vivo. Responda em uma ou duas frases curtas, '
+    'em texto corrido, sem lista, sem tabela e sem Markdown.'
+)
+
+
+def responder_camilo(pergunta: str, historico: list[dict] | None = None, voz: bool = False) -> dict:
     anteriores = historico_valido(historico)
     if transcricao_sem_instrucao(pergunta):
         return _transcricao_sem_pedido(pergunta, anteriores)
     fala = fala_da_reuniao(pergunta, anteriores) if pedido_de_ata(pergunta) else pergunta
-    material = material_matriz_empresarial(pergunta, _pista_documento(fala) or perguntas_anteriores(anteriores))[:ORCAMENTO_MATERIAL]
+    buscar_material = not voz or pediu_documento(pergunta) or pedido_de_ata(pergunta)
+    material = ''
+    if buscar_material:
+        material = material_matriz_empresarial(
+            pergunta, _pista_documento(fala) or perguntas_anteriores(anteriores),
+        )[:ORCAMENTO_MATERIAL]
     if pedido_de_ata(pergunta):
         ata = redigir_ata(fala, material, chat_padrao=True)
         resumo = ata.get('resumo') or ''
@@ -191,15 +202,24 @@ def responder_camilo(pergunta: str, historico: list[dict] | None = None) -> dict
             **medir_contexto(material, [{'text': fala}, {'text': resumo}]),
         }
     sistema = sistema_camilo()
+    if voz:
+        sistema = f'{sistema} {VOZ_CURTA}'
     pedido = pergunta if not material else f'Material da Matriz empresarial:\n{material}\n\nPergunta: {pergunta}'
     orcamento = max(0, LIMITE_CONTEXTO - len(sistema) - len(pedido))
     mensagens = [*encaixar_historico(anteriores, orcamento), {'role': 'user', 'text': pedido}]
-    resposta = gerar(sistema, mensagens)
-    titulo = titulo_da_conversa(pergunta, resposta) if not anteriores else ''
+    resposta = gerar(
+        sistema,
+        mensagens,
+        max_tokens=512 if voz else 8192,
+        pensar='minimal' if voz else 'low',
+    )
+    titulo = ('' if anteriores else titulo_local(pergunta)) if voz else (
+        titulo_da_conversa(pergunta, resposta) if not anteriores else ''
+    )
     return {'resposta': resposta, 'titulo': titulo, **medir_contexto(sistema, mensagens)}
 
 
-def responder_agente(user, agente, pergunta: str, historico: list[dict] | None = None) -> dict:
+def responder_agente(user, agente, pergunta: str, historico: list[dict] | None = None, voz: bool = False) -> dict:
     anteriores = historico_valido(historico)
     if transcricao_sem_instrucao(pergunta):
         return _transcricao_sem_pedido(pergunta, anteriores)
@@ -245,6 +265,7 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
         'Exemplo: perguntaram diária e o texto traz piso mensal — mostre os pisos, não omita as cifras. '
         'Diga que não há a informação só quando o material não tiver nem o termo nem um valor equivalente. '
         + FORMATO_RESPOSTA
+        + (f' {VOZ_CURTA}' if voz else '')
     )
     pedido = pergunta if not material else f'Material consultado agora:\n{material}\n\nPergunta: {pergunta}'
     orcamento = max(0, LIMITE_CONTEXTO - len(sistema) - len(pedido))
@@ -252,5 +273,10 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
     resultado.update(medir_contexto(sistema, mensagens))
     if not configurado() or not resultado.get('fontes'):
         return resultado
-    resultado['resposta'] = gerar(sistema, mensagens)
+    resultado['resposta'] = gerar(
+        sistema,
+        mensagens,
+        max_tokens=512 if voz else 8192,
+        pensar='minimal' if voz else 'low',
+    )
     return resultado
