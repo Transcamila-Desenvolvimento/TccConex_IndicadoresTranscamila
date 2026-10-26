@@ -77,6 +77,13 @@ export function useDeleteCamiloAgente() {
 
 type CamiloHistorico = { papel: 'user' | 'assistant'; texto: string }[];
 
+export function useEnviarEmailCamiloAta() {
+  return useMutation({
+    mutationFn: (payload: { to: string[]; cc: string[]; titulo: string; observacao?: string; pdf: Blob }) =>
+      apiService.enviarEmailCamiloAta(payload),
+  });
+}
+
 export function useConversarCamilo() {
   return useMutation({
     mutationFn: ({ pergunta, historico }: { pergunta: string; historico: CamiloHistorico }) =>

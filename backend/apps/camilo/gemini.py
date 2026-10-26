@@ -17,7 +17,7 @@ def configurado() -> bool:
     return bool(getattr(settings, 'GEMINI_API_KEY', ''))
 
 
-def _alternar(mensagens: list[dict]) -> list[dict]:
+def _alternar(mensagens: list[dict], limite_texto: int = 8000) -> list[dict]:
     saida = []
     for item in mensagens:
         papel = item.get('role')
@@ -25,22 +25,22 @@ def _alternar(mensagens: list[dict]) -> list[dict]:
         if papel not in {'user', 'model'} or not texto:
             continue
         if saida and saida[-1]['role'] == papel:
-            saida[-1]['text'] = f"{saida[-1]['text']}\n{texto}"[:8000]
+            saida[-1]['text'] = f"{saida[-1]['text']}\n{texto}"[:limite_texto]
             continue
-        saida.append({'role': papel, 'text': texto[:8000]})
+        saida.append({'role': papel, 'text': texto[:limite_texto]})
     if saida and saida[0]['role'] != 'user':
         saida.insert(0, {'role': 'user', 'text': 'Olá.'})
     return saida
 
 
-def gerar(sistema: str, mensagens: list[dict], max_tokens: int = 8192) -> str:
+def gerar(sistema: str, mensagens: list[dict], max_tokens: int = 8192, limite_texto: int = 8000) -> str:
     chave = getattr(settings, 'GEMINI_API_KEY', '')
     if not chave:
         raise GeminiErro(
             'O Gemini ainda não está configurado. Defina GEMINI_API_KEY no servidor.',
             status=503,
         )
-    conteudo = _alternar(mensagens)
+    conteudo = _alternar(mensagens, limite_texto)
     if not conteudo:
         raise GeminiErro('Escreva a pergunta.', status=400)
 

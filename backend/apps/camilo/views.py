@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.views import APIView
 
 from apps.accounts.constants import AGENTE_CAMILO_ENVIRONMENT
@@ -13,6 +14,7 @@ from apps.accounts.permissions import user_has_module_access
 from apps.audit.services import record_audit
 from apps.camilo.catalogo import grupos_do_usuario
 from apps.camilo.comprovante import comprovante_pdf
+from apps.camilo.ata_email import enviar_ata_por_email
 from apps.camilo.conversa import historico_valido, responder_agente, responder_camilo
 from apps.camilo.gemini import GeminiErro
 from apps.camilo.models import Agente, ChatPadrao, TermoAceite
@@ -89,8 +91,8 @@ def _pergunta(request):
     pergunta = str(request.data.get('pergunta') or '').strip()
     if not pergunta:
         return None, Response({'detail': 'Escreva a pergunta.'}, status=status.HTTP_400_BAD_REQUEST)
-    if len(pergunta) > 2000:
-        return None, Response({'detail': 'A pergunta passou de 2000 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
+    if len(pergunta) > 16000:
+        return None, Response({'detail': 'A pergunta passou de 16000 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
     return pergunta, None
 
 
@@ -130,6 +132,27 @@ class AgenteConsultarView(CamiloAccessMixin, APIView):
             f'{agente.nome}: {len(resultado["fontes"])} fontes',
         )
         return Response(resultado)
+
+
+class CamiloAtaEmailView(CamiloAccessMixin, APIView):
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        try:
+            resultado = enviar_ata_por_email(request.user, request)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        record_audit(
+            request.user,
+            'camilo.ata.email',
+            f'{resultado["titulo"]} para {", ".join(resultado["to"])}',
+        )
+        return Response({
+            'success': True,
+            'message': f'Ata "{resultado["titulo"]}" enviada para {", ".join(resultado["to"])}.',
+            'to': resultado['to'],
+            'cc': resultado['cc'],
+        })
 
 
 class ChatPadraoView(APIView):

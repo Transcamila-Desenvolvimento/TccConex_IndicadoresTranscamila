@@ -1,5 +1,6 @@
 """Monta o pedido ao Gemini. O chat padrão não vê o ERP; o agente só vê a consulta."""
 
+from apps.camilo.ata import pedido_de_ata, redigir_ata
 from apps.camilo.consulta import consultar
 from apps.camilo.gemini import GeminiErro, configurado, gerar
 from apps.camilo.models import INSTRUCAO_CHAT_PADRAO, ChatPadrao
@@ -147,6 +148,15 @@ def material_matriz_empresarial(pergunta: str, contexto: str = '') -> str:
 def responder_camilo(pergunta: str, historico: list[dict] | None = None) -> dict:
     anteriores = historico_valido(historico)
     material = material_matriz_empresarial(pergunta, perguntas_anteriores(anteriores))[:ORCAMENTO_MATERIAL]
+    if pedido_de_ata(pergunta):
+        ata = redigir_ata(pergunta, material, chat_padrao=True)
+        resumo = ata.pop('resumo')
+        return {
+            'resposta': resumo,
+            'titulo': '' if anteriores else ata['titulo'],
+            'ata': ata,
+            **medir_contexto(material, [{'text': pergunta}, {'text': resumo}]),
+        }
     sistema = sistema_camilo()
     pedido = pergunta if not material else f'Material da Matriz empresarial:\n{material}\n\nPergunta: {pergunta}'
     orcamento = max(0, LIMITE_CONTEXTO - len(sistema) - len(pedido))
@@ -162,6 +172,15 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
     if not anteriores:
         resultado['titulo'] = titulo_local(pergunta)
     material = (resultado.get('material') or '')[:ORCAMENTO_MATERIAL]
+    if pedido_de_ata(pergunta):
+        ata = redigir_ata(pergunta, material, chat_padrao=False)
+        resumo = ata.pop('resumo')
+        resultado['resposta'] = resumo
+        resultado['ata'] = ata
+        if not anteriores:
+            resultado['titulo'] = ata['titulo']
+        resultado.update(medir_contexto(material, [{'text': pergunta}, {'text': resumo}]))
+        return resultado
     instrucao = (agente.instrucao or '').strip() or 'Responda só com o material consultado.'
     partes = ', '.join(
         f"{fonte['ambiente']} / {fonte['rotulo']}" for fonte in resultado.get('fontes') or []

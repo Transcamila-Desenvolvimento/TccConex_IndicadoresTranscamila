@@ -13,8 +13,17 @@ import {
   useDeleteCamiloAgente,
   useUpdateCamiloAgente,
 } from '../../hooks/useCamiloAgentes';
-import type { CamiloAgente } from '../../types/domain';
+import type { CamiloAgente, CamiloAta } from '../../types/domain';
+import CamiloAtaEmailModal from './CamiloAtaEmailModal';
 import CamiloTexto from './CamiloTexto';
+import { downloadCamiloAtaPdf } from './camiloAtaPdf';
+import {
+  capturaVozDisponivel,
+  falarTexto,
+  iniciarCaptura,
+  pararFala,
+  type SessaoCaptura,
+} from './camiloVoz';
 
 const STORAGE_PREFIX = 'tccconex.agente-camilo.threads';
 
@@ -33,6 +42,7 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  ata?: CamiloAta;
 }
 
 interface ChatThread {
@@ -165,6 +175,7 @@ const AgenteCamiloChat: React.FC = () => {
   const [draft, setDraft] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [panel, setPanel] = useState<'chat' | 'agentes'>('chat');
+  const [ataEmail, setAtaEmail] = useState<CamiloAta | null>(null);
   const [formMode, setFormMode] = useState<'create' | string | null>(null);
   const [agentName, setAgentName] = useState('');
   const [agentInstruction, setAgentInstruction] = useState('');
@@ -173,6 +184,10 @@ const AgenteCamiloChat: React.FC = () => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [draftAgentId, setDraftAgentId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [ouvindo, setOuvindo] = useState(false);
+  const [falando, setFalando] = useState(false);
+  const [vozAviso, setVozAviso] = useState('');
   const partesQuery = useCamiloPartes();
   const chatPadraoQuery = useCamiloChatPadrao();
   const agentesQuery = useCamiloAgentes();
@@ -186,6 +201,10 @@ const AgenteCamiloChat: React.FC = () => {
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const capturaRef = useRef<SessaoCaptura | null>(null);
+  const veioDaVoz = useRef(false);
+  const sendRef = useRef<(texto: string, falarResposta?: boolean) => void>(() => {});
+  const pendingRef = useRef<string | null>(null);
 
   const active = useMemo(
     () => threads.find((thread) => thread.id === activeId) ?? null,
@@ -238,6 +257,11 @@ const AgenteCamiloChat: React.FC = () => {
   }, [pickerOpen]);
 
   const chooseChat = (agent: CamiloAgente | null) => {
+    pararFala();
+    setFalando(false);
+    capturaRef.current?.cancelar();
+    capturaRef.current = null;
+    setOuvindo(false);
     setPickerOpen(false);
     setPanel('chat');
     setActiveId(null);
@@ -246,7 +270,13 @@ const AgenteCamiloChat: React.FC = () => {
   };
 
   const startNewChat = () => {
+    pararFala();
+    setFalando(false);
+    capturaRef.current?.cancelar();
+    capturaRef.current = null;
+    setOuvindo(false);
     setPickerOpen(false);
+    setMenuAberto(false);
     setPanel('chat');
     setDraftAgentId(null);
     setActiveId(null);
@@ -255,6 +285,12 @@ const AgenteCamiloChat: React.FC = () => {
   };
 
   const openThread = (thread: ChatThread) => {
+    pararFala();
+    setFalando(false);
+    capturaRef.current?.cancelar();
+    capturaRef.current = null;
+    setOuvindo(false);
+    setMenuAberto(false);
     setPanel('chat');
     setDraftAgentId(null);
     setActiveId(thread.id);
@@ -323,9 +359,15 @@ const AgenteCamiloChat: React.FC = () => {
     if (activeId === id) setActiveId(null);
   };
 
-  const send = (text: string) => {
+  const send = (text: string, falarResposta = false) => {
     const trimmed = text.trim();
     if (!trimmed || pendingId || agentGone) return;
+
+    const deveFalar = falarResposta || veioDaVoz.current;
+    veioDaVoz.current = false;
+    pararFala();
+    setFalando(false);
+    setVozAviso('');
 
     const speakingAgent = activeAgent;
     const continua = speakingAgent
@@ -342,10 +384,17 @@ const AgenteCamiloChat: React.FC = () => {
       texto: string,
       titulo?: string,
       contexto?: { usado: number; limite: number },
+      ata?: CamiloAta,
     ) => {
-      const reply: ChatMessage = { id: newId(), role: 'assistant', text: texto };
+      const reply: ChatMessage = { id: newId(), role: 'assistant', text: texto, ...(ata ? { ata } : {}) };
       setThreads((current) => rememberThread(current, threadId, reply, undefined, titulo, contexto));
       setPendingId((current) => (current === threadId ? null : current));
+      if (deveFalar) {
+        falarTexto(texto, {
+          onStart: () => setFalando(true),
+          onEnd: () => setFalando(false),
+        });
+      }
     };
     const contextoDaResposta = (data: { contextoUsado?: number; contextoLimite?: number }) => (
       typeof data.contextoUsado === 'number'
@@ -368,7 +417,7 @@ const AgenteCamiloChat: React.FC = () => {
       consultarAgent.mutate(
         { id: speakingAgent.id, pergunta: trimmed, historico },
         {
-          onSuccess: (data) => guardarResposta(data.resposta, data.titulo, contextoDaResposta(data)),
+          onSuccess: (data) => guardarResposta(data.resposta, data.titulo, contextoDaResposta(data), data.ata),
           onError: (error) => guardarResposta(erroApi(error)),
         },
       );
@@ -378,23 +427,83 @@ const AgenteCamiloChat: React.FC = () => {
     conversarCamilo.mutate(
       { pergunta: trimmed, historico },
       {
-        onSuccess: (data) => guardarResposta(data.resposta, data.titulo, contextoDaResposta(data)),
+        onSuccess: (data) => guardarResposta(data.resposta, data.titulo, contextoDaResposta(data), data.ata),
         onError: (error) => guardarResposta(erroApi(error)),
       },
     );
   };
 
+  const enviarFala = () => {
+    const texto = (capturaRef.current?.parar() || '').trim();
+    capturaRef.current = null;
+    setOuvindo(false);
+    if (!texto) {
+      setDraft('');
+      setVozAviso('Não ouvi nada. Tente de novo.');
+      return;
+    }
+    if (pendingRef.current) {
+      setDraft(texto);
+      setVozAviso('Aguarde a resposta para enviar a próxima pergunta.');
+      return;
+    }
+    send(texto, true);
+  };
+
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (ouvindo) {
+      enviarFala();
+      return;
+    }
     send(draft);
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
+      if (ouvindo) {
+        enviarFala();
+        return;
+      }
       send(draft);
     }
   };
+
+  const comecarOuvir = () => {
+    if (ouvindo) {
+      enviarFala();
+      return;
+    }
+    pararFala();
+    setFalando(false);
+    setVozAviso('');
+    veioDaVoz.current = true;
+    const sessao = iniciarCaptura({
+      onTexto: (confirmado, parcial) => {
+        setDraft([confirmado, parcial].filter(Boolean).join(' '));
+      },
+      onErro: (mensagem) => setVozAviso(mensagem),
+    });
+    if (!sessao) return;
+    capturaRef.current = sessao;
+    setOuvindo(true);
+  };
+
+  sendRef.current = send;
+  pendingRef.current = pendingId;
+
+  useEffect(() => {
+    const campo = inputRef.current;
+    if (!campo) return;
+    if (!ouvindo) {
+      campo.style.height = '';
+      return;
+    }
+    campo.style.height = '28px';
+    campo.style.height = `${Math.min(campo.scrollHeight, 84)}px`;
+    campo.scrollTop = campo.scrollHeight;
+  }, [draft, ouvindo]);
 
   const openingChat = (!active || active.messages.length === 0) && !agentGone;
 
@@ -446,38 +555,83 @@ const AgenteCamiloChat: React.FC = () => {
   );
 
   const composer = (
-    <form className="camilo-composer" onSubmit={onSubmit}>
-      <textarea
-        ref={inputRef}
-        rows={1}
-        value={draft}
-        placeholder={activeAgent ? `Pergunte ao ${activeAgent.nome}` : `Pergunte ao ${chatNome}`}
-        aria-label={activeAgent ? `Mensagem para ${activeAgent.nome}` : `Mensagem para ${chatNome}`}
-        disabled={agentGone}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={onKeyDown}
-      />
-      <RodinhaContexto
-        usado={(active ? contextoDoChat(active).usado : 0) + draft.length}
-        limite={active?.contextoLimite || LIMITE_CONTEXTO}
-      />
-      {chatPicker}
-      <button
-        type="submit"
-        className="camilo-send"
-        aria-label="Enviar mensagem"
-        disabled={!draft.trim() || Boolean(pendingId) || agentGone}
-      >
-        <i className="bi bi-arrow-up" aria-hidden="true" />
-      </button>
-    </form>
+    <div className="camilo-composer-wrap">
+      <form className={`camilo-composer${ouvindo ? ' is-ouvindo' : ''}`} onSubmit={onSubmit}>
+        <textarea
+          ref={inputRef}
+          rows={1}
+          value={draft}
+          placeholder={ouvindo
+            ? 'Ouvindo…'
+            : (activeAgent ? `Pergunte ao ${activeAgent.nome}` : `Pergunte ao ${chatNome}`)}
+          aria-label={activeAgent ? `Mensagem para ${activeAgent.nome}` : `Mensagem para ${chatNome}`}
+          disabled={agentGone}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            if (!ouvindo) veioDaVoz.current = false;
+          }}
+          onKeyDown={onKeyDown}
+        />
+        <RodinhaContexto
+          usado={(active ? contextoDoChat(active).usado : 0) + draft.length}
+          limite={active?.contextoLimite || LIMITE_CONTEXTO}
+        />
+        {chatPicker}
+        <button
+          type="button"
+          className={`camilo-mic${ouvindo ? ' is-ouvindo' : ''}`}
+          aria-pressed={ouvindo}
+          aria-label={ouvindo ? 'Enviar o que foi falado' : 'Perguntar por voz'}
+          disabled={agentGone || !capturaVozDisponivel()}
+          title={capturaVozDisponivel() ? (ouvindo ? 'Enviar o que foi falado' : 'Perguntar por voz') : 'Voz indisponível neste navegador'}
+          onClick={comecarOuvir}
+        >
+          <i className={`bi ${ouvindo ? 'bi-mic-fill' : 'bi-mic'}`} aria-hidden="true" />
+        </button>
+        <button
+          type="submit"
+          className="camilo-send"
+          aria-label="Enviar mensagem"
+          disabled={!draft.trim() || Boolean(pendingId) || agentGone}
+        >
+          <i className="bi bi-arrow-up" aria-hidden="true" />
+        </button>
+      </form>
+      {vozAviso && <p className="camilo-voz-status is-erro" role="status">{vozAviso}</p>}
+      {!vozAviso && falando && <p className="camilo-voz-status" role="status">Lendo a resposta…</p>}
+    </div>
   );
+
+  useEffect(() => () => {
+    capturaRef.current?.cancelar();
+    pararFala();
+  }, []);
+
+  useEffect(() => {
+    if (!menuAberto) return undefined;
+    const fechar = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuAberto(false);
+    };
+    document.addEventListener('keydown', fechar);
+    return () => document.removeEventListener('keydown', fechar);
+  }, [menuAberto]);
 
   return (
     <div className="camilo-chat">
-      <aside className="camilo-chat-side">
+      {menuAberto && (
+        <button
+          type="button"
+          className="camilo-side-backdrop"
+          aria-label="Fechar conversas"
+          onClick={() => setMenuAberto(false)}
+        />
+      )}
+      <aside id="camilo-conversas" className={`camilo-chat-side${menuAberto ? ' is-open' : ''}`}>
         <div className="camilo-side-logo">
           <img src={camiloLogo} alt="Camilo" />
+          <button type="button" className="camilo-side-close" aria-label="Fechar conversas" onClick={() => setMenuAberto(false)}>
+            <i className="bi bi-x-lg" aria-hidden="true" />
+          </button>
         </div>
         <button type="button" className="camilo-new-chat" onClick={startNewChat}>
           <i className="bi bi-plus-lg" aria-hidden="true" />
@@ -486,7 +640,10 @@ const AgenteCamiloChat: React.FC = () => {
         <button
           type="button"
           className={`camilo-side-menu${panel === 'agentes' ? ' is-active' : ''}`}
-          onClick={() => setPanel('agentes')}
+          onClick={() => {
+            setPanel('agentes');
+            setMenuAberto(false);
+          }}
         >
           Meus agentes
         </button>
@@ -521,6 +678,19 @@ const AgenteCamiloChat: React.FC = () => {
       </aside>
 
       <section className="camilo-chat-main">
+        <div className="camilo-mobile-bar">
+          <button
+            type="button"
+            className="camilo-menu-btn"
+            aria-expanded={menuAberto}
+            aria-controls="camilo-conversas"
+            onClick={() => setMenuAberto((aberto) => !aberto)}
+          >
+            <i className="bi bi-list" aria-hidden="true" />
+            <span>Conversas</span>
+          </button>
+          <strong>{panel === 'agentes' ? 'Meus agentes' : (active?.title || chatNome)}</strong>
+        </div>
         {panel === 'agentes' ? (
           <div className="camilo-agents">
             <div className="camilo-agents-head">
@@ -742,6 +912,42 @@ const AgenteCamiloChat: React.FC = () => {
                   <article key={message.id} className={`camilo-message is-${message.role}`}>
                     {message.role === 'assistant' && <span className="camilo-message-author">{authorName}</span>}
                     {message.role === 'assistant' ? <CamiloTexto texto={message.text} /> : <p>{message.text}</p>}
+                    {message.ata && (
+                      <div className="camilo-ata">
+                        <strong>{message.ata.titulo}</strong>
+                        <p className="camilo-ata-meta">
+                          {message.ata.data ? `${message.ata.data} · ` : ''}
+                          {message.ata.participantes.length
+                            ? `Participantes: ${message.ata.participantes.join(', ')}`
+                            : 'Nenhum participante citado'}
+                        </p>
+                        {(message.ata.assuntos ?? []).length > 0 && (
+                          <section className="camilo-ata-bloco is-dito">
+                            <h4>O que foi dito</h4>
+                            <ul>
+                              {(message.ata.assuntos ?? []).map((assunto) => <li key={assunto}>{assunto}</li>)}
+                            </ul>
+                          </section>
+                        )}
+                        {(message.ata.consideracoes ?? []).length > 0 && (
+                          <section className="camilo-ata-bloco is-doc">
+                            <h4>Considerações do documento</h4>
+                            <ul>
+                              {(message.ata.consideracoes ?? []).map((item) => <li key={item}>{item}</li>)}
+                            </ul>
+                          </section>
+                        )}
+                        {message.ata.aviso && <p className="camilo-ata-aviso">{message.ata.aviso}</p>}
+                        <div className="camilo-ata-acoes">
+                          <button type="button" onClick={() => downloadCamiloAtaPdf(message.ata as CamiloAta)}>
+                            Baixar PDF
+                          </button>
+                          <button type="button" onClick={() => setAtaEmail(message.ata as CamiloAta)}>
+                            Enviar e-mail
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </article>
                 ))}
                 {pendingId === active.id && (
@@ -761,6 +967,7 @@ const AgenteCamiloChat: React.FC = () => {
             </div>
           </>
         ) : null}
+        {ataEmail && <CamiloAtaEmailModal ata={ataEmail} onClose={() => setAtaEmail(null)} />}
       </section>
     </div>
   );

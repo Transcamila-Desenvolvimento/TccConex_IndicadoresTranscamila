@@ -63,7 +63,7 @@ import type {
   RotaDistanciaPayload, RotaDistanciaResult, EnderecoSugestao, GoogleMapsConfigComercial,
   ProdutoComercial, ProdutoComercialPayload, ProdutoComercialLotePayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
   Notificacao, PushNotificacoesConfig, PushInscricaoPayload,
-  CamiloAgente, CamiloAgentePayload, CamiloChatPadrao, CamiloChatPadraoPayload, CamiloConsulta, CamiloMeuTermo, CamiloParteGrupo, CamiloTermoAceite, CamiloTermoAceiteLista, CamiloTermoPublicacao, CamiloTermoSecao, CamiloTermoVersao,
+  CamiloAgente, CamiloAgentePayload, CamiloAta, CamiloChatPadrao, CamiloChatPadraoPayload, CamiloConsulta, CamiloMeuTermo, CamiloParteGrupo, CamiloTermoAceite, CamiloTermoAceiteLista, CamiloTermoPublicacao, CamiloTermoSecao, CamiloTermoVersao,
 } from '../types/domain';
 import {
   cloneTabelaArmazenagem,
@@ -1218,6 +1218,38 @@ function normalizarTermoVersao(data: any): CamiloTermoVersao {
     assinatura: typeof data?.assinatura === 'string' ? data.assinatura : '',
     declaracao: typeof data?.declaracao === 'string' ? data.declaracao : 'Li e concordo com o termo de uso do Camilo IA.',
     secoes: normalizarSecoesTermo(data?.secoes),
+  };
+}
+
+function textosDaAta(valor: unknown): string[] {
+  if (!Array.isArray(valor)) return [];
+  return valor.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map((item) => item.trim());
+}
+
+function normalizarCamiloAta(raw: unknown): CamiloAta | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const ata = raw as Record<string, unknown>;
+  if (typeof ata.titulo !== 'string' || !ata.titulo.trim()) return undefined;
+  const documentos = Array.isArray(ata.documentos)
+    ? ata.documentos.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const doc = item as { titulo?: unknown; relacao?: unknown };
+      if (typeof doc.titulo !== 'string' || !doc.titulo.trim()) return [];
+      return [{
+        titulo: doc.titulo.trim(),
+        relacao: typeof doc.relacao === 'string' ? doc.relacao.trim() : '',
+      }];
+    })
+    : [];
+  return {
+    titulo: ata.titulo.trim(),
+    data: typeof ata.data === 'string' ? ata.data : '',
+    participantes: textosDaAta(ata.participantes),
+    assuntos: textosDaAta(ata.assuntos),
+    deliberacoes: textosDaAta(ata.deliberacoes),
+    documentos,
+    consideracoes: textosDaAta(ata.consideracoes),
+    aviso: typeof ata.aviso === 'string' ? ata.aviso.trim() : '',
   };
 }
 
@@ -3833,9 +3865,9 @@ export const apiService = {
   async conversarCamilo(
     pergunta: string,
     historico: { papel: 'user' | 'assistant'; texto: string }[] = [],
-  ): Promise<{ resposta: string; titulo?: string; contextoUsado?: number; contextoLimite?: number }> {
+  ): Promise<{ resposta: string; titulo?: string; contextoUsado?: number; contextoLimite?: number; ata?: CamiloAta }> {
     const { data } = await api.post('/api/camilo/conversar/', { pergunta, historico });
-    return data;
+    return { ...data, ata: normalizarCamiloAta(data?.ata) };
   },
 
   async consultarCamiloAgente(
@@ -3844,6 +3876,23 @@ export const apiService = {
     historico: { papel: 'user' | 'assistant'; texto: string }[] = [],
   ): Promise<CamiloConsulta> {
     const { data } = await api.post(`/api/camilo/agentes/${id}/consultar/`, { pergunta, historico });
+    return { ...data, ata: normalizarCamiloAta(data?.ata) };
+  },
+
+  async enviarEmailCamiloAta(payload: {
+    to: string[];
+    cc: string[];
+    titulo: string;
+    observacao?: string;
+    pdf: Blob;
+  }): Promise<{ success: boolean; message: string }> {
+    const form = new FormData();
+    payload.to.forEach((email) => form.append('to', email));
+    payload.cc.forEach((email) => form.append('cc', email));
+    form.append('titulo', payload.titulo);
+    if (payload.observacao) form.append('observacao', payload.observacao);
+    form.append('pdf', payload.pdf, 'ata-reuniao.pdf');
+    const { data } = await api.post('/api/camilo/atas/enviar-email/', form);
     return data;
   },
 

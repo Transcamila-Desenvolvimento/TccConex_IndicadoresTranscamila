@@ -9,6 +9,7 @@ from .matriz_views import (
 )
 from .views import (
     AgenteConsultarView,
+    CamiloAtaEmailView,
     AgenteDetailView,
     AgenteListCreateView,
     CamiloConversarView,
@@ -26,6 +27,7 @@ router.register('matriz-empresarial/pastas', PastaMatrizEmpresarialViewSet, base
 
 urlpatterns = [
     path('conversar/', CamiloConversarView.as_view(), name='camilo-conversar'),
+    path('atas/enviar-email/', CamiloAtaEmailView.as_view(), name='camilo-ata-email'),
     path('chat-padrao/', ChatPadraoView.as_view(), name='camilo-chat-padrao'),
     path('termo/', MeuTermoView.as_view(), name='camilo-termo'),
     path('termos/', TermosAceitosView.as_view(), name='camilo-termos'),

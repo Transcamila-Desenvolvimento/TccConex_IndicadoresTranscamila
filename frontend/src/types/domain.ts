@@ -3880,12 +3880,29 @@ export interface CamiloAgentePayload {
   escopos: { ambiente: string; parte: string }[];
 }
 
+export interface CamiloAtaDocumento {
+  titulo: string;
+  relacao: string;
+}
+
+export interface CamiloAta {
+  titulo: string;
+  data: string;
+  participantes: string[];
+  assuntos: string[];
+  deliberacoes: string[];
+  documentos: CamiloAtaDocumento[];
+  consideracoes: string[];
+  aviso: string;
+}
+
 export interface CamiloConsulta {
   resposta: string;
   titulo?: string;
   contextoUsado?: number;
   contextoLimite?: number;
   fontes: Array<CamiloEscopo & { resumo: string }>;
+  ata?: CamiloAta;
 }
 
 export interface CamiloChatPadrao {

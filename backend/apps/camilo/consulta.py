@@ -18,6 +18,7 @@ MENCOES_AMBIENTE = (
     ('marketing', 'Marketing'),
     ('frota', 'Frota'),
     ('rh', 'RH'),
+    ('sgq', 'SGQ'),
 )
 
 

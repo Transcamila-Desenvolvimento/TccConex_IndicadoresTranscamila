@@ -22015,3 +22015,166 @@ button.proposta-status-badge {
   font-size: 11px;
   color: #64748b;
 }
+
+.camilo-ata {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.camilo-ata strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #111827;
+  font-size: 14px;
+}
+
+.camilo-ata p {
+  margin: 0;
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.camilo-ata-bloco {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.camilo-ata-bloco h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.camilo-ata-bloco ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.camilo-ata-bloco li {
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #111827;
+}
+
+.camilo-ata-bloco.is-dito {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+}
+
+.camilo-ata-bloco.is-dito h4 {
+  color: #1d4ed8;
+}
+
+.camilo-ata-bloco.is-doc {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
+.camilo-ata-bloco.is-doc h4 {
+  color: #c2410c;
+}
+
+.camilo-ata-aviso {
+  margin-top: 8px;
+  color: #9a3412;
+}
+
+.camilo-ata-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.camilo-ata-acoes button {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #fff;
+  color: #1f2937;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.camilo-ata-acoes button:hover {
+  background: #f3f4f6;
+}
+
+.camilo-composer-wrap {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+}
+
+.camilo-composer-wrap .camilo-composer {
+  width: 100%;
+}
+
+.camilo-mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #9ca3af;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.camilo-mic i {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.camilo-mic:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.camilo-mic.is-ouvindo {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.camilo-mic:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.camilo-mic:disabled:hover {
+  background: transparent;
+  color: #9ca3af;
+}
+
+.camilo-composer.is-ouvindo {
+  border-color: #fecaca;
+}
+
+.camilo-composer.is-ouvindo textarea {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.camilo-voz-status {
+  margin: 8px 4px 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.camilo-voz-status.is-erro {
+  color: #b91c1c;
+}
