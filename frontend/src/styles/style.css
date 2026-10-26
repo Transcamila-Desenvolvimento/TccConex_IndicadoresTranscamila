@@ -22178,3 +22178,221 @@ button.proposta-status-badge {
 .camilo-voz-status.is-erro {
   color: #b91c1c;
 }
+
+.camilo-mobile-bar,
+.camilo-side-close,
+.camilo-side-backdrop {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  .main-wrapper:has(.camilo-chat) {
+    height: calc(100vh / var(--app-zoom));
+    height: calc(100dvh / var(--app-zoom));
+  }
+
+  .main-wrapper:has(.camilo-chat) > .app-header {
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .main-wrapper:has(.camilo-chat) .header-breadcrumb {
+    min-width: 0;
+    padding: 5px 8px;
+  }
+
+  .main-wrapper:has(.camilo-chat) .header-breadcrumb #breadcrumb-text {
+    max-width: 92px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .main-wrapper:has(.camilo-chat) .header-right {
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .main-wrapper:has(.camilo-chat) .header-user .user-info {
+    display: none;
+  }
+
+  .main-wrapper:has(.camilo-chat) .header-ambiente-btn span {
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .main-wrapper:has(.camilo-chat) .header-ambiente-menus {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    max-width: calc(100vw - 20px);
+  }
+
+  .main-wrapper:has(.camilo-chat) .header-ambiente-filiais {
+    position: static;
+    margin-bottom: 6px;
+    max-width: min(240px, calc(100vw - 24px));
+  }
+
+  .camilo-chat {
+    position: relative;
+    flex-direction: row;
+  }
+
+  .camilo-mobile-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    min-height: 48px;
+    padding: 6px 12px;
+    border-bottom: 1px solid #ececec;
+    background: #fff;
+  }
+
+  .camilo-mobile-bar strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .camilo-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    min-height: 36px;
+    padding: 6px 10px;
+    border: 1px solid #e4e4e7;
+    border-radius: 10px;
+    background: #fff;
+    color: #1f2937;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .camilo-menu-btn i {
+    font-size: 18px;
+  }
+
+  .camilo-side-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 25;
+    border: 0;
+    background: rgba(15, 23, 42, 0.4);
+    cursor: pointer;
+  }
+
+  .camilo-chat-side {
+    position: absolute;
+    z-index: 26;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(300px, 86vw);
+    max-height: none;
+    border-right: 1px solid #ececec;
+    border-bottom: 0;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .camilo-chat-side.is-open {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+    box-shadow: 8px 0 24px rgba(15, 23, 42, 0.16);
+  }
+
+  .camilo-side-logo {
+    justify-content: space-between;
+    padding-right: 0;
+  }
+
+  .camilo-side-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #374151;
+    cursor: pointer;
+  }
+
+  .camilo-thread-delete {
+    width: 36px;
+    height: 36px;
+    opacity: 1;
+  }
+
+  .camilo-hero {
+    overflow-y: auto;
+    justify-content: safe center;
+    padding: 20px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .camilo-hero h1 {
+    font-size: 22px;
+    margin-bottom: 18px;
+    text-align: center;
+  }
+
+  .camilo-thread-title {
+    padding: 12px 16px 0;
+  }
+
+  .camilo-messages {
+    padding: 16px 12px 8px;
+  }
+
+  .camilo-message.is-user {
+    max-width: 92%;
+  }
+
+  .camilo-composer-dock {
+    padding: 8px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .camilo-picker-trigger {
+    max-width: 108px;
+    padding: 8px 6px;
+  }
+
+  .camilo-agents {
+    padding: 16px 16px 24px;
+  }
+
+  .camilo-agents-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .camilo-agents h1 {
+    font-size: 20px;
+  }
+
+  .camilo-agent-form-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 800px) and (prefers-reduced-motion: reduce) {
+  .camilo-chat-side {
+    transition: none;
+  }
+}

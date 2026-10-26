@@ -86,8 +86,22 @@ def _relato(texto: str) -> str:
 
 
 def assuntos_do_relato(texto: str) -> list[str]:
+    """Tudo o que foi falado, sem teto. Frase longa sem ponto vira parágrafos curtos."""
     relato = _relato(texto)
+    if not relato:
+        return []
     frases = [frase.strip() for frase in re.split(r'(?<=[.!?])\s+', relato) if frase.strip()]
+    if len(frases) <= 1 and len(relato) > 420:
+        frases = []
+        atual = ''
+        for palavra in relato.split():
+            if atual and len(atual) + len(palavra) + 1 > 420:
+                frases.append(atual)
+                atual = palavra
+            else:
+                atual = f'{atual} {palavra}'.strip()
+        if atual:
+            frases.append(atual)
     uteis = []
     for frase in frases:
         base = _sem_acento(frase).lower()
@@ -95,11 +109,7 @@ def assuntos_do_relato(texto: str) -> list[str]:
             continue
         if len(frase) > 8:
             uteis.append(frase)
-        if len(uteis) >= 8:
-            break
-    if uteis:
-        return uteis
-    return [relato[:800]] if relato else []
+    return uteis or [relato]
 
 
 def _titulo(assuntos: list[str]) -> str:
@@ -163,9 +173,34 @@ def _encurtar(texto: str, limite: int = 320) -> str:
     return texto[:limite].rsplit(' ', 1)[0].rstrip('.,;') + '…'
 
 
+def amostra_reuniao(texto: str) -> str:
+    """Começo, meio e fim, para a consideração alcançar a reunião inteira."""
+    texto = ' '.join((texto or '').split())
+    if len(texto) <= 12000:
+        return texto
+    tamanho = 3500
+    inicios = (0, max(0, len(texto) // 2 - tamanho // 2), max(0, len(texto) - tamanho))
+    vistos = []
+    fatias = []
+    for inicio in inicios:
+        if inicio in vistos:
+            continue
+        vistos.append(inicio)
+        fatias.append(texto[inicio:inicio + tamanho])
+    return '\n[...]\n'.join(fatias)
+
+
+def _dito_para_relacao(assuntos: list[str]) -> str:
+    if not assuntos:
+        return ''
+    if len(assuntos) == 1:
+        return _encurtar(assuntos[0], 500)
+    return f'{_encurtar(assuntos[0], 240)} […] {_encurtar(assuntos[-1], 240)}'
+
+
 def consideracoes_do_documento(assuntos: list[str], documentos: list[dict]) -> list[str]:
     """Liga o que foi dito ao trecho do documento, sem misturar os dois textos."""
-    dito = _encurtar(' '.join(assuntos), 360)
+    dito = _dito_para_relacao(assuntos)
     if not dito or not documentos:
         return []
     itens = []
@@ -196,7 +231,11 @@ def _consideracoes_validas(valor, documentos: list[dict]) -> list[str]:
 
 def _resumo(assuntos, participantes, consideracoes, aviso) -> str:
     frases = []
-    if assuntos:
+    tamanho = sum(len(assunto) for assunto in assuntos)
+    if assuntos and tamanho > 1200:
+        frases.append(f'A reunião foi longa. No início: {_encurtar(assuntos[0], 220)}')
+        frases.append(f'No fim: {_encurtar(assuntos[-1], 220)}')
+    elif assuntos:
         frases.append('Na reunião foi dito: ' + ' '.join(assuntos)[:500])
     if participantes:
         frases.append('Participaram ' + ', '.join(participantes) + '.')
@@ -241,7 +280,7 @@ def _completar_com_modelo(ata: dict, pergunta: str, documentos: list[dict]) -> d
     if not configurado():
         return ata
     blocos = [
-        f"Fala da reunião:\n{pergunta[:14000]}",
+        f"Fala da reunião:\n{amostra_reuniao(pergunta)}",
         'Participantes citados, e só estes podem aparecer: '
         + (', '.join(ata['participantes']) or 'nenhum'),
     ]

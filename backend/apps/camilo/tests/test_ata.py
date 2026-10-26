@@ -103,6 +103,24 @@ class CamiloAtaTests(TestCase):
         self.assertIn('chat padrão não consulta documentos do SGQ', corpo['resposta'])
         self.assertEqual(corpo['ata']['participantes'], ['Ana Lima', 'João Souza'])
 
+    def test_reuniao_longa_nao_esbarra_no_limite_antigo(self):
+        agente_id = self._agente(self.sgq, 'Qualidade', [{'ambiente': 'SGQ', 'parte': 'matriz'}])
+        miolo = 'Ficou combinado revisar a doca antes de liberar a carga. ' * 500
+        fala = (
+            f'{miolo} Participantes: Ana Lima e João Souza. '
+            'Crie uma ata desta reunião relacionando com o documento do procedimento da logística do SGQ.'
+        )
+        self.assertGreater(len(fala), 16000)
+        resposta = self.client.post(
+            f'/api/camilo/agentes/{agente_id}/consultar/',
+            {'pergunta': fala},
+            format='json',
+        )
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        assuntos = ' '.join(resposta.json()['ata']['assuntos']).lower()
+        self.assertIn('doca', assuntos)
+        self.assertGreater(len(resposta.json()['ata']['assuntos']), 8)
+
     def test_email_exige_google_vinculado(self):
         self.client.force_authenticate(user=self.sgq)
         pdf = SimpleUploadedFile('ata.pdf', b'%PDF-1.4 ata', content_type='application/pdf')

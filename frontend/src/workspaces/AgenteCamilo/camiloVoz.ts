@@ -22,6 +22,7 @@ interface ReconhecimentoVoz extends EventTarget {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
+  onstart: (() => void) | null;
   onresult: ((event: EventoResultadoVoz) => void) | null;
   onerror: ((event: EventoErroVoz) => void) | null;
   onend: (() => void) | null;
@@ -197,6 +198,23 @@ export interface SessaoCaptura {
   cancelar: () => void;
 }
 
+/** Junta o trecho novo sem repetir o que o navegador devolve de novo ao reiniciar a escuta. */
+function juntar(base: string, extra: string): string {
+  const esquerda = base.trim();
+  const direita = extra.trim();
+  if (!direita) return esquerda;
+  if (!esquerda) return direita;
+  if (direita.startsWith(esquerda)) return direita;
+  if (esquerda.endsWith(direita)) return esquerda;
+  const limite = Math.min(esquerda.length, direita.length, 4000);
+  for (let tamanho = limite; tamanho >= 24; tamanho -= 1) {
+    if (esquerda.slice(-tamanho) === direita.slice(0, tamanho)) {
+      return `${esquerda}${direita.slice(tamanho)}`.trim();
+    }
+  }
+  return `${esquerda} ${direita}`.trim();
+}
+
 /** Ouve até `parar` ou `cancelar`. O navegador pode encerrar sozinho; nesse caso a escuta recomeça. */
 export function iniciarCaptura(eventos: {
   onTexto: (confirmado: string, parcial: string) => void;
@@ -215,11 +233,17 @@ export function iniciarCaptura(eventos: {
   let sessaoFinal = '';
   let parcialAtual = '';
   let ativo = true;
+  let geracao = 0;
 
-  const textoAtual = () => [acumulado, sessaoFinal, parcialAtual].filter(Boolean).join(' ').trim();
-  const publicar = () => eventos.onTexto([acumulado, sessaoFinal].filter(Boolean).join(' '), parcialAtual);
+  const textoAtual = () => juntar(acumulado, [sessaoFinal, parcialAtual].filter(Boolean).join(' '));
+  const publicar = () => eventos.onTexto(juntar(acumulado, sessaoFinal), parcialAtual);
 
+  reconhecimento.onstart = () => {
+    sessaoFinal = '';
+    parcialAtual = '';
+  };
   reconhecimento.onresult = (event) => {
+    const minha = geracao;
     let finais = '';
     let parcial = '';
     for (let indice = 0; indice < event.results.length; indice += 1) {
@@ -228,6 +252,7 @@ export function iniciarCaptura(eventos: {
       if (resultado.isFinal) finais = `${finais} ${texto}`.trim();
       else parcial = `${parcial} ${texto}`.trim();
     }
+    if (minha !== geracao || !ativo) return;
     sessaoFinal = finais;
     parcialAtual = parcial;
     publicar();
@@ -244,9 +269,11 @@ export function iniciarCaptura(eventos: {
   };
   reconhecimento.onend = () => {
     if (!ativo) return;
+    geracao += 1;
     acumulado = textoAtual();
     sessaoFinal = '';
     parcialAtual = '';
+    publicar();
     try {
       reconhecimento.start();
     } catch {

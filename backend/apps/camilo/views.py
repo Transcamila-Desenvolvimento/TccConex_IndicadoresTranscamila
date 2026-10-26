@@ -91,8 +91,11 @@ def _pergunta(request):
     pergunta = str(request.data.get('pergunta') or '').strip()
     if not pergunta:
         return None, Response({'detail': 'Escreva a pergunta.'}, status=status.HTTP_400_BAD_REQUEST)
-    if len(pergunta) > 16000:
-        return None, Response({'detail': 'A pergunta passou de 16000 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
+    if len(pergunta) > 200000:
+        return None, Response(
+            {'detail': 'A reunião passou de 200000 caracteres. Divida em duas atas.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     return pergunta, None
 
 
