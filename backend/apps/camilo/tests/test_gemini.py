@@ -77,7 +77,7 @@ class CamiloGeminiTests(TestCase):
         sistema = pedido['systemInstruction']['parts'][0]['text']
         self.assertIn('uma ou duas frases curtas', sistema)
         self.assertEqual(pedido['generationConfig']['maxOutputTokens'], 512)
-        self.assertEqual(pedido['generationConfig']['thinkingConfig']['thinkingLevel'], 'minimal')
+        self.assertEqual(pedido['generationConfig']['thinkingConfig']['thinkingLevel'], 'low')
 
     @patch('apps.camilo.gemini.urllib.request.urlopen')
     def test_admin_configura_o_chat_padrao(self, urlopen):

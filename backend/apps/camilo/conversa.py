@@ -211,7 +211,7 @@ def responder_camilo(pergunta: str, historico: list[dict] | None = None, voz: bo
         sistema,
         mensagens,
         max_tokens=512 if voz else 8192,
-        pensar='minimal' if voz else 'low',
+        pensar='low',
     )
     titulo = ('' if anteriores else titulo_local(pergunta)) if voz else (
         titulo_da_conversa(pergunta, resposta) if not anteriores else ''
@@ -277,6 +277,6 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
         sistema,
         mensagens,
         max_tokens=512 if voz else 8192,
-        pensar='minimal' if voz else 'low',
+        pensar='low',
     )
     return resultado
