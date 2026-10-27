@@ -44,6 +44,12 @@ import type {
   GoogleDriveStatus, GoogleDriveBrowseResponse,
   UserDirectoryEntry,
   SgqLoteDraft, SgqLoteDraftRow, SgqFormDraft,
+  SgqAuditoria, SgqAuditoriaPayload, SgqAuditoriaQueryParams, SgqAuditoriaResumo, SgqAuditoriaSugestoes, SgqAuditoriaVisao,
+  SgqAuditoriaExecucao, SgqAuditoriaResposta, SgqAuditoriaRespostaPayload,
+  SgqNorma, SgqNormaPayload, SgqNormaQueryParams, SgqNormaResumo, SgqNormaItem, SgqNormaItemPayload,
+  SgqCategoria, SgqCategoriaPayload, SgqCategoriaQueryParams, SgqCategoriaResumo, SgqCategoriaSugestoes,
+  SgqNormaItensImportParams, SgqNormaItensImportResumo, SgqNormaTipoResposta,
+  SgqTipoResposta, SgqTipoRespostaPayload, SgqTipoRespostaQueryParams, SgqTipoRespostaResumo,
   VeiculoFrota, VeiculoFrotaPayload,
   CondutorFrota, CondutorFrotaPayload,
   CustoFrotaLote, CustoFrotaLotesResponse, CustoFrotaImportResult, CustoFrotaReportType,
@@ -122,6 +128,7 @@ function normalizeUser(raw: any): User {
     indicadorFiliais: raw.indicadorFiliais && typeof raw.indicadorFiliais === 'object' ? raw.indicadorFiliais : {},
     funcoes: raw.funcoes && typeof raw.funcoes === 'object' ? raw.funcoes : {},
     abas: raw.abas && typeof raw.abas === 'object' ? raw.abas : {},
+    sgqAuditoriasLiberadas: raw.sgqAuditoriasLiberadas === true,
     googleEmail: raw.googleEmail ?? null,
     googleLinkedAt: raw.googleLinkedAt ?? null,
     googlePicture: raw.googlePicture ?? null,
@@ -2075,6 +2082,242 @@ export const apiService = {
   async moverDocumentoSGQ(id: string, pastaId: string | null): Promise<DocumentoRH> {
     const { data } = await api.post(`/api/sgq/documentos/${id}/mover/`, { pastaId });
     return data;
+  },
+
+  // ─── SGQ — Auditorias (Django API) ─────────────────────────────────────────
+
+  async getSgqAuditorias(params: SgqAuditoriaQueryParams = {}): Promise<PaginatedResponse<SgqAuditoria>> {
+    const { data } = await api.get('/api/sgq/auditorias/', {
+      params: {
+        page: params.page,
+        page_size: params.pageSize,
+        search: params.search || undefined,
+        status: params.status || undefined,
+        ordering: params.ordering,
+      },
+    });
+    return paginatedFromResponse(data, (raw) => raw as SgqAuditoria);
+  },
+
+  async getSgqAuditoriasResumo(): Promise<SgqAuditoriaResumo> {
+    const { data } = await api.get('/api/sgq/auditorias/resumo/');
+    return data as SgqAuditoriaResumo;
+  },
+
+  async getSgqAuditoriasVisao(): Promise<SgqAuditoriaVisao> {
+    const { data } = await api.get('/api/sgq/auditorias/visao/');
+    return data as SgqAuditoriaVisao;
+  },
+
+  async getSgqAuditoriasSugestoes(): Promise<SgqAuditoriaSugestoes> {
+    const { data } = await api.get('/api/sgq/auditorias/sugestoes/');
+    return data as SgqAuditoriaSugestoes;
+  },
+
+  async createSgqAuditoria(payload: SgqAuditoriaPayload): Promise<SgqAuditoria> {
+    const { data } = await api.post('/api/sgq/auditorias/', payload);
+    return data as SgqAuditoria;
+  },
+
+  async updateSgqAuditoria(id: string, payload: Partial<SgqAuditoriaPayload>): Promise<SgqAuditoria> {
+    const { data } = await api.patch(`/api/sgq/auditorias/${id}/`, payload);
+    return data as SgqAuditoria;
+  },
+
+  async deleteSgqAuditorias(ids: string[]): Promise<void> {
+    await api.post('/api/sgq/auditorias/excluir-lote/', { ids });
+  },
+
+  async getSgqAuditoriaExecucao(id: string): Promise<SgqAuditoriaExecucao> {
+    const { data } = await api.get(`/api/sgq/auditorias/${id}/execucao/`);
+    return data as SgqAuditoriaExecucao;
+  },
+
+  async responderSgqAuditoriaItem(id: string, payload: SgqAuditoriaRespostaPayload): Promise<SgqAuditoriaResposta> {
+    const { data } = await api.post(`/api/sgq/auditorias/${id}/responder/`, payload);
+    return data as SgqAuditoriaResposta;
+  },
+
+  async anexarSgqAuditoriaItem(id: string, itemId: string, arquivo: File): Promise<SgqAuditoriaResposta> {
+    const form = new FormData();
+    form.append('itemId', itemId);
+    form.append('arquivo', arquivo);
+    const { data } = await api.post(`/api/sgq/auditorias/${id}/anexos/`, form);
+    return data as SgqAuditoriaResposta;
+  },
+
+  async excluirSgqAuditoriaAnexo(id: string, anexoId: string): Promise<SgqAuditoriaResposta> {
+    const { data } = await api.delete(`/api/sgq/auditorias/${id}/anexos/${anexoId}/`);
+    return data as SgqAuditoriaResposta;
+  },
+
+  async downloadSgqAuditoriaAnexo(id: string, anexoId: string): Promise<Blob> {
+    const { data, status } = await api.get(`/api/sgq/auditorias/${id}/anexos/${anexoId}/`, {
+      responseType: 'blob',
+      validateStatus: () => true,
+    });
+    if (status < 200 || status >= 300) {
+      throw new Error(await readBlobErrorMessage(data, 'Não foi possível baixar o anexo.'));
+    }
+    return data;
+  },
+
+  async getSgqNormas(params: SgqNormaQueryParams = {}): Promise<PaginatedResponse<SgqNorma>> {
+    const { data } = await api.get('/api/sgq/normas/', {
+      params: {
+        page: params.page,
+        page_size: params.pageSize,
+        search: params.search || undefined,
+        situacao: params.situacao || undefined,
+        ordering: params.ordering,
+      },
+    });
+    return paginatedFromResponse(data, (raw) => raw as SgqNorma);
+  },
+
+  async getSgqNormasResumo(): Promise<SgqNormaResumo> {
+    const { data } = await api.get('/api/sgq/normas/resumo/');
+    return data as SgqNormaResumo;
+  },
+
+  async createSgqNorma(payload: SgqNormaPayload): Promise<SgqNorma> {
+    const { data } = await api.post('/api/sgq/normas/', payload);
+    return data as SgqNorma;
+  },
+
+  async updateSgqNorma(id: string, payload: Partial<SgqNormaPayload>): Promise<SgqNorma> {
+    const { data } = await api.patch(`/api/sgq/normas/${id}/`, payload);
+    return data as SgqNorma;
+  },
+
+  async deleteSgqNormas(ids: string[]): Promise<void> {
+    await api.post('/api/sgq/normas/excluir-lote/', { ids });
+  },
+
+  async getSgqCategorias(params: SgqCategoriaQueryParams = {}): Promise<PaginatedResponse<SgqCategoria>> {
+    const { data } = await api.get('/api/sgq/auditorias-categorias/', {
+      params: {
+        page: params.page,
+        page_size: params.pageSize,
+        search: params.search || undefined,
+        situacao: params.situacao || undefined,
+        ordering: params.ordering,
+      },
+    });
+    return paginatedFromResponse(data, (raw) => raw as SgqCategoria);
+  },
+
+  async getSgqCategoriasResumo(): Promise<SgqCategoriaResumo> {
+    const { data } = await api.get('/api/sgq/auditorias-categorias/resumo/');
+    return data as SgqCategoriaResumo;
+  },
+
+  async getSgqCategoriasSugestoes(): Promise<SgqCategoriaSugestoes> {
+    const { data } = await api.get('/api/sgq/auditorias-categorias/sugestoes/');
+    return data as SgqCategoriaSugestoes;
+  },
+
+  async createSgqCategoria(payload: SgqCategoriaPayload): Promise<SgqCategoria> {
+    const { data } = await api.post('/api/sgq/auditorias-categorias/', payload);
+    return data as SgqCategoria;
+  },
+
+  async updateSgqCategoria(id: string, payload: Partial<SgqCategoriaPayload>): Promise<SgqCategoria> {
+    const { data } = await api.patch(`/api/sgq/auditorias-categorias/${id}/`, payload);
+    return data as SgqCategoria;
+  },
+
+  async deleteSgqCategorias(ids: string[]): Promise<void> {
+    await api.post('/api/sgq/auditorias-categorias/excluir-lote/', { ids });
+  },
+
+  async getSgqTiposResposta(params: SgqTipoRespostaQueryParams = {}): Promise<PaginatedResponse<SgqTipoResposta>> {
+    const { data } = await api.get('/api/sgq/auditorias-tipos-resposta/', {
+      params: {
+        page: params.page,
+        page_size: params.pageSize,
+        search: params.search || undefined,
+        publica: params.publica || undefined,
+        ordering: params.ordering,
+      },
+    });
+    return paginatedFromResponse(data, (raw) => raw as SgqTipoResposta);
+  },
+
+  async getSgqTiposRespostaResumo(): Promise<SgqTipoRespostaResumo> {
+    const { data } = await api.get('/api/sgq/auditorias-tipos-resposta/resumo/');
+    return data as SgqTipoRespostaResumo;
+  },
+
+  async createSgqTipoResposta(payload: SgqTipoRespostaPayload): Promise<SgqTipoResposta> {
+    const { data } = await api.post('/api/sgq/auditorias-tipos-resposta/', payload);
+    return data as SgqTipoResposta;
+  },
+
+  async updateSgqTipoResposta(id: string, payload: Partial<SgqTipoRespostaPayload>): Promise<SgqTipoResposta> {
+    const { data } = await api.patch(`/api/sgq/auditorias-tipos-resposta/${id}/`, payload);
+    return data as SgqTipoResposta;
+  },
+
+  async deleteSgqTiposResposta(ids: string[]): Promise<void> {
+    await api.post('/api/sgq/auditorias-tipos-resposta/excluir-lote/', { ids });
+  },
+
+  async getSgqNorma(id: string): Promise<SgqNorma> {
+    const { data } = await api.get(`/api/sgq/normas/${id}/`);
+    return data as SgqNorma;
+  },
+
+  async getSgqNormaTiposResposta(normaId: string): Promise<SgqNormaTipoResposta[]> {
+    const { data } = await api.get(`/api/sgq/normas/${normaId}/tipos-resposta/`);
+    return data as SgqNormaTipoResposta[];
+  },
+
+  async getSgqNormaItens(normaId: string): Promise<SgqNormaItem[]> {
+    const { data } = await api.get('/api/sgq/normas-itens/', { params: { norma: normaId } });
+    return data as SgqNormaItem[];
+  },
+
+  async createSgqNormaItem(payload: SgqNormaItemPayload): Promise<SgqNormaItem> {
+    const { data } = await api.post('/api/sgq/normas-itens/', payload);
+    return data as SgqNormaItem;
+  },
+
+  async updateSgqNormaItem(id: string, payload: Partial<SgqNormaItemPayload>): Promise<SgqNormaItem> {
+    const { data } = await api.patch(`/api/sgq/normas-itens/${id}/`, payload);
+    return data as SgqNormaItem;
+  },
+
+  async deleteSgqNormaItem(id: string): Promise<void> {
+    await api.delete(`/api/sgq/normas-itens/${id}/`);
+  },
+
+  async moverSgqNormaItem(id: string, direcao: 'cima' | 'baixo'): Promise<void> {
+    await api.post(`/api/sgq/normas-itens/${id}/mover/`, { direcao });
+  },
+
+  async exportarModeloItensNorma(): Promise<Blob> {
+    const { data, headers } = await api.get('/api/sgq/normas/exportar-modelo-itens/', { responseType: 'blob' });
+    if (data instanceof Blob && data.type.includes('json')) {
+      throw new Error(await readBlobErrorMessage(data, 'Não foi possível baixar o modelo.'));
+    }
+    return assertSpreadsheetBlob(data, headers);
+  },
+
+  async importarSgqNormaItens(normaId: string, params: SgqNormaItensImportParams): Promise<SgqNormaItensImportResumo> {
+    const form = new FormData();
+    form.append('file', params.file);
+    form.append('tipoRespostaId', params.tipoRespostaId);
+    form.append('substituir', String(params.substituir));
+    form.append('dryRun', String(params.dryRun));
+    if (params.mapeamento?.length) form.append('mapeamento', JSON.stringify(params.mapeamento));
+    if (params.classificacoes?.length) form.append('classificacoes', JSON.stringify(params.classificacoes));
+    if (params.areas?.length) form.append('areas', JSON.stringify(params.areas));
+    const { data } = await api.post(`/api/sgq/normas/${normaId}/importar-itens/`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    });
+    return data as SgqNormaItensImportResumo;
   },
 
   async getSGQDriveStatus(): Promise<GoogleDriveStatus> {

@@ -6,7 +6,7 @@ import NotificacoesBell from '../components/NotificacoesBell';
 import { AGENTE_CAMILO_ENVIRONMENT, environmentRequiresFilial, filterActiveEnvironments, isAdminEnvironment } from '../constants/environments';
 import { branchesForModule } from '../constants/filiais';
 import { getAllowedIndicadores } from '../constants/indicadores';
-import { userCanSeeAba } from '../constants/abas';
+import { abasDoModulo, userCanSeeAba } from '../constants/abas';
 import logoExpanded from '../assets/Logo_TccConex.png';
 import logoCollapsed from '../assets/Logo_TccConex_Fechado.png';
 import logoIndicadoresExpanded from '../assets/Logo_Indicadores.png';
@@ -30,6 +30,17 @@ function NavIcon({ name, sub = false }: { name: string; sub?: boolean }) {
 }
 
 type IndNavGroup = 'financeiro' | 'logistica' | 'rh' | 'sgq' | 'frota';
+
+const SGQ_AUDITORIAS_MENU = abasDoModulo('SGQ').filter((item) => item.key.startsWith('auditorias'));
+const SGQ_AUDITORIAS_PATHS = SGQ_AUDITORIAS_MENU.map((item) => item.path);
+const SGQ_AUDITORIAS_ICONS: Record<string, string> = {
+  'auditorias-visao-geral': 'grid',
+  auditorias: 'clipboard-check',
+  'auditorias-minhas-acoes': 'check-square',
+  'auditorias-normas': 'book',
+  'auditorias-tipos-resposta': 'chat-left-text',
+  'auditorias-categorias': 'tags',
+};
 
 function ChevronSubmenu({ open }: { open: boolean }) {
   return (
@@ -65,6 +76,7 @@ const DashboardLayout: React.FC = () => {
   const [isCadastrosComprasSubmenuOpen, setIsCadastrosComprasSubmenuOpen] = useState(false);
   const [isQuestionariosFrotaSubmenuOpen, setIsQuestionariosFrotaSubmenuOpen] = useState(false);
   const [isCadastrosComercialSubmenuOpen, setIsCadastrosComercialSubmenuOpen] = useState(false);
+  const [isAuditoriasSgqSubmenuOpen, setIsAuditoriasSgqSubmenuOpen] = useState(false);
   const [, setIsAdminSubmenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
@@ -120,6 +132,9 @@ const DashboardLayout: React.FC = () => {
     }
     if (location.pathname.startsWith('/comercial/cadastros') || location.pathname.startsWith('/comercial/parametros/prazos')) {
       setIsCadastrosComercialSubmenuOpen(true);
+    }
+    if (location.pathname.startsWith('/sgq/auditorias')) {
+      setIsAuditoriasSgqSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/admin')) {
       setIsAdminSubmenuOpen(true);
@@ -539,6 +554,13 @@ const DashboardLayout: React.FC = () => {
         action: () => navigate('/sgq/matriz'),
         show: selectedEnvironment === 'SGQ' && canAba('SGQ', 'matriz')
       },
+      ...SGQ_AUDITORIAS_MENU.map((item) => ({
+        title: item.label,
+        path: `Gestão da Qualidade (SGQ) / Auditorias / ${item.label}`,
+        icon: <i className={`bi bi-${SGQ_AUDITORIAS_ICONS[item.key]} search-item-icon`} aria-hidden="true" />,
+        action: () => navigate(item.path),
+        show: selectedEnvironment === 'SGQ' && canAba('SGQ', item.key),
+      })),
       {
         title: "Home Marketing",
         path: "Marketing / Home",
@@ -769,6 +791,8 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/rh')) return env;
     if (path.startsWith('/sgq/matriz')) return `${env} / Matriz`;
     if (path.startsWith('/sgq/pesquisa-satisfacao')) return `${env} / Pesquisa de Satisfação`;
+    const auditoriaAtual = SGQ_AUDITORIAS_MENU.find((item) => path.startsWith(item.path));
+    if (auditoriaAtual) return `${env} / Auditorias / ${auditoriaAtual.label}`;
     if (path.startsWith('/sgq')) return env;
     if (path.startsWith('/logistica/configuracoes')) return `${env} / Configurações gerais`;
     if (path.startsWith('/logistica')) return env;
@@ -1505,6 +1529,45 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Matriz</span>
                   </div>
                 </Link>
+                )}
+                {SGQ_AUDITORIAS_MENU.some((item) => canAba('SGQ', item.key)) && (
+                <div className={`nav-group-wrapper${isAuditoriasSgqSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-sgq-auditorias">
+                  <button
+                    type="button"
+                    className={`nav-btn ${isParentNavActive(SGQ_AUDITORIAS_PATHS, isAuditoriasSgqSubmenuOpen) ? 'active-parent' : ''}`}
+                    onClick={() => setIsAuditoriasSgqSubmenuOpen(!isAuditoriasSgqSubmenuOpen)}
+                    data-tooltip="Auditorias"
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="clipboard2-check" />
+                      <span className="nav-text">Auditorias</span>
+                    </div>
+                    <ChevronSubmenu open={isAuditoriasSgqSubmenuOpen} />
+                  </button>
+                  <div
+                    className="submenu-container"
+                    style={{
+                      display: isSidebarCollapsed ? undefined : 'block',
+                      maxHeight: isSidebarCollapsed ? undefined : (isAuditoriasSgqSubmenuOpen ? '400px' : '0px'),
+                      overflow: 'hidden',
+                      transition: 'max-height 0.25s ease',
+                    }}
+                  >
+                    {SGQ_AUDITORIAS_MENU.map((item) => canAba('SGQ', item.key) && (
+                      <Link
+                        key={item.key}
+                        to={item.path}
+                        className={`nav-btn sub-nav-btn ${isRouteActive(item.path) ? 'active' : ''}`}
+                        data-tooltip={item.label}
+                      >
+                        <div className="nav-btn-left">
+                          <NavIcon name={SGQ_AUDITORIAS_ICONS[item.key]} sub />
+                          <span className="nav-text">{item.label}</span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
                 )}
               </div>
             )}

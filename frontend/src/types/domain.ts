@@ -23,6 +23,8 @@ export interface User {
   funcoes: Record<string, string[]>;
   /** Abas de menu liberadas por ambiente (exceto Indicadores). Vazio no módulo = todas. */
   abas: Record<string, string[]>;
+  /** False no Azure enquanto a função de auditorias estiver bloqueada para todos. */
+  sgqAuditoriasLiberadas?: boolean;
   googleEmail: string | null;
   googleLinkedAt: string | null;
   googlePicture: string | null;
@@ -2098,6 +2100,360 @@ export interface SgqFormDraft {
   filial: string;
   hasDraft: boolean;
   form: SgqLoteDraftRow;
+}
+
+// --- SGQ (Auditorias) TYPES ---
+
+export const SGQ_AUDITORIA_STATUS_OPTIONS = [
+  { value: 'planejamento', label: 'Em planejamento' },
+  { value: 'execucao', label: 'Em execução' },
+  { value: 'concluida', label: 'Concluída' },
+] as const;
+
+export type SgqAuditoriaStatus = (typeof SGQ_AUDITORIA_STATUS_OPTIONS)[number]['value'];
+
+export const SGQ_AUDITORIA_STATUS_LABEL: Record<SgqAuditoriaStatus, string> = {
+  planejamento: 'Em planejamento',
+  execucao: 'Em execução',
+  concluida: 'Concluída',
+};
+
+export interface SgqAuditoria {
+  id: string;
+  codigo: string;
+  categoria: string;
+  titulo: string;
+  dataInicio: string;
+  dataTermino: string;
+  normas: SgqAuditoriaNorma[];
+  auditorLider: string;
+  auditores: string[];
+  status: SgqAuditoriaStatus;
+  escopo: string;
+  filial: string;
+  atrasada: boolean;
+  /** Perguntas das normas vinculadas à auditoria. */
+  totalPerguntas: number;
+  /** Perguntas que já têm opção de resposta escolhida. */
+  perguntasRespondidas: number;
+  criadoPor: string;
+  criadoEm: string;
+  atualizadoEm: string;
+}
+
+export interface SgqAuditoriaNorma {
+  id: string;
+  nome: string;
+  ativa: boolean;
+}
+
+export type SgqAuditoriaPayload = Pick<
+  SgqAuditoria,
+  'categoria' | 'titulo' | 'dataInicio' | 'dataTermino' | 'auditorLider' | 'auditores' | 'status' | 'escopo'
+>;
+
+export type SgqAuditoriaOrdering =
+  | 'data_inicio' | '-data_inicio'
+  | 'data_termino' | '-data_termino'
+  | 'codigo' | '-codigo'
+  | 'titulo' | '-titulo';
+
+export interface SgqAuditoriaQueryParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: SgqAuditoriaStatus | 'atrasada' | '';
+  ordering?: SgqAuditoriaOrdering;
+}
+
+export interface SgqAuditoriaResumo {
+  total: number;
+  planejamento: number;
+  execucao: number;
+  concluida: number;
+  atrasada: number;
+}
+
+export interface SgqAuditoriaVisao {
+  semestre: string;
+  atrasadas: number;
+  planejamento: number;
+  execucao: number;
+  concluida: number;
+  /** Não conformidades (resposta com valor 0) agrupadas pelo título da auditoria. */
+  ocorrencias: Array<{ label: string; valor: number }>;
+}
+
+export interface SgqAuditoriaSugestoes {
+  /** Categorias ativas da filial, com as normas ativas que a auditoria herda de cada uma. */
+  categorias: Array<{ nome: string; normas: Array<{ id: string; nome: string }> }>;
+  /** Usuários ativos com o SGQ liberado na filial. */
+  auditores: SgqPessoa[];
+}
+
+export interface SgqPessoa {
+  nome: string;
+  cargo: string;
+}
+
+export interface SgqNorma {
+  id: string;
+  nome: string;
+  descricao: string;
+  dataAtualizacao: string;
+  emissor: string;
+  publica: boolean;
+  ativa: boolean;
+  classificacoes: SgqNormaClassificacao[];
+  areas: SgqNormaArea[];
+  filial: string;
+  criadoPor: string;
+  criadoEm: string;
+  atualizadoEm: string;
+}
+
+/** Classificação das perguntas da norma (ex.: SASSMAQ M/I/D), com metas em % de conformidade. */
+export interface SgqNormaClassificacao {
+  sigla: string;
+  nome: string;
+  /** Crítica: pergunta obrigatória; uma não conformidade reprova a auditoria. */
+  critica: boolean;
+  metaPrimeira: number;
+  metaReavaliacao: number;
+}
+
+/** Área / pilar da norma (ex.: SASSMAQ SS - Saúde e Segurança); uma pergunta pode ter várias. */
+export interface SgqNormaArea {
+  sigla: string;
+  nome: string;
+}
+
+export type SgqNormaPayload = Pick<SgqNorma, 'nome' | 'descricao' | 'publica' | 'ativa' | 'classificacoes' | 'areas'>;
+
+export type SgqNormaOrdering =
+  | 'nome' | '-nome'
+  | 'descricao' | '-descricao'
+  | 'data_atualizacao' | '-data_atualizacao'
+  | 'emissor' | '-emissor';
+
+export interface SgqNormaQueryParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  situacao?: 'ativa' | 'inativa' | '';
+  ordering?: SgqNormaOrdering;
+}
+
+export interface SgqNormaResumo {
+  total: number;
+  ativa: number;
+  inativa: number;
+}
+
+export interface SgqCategoria {
+  id: string;
+  nome: string;
+  normas: SgqAuditoriaNorma[];
+  ativa: boolean;
+  emissor: string;
+  atualizadoPor: string;
+  filial: string;
+  criadoEm: string;
+  atualizadoEm: string;
+  /** Auditorias que usam a categoria — em uso, ela só pode ser inativada. */
+  totalAuditorias: number;
+}
+
+export type SgqCategoriaPayload = Pick<SgqCategoria, 'nome' | 'ativa'> & { normaIds: string[] };
+
+export interface SgqCategoriaSugestoes {
+  /** Normas ativas da filial disponíveis para vincular. */
+  normas: { id: string; nome: string; descricao: string }[];
+}
+
+export type SgqCategoriaOrdering =
+  | 'nome' | '-nome'
+  | 'ativa' | '-ativa'
+  | 'emissor' | '-emissor'
+  | 'atualizado_por' | '-atualizado_por';
+
+export interface SgqCategoriaQueryParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  situacao?: 'ativa' | 'inativa' | '';
+  ordering?: SgqCategoriaOrdering;
+}
+
+export type SgqCategoriaResumo = SgqNormaResumo;
+
+export interface SgqTipoRespostaOpcao {
+  /** O que se digita/importa como resposta (ex.: SASSMAQ 1, 0, X); vazio usa o texto. */
+  codigo: string;
+  texto: string;
+  /** % de conformidade da opção (0 a 100); null = "não se aplica" (fora do cálculo). */
+  valor: number | null;
+  /** A resposta só é aceita com justificativa (ex.: SASSMAQ "X - Não aplicável"). */
+  exigeJustificativa: boolean;
+}
+
+export interface SgqTipoResposta {
+  id: string;
+  /** Sequencial por unidade (001, 002...), gerado pelo backend. */
+  codigo: string;
+  nome: string;
+  opcoes: SgqTipoRespostaOpcao[];
+  publica: boolean;
+  emissor: string;
+  filial: string;
+  criadoEm: string;
+  atualizadoEm: string;
+}
+
+export type SgqTipoRespostaPayload = Pick<SgqTipoResposta, 'nome' | 'opcoes' | 'publica'>;
+
+export type SgqTipoRespostaOrdering =
+  | 'codigo' | '-codigo'
+  | 'nome' | '-nome'
+  | 'emissor' | '-emissor'
+  | 'atualizado_em' | '-atualizado_em'
+  | 'publica' | '-publica';
+
+export interface SgqTipoRespostaQueryParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  publica?: 'sim' | 'nao' | '';
+  ordering?: SgqTipoRespostaOrdering;
+}
+
+export interface SgqTipoRespostaResumo {
+  total: number;
+  sim: number;
+  nao: number;
+}
+
+export const SGQ_NORMA_ITEM_TIPO_OPTIONS = [
+  { value: 'orientativo', label: 'Texto orientativo' },
+  { value: 'pergunta', label: 'Pergunta' },
+] as const;
+
+export type SgqNormaItemTipo = (typeof SGQ_NORMA_ITEM_TIPO_OPTIONS)[number]['value'];
+
+export interface SgqNormaItem {
+  id: string;
+  normaId: string;
+  parentId: string | null;
+  ordem: number;
+  /** Código oficial na norma (ex.: 1.2.1a); vazio usa a numeração automática. */
+  codigo: string;
+  titulo: string;
+  descricao: string;
+  tipo: SgqNormaItemTipo;
+  /** Tipo de resposta do cadastro (só perguntas). */
+  tipoRespostaId: string | null;
+  /** Sigla de uma classificação da norma (só perguntas); classificação crítica torna a pergunta obrigatória. */
+  classificacao: string;
+  /** Siglas das áreas da norma a que a pergunta pertence (ex.: SS, MA, Q). */
+  areas: string[];
+  peso: number;
+  obrigatorio: boolean;
+}
+
+export type SgqNormaItemPayload = Omit<SgqNormaItem, 'id' | 'ordem'>;
+
+/** Tipo de resposta disponível para as perguntas de uma norma (unidade da norma). */
+export type SgqNormaTipoResposta = Pick<SgqTipoResposta, 'id' | 'codigo' | 'nome' | 'opcoes'>;
+
+export type SgqRespostaDestaque = '' | 'forte' | 'fraco';
+
+export interface SgqAuditoriaAnexo {
+  id: string;
+  nome: string;
+  tamanho: number;
+  incluidoPor: string;
+  criadoEm: string;
+}
+
+/** Resolução de uma pergunta na auditoria; a opção é copiada do tipo de resposta no momento da resposta. */
+export interface SgqAuditoriaResposta {
+  itemId: string;
+  /** Vazio = ainda sem resposta (só observações/anexos). */
+  opcaoCodigo: string;
+  opcaoTexto: string;
+  valor: number | null;
+  observacoes: string;
+  destaque: SgqRespostaDestaque;
+  respondidoPor: string;
+  atualizadoEm: string;
+  anexos: SgqAuditoriaAnexo[];
+}
+
+export type SgqAuditoriaRespostaPayload = Pick<SgqAuditoriaResposta, 'itemId' | 'opcaoCodigo' | 'observacoes' | 'destaque'>;
+
+export interface SgqAuditoriaExecucao {
+  auditoria: SgqAuditoria;
+  normas: Array<Pick<SgqNorma, 'id' | 'nome' | 'classificacoes' | 'areas'>>;
+  tiposResposta: Array<Pick<SgqTipoResposta, 'id' | 'nome' | 'opcoes'>>;
+  /** Itens de todas as normas da auditoria, na ordem de cada nível. */
+  itens: SgqNormaItem[];
+  respostas: SgqAuditoriaResposta[];
+}
+
+export interface SgqNormaItensImportParams {
+  file: File;
+  tipoRespostaId: string;
+  substituir: boolean;
+  dryRun: boolean;
+  /** Papel escolhido para cada coluna (sobrepõe a sugestão do backend). */
+  mapeamento?: Array<Pick<SgqNormaImportColuna, 'indice' | 'papel' | 'area'>>;
+  /** Definição das siglas da planilha que ainda não existem na norma (gravadas na importação). */
+  classificacoes?: SgqNormaClassificacao[];
+  areas?: SgqNormaArea[];
+}
+
+export const SGQ_NORMA_IMPORT_PAPEL_OPTIONS = [
+  { value: 'ignorar', label: 'Ignorar' },
+  { value: 'codigo', label: 'Código do item' },
+  { value: 'titulo', label: 'Pergunta / título' },
+  { value: 'descricao', label: 'Orientação' },
+  { value: 'classificacao', label: 'Classificação (sigla)' },
+  { value: 'area', label: 'Área (marcação)' },
+  { value: 'areaValor', label: 'Área (valor da célula)' },
+] as const;
+
+export type SgqNormaImportPapel = (typeof SGQ_NORMA_IMPORT_PAPEL_OPTIONS)[number]['value'];
+
+export interface SgqNormaImportColuna {
+  indice: number;
+  cabecalho: string;
+  papel: SgqNormaImportPapel;
+  /** Sigla da área quando o papel é "Área (marcação)". */
+  area: string;
+  exemplos: string[];
+}
+
+export interface SgqNormaItensImportResumo {
+  /** Linha do cabeçalho na planilha (1 = primeira). */
+  linhaCabecalho: number;
+  colunas: SgqNormaImportColuna[];
+  /** Preenchida quando faltam colunas obrigatórias no mapeamento (nada foi analisado). */
+  pendencia: string;
+  total: number;
+  requisitos: number;
+  orientativos: number;
+  perguntas: number;
+  /** Perguntas por sigla de classificação lida da coluna "Tipo"/"Classificação". */
+  porClassificacao: Record<string, number>;
+  /** Siglas da planilha ainda não cadastradas na norma; precisam ser definidas para importar. */
+  classificacoesNovas: string[];
+  /** Perguntas por sigla de área. */
+  porArea: Record<string, number>;
+  /** Áreas da planilha ainda não cadastradas na norma; precisam ser definidas para importar. */
+  areasNovas: string[];
+  linhasIgnoradas: number[];
+  avisos: string[];
+  itensExistentes: number;
 }
 
 // --- Marketing — Campanhas ---

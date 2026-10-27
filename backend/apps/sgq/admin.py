@@ -1,13 +1,18 @@
 from django.contrib import admin
 
 from .models import (
+    AuditoriaSGQ,
+    CategoriaAuditoriaSGQ,
     DocumentoSGQ,
     EscopoAnalise,
     EscopoAnaliseOpcao,
+    ItemNormaSGQ,
+    NormaSGQ,
     PastaMatrizSGQ,
     PesquisaSatisfacao,
     PesquisaSatisfacaoFormDraft,
     PesquisaSatisfacaoLoteDraft,
+    TipoRespostaSGQ,
 )
 
 
@@ -59,6 +64,47 @@ class PastaMatrizSGQAdmin(admin.ModelAdmin):
     list_display = ('nome', 'parent', 'criado_em')
     search_fields = ('nome',)
     readonly_fields = ('criado_em',)
+
+
+@admin.register(AuditoriaSGQ)
+class AuditoriaSGQAdmin(admin.ModelAdmin):
+    list_display = ('codigo', 'titulo', 'categoria', 'filial', 'data_inicio', 'data_termino', 'auditor_lider', 'status')
+    list_filter = ('status', 'filial', 'categoria')
+    search_fields = ('codigo', 'titulo', 'normas', 'auditor_lider')
+    readonly_fields = ('codigo', 'ano', 'sequencia', 'criado_em', 'atualizado_em')
+
+
+@admin.register(NormaSGQ)
+class NormaSGQAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'descricao', 'filial', 'data_atualizacao', 'emissor', 'publica', 'ativa')
+    list_filter = ('ativa', 'publica', 'filial')
+    search_fields = ('nome', 'descricao', 'emissor')
+    readonly_fields = ('criado_em', 'atualizado_em')
+
+
+@admin.register(CategoriaAuditoriaSGQ)
+class CategoriaAuditoriaSGQAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'filial', 'ativa', 'emissor', 'atualizado_por')
+    list_filter = ('ativa', 'filial')
+    search_fields = ('nome', 'emissor', 'atualizado_por')
+    filter_horizontal = ('normas',)
+    readonly_fields = ('criado_em', 'atualizado_em')
+
+
+@admin.register(TipoRespostaSGQ)
+class TipoRespostaSGQAdmin(admin.ModelAdmin):
+    list_display = ('codigo', 'nome', 'filial', 'publica', 'emissor', 'atualizado_em')
+    list_filter = ('publica', 'filial')
+    search_fields = ('nome', 'emissor')
+    readonly_fields = ('sequencia', 'criado_em', 'atualizado_em')
+
+
+@admin.register(ItemNormaSGQ)
+class ItemNormaSGQAdmin(admin.ModelAdmin):
+    list_display = ('titulo', 'norma', 'parent', 'tipo', 'tipo_resposta', 'classificacao', 'areas', 'peso', 'obrigatorio', 'ordem')
+    list_filter = ('tipo', 'classificacao', 'obrigatorio')
+    search_fields = ('titulo', 'descricao', 'norma__nome')
+    readonly_fields = ('criado_em', 'atualizado_em')
 
 
 @admin.register(DocumentoSGQ)

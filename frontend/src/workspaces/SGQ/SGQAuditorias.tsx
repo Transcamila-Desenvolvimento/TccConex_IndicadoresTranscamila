@@ -1,0 +1,1012 @@
+import React, { useEffect, useRef, useState } from 'react';
+import QueryDataPanel from '../../components/QueryDataPanel';
+import SGQAuditoriaResultados from './SGQAuditoriaResultados';
+import { useAuth } from '../../contexts/AuthContext';
+import { userHasFuncao } from '../../constants/funcoes';
+import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
+import {
+  getSgqAuditoriaErrorMessage,
+  useBaixarRelatorioSgqAuditoria,
+  useDeleteSgqAuditorias,
+  useSaveSgqAuditoria,
+  useSgqAuditorias,
+  useSgqAuditoriasResumo,
+  useSgqAuditoriasSugestoes,
+} from '../../hooks/useSgqAuditorias';
+import type {
+  SgqAuditoria,
+  SgqAuditoriaOrdering,
+  SgqAuditoriaPayload,
+  SgqAuditoriaQueryParams,
+  SgqAuditoriaStatus,
+  SgqPessoa,
+} from '../../types/domain';
+import { SGQ_AUDITORIA_STATUS_LABEL, SGQ_AUDITORIA_STATUS_OPTIONS } from '../../types/domain';
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50];
+type FiltroStatus = NonNullable<SgqAuditoriaQueryParams['status']>;
+
+const FILTROS: Array<{ value: FiltroStatus; label: string; resumo: 'total' | SgqAuditoriaStatus | 'atrasada' }> = [
+  { value: '', label: 'Status: Todos', resumo: 'total' },
+  { value: 'planejamento', label: 'Em planejamento', resumo: 'planejamento' },
+  { value: 'execucao', label: 'Em execução', resumo: 'execucao' },
+  { value: 'concluida', label: 'Concluídas', resumo: 'concluida' },
+  { value: 'atrasada', label: 'Atrasadas', resumo: 'atrasada' },
+];
+
+const STATUS_ICON: Record<SgqAuditoriaStatus, string> = {
+  planejamento: 'hourglass-split',
+  execucao: 'play-circle',
+  concluida: 'check-circle-fill',
+};
+
+type AbaModal = 'visao' | 'dados' | 'planejamento';
+
+const ABAS_MODAL: Array<{ value: AbaModal; label: string }> = [
+  { value: 'visao', label: 'Visão geral' },
+  { value: 'dados', label: 'Geral' },
+  { value: 'planejamento', label: 'Itens do Planejamento' },
+];
+
+function formatarDataHora(iso: string) {
+  return iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+}
+
+function partesNome(nome: string) {
+  return nome.trim().split(/\s+/).filter(Boolean);
+}
+
+function iniciais(nome: string) {
+  const partes = partesNome(nome);
+  if (!partes.length) return '?';
+  const ultima = partes.length > 1 ? partes[partes.length - 1][0] : '';
+  return (partes[0][0] + ultima).toUpperCase();
+}
+
+function nomeAbreviado(nome: string) {
+  const partes = partesNome(nome);
+  if (partes.length <= 2) return partes.join(' ');
+  return `${partes[0]} ${partes[partes.length - 1]}`;
+}
+
+const CORES_AVATAR = [
+  { fundo: '#e0f2fe', texto: '#0369a1' },
+  { fundo: '#dcfce7', texto: '#15803d' },
+  { fundo: '#fef3c7', texto: '#b45309' },
+  { fundo: '#ede9fe', texto: '#6d28d9' },
+  { fundo: '#fce7f3', texto: '#be185d' },
+  { fundo: '#ccfbf1', texto: '#0f766e' },
+];
+
+function corAvatar(nome: string) {
+  let soma = 0;
+  for (const letra of nome) soma = (soma * 31 + letra.charCodeAt(0)) % 997;
+  const cor = CORES_AVATAR[soma % CORES_AVATAR.length];
+  return { background: cor.fundo, color: cor.texto };
+}
+
+const AvatarPessoa: React.FC<{ nome: string }> = ({ nome }) => (
+  <span className="sgq-pessoa-avatar" style={corAvatar(nome)} aria-hidden="true">{iniciais(nome)}</span>
+);
+
+const PessoaResumo: React.FC<{ nome: string }> = ({ nome }) => {
+  const curto = nomeAbreviado(nome);
+  return (
+    <span className="sgq-pessoa-resumo" title={nome}>
+      <AvatarPessoa nome={nome} />
+      <span className="sgq-pessoa-nome">{curto}</span>
+    </span>
+  );
+};
+
+interface SeletorPessoaProps {
+  valor: string;
+  opcoes: SgqPessoa[];
+  carregando: boolean;
+  placeholder: string;
+  vazio: string;
+  obrigatorio?: boolean;
+  onChange: (valor: string) => void;
+}
+
+const SeletorPessoa: React.FC<SeletorPessoaProps> = ({ valor, opcoes, carregando, placeholder, vazio, obrigatorio = true, onChange }) => {
+  const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState('');
+  const [destaque, setDestaque] = useState(0);
+  const raiz = useRef<HTMLDivElement>(null);
+  const selecionada = opcoes.find((pessoa) => pessoa.nome === valor);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const fecharFora = (e: MouseEvent) => {
+      if (!raiz.current?.contains(e.target as Node)) setAberto(false);
+    };
+    const fecharEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAberto(false);
+    };
+    document.addEventListener('mousedown', fecharFora);
+    document.addEventListener('keydown', fecharEsc);
+    return () => {
+      document.removeEventListener('mousedown', fecharFora);
+      document.removeEventListener('keydown', fecharEsc);
+    };
+  }, [aberto]);
+
+  const termo = busca.trim().toLocaleLowerCase('pt-BR');
+  const filtradas = termo
+    ? opcoes.filter((pessoa) => `${pessoa.nome} ${pessoa.cargo}`.toLocaleLowerCase('pt-BR').includes(termo))
+    : opcoes;
+
+  const escolher = (nome: string) => {
+    onChange(nome);
+    setAberto(false);
+  };
+
+  const navegar = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const passo = e.key === 'ArrowDown' ? 1 : -1;
+      setDestaque((atual) => Math.min(Math.max(atual + passo, 0), Math.max(filtradas.length - 1, 0)));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filtradas[destaque]) escolher(filtradas[destaque].nome);
+    }
+  };
+
+  return (
+    <div className="sgq-pessoa" ref={raiz}>
+      <button
+        type="button"
+        className={`sgq-pessoa-campo${aberto ? ' is-aberto' : ''}`}
+        aria-haspopup="listbox"
+        aria-expanded={aberto}
+        onClick={() => {
+          setBusca('');
+          setDestaque(Math.max(opcoes.findIndex((pessoa) => pessoa.nome === valor), 0));
+          setAberto((atual) => !atual);
+        }}
+      >
+        {valor ? (
+          <>
+            <AvatarPessoa nome={valor} />
+            <span className="sgq-pessoa-texto">
+              <span className="sgq-pessoa-nome">{valor}</span>
+              {selecionada?.cargo && <small>{selecionada.cargo}</small>}
+            </span>
+          </>
+        ) : (
+          <span className="sgq-pessoa-placeholder">{carregando ? 'Carregando...' : placeholder}</span>
+        )}
+        <i className={`bi bi-chevron-${aberto ? 'up' : 'down'}`} aria-hidden="true" />
+      </button>
+      {obrigatorio && (
+        <input className="sgq-pessoa-validacao" required value={valor} onChange={() => undefined} tabIndex={-1} aria-hidden="true" />
+      )}
+      {aberto && (
+        <div className="sgq-pessoa-menu">
+          <div className="sgq-pessoa-busca">
+            <i className="bi bi-search" aria-hidden="true" />
+            <input
+              type="search"
+              value={busca}
+              onChange={(e) => { setBusca(e.target.value); setDestaque(0); }}
+              onKeyDown={navegar}
+              placeholder="Buscar por nome ou cargo..."
+              aria-label="Buscar pessoa"
+              autoFocus
+            />
+          </div>
+          <ul role="listbox">
+            {filtradas.map((pessoa, indice) => {
+              const marcada = pessoa.nome === valor;
+              return (
+                <li key={pessoa.nome}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={marcada}
+                    className={`sgq-pessoa-opcao${marcada ? ' is-selecionada' : ''}${indice === destaque ? ' is-destaque' : ''}`}
+                    onMouseEnter={() => setDestaque(indice)}
+                    onClick={() => escolher(pessoa.nome)}
+                  >
+                    <AvatarPessoa nome={pessoa.nome} />
+                    <span className="sgq-pessoa-texto">
+                      <span className="sgq-pessoa-nome">{pessoa.nome}</span>
+                      {pessoa.cargo && <small>{pessoa.cargo}</small>}
+                    </span>
+                    {marcada && <i className="bi bi-check2" aria-hidden="true" />}
+                  </button>
+                </li>
+              );
+            })}
+            {!filtradas.length && (
+              <li className="sgq-pessoa-vazio">
+                <i className="bi bi-person-x" aria-hidden="true" />
+                {carregando ? 'Carregando...' : opcoes.length ? 'Nenhuma pessoa encontrada.' : vazio}
+              </li>
+            )}
+          </ul>
+          {opcoes.length > 0 && (
+            <div className="sgq-pessoa-rodape">
+              <i className="bi bi-people" aria-hidden="true" />
+              {opcoes.length} {opcoes.length === 1 ? 'pessoa' : 'pessoas'} com o SGQ liberado
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const emptyForm: SgqAuditoriaPayload = {
+  titulo: '',
+  categoria: '',
+  dataInicio: '',
+  dataTermino: '',
+  auditorLider: '',
+  auditores: [],
+  status: 'planejamento',
+  escopo: '',
+};
+
+function formatarData(iso: string) {
+  if (!iso) return '—';
+  const [ano, mes, dia] = iso.split('-').map(Number);
+  return new Date(ano, mes - 1, dia).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+const SGQAuditorias: React.FC = () => {
+  const { user, selectedFilial } = useAuth();
+  const canManage = userHasFuncao(user, 'SGQ', 'gerenciar-auditorias');
+
+  const [busca, setBusca] = useState('');
+  const [buscaAplicada, setBuscaAplicada] = useState('');
+  const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('');
+  const [ordering, setOrdering] = useState<SgqAuditoriaOrdering>('-data_inicio');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
+  const [acoesAbertas, setAcoesAbertas] = useState(false);
+  const [modalAberto, setModalAberto] = useState(false);
+  const [editando, setEditando] = useState<SgqAuditoria | null>(null);
+  const [form, setForm] = useState<SgqAuditoriaPayload>(emptyForm);
+  const [abaModal, setAbaModal] = useState<AbaModal>('dados');
+  const [relatorioDe, setRelatorioDe] = useState<SgqAuditoria | null>(null);
+  const [tipoRelatorio, setTipoRelatorio] = useState<'detalhado' | 'analitico'>('detalhado');
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setBuscaAplicada(busca.trim());
+      setPage(1);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [busca]);
+
+  useEffect(() => {
+    if (!acoesAbertas) return;
+    const fechar = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.reports-dropdown-wrapper')) setAcoesAbertas(false);
+    };
+    document.addEventListener('click', fechar);
+    return () => document.removeEventListener('click', fechar);
+  }, [acoesAbertas]);
+
+  const params: SgqAuditoriaQueryParams = { page, pageSize, search: buscaAplicada, status: filtroStatus, ordering };
+  const listaQuery = useSgqAuditorias(selectedFilial, params);
+  const { canShowEmpty } = useAsyncQueryState(listaQuery);
+  const resumoQuery = useSgqAuditoriasResumo(selectedFilial);
+  const sugestoesQuery = useSgqAuditoriasSugestoes(selectedFilial, modalAberto);
+  const salvar = useSaveSgqAuditoria();
+  const excluir = useDeleteSgqAuditorias();
+  const baixarRelatorio = useBaixarRelatorioSgqAuditoria(selectedFilial);
+
+  const linhas = listaQuery.data?.results ?? [];
+  const total = listaQuery.data?.count ?? 0;
+  const totalPaginas = Math.max(1, Math.ceil(total / pageSize));
+  const resumo = resumoQuery.data;
+  const sugestoes = sugestoesQuery.data;
+  // A categoria atual de uma auditoria em edição continua selecionável mesmo se tiver sido inativada.
+  const categoriasAtivas = (sugestoes?.categorias ?? []).map((categoria) => categoria.nome);
+  const categoriasOpcoes = editando?.categoria && !categoriasAtivas.includes(editando.categoria)
+    ? [editando.categoria, ...categoriasAtivas]
+    : categoriasAtivas;
+  const auditoresSgq = sugestoes?.auditores ?? [];
+  const auditoresOpcoes = editando?.auditorLider && !auditoresSgq.some((pessoa) => pessoa.nome === editando.auditorLider)
+    ? [{ nome: editando.auditorLider, cargo: '' }, ...auditoresSgq]
+    : auditoresSgq;
+  // Mantida a categoria, a auditoria em edição conserva as normas já vinculadas; trocada, recebe as da nova categoria.
+  const normasDoForm = editando && form.categoria === editando.categoria
+    ? editando.normas
+    : sugestoes?.categorias.find((opcao) => opcao.nome === form.categoria)?.normas ?? [];
+
+  const todasDaPaginaMarcadas = linhas.length > 0 && linhas.every((linha) => selecionadas.has(linha.id));
+  const algumaDaPaginaMarcada = linhas.some((linha) => selecionadas.has(linha.id));
+  const filtrando = Boolean(buscaAplicada || filtroStatus);
+  const paginaAtual = Math.min(page, totalPaginas);
+  const auditoriaSelecionada = selecionadas.size === 1 ? linhas.find((linha) => selecionadas.has(linha.id)) : undefined;
+
+  const mudarFiltro = (valor: FiltroStatus) => {
+    setFiltroStatus(valor);
+    setPage(1);
+    setSelecionadas(new Set());
+  };
+
+  const limparFiltros = () => {
+    setBusca('');
+    setBuscaAplicada('');
+    mudarFiltro('');
+  };
+
+  const alternarOrdenacao = (campo: 'data_inicio' | 'data_termino' | 'codigo' | 'titulo') => {
+    setOrdering((atual) => (atual === `-${campo}` ? campo : `-${campo}`) as SgqAuditoriaOrdering);
+    setPage(1);
+  };
+
+  const iconeOrdenacao = (campo: string) => {
+    if (ordering === campo) return 'bi-arrow-up';
+    if (ordering === `-${campo}`) return 'bi-arrow-down';
+    return 'bi-arrow-down-up is-idle';
+  };
+
+  const alternarSelecao = (id: string) => {
+    setSelecionadas((atual) => {
+      const proxima = new Set(atual);
+      if (proxima.has(id)) proxima.delete(id);
+      else proxima.add(id);
+      return proxima;
+    });
+  };
+
+  const alternarPagina = () => {
+    setSelecionadas((atual) => {
+      const proxima = new Set(atual);
+      linhas.forEach((linha) => (todasDaPaginaMarcadas ? proxima.delete(linha.id) : proxima.add(linha.id)));
+      return proxima;
+    });
+  };
+
+  const abrirNova = () => {
+    setEditando(null);
+    setForm(emptyForm);
+    setAbaModal('dados');
+    setModalAberto(true);
+  };
+
+  const abrirEdicao = (auditoria: SgqAuditoria) => {
+    setAcoesAbertas(false);
+    setEditando(auditoria);
+    setForm({
+      titulo: auditoria.titulo,
+      categoria: auditoria.categoria,
+      dataInicio: auditoria.dataInicio,
+      dataTermino: auditoria.dataTermino,
+      auditorLider: auditoria.auditorLider,
+      auditores: auditoria.auditores ?? [],
+      status: auditoria.status,
+      escopo: auditoria.escopo,
+    });
+    setAbaModal('visao');
+    setModalAberto(true);
+  };
+
+  const fecharModal = () => {
+    if (salvar.isPending) return;
+    setModalAberto(false);
+    setEditando(null);
+  };
+
+  const enviar = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formEl = e.currentTarget;
+    const invalido = formEl.querySelector<HTMLElement>('input:invalid, select:invalid, textarea:invalid');
+    if (invalido) {
+      const aba = invalido.closest<HTMLElement>('[data-aba]')?.dataset.aba as AbaModal | undefined;
+      if (aba) setAbaModal(aba);
+      window.setTimeout(() => formEl.reportValidity());
+      return;
+    }
+    salvar.mutate(
+      { id: editando?.id, payload: { ...form, titulo: form.titulo.trim(), categoria: form.categoria.trim() } },
+      {
+        onSuccess: () => { setModalAberto(false); setEditando(null); },
+        onError: (err) => alert(getSgqAuditoriaErrorMessage(err)),
+      },
+    );
+  };
+
+  const excluirIds = (ids: string[], descricao: string) => {
+    setAcoesAbertas(false);
+    if (!window.confirm(`Excluir ${descricao}? Essa ação não pode ser desfeita.`)) return;
+    excluir.mutate(ids, {
+      onSuccess: () => setSelecionadas((atual) => {
+        const proxima = new Set(atual);
+        ids.forEach((id) => proxima.delete(id));
+        return proxima;
+      }),
+      onError: (err) => alert(getSgqAuditoriaErrorMessage(err)),
+    });
+  };
+
+  return (
+    <div className="fat-list-compact sgq-lista">
+      <header className="view-header sgq-lista-header">
+        <div className="sgq-lista-titulo">
+          <span className="sgq-lista-marcador" aria-hidden="true" />
+          <h1 className="view-page-title">Auditorias</h1>
+        </div>
+        <div className="sgq-lista-acoes">
+          <div className="reports-dropdown-wrapper">
+            <button
+              type="button"
+              className="reports-action-btn secondary"
+              disabled={selecionadas.size === 0}
+              onClick={() => setAcoesAbertas((aberto) => !aberto)}
+            >
+              <span>Ações{selecionadas.size > 0 ? ` (${selecionadas.size})` : ''}</span>
+              <i className="bi bi-chevron-down" aria-hidden="true" />
+            </button>
+            <div className={`reports-dropdown-menu ${acoesAbertas ? 'show' : ''}`}>
+              {auditoriaSelecionada && (
+                <span className="reports-dropdown-item" onClick={() => abrirEdicao(auditoriaSelecionada)}>
+                  <span className="reports-dropdown-item-left">
+                    <i className={`bi ${canManage ? 'bi-pencil' : 'bi-eye'}`} aria-hidden="true" />
+                    {canManage ? 'Editar' : 'Visualizar'}
+                  </span>
+                </span>
+              )}
+              {auditoriaSelecionada && (
+                <span
+                  className="reports-dropdown-item"
+                  onClick={() => {
+                    setRelatorioDe(auditoriaSelecionada);
+                    setTipoRelatorio('detalhado');
+                    setAcoesAbertas(false);
+                  }}
+                >
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-file-earmark-bar-graph" aria-hidden="true" />
+                    Relatórios
+                  </span>
+                </span>
+              )}
+              {canManage && (
+                <span
+                  className={`reports-dropdown-item is-danger${excluir.isPending ? ' is-disabled' : ''}`}
+                  onClick={() => excluirIds(
+                    [...selecionadas],
+                    auditoriaSelecionada ? `a auditoria ${auditoriaSelecionada.codigo}` : `${selecionadas.size} auditorias`,
+                  )}
+                >
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-trash3" aria-hidden="true" />
+                    {excluir.isPending ? 'Excluindo...' : 'Excluir'}
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
+          {canManage && (
+            <button type="button" className="reports-action-btn primary" onClick={abrirNova}>
+              <i className="bi bi-plus-lg" aria-hidden="true" />
+              <span>Nova auditoria</span>
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="reports-filters-bar">
+        <div className="reports-filter-left">
+          <div className="reports-filter-icon-label">
+            <i className="bi bi-funnel" aria-hidden="true" />
+            <span>Filtrar</span>
+          </div>
+          <div className="reports-search-wrapper">
+            <i className="bi bi-search search-icon" aria-hidden="true" />
+            <input
+              type="search"
+              placeholder="Buscar auditoria..."
+              title="Busca por código, título, norma ou auditor"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              aria-label="Buscar auditorias"
+            />
+          </div>
+          <div className="reports-select-wrapper">
+            <select
+              value={filtroStatus}
+              onChange={(e) => mudarFiltro(e.target.value as FiltroStatus)}
+              aria-label="Filtrar por status"
+            >
+              {FILTROS.map((filtro) => (
+                <option key={filtro.value || 'todas'} value={filtro.value}>
+                  {filtro.label}{resumo ? ` (${resumo[filtro.resumo]})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button type="button" className="reports-action-btn secondary" onClick={limparFiltros} disabled={!filtrando && !busca}>
+            Limpar Filtros
+          </button>
+        </div>
+        <div className="reports-filter-right">
+          <span className="reports-records-count"><strong>{total}</strong> {total === 1 ? 'Auditoria' : 'Auditorias'}</span>
+        </div>
+      </div>
+
+      <QueryDataPanel
+        query={listaQuery}
+        refreshVariant="overlay"
+        loadingMessage="Carregando auditorias..."
+        refreshingMessage="Atualizando auditorias..."
+        errorMessage="Não foi possível carregar as auditorias. Tente novamente."
+      >
+        <div className="erp-card reports-table-card sgq-lista-card">
+          <div className="table-container sgq-lista-scroll">
+            <table className="erp-table reports-table sgq-lista-tabela">
+              <thead>
+                <tr>
+                  <th className="checkbox-cell">
+                    <input
+                      type="checkbox"
+                      aria-label="Selecionar todas da página"
+                      checked={todasDaPaginaMarcadas}
+                      ref={(el) => { if (el) el.indeterminate = algumaDaPaginaMarcada && !todasDaPaginaMarcadas; }}
+                      onChange={alternarPagina}
+                    />
+                  </th>
+                  <th>Categoria</th>
+                  <th>
+                    <button type="button" className="sgq-aud-sort" onClick={() => alternarOrdenacao('codigo')}>
+                      Código <i className={`bi ${iconeOrdenacao('codigo')}`} aria-hidden="true" />
+                    </button>
+                  </th>
+                  <th>
+                    <button type="button" className="sgq-aud-sort" onClick={() => alternarOrdenacao('titulo')}>
+                      Título <i className={`bi ${iconeOrdenacao('titulo')}`} aria-hidden="true" />
+                    </button>
+                  </th>
+                  <th>
+                    <button type="button" className="sgq-aud-sort" onClick={() => alternarOrdenacao('data_inicio')}>
+                      Início <i className={`bi ${iconeOrdenacao('data_inicio')}`} aria-hidden="true" />
+                    </button>
+                  </th>
+                  <th>
+                    <button type="button" className="sgq-aud-sort" onClick={() => alternarOrdenacao('data_termino')}>
+                      Término <i className={`bi ${iconeOrdenacao('data_termino')}`} aria-hidden="true" />
+                    </button>
+                  </th>
+                  <th>Normas</th>
+                  <th>Auditor líder</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {canShowEmpty && linhas.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="comercial-browse-empty">
+                      {filtrando ? 'Nenhuma auditoria encontrada para os filtros aplicados.' : 'Não há registros a serem exibidos.'}
+                    </td>
+                  </tr>
+                ) : (
+                  linhas.map((auditoria) => {
+                    const normas = auditoria.normas.map((norma) => norma.nome);
+                    const marcada = selecionadas.has(auditoria.id);
+                    return (
+                      <tr key={auditoria.id} className={marcada ? 'row-selected' : undefined}>
+                        <td className="checkbox-cell">
+                          <input
+                            type="checkbox"
+                            aria-label={`Selecionar auditoria ${auditoria.codigo}`}
+                            checked={marcada}
+                            onChange={() => alternarSelecao(auditoria.id)}
+                          />
+                        </td>
+                        <td><span className="sgq-lista-categoria">{auditoria.categoria}</span></td>
+                        <td><span className="sgq-aud-codigo">{auditoria.codigo}</span></td>
+                        <td className="sgq-lista-texto-longo" title={auditoria.titulo}>
+                          <button type="button" className="sgq-lista-nome" onClick={() => abrirEdicao(auditoria)}>
+                            {auditoria.titulo}
+                          </button>
+                        </td>
+                        <td>{formatarData(auditoria.dataInicio)}</td>
+                        <td>
+                          <span className={auditoria.atrasada ? 'sgq-aud-atrasada' : undefined}>
+                            {auditoria.atrasada && <i className="bi bi-exclamation-circle-fill" aria-hidden="true" />}
+                            {formatarData(auditoria.dataTermino)}
+                          </span>
+                        </td>
+                        <td>
+                          {normas.length ? (
+                            <div className="sgq-aud-normas">
+                              {normas.slice(0, 2).map((norma) => <span key={norma} className="sgq-aud-chip">{norma}</span>)}
+                              {normas.length > 2 && (
+                                <span className="sgq-aud-chip is-more" title={normas.slice(2).join(', ')}>+{normas.length - 2}</span>
+                              )}
+                            </div>
+                          ) : <span className="sgq-aud-muted">—</span>}
+                        </td>
+                        <td>{auditoria.auditorLider ? <PessoaResumo nome={auditoria.auditorLider} /> : '—'}</td>
+                        <td>
+                          <span className={`sgq-aud-status is-${auditoria.status}`}>
+                            <i className={`bi bi-${STATUS_ICON[auditoria.status]}`} aria-hidden="true" />
+                            {SGQ_AUDITORIA_STATUS_LABEL[auditoria.status]}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="erp-pagination-bar">
+          <div className="erp-pagination-page-size">
+            <label htmlFor="sgq-auditorias-page-size">Itens por página</label>
+            <select
+              id="sgq-auditorias-page-size"
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+            >
+              {PAGE_SIZE_OPTIONS.map((opcao) => <option key={opcao} value={opcao}>{opcao}</option>)}
+            </select>
+          </div>
+          <span className="sgq-lista-pagina">
+            Página <span className="erp-pagination-current">{paginaAtual}</span> de{' '}
+            <span className="erp-pagination-current">{totalPaginas}</span>
+            <span className="erp-pagination-meta">({total} registros)</span>
+          </span>
+          <button type="button" className="reports-action-btn secondary sgq-lista-pag-btn" disabled={paginaAtual <= 1} onClick={() => setPage(paginaAtual - 1)}>
+            <i className="bi bi-chevron-left" aria-hidden="true" />
+            Anterior
+          </button>
+          <button type="button" className="reports-action-btn secondary sgq-lista-pag-btn" disabled={paginaAtual >= totalPaginas} onClick={() => setPage(paginaAtual + 1)}>
+            Próximo
+            <i className="bi bi-chevron-right" aria-hidden="true" />
+          </button>
+        </div>
+      </QueryDataPanel>
+
+      {relatorioDe && (
+        <div
+          className="search-backdrop sgq-aud-modal-backdrop"
+          onClick={(e) => { if (e.target === e.currentTarget && !baixarRelatorio.isPending) setRelatorioDe(null); }}
+        >
+          <div className="modal-card sgq-aud-relatorio" role="dialog" aria-modal="true" aria-labelledby="sgq-aud-relatorio-title">
+            <div className="modal-header">
+              <div>
+                <h3 id="sgq-aud-relatorio-title">Relatórios</h3>
+                <p className="sgq-aud-modal-sub">{relatorioDe.codigo} · {relatorioDe.titulo}</p>
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setRelatorioDe(null)}
+                disabled={baixarRelatorio.isPending}
+                aria-label="Fechar"
+              >
+                <i className="bi bi-x-lg" aria-hidden="true" />
+              </button>
+            </div>
+            <form
+              className="modal-body sgq-aud-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (baixarRelatorio.isPending) return;
+                baixarRelatorio.mutate(
+                  { id: relatorioDe.id, tipo: tipoRelatorio },
+                  {
+                    onSuccess: () => setRelatorioDe(null),
+                    onError: (err) => alert(getSgqAuditoriaErrorMessage(err, 'Não foi possível gerar o relatório.')),
+                  },
+                );
+              }}
+            >
+              <fieldset className="sgq-aud-relatorio-opcoes">
+                <legend className="sgq-sr-only">Tipo de relatório</legend>
+                <label className={`sgq-aud-relatorio-opcao${tipoRelatorio === 'detalhado' ? ' is-picked' : ''}`}>
+                  <input
+                    type="radio"
+                    name="tipo-relatorio"
+                    value="detalhado"
+                    checked={tipoRelatorio === 'detalhado'}
+                    onChange={() => setTipoRelatorio('detalhado')}
+                  />
+                  <strong>Relatório detalhado</strong>
+                  <span>Registro completo das perguntas, respostas e observações.</span>
+                </label>
+                <label className={`sgq-aud-relatorio-opcao${tipoRelatorio === 'analitico' ? ' is-picked' : ''}`}>
+                  <input
+                    type="radio"
+                    name="tipo-relatorio"
+                    value="analitico"
+                    checked={tipoRelatorio === 'analitico'}
+                    onChange={() => setTipoRelatorio('analitico')}
+                  />
+                  <strong>Relatório analítico</strong>
+                  <span>Gráficos e o resumo da auditoria, por classificação, área e resposta.</span>
+                </label>
+              </fieldset>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="reports-action-btn secondary"
+                  onClick={() => setRelatorioDe(null)}
+                  disabled={baixarRelatorio.isPending}
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className="reports-action-btn primary" disabled={baixarRelatorio.isPending}>
+                  {baixarRelatorio.isPending ? 'Gerando...' : 'Extrair'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {modalAberto && (
+        <div className="search-backdrop sgq-aud-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) fecharModal(); }}>
+          <div className="modal-card sgq-aud-modal is-fixo" role="dialog" aria-modal="true" aria-labelledby="sgq-aud-modal-title">
+            <div className="modal-header">
+              <div>
+                <h3 id="sgq-aud-modal-title">
+                  {editando ? (canManage ? 'Editar Auditoria' : 'Auditoria') : 'Nova Auditoria'}
+                </h3>
+                <p className="sgq-aud-modal-sub">
+                  {editando
+                    ? `${editando.codigo} · criada por ${editando.criadoPor || '—'}`
+                    : 'O código é gerado automaticamente ao salvar.'}
+                </p>
+              </div>
+              <button type="button" className="btn-icon" onClick={fecharModal} aria-label="Fechar">
+                <i className="bi bi-x-lg" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="sgq-aud-abas" role="tablist">
+              {ABAS_MODAL.filter((aba) => editando || aba.value !== 'visao').map((aba) => (
+                <button
+                  key={aba.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={abaModal === aba.value}
+                  className={`sgq-aud-aba${abaModal === aba.value ? ' is-active' : ''}`}
+                  onClick={() => setAbaModal(aba.value)}
+                >
+                  {aba.label}
+                </button>
+              ))}
+            </div>
+
+            <form className="modal-body sgq-aud-form" onSubmit={enviar} noValidate>
+              <div className="sgq-aud-form-corpo">
+              {editando && (
+                <section className="sgq-aud-ficha" hidden={abaModal !== 'visao'} aria-label="Resumo da auditoria">
+                  <header className="sgq-aud-ficha-topo">
+                    <div className="sgq-aud-ficha-id">
+                      <span className="sgq-aud-codigo">{editando.codigo}</span>
+                      <h4>{editando.titulo}</h4>
+                    </div>
+                    <span className={`sgq-aud-status is-${editando.status}`}>
+                      <i className={`bi bi-${STATUS_ICON[editando.status]}`} aria-hidden="true" />
+                      {SGQ_AUDITORIA_STATUS_LABEL[editando.status]}
+                    </span>
+                  </header>
+                  <dl className="sgq-aud-ficha-grade">
+                    <div>
+                      <dt>Categoria</dt>
+                      <dd>{editando.categoria || '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>Período</dt>
+                      <dd>
+                        <span className={editando.atrasada ? 'sgq-aud-atrasada' : undefined}>
+                          {editando.atrasada && <i className="bi bi-exclamation-circle-fill" aria-hidden="true" />}
+                          {formatarData(editando.dataInicio)} a {formatarData(editando.dataTermino)}
+                        </span>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Auditor líder</dt>
+                      <dd>{editando.auditorLider ? <PessoaResumo nome={editando.auditorLider} /> : '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>Auditores</dt>
+                      <dd>
+                        {editando.auditores?.length ? (
+                          <div className="sgq-aud-auditores">
+                            {editando.auditores.map((nome) => <PessoaResumo key={nome} nome={nome} />)}
+                          </div>
+                        ) : '—'}
+                      </dd>
+                    </div>
+                    <div className="sgq-aud-ficha-largo">
+                      <dt>Normas</dt>
+                      <dd>
+                        {editando.normas.length ? (
+                          <div className="sgq-aud-normas">
+                            {editando.normas.map((norma) => <span key={norma.id} className="sgq-aud-chip">{norma.nome}</span>)}
+                          </div>
+                        ) : '—'}
+                      </dd>
+                    </div>
+                    {editando.escopo.trim() && (
+                      <div className="sgq-aud-ficha-largo">
+                        <dt>Escopo / objetivo</dt>
+                        <dd className="sgq-aud-visao-texto">{editando.escopo}</dd>
+                      </div>
+                    )}
+                  </dl>
+                  <footer className="sgq-aud-ficha-rodape">
+                    <span>Criada por {editando.criadoPor || '—'} · {formatarDataHora(editando.criadoEm)}</span>
+                    <span>Atualizada em {formatarDataHora(editando.atualizadoEm)}</span>
+                  </footer>
+                </section>
+              )}
+              {editando && abaModal === 'visao' && (
+                <SGQAuditoriaResultados auditoriaId={editando.id} />
+              )}
+              <fieldset data-aba="dados" hidden={abaModal !== 'dados'} disabled={!canManage || salvar.isPending}>
+                <label className="is-wide">
+                  <span>Título <em>*</em></span>
+                  <input
+                    className="form-input"
+                    required
+                    maxLength={200}
+                    value={form.titulo}
+                    onChange={(e) => setForm({ ...form, titulo: e.target.value })}
+                    placeholder="Ex.: Auditoria interna - ISO 9001:2015"
+                    autoFocus
+                  />
+                </label>
+                <label>
+                  <span>Categoria <em>*</em></span>
+                  <select
+                    className="form-input"
+                    required
+                    value={form.categoria}
+                    onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+                  >
+                    <option value="" disabled>
+                      {sugestoesQuery.isLoading ? 'Carregando...' : categoriasOpcoes.length ? 'Selecione' : 'Nenhuma categoria ativa cadastrada'}
+                    </option>
+                    {categoriasOpcoes.map((nome) => <option key={nome} value={nome}>{nome}</option>)}
+                  </select>
+                </label>
+                <div className="sgq-aud-campo">
+                  <span>Normas</span>
+                  <div
+                    className="form-input sgq-aud-normas sgq-aud-normas-campo"
+                    aria-disabled="true"
+                    title="As normas são definidas pela categoria"
+                  >
+                    {normasDoForm.length
+                      ? normasDoForm.map((norma) => <span key={norma.id} className="sgq-aud-chip">{norma.nome}</span>)
+                      : (
+                        <span className="sgq-aud-normas-placeholder">
+                          {form.categoria ? 'Nenhuma norma vinculada a esta categoria' : 'Selecione a categoria'}
+                        </span>
+                      )}
+                  </div>
+                </div>
+                <div className="is-wide sgq-aud-campo">
+                  <span>Auditor líder <em>*</em></span>
+                  <SeletorPessoa
+                    valor={form.auditorLider}
+                    opcoes={auditoresOpcoes}
+                    carregando={sugestoesQuery.isLoading}
+                    placeholder="Selecione o auditor líder"
+                    vazio="Nenhum usuário com o SGQ liberado."
+                    onChange={(nome) => setForm({
+                      ...form,
+                      auditorLider: nome,
+                      auditores: form.auditores.filter((auditor) => auditor !== nome),
+                    })}
+                  />
+                </div>
+                <div className="is-wide sgq-aud-campo">
+                  <span>Auditores</span>
+                  {form.auditores.length > 0 && (
+                    <div className="sgq-aud-auditores">
+                      {form.auditores.map((nome) => (
+                        <span key={nome} className="sgq-aud-auditor">
+                          <PessoaResumo nome={nome} />
+                          <button
+                            type="button"
+                            aria-label={`Remover ${nome}`}
+                            onClick={() => setForm({ ...form, auditores: form.auditores.filter((auditor) => auditor !== nome) })}
+                          >
+                            <i className="bi bi-x" aria-hidden="true" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <SeletorPessoa
+                    valor=""
+                    obrigatorio={false}
+                    opcoes={auditoresOpcoes.filter((pessoa) => pessoa.nome !== form.auditorLider && !form.auditores.includes(pessoa.nome))}
+                    carregando={sugestoesQuery.isLoading}
+                    placeholder="Adicionar auditor"
+                    vazio="Nenhum outro usuário com o SGQ liberado."
+                    onChange={(nome) => {
+                      if (!nome || nome === form.auditorLider || form.auditores.includes(nome)) return;
+                      setForm({ ...form, auditores: [...form.auditores, nome] });
+                    }}
+                  />
+                </div>
+              </fieldset>
+              <fieldset data-aba="planejamento" hidden={abaModal !== 'planejamento'} disabled={!canManage || salvar.isPending}>
+                <label>
+                  <span>Data de início <em>*</em></span>
+                  <input
+                    className="form-input"
+                    type="date"
+                    required
+                    value={form.dataInicio}
+                    onChange={(e) => setForm({ ...form, dataInicio: e.target.value })}
+                  />
+                </label>
+                <label>
+                  <span>Data de término <em>*</em></span>
+                  <input
+                    className="form-input"
+                    type="date"
+                    required
+                    min={form.dataInicio || undefined}
+                    value={form.dataTermino}
+                    onChange={(e) => setForm({ ...form, dataTermino: e.target.value })}
+                  />
+                </label>
+                <label className="is-wide">
+                  <span>Escopo / objetivo</span>
+                  <textarea
+                    className="form-input"
+                    rows={3}
+                    value={form.escopo}
+                    onChange={(e) => setForm({ ...form, escopo: e.target.value })}
+                    placeholder="Processos, áreas e critérios que serão auditados."
+                  />
+                </label>
+                <div className="is-wide sgq-aud-status-picker" role="radiogroup" aria-label="Status">
+                  <span>Status</span>
+                  <div>
+                    {SGQ_AUDITORIA_STATUS_OPTIONS.map((opcao) => (
+                      <button
+                        key={opcao.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={form.status === opcao.value}
+                        className={`sgq-aud-status is-${opcao.value}${form.status === opcao.value ? ' is-picked' : ''}`}
+                        onClick={() => setForm({ ...form, status: opcao.value })}
+                      >
+                        <i className={`bi bi-${STATUS_ICON[opcao.value]}`} aria-hidden="true" />
+                        {opcao.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </fieldset>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="reports-action-btn secondary" onClick={fecharModal} disabled={salvar.isPending}>
+                  {canManage ? 'Cancelar' : 'Fechar'}
+                </button>
+                {canManage && (
+                  <button type="submit" className="reports-action-btn primary" disabled={salvar.isPending}>
+                    {salvar.isPending ? 'Salvando...' : editando ? 'Salvar Alterações' : 'Registrar Auditoria'}
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SGQAuditorias;

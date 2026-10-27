@@ -91,6 +91,8 @@ class UserSerializer(serializers.ModelSerializer):
         data['indicadorFiliais'] = sanitize_indicador_filiais(data.get('indicadorFiliais'))
         data['funcoes'] = sanitize_funcoes(data.get('funcoes'))
         data['abas'] = sanitize_abas(data.get('abas'))
+        from django.conf import settings
+        data['sgqAuditoriasLiberadas'] = bool(getattr(settings, 'SGQ_AUDITORIAS_LIBERADAS', False))
         return _cpf_na_resposta(data)
 
 

@@ -143,6 +143,13 @@ else
   echo "== TccConex ERP: migrate ignorado (RUN_STARTUP_MIGRATE=False) =="
 fi
 
+# Carga única das auditorias do SGQ. Não altera as outras tabelas e não roda
+# de novo se já existir norma, tipo ou auditoria.
+if [ -n "${WEBSITE_SITE_NAME:-}" ]; then
+  echo "== TccConex ERP: auditorias iniciais (se o cadastro ainda estiver vazio) =="
+  python manage.py importar_auditorias_iniciais || echo "== TccConex ERP: importação de auditorias falhou; o restante do sistema segue =="
+fi
+
 if [ "$USE_CELERY" = "True" ]; then
   echo "== TccConex ERP: worker Celery em background =="
   python -m celery -A prothon worker -l warning --concurrency=1 &

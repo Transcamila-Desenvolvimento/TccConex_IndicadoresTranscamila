@@ -37,6 +37,12 @@ export const ABA_ITEMS = [
   { module: 'SGQ', key: 'home', label: 'Home SGQ', path: '/sgq' },
   { module: 'SGQ', key: 'pesquisa-satisfacao', label: 'Pesquisa de satisfação', path: '/sgq/pesquisa-satisfacao' },
   { module: 'SGQ', key: 'matriz', label: 'Matriz', path: '/sgq/matriz' },
+  { module: 'SGQ', key: 'auditorias-visao-geral', label: 'Visão geral', path: '/sgq/auditorias/visao-geral' },
+  { module: 'SGQ', key: 'auditorias', label: 'Auditorias', path: '/sgq/auditorias/auditorias' },
+  { module: 'SGQ', key: 'auditorias-minhas-acoes', label: 'Questionário', path: '/sgq/auditorias/minhas-acoes' },
+  { module: 'SGQ', key: 'auditorias-normas', label: 'Normas', path: '/sgq/auditorias/normas' },
+  { module: 'SGQ', key: 'auditorias-tipos-resposta', label: 'Tipos de respostas', path: '/sgq/auditorias/tipos-resposta' },
+  { module: 'SGQ', key: 'auditorias-categorias', label: 'Categorias', path: '/sgq/auditorias/categorias' },
 
   { module: 'Marketing', key: 'home', label: 'Home Marketing', path: '/marketing' },
   { module: 'Marketing', key: 'campanhas', label: 'Calendário Transcamila', path: '/marketing/campanhas' },
@@ -74,17 +80,24 @@ export function rotinasConfiguraveisDoModulo(module: string) {
   return abasDoModulo(module).filter((item) => item.key !== HOME_ABA_KEY);
 }
 
+function semAuditoriasBloqueadas(user: User | null, module: string, allowed: Set<string>): Set<string> {
+  if (module !== 'SGQ' || user?.sgqAuditoriasLiberadas === true) return allowed;
+  return new Set([...allowed].filter((key) => !key.startsWith('auditorias')));
+}
+
 export function getAllowedAbas(user: User | null, module: string): Set<string> {
   if (module === 'Indicadores') {
     return getAllowedIndicadores(user) as Set<string>;
   }
   const catalog = abasDoModulo(module).map((item) => item.key as string);
-  if (user?.roleId === '1' || catalog.length === 0) return new Set(catalog);
+  if (user?.roleId === '1' || catalog.length === 0) {
+    return semAuditoriasBloqueadas(user, module, new Set(catalog));
+  }
   const selected = (user?.abas?.[module] ?? []).filter((key) => catalog.includes(key));
-  if (selected.length === 0) return new Set(catalog);
+  if (selected.length === 0) return semAuditoriasBloqueadas(user, module, new Set(catalog));
   const allowed = new Set(selected);
   if (catalog.includes(HOME_ABA_KEY)) allowed.add(HOME_ABA_KEY);
-  return allowed;
+  return semAuditoriasBloqueadas(user, module, allowed);
 }
 
 export function userCanSeeAba(user: User | null, module: string, key: string): boolean {

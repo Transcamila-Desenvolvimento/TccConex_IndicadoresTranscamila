@@ -13,6 +13,12 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-fallback-nao-u
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
+# No App Service a função de auditorias nasce bloqueada para todos, inclusive
+# administradores. Liberar depois com SGQ_AUDITORIAS_LIBERADAS=True.
+# Fora do Azure (dev e testes) continua liberada, salvo essa variável em False.
+_auditorias_padrao = 'False' if os.environ.get('WEBSITE_SITE_NAME') else 'True'
+SGQ_AUDITORIAS_LIBERADAS = os.environ.get('SGQ_AUDITORIAS_LIBERADAS', _auditorias_padrao) == 'True'
+
 # Produção: definir DJANGO_ALLOWED_HOSTS com os domínios reais (separados por vírgula).
 # Sem a variável, cai no fallback permissivo (uso só em dev).
 _allowed_hosts_env = os.environ.get('DJANGO_ALLOWED_HOSTS', '')
