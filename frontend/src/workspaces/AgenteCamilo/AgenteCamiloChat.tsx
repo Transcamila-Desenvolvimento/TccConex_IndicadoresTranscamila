@@ -22,6 +22,7 @@ import {
   falarTexto,
   iniciarCaptura,
   pararFala,
+  prepararSintese,
   type SessaoCaptura,
 } from './camiloVoz';
 
@@ -430,7 +431,7 @@ const AgenteCamiloChat: React.FC = () => {
               window.setTimeout(() => ouvirConversaRef.current(), 200);
             }
           },
-        });
+        }, { rapido: panelRef.current === 'voz' });
       }
     };
     const contextoDaResposta = (data: { contextoUsado?: number; contextoLimite?: number }) => (
@@ -549,7 +550,7 @@ const AgenteCamiloChat: React.FC = () => {
         setOuvindo(false);
         setDraft('');
         if (panelRef.current !== 'voz') return;
-        if (dito.length < 8 || pendingRef.current || falandoRef.current) {
+        if (dito.length < 2 || pendingRef.current || falandoRef.current) {
           window.setTimeout(() => ouvirConversaRef.current(), 400);
           return;
         }
@@ -560,7 +561,7 @@ const AgenteCamiloChat: React.FC = () => {
         setOuvindo(false);
         setVozAviso(mensagem);
       },
-    });
+    }, { aoVivo: true });
     if (!sessao) return;
     capturaRef.current = sessao;
     setOuvindo(true);
@@ -568,6 +569,7 @@ const AgenteCamiloChat: React.FC = () => {
   ouvirConversaRef.current = ouvirConversa;
 
   const abrirConversaVoz = () => {
+    prepararSintese();
     pararFala();
     falandoRef.current = false;
     setFalando(false);

@@ -182,6 +182,19 @@ class AuditoriaConversaTests(TestCase):
         abertura = self.falar('Tem procedimento de auditoria na matriz?', voz=False)
         self.assertNotIn('Qual delas você quer continuar?', abertura)
 
+    def test_sim_com_ruido_de_voz_continua_a_auditoria(self):
+        AuditoriaSGQ.objects.filter(codigo='26-00002').update(status='concluida')
+        self.falar('Quero dar andamento na minha auditoria')
+        pergunta = self.falar('sim não passa não direito mano')
+        self.assertIn('Há política?', pergunta)
+        self.assertNotIn('Quando quiser retomar', pergunta)
+
+    def test_nao_sozinho_interrompe(self):
+        AuditoriaSGQ.objects.filter(codigo='26-00002').update(status='concluida')
+        self.falar('Quero dar andamento na minha auditoria')
+        resposta = self.falar('não')
+        self.assertIn('Quando quiser retomar', resposta)
+
     def test_sem_permissao_nao_grava(self):
         self.auditor.funcoes = {'SGQ': []}
         self.auditor.save(update_fields=['funcoes'])

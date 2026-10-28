@@ -145,7 +145,7 @@ def _escolher_e_seguir(user, pergunta, anteriores, fonte, auditorias, ultimo):
                 f'A auditoria {achada.codigo} já está concluída. ' + _lista(abertas, perguntar=True),
             )
         return _seguir_para_pergunta(pergunta, anteriores, fonte, achada, anteriores)
-    if 'quer continuar nela' in _norm(ultimo) and re.search(r'\bnao\b', _norm(pergunta)):
+    if 'quer continuar nela' in _norm(ultimo) and _recusou_continuar(_norm(pergunta)):
         return _resultado(
             pergunta, anteriores, fonte,
             'Tudo bem. Quando quiser retomar, peça para dar andamento na auditoria.',
@@ -597,6 +597,13 @@ def _pediu_andamento(texto: str) -> bool:
     if any(pista in texto for pista in ('matriz', 'documento', 'arquivo', 'procedimento')):
         return False
     return True
+
+
+def _recusou_continuar(texto: str) -> bool:
+    """Não sozinho recusa. Sim no meio do ruído da voz continua a auditoria."""
+    if re.search(r'\b(sim|pode|quero|vamos|continua|continuar|claro|isso|beleza|ok|okay|bora)\b', texto):
+        return False
+    return bool(re.search(r'\bnao\b', texto))
 
 
 def _quer_parar(texto: str) -> bool:

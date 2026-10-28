@@ -183,6 +183,7 @@ function falarNoNavegador(
   texto: string,
   token: number,
   eventos: { onStart?: () => void; onEnd?: () => void },
+  velocidade = 0.94,
 ): void {
   if (!sinteseVozDisponivel() || token !== leituraAtual) {
     if (token === leituraAtual) eventos.onEnd?.();
@@ -212,7 +213,7 @@ function falarNoNavegador(
     }
     const fala = new SpeechSynthesisUtterance(partes[indice]);
     fala.lang = 'pt-BR';
-    fala.rate = 0.94;
+    fala.rate = velocidade;
     fala.pitch = 1;
     fala.volume = 1;
     if (voz) fala.voice = voz;
@@ -247,12 +248,17 @@ function falarNoNavegador(
 export function falarTexto(
   markdown: string,
   eventos: { onStart?: () => void; onEnd?: () => void } = {},
+  opcoes: { rapido?: boolean } = {},
 ): void {
   pararFala();
   const token = leituraAtual;
   const texto = textoFalado(markdown);
   if (!texto) {
     eventos.onEnd?.();
+    return;
+  }
+  if (opcoes.rapido) {
+    falarNoNavegador(texto, token, eventos, 1.05);
     return;
   }
   apiService.sintetizarVozCamilo(texto)
@@ -345,7 +351,7 @@ export function iniciarCaptura(eventos: {
   onErro: (mensagem: string) => void;
   /** Na conversa ao vivo, a pausa na fala envia sozinha. */
   onSilencio?: (texto: string) => void;
-}): SessaoCaptura | null {
+}, opcoes: { aoVivo?: boolean } = {}): SessaoCaptura | null {
   const Construtor = construtorReconhecimento();
   if (!Construtor) {
     eventos.onErro('Este navegador não captura voz. Use Chrome ou Edge.');
@@ -367,6 +373,9 @@ export function iniciarCaptura(eventos: {
   let silencio: number | null = null;
   let ultimoSinal = Date.now();
   let ultimoTextoEm = Date.now();
+  let enviou = false;
+  const pausaMs = opcoes.aoVivo ? 650 : 700;
+  const minimo = opcoes.aoVivo ? 2 : 8;
 
   const textoAtual = () => apararRepeticao(juntar(acumulado, [sessaoFinal, parcialAtual].filter(Boolean).join(' ')));
   const publicar = () => eventos.onTexto(apararRepeticao(juntar(acumulado, sessaoFinal)), parcialAtual);
@@ -403,6 +412,21 @@ export function iniciarCaptura(eventos: {
   const aoVoltar = () => {
     if (!ativo || document.visibilityState === 'hidden') return;
     if (!escutando) agendarReinicio(300);
+  };
+  const entregar = (texto: string) => {
+    if (enviou || !eventos.onSilencio) return;
+    enviou = true;
+    soltar();
+    try {
+      reconhecimento.stop();
+    } catch {
+      try {
+        reconhecimento.abort();
+      } catch {
+        /* já estava parado */
+      }
+    }
+    eventos.onSilencio(texto);
   };
   const soltar = () => {
     ativo = false;
@@ -466,6 +490,7 @@ export function iniciarCaptura(eventos: {
       return;
     }
     marcar();
+    if (opcoes.aoVivo) return;
     window.setTimeout(() => {
       if (!ativo || escutando || ligando || document.visibilityState === 'hidden') return;
       religar();
@@ -474,13 +499,18 @@ export function iniciarCaptura(eventos: {
   reconhecimento.onend = () => {
     ligando = false;
     escutando = false;
-    if (!ativo) return;
+    if (!ativo || enviou) return;
     guardarSessao();
     if (document.visibilityState === 'hidden') return;
-    agendarReinicio(280);
+    const dito = textoAtual().trim();
+    if (opcoes.aoVivo && dito.length >= minimo) {
+      entregar(dito);
+      return;
+    }
+    agendarReinicio(opcoes.aoVivo ? 900 : 280);
   };
 
-  vigia = window.setInterval(() => {
+  vigia = opcoes.aoVivo ? null : window.setInterval(() => {
     if (!ativo || document.visibilityState === 'hidden' || Date.now() - ultimoSinal < 20000) return;
     ligando = false;
     if (escutando) {
@@ -504,16 +534,22 @@ export function iniciarCaptura(eventos: {
     silencio = window.setInterval(() => {
       if (!ativo || avisou) return;
       const texto = textoAtual().trim();
-      if (texto.length < 8 || Date.now() - ultimoTextoEm < 700) return;
+      if (texto.length < minimo || Date.now() - ultimoTextoEm < pausaMs) return;
       avisou = true;
+      if (opcoes.aoVivo) {
+        entregar(texto);
+        return;
+      }
       eventos.onSilencio?.(texto);
     }, 200);
   }
 
-  try {
-    prepararSintese();
-  } catch {
-    /* a leitura da resposta pode esperar o próximo toque */
+  if (!opcoes.aoVivo) {
+    try {
+      prepararSintese();
+    } catch {
+      /* a leitura da resposta pode esperar o próximo toque */
+    }
   }
   window.setTimeout(() => {
     if (!ativo) return;
