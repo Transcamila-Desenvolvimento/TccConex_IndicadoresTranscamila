@@ -1,4 +1,7 @@
-"""Partes do ERP que um agente pode consultar. Só leitura, e só o que o usuário já acessa."""
+"""Partes do ERP que um agente pode usar. Só o que o usuário já acessa.
+
+A parte Auditorias do SGQ também grava o questionário, quando a pessoa tem a função de executar auditorias.
+"""
 
 from apps.accounts.constants import (
     ABAS_POR_AMBIENTE,
@@ -22,6 +25,7 @@ PARTES = (
     {'ambiente': 'RH', 'parte': 'documentos', 'rotulo': 'Matriz de conhecimento'},
     {'ambiente': 'SGQ', 'parte': 'pesquisa-satisfacao', 'rotulo': 'Pesquisa de satisfação'},
     {'ambiente': 'SGQ', 'parte': 'matriz', 'rotulo': 'Matriz de conhecimento'},
+    {'ambiente': 'SGQ', 'parte': 'auditorias', 'rotulo': 'Auditorias'},
     {'ambiente': 'Marketing', 'parte': 'campanhas', 'rotulo': 'Calendário Transcamila'},
     {'ambiente': 'Logística', 'parte': 'configuracoes', 'rotulo': 'Configurações gerais'},
     {'ambiente': 'Frota', 'parte': 'custos-frota', 'rotulo': 'Custos de frota'},
@@ -80,7 +84,12 @@ def partes_do_usuario(user) -> list[dict]:
             if item['parte'] in indicadores:
                 liberadas.append(dict(item))
             continue
-        if item['parte'] in _abas_consultaveis(user, ambiente):
+        abas = _abas_consultaveis(user, ambiente)
+        if ambiente == 'SGQ' and item['parte'] == 'auditorias':
+            if 'auditorias' in abas or 'auditorias-minhas-acoes' in abas:
+                liberadas.append(dict(item))
+            continue
+        if item['parte'] in abas:
             liberadas.append(dict(item))
     return liberadas
 

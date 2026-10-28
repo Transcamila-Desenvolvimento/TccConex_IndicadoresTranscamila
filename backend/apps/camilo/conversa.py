@@ -2,6 +2,7 @@
 
 import re
 
+from apps.camilo.auditoria_conversa import conduzir_auditoria
 from apps.camilo.ata import (
     PERGUNTA_O_QUE_FAZER,
     fala_da_reuniao,
@@ -223,6 +224,9 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
     anteriores = historico_valido(historico)
     if transcricao_sem_instrucao(pergunta):
         return _transcricao_sem_pedido(pergunta, anteriores)
+    conduzida = conduzir_auditoria(user, agente, pergunta, anteriores)
+    if conduzida is not None:
+        return conduzida
     fala = fala_da_reuniao(pergunta, anteriores) if pedido_de_ata(pergunta) else pergunta
     contexto = _pista_documento(fala) or perguntas_anteriores(anteriores)
     resultado = consultar(user, agente, pergunta, contexto=contexto)

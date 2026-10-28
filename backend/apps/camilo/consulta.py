@@ -513,6 +513,15 @@ def resumo_pesquisas(user) -> str:
     return _texto(total, 'pesquisa de satisfação', 'pesquisas de satisfação')
 
 
+def resumo_auditorias(user) -> str:
+    from apps.sgq.models import AuditoriaSGQ
+    abertas = _filtra_filial(AuditoriaSGQ.objects.all(), user, 'SGQ', 'filial').exclude(status='concluida').count()
+    if abertas == 0:
+        return 'Nenhuma auditoria em aberto.'
+    texto = _texto(abertas, 'auditoria em aberto', 'auditorias em aberto')
+    return f'{texto} Dá para responder o questionário pedindo para dar andamento.'
+
+
 def resumo_campanhas(user) -> str:
     from apps.marketing.models import CampanhaMarketing
     return _texto(CampanhaMarketing.objects.count(), 'campanha', 'campanhas')
@@ -617,6 +626,7 @@ LEITORES = {
     ('RH', 'documentos'): resumo_documentos,
     ('SGQ', 'matriz'): resumo_matriz_sgq,
     ('SGQ', 'pesquisa-satisfacao'): resumo_pesquisas,
+    ('SGQ', 'auditorias'): resumo_auditorias,
     ('Marketing', 'campanhas'): resumo_campanhas,
     ('Logística', 'configuracoes'): resumo_metas,
     ('Frota', 'custos-frota'): resumo_custos_frota,
@@ -651,6 +661,7 @@ _SINAIS = {
     ('RH', 'documentos'): ('documento', 'matriz', 'conhecimento', 'convencao', 'piso', 'diaria', 'sindical', 'acordo'),
     ('SGQ', 'matriz'): ('matriz', 'conhecimento', 'documento', 'procedimento', 'norma', 'qualidade', 'auditoria'),
     ('SGQ', 'pesquisa-satisfacao'): ('pesquisa', 'satisfacao'),
+    ('SGQ', 'auditorias'): ('questionario', 'andamento', 'auditoria em aberto'),
     ('Marketing', 'campanhas'): ('campanha', 'marketing'),
     ('Logística', 'configuracoes'): ('logistica',),
     ('Frota', 'custos-frota'): ('abastecimento', 'manutencao', 'custo da frota'),
