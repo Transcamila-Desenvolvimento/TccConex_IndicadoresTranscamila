@@ -121,8 +121,22 @@ def _semestre_atual(hoje):
     return inicio, fim, rotulo
 
 
+def _auditoria_liberada(user, aba: str) -> bool:
+    """No Azure a rotina nova não entra no 'todas as rotinas'.
+
+    Administrador sempre entra. Os demais só entram se a rotina foi gravada
+    no cadastro. SGQ_AUDITORIAS_LIBERADAS=True devolve o acesso antigo.
+    """
+    if getattr(settings, 'SGQ_AUDITORIAS_LIBERADAS', False):
+        return True
+    if getattr(user, 'is_admin', False):
+        return True
+    abas = (getattr(user, 'abas', None) or {}).get('SGQ') or []
+    return aba in abas
+
+
 def _sem_aba(user, aba: str) -> bool:
-    if aba.startswith('auditorias') and not getattr(settings, 'SGQ_AUDITORIAS_LIBERADAS', False):
+    if aba.startswith('auditorias') and not _auditoria_liberada(user, aba):
         return True
     if getattr(user, 'is_admin', False):
         return False

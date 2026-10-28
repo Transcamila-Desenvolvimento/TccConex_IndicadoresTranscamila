@@ -13,9 +13,9 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-fallback-nao-u
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-# No App Service a função de auditorias nasce bloqueada para todos, inclusive
-# administradores. Liberar depois com SGQ_AUDITORIAS_LIBERADAS=True.
-# Fora do Azure (dev e testes) continua liberada, salvo essa variável em False.
+# No App Service as rotinas de auditorias não entram no "todas as rotinas".
+# Administrador sempre acessa; os demais só se a rotina estiver no cadastro.
+# SGQ_AUDITORIAS_LIBERADAS=True libera para quem já tem o SGQ, como no dev.
 _auditorias_padrao = 'False' if os.environ.get('WEBSITE_SITE_NAME') else 'True'
 SGQ_AUDITORIAS_LIBERADAS = os.environ.get('SGQ_AUDITORIAS_LIBERADAS', _auditorias_padrao) == 'True'
 

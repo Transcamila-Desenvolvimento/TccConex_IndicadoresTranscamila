@@ -23,7 +23,7 @@ export interface User {
   funcoes: Record<string, string[]>;
   /** Abas de menu liberadas por ambiente (exceto Indicadores). Vazio no módulo = todas. */
   abas: Record<string, string[]>;
-  /** False no Azure enquanto a função de auditorias estiver bloqueada para todos. */
+  /** True libera as rotinas de auditorias para quem já tem o SGQ. No Azure, false: só administrador e quem teve a rotina gravada. */
   sgqAuditoriasLiberadas?: boolean;
   googleEmail: string | null;
   googleLinkedAt: string | null;

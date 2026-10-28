@@ -81,8 +81,9 @@ export function rotinasConfiguraveisDoModulo(module: string) {
 }
 
 function semAuditoriasBloqueadas(user: User | null, module: string, allowed: Set<string>): Set<string> {
-  if (module !== 'SGQ' || user?.sgqAuditoriasLiberadas === true) return allowed;
-  return new Set([...allowed].filter((key) => !key.startsWith('auditorias')));
+  if (module !== 'SGQ' || user?.sgqAuditoriasLiberadas === true || user?.roleId === '1') return allowed;
+  const explicitas = new Set(user?.abas?.SGQ ?? []);
+  return new Set([...allowed].filter((key) => !key.startsWith('auditorias') || explicitas.has(key)));
 }
 
 export function getAllowedAbas(user: User | null, module: string): Set<string> {

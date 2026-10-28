@@ -26,6 +26,30 @@ import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 
 const PAGE_SIZE = 10;
 
+function chavesDoModulo(module: string): string[] {
+  return abasDoModulo(module).map((item) => item.key as string);
+}
+
+/** No Azure, lista vazia continua significando as rotinas antigas — Auditorias fica de fora até ser gravada. */
+function rotinasMarcadas(module: string, saved: string[], auditoriasOptIn: boolean): string[] {
+  const catalog = chavesDoModulo(module);
+  if (saved.length === 0) {
+    if (!(auditoriasOptIn && module === 'SGQ')) return catalog;
+    return catalog.filter((key) => !key.startsWith('auditorias'));
+  }
+  return catalog.filter((key) => saved.includes(key));
+}
+
+function gravacaoDasRotinas(module: string, marcadas: string[], auditoriasOptIn: boolean): string[] {
+  const catalog = chavesDoModulo(module);
+  const unique = catalog.filter((key) => marcadas.includes(key));
+  const classicas = catalog.filter((key) => !(auditoriasOptIn && module === 'SGQ' && key.startsWith('auditorias')));
+  const soClassicas = unique.length === classicas.length && classicas.every((key) => unique.includes(key));
+  if (soClassicas) return [];
+  if (unique.length === catalog.length && !(auditoriasOptIn && module === 'SGQ')) return [];
+  return unique;
+}
+
 function mascaraCpf(valor: string) {
   const digitos = valor.replace(/\D/g, '').slice(0, 11);
   if (digitos.length <= 3) return digitos;
@@ -120,6 +144,7 @@ const AdminUsersPanel: React.FC = () => {
   const [selectedModule, setSelectedModule] = useState<string>(MODULE_ACCESS_GROUPS[0].module);
 
   const isSelectedAdmin = roleId === '1';
+  const auditoriasOptIn = currentUser?.sgqAuditoriasLiberadas !== true;
   const { data: indicadorFiliaisOpcoes = {} } = useIndicadorFiliaisOpcoes(isModalOpen);
   const isEditingSelf = !!editingUserId && editingUserId === currentUser?.id;
 
@@ -272,9 +297,13 @@ const AdminUsersPanel: React.FC = () => {
     const abas: Record<string, string[]> = {};
     for (const group of MODULE_ACCESS_GROUPS) {
       if (group.module === 'Indicadores' || !environments.includes(group.module)) continue;
-      const catalog = abasDoModulo(group.module).map((item) => item.key as string);
-      const keys = (selectedAbas[group.module] ?? []).filter((key) => catalog.includes(key));
-      if (keys.length > 0 && keys.length < catalog.length) {
+      const catalog = chavesDoModulo(group.module);
+      const keys = gravacaoDasRotinas(
+        group.module,
+        rotinasMarcadas(group.module, selectedAbas[group.module] ?? [], auditoriasOptIn),
+        auditoriasOptIn,
+      );
+      if (keys.length > 0) {
         abas[group.module] = catalog.includes(HOME_ABA_KEY) && !keys.includes(HOME_ABA_KEY)
           ? [HOME_ABA_KEY, ...keys]
           : keys;
@@ -429,15 +458,15 @@ const AdminUsersPanel: React.FC = () => {
 
   const handleToggleAba = (module: string, key: string) => {
     if (key === HOME_ABA_KEY) return;
-    const catalog = abasDoModulo(module).map((item) => item.key as string);
-    const current = (selectedAbas[module]?.length ?? 0) > 0 ? selectedAbas[module] : catalog;
+    const catalog = chavesDoModulo(module);
+    const current = rotinasMarcadas(module, selectedAbas[module] ?? [], auditoriasOptIn);
     const turningOff = current.includes(key);
     if (turningOff && current.length <= 1) return;
     const next = turningOff ? current.filter((k) => k !== key) : [...current, key];
     if (!next.includes(HOME_ABA_KEY) && catalog.includes(HOME_ABA_KEY)) {
       next.unshift(HOME_ABA_KEY);
     }
-    setSelectedAbas((prev) => ({ ...prev, [module]: next.length === catalog.length ? [] : next }));
+    setSelectedAbas((prev) => ({ ...prev, [module]: gravacaoDasRotinas(module, next, auditoriasOptIn) }));
     if (turningOff) {
       const keysDaAba = funcoesDaAba(module, key).map((item) => item.key);
       setFuncoes((prev) => ({
@@ -461,7 +490,10 @@ const AdminUsersPanel: React.FC = () => {
       return;
     }
     if (preset === 'todas-rotinas') {
-      setSelectedAbas((prev) => ({ ...prev, [module]: [] }));
+      setSelectedAbas((prev) => ({
+        ...prev,
+        [module]: auditoriasOptIn && module === 'SGQ' ? chavesDoModulo(module) : [],
+      }));
       return;
     }
     if (preset === 'so-consulta') {
@@ -938,9 +970,8 @@ const AdminUsersPanel: React.FC = () => {
                             ? (selectedIndicadores.length === 0 ? INDICADOR_ITEMS.length : selectedIndicadores.length)
                             : (() => {
                               const configuraveis = rotinasConfiguraveisDoModulo(item.module);
-                              const saved = selectedAbas[item.module] ?? [];
-                              if (saved.length === 0) return configuraveis.length;
-                              return configuraveis.filter((aba) => saved.includes(aba.key)).length;
+                              const marcadas = rotinasMarcadas(item.module, selectedAbas[item.module] ?? [], auditoriasOptIn);
+                              return configuraveis.filter((aba) => marcadas.includes(aba.key)).length;
                             })();
                           const itemAbaTotal = item.module === 'Indicadores'
                             ? INDICADOR_ITEMS.length
@@ -1105,8 +1136,11 @@ const AdminUsersPanel: React.FC = () => {
                                 ))}
 
                                 {group.module !== 'Indicadores' && abaItems.map((item) => {
-                                  const saved = selectedAbas[group.module] ?? [];
-                                  const visible = saved.length === 0 || saved.includes(item.key);
+                                  const visible = rotinasMarcadas(
+                                    group.module,
+                                    selectedAbas[group.module] ?? [],
+                                    auditoriasOptIn,
+                                  ).includes(item.key);
                                   const rotinaFuncoes = funcoesDaAba(group.module, item.key);
                                   const acoesOptIn = rotinaFuncoes.filter((fn) => isFuncaoOptIn(fn));
                                   const acoesVisiveis = isSelectedAdmin ? acoesOptIn : rotinaFuncoes;

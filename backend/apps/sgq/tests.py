@@ -1398,15 +1398,26 @@ class AuditoriaSGQTests(APITestCase):
         self.client.force_authenticate(self.gestor)
 
     @override_settings(SGQ_AUDITORIAS_LIBERADAS=False)
-    def test_auditorias_bloqueadas_recusam_ate_administrador(self):
+    def test_auditorias_no_azure_liberam_admin_e_quem_tem_a_rotina(self):
         negado = self.client.get(self.URL, **_headers())
         self.assertEqual(negado.status_code, 403)
+
         admin = User.objects.create_user(
             username='admin.aud.bloqueio', password='x', name='Admin Bloqueio', role_id='1', status='ativo',
             environments=['SGQ', 'Administração/Manutenção'], filiais={'SGQ': [IBIPORA]},
         )
         self.client.force_authenticate(admin)
-        self.assertEqual(self.client.get(self.URL, **_headers()).status_code, 403)
+        self.assertEqual(self.client.get(self.URL, **_headers()).status_code, 200)
+        self.assertEqual(self.client.get('/api/sgq/normas/', **_headers()).status_code, 200)
+
+        liberado = User.objects.create_user(
+            username='sgq.auditor.liberado', password='x', name='Auditor Liberado', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            abas={'SGQ': ['home', 'auditorias']},
+            funcoes={'SGQ': ['gerenciar-auditorias']},
+        )
+        self.client.force_authenticate(liberado)
+        self.assertEqual(self.client.get(self.URL, **_headers()).status_code, 200)
         self.assertEqual(self.client.get('/api/sgq/normas/', **_headers()).status_code, 403)
 
     def test_grava_auditores_sem_repetir_o_lider(self):
