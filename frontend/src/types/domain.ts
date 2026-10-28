@@ -2194,6 +2194,8 @@ export interface SgqAuditoriaSugestoes {
 export interface SgqPessoa {
   nome: string;
   cargo: string;
+  /** Foto da conta Google, quando o usuário conectou o perfil. */
+  foto?: string;
 }
 
 export interface SgqNorma {

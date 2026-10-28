@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import SGQAuditoriaResultados from './SGQAuditoriaResultados';
 import { useAuth } from '../../contexts/AuthContext';
@@ -69,31 +69,25 @@ function nomeAbreviado(nome: string) {
   return `${partes[0]} ${partes[partes.length - 1]}`;
 }
 
-const CORES_AVATAR = [
-  { fundo: '#e0f2fe', texto: '#0369a1' },
-  { fundo: '#dcfce7', texto: '#15803d' },
-  { fundo: '#fef3c7', texto: '#b45309' },
-  { fundo: '#ede9fe', texto: '#6d28d9' },
-  { fundo: '#fce7f3', texto: '#be185d' },
-  { fundo: '#ccfbf1', texto: '#0f766e' },
-];
+const AvatarPessoa: React.FC<{ nome: string; foto?: string }> = ({ nome, foto }) => {
+  const [falhou, setFalhou] = useState(false);
+  const url = foto?.trim();
+  useEffect(() => setFalhou(false), [url]);
+  if (url && !falhou) {
+    return (
+      <span className="sgq-pessoa-avatar" aria-hidden="true">
+        <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setFalhou(true)} />
+      </span>
+    );
+  }
+  return <span className="sgq-pessoa-avatar" aria-hidden="true">{iniciais(nome)}</span>;
+};
 
-function corAvatar(nome: string) {
-  let soma = 0;
-  for (const letra of nome) soma = (soma * 31 + letra.charCodeAt(0)) % 997;
-  const cor = CORES_AVATAR[soma % CORES_AVATAR.length];
-  return { background: cor.fundo, color: cor.texto };
-}
-
-const AvatarPessoa: React.FC<{ nome: string }> = ({ nome }) => (
-  <span className="sgq-pessoa-avatar" style={corAvatar(nome)} aria-hidden="true">{iniciais(nome)}</span>
-);
-
-const PessoaResumo: React.FC<{ nome: string }> = ({ nome }) => {
+const PessoaResumo: React.FC<{ nome: string; foto?: string }> = ({ nome, foto }) => {
   const curto = nomeAbreviado(nome);
   return (
     <span className="sgq-pessoa-resumo" title={nome}>
-      <AvatarPessoa nome={nome} />
+      <AvatarPessoa nome={nome} foto={foto} />
       <span className="sgq-pessoa-nome">{curto}</span>
     </span>
   );
@@ -168,7 +162,7 @@ const SeletorPessoa: React.FC<SeletorPessoaProps> = ({ valor, opcoes, carregando
       >
         {valor ? (
           <>
-            <AvatarPessoa nome={valor} />
+            <AvatarPessoa nome={valor} foto={selecionada?.foto} />
             <span className="sgq-pessoa-texto">
               <span className="sgq-pessoa-nome">{valor}</span>
               {selecionada?.cargo && <small>{selecionada.cargo}</small>}
@@ -209,7 +203,7 @@ const SeletorPessoa: React.FC<SeletorPessoaProps> = ({ valor, opcoes, carregando
                     onMouseEnter={() => setDestaque(indice)}
                     onClick={() => escolher(pessoa.nome)}
                   >
-                    <AvatarPessoa nome={pessoa.nome} />
+                    <AvatarPessoa nome={pessoa.nome} foto={pessoa.foto} />
                     <span className="sgq-pessoa-texto">
                       <span className="sgq-pessoa-nome">{pessoa.nome}</span>
                       {pessoa.cargo && <small>{pessoa.cargo}</small>}
@@ -295,7 +289,7 @@ const SGQAuditorias: React.FC = () => {
   const listaQuery = useSgqAuditorias(selectedFilial, params);
   const { canShowEmpty } = useAsyncQueryState(listaQuery);
   const resumoQuery = useSgqAuditoriasResumo(selectedFilial);
-  const sugestoesQuery = useSgqAuditoriasSugestoes(selectedFilial, modalAberto);
+  const sugestoesQuery = useSgqAuditoriasSugestoes(selectedFilial, true);
   const salvar = useSaveSgqAuditoria();
   const excluir = useDeleteSgqAuditorias();
   const baixarRelatorio = useBaixarRelatorioSgqAuditoria(selectedFilial);
@@ -312,8 +306,15 @@ const SGQAuditorias: React.FC = () => {
     : categoriasAtivas;
   const auditoresSgq = sugestoes?.auditores ?? [];
   const auditoresOpcoes = editando?.auditorLider && !auditoresSgq.some((pessoa) => pessoa.nome === editando.auditorLider)
-    ? [{ nome: editando.auditorLider, cargo: '' }, ...auditoresSgq]
+    ? [{ nome: editando.auditorLider, cargo: '', foto: '' }, ...auditoresSgq]
     : auditoresSgq;
+  const fotosPorNome = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const pessoa of auditoresSgq) {
+      if (pessoa.foto?.trim()) mapa.set(pessoa.nome, pessoa.foto);
+    }
+    return mapa;
+  }, [auditoresSgq]);
   // Mantida a categoria, a auditoria em edição conserva as normas já vinculadas; trocada, recebe as da nova categoria.
   const normasDoForm = editando && form.categoria === editando.categoria
     ? editando.normas
@@ -625,7 +626,7 @@ const SGQAuditorias: React.FC = () => {
                             </div>
                           ) : <span className="sgq-aud-muted">—</span>}
                         </td>
-                        <td>{auditoria.auditorLider ? <PessoaResumo nome={auditoria.auditorLider} /> : '—'}</td>
+                        <td>{auditoria.auditorLider ? <PessoaResumo nome={auditoria.auditorLider} foto={fotosPorNome.get(auditoria.auditorLider)} /> : '—'}</td>
                         <td>
                           <span className={`sgq-aud-status is-${auditoria.status}`}>
                             <i className={`bi bi-${STATUS_ICON[auditoria.status]}`} aria-hidden="true" />
@@ -810,14 +811,14 @@ const SGQAuditorias: React.FC = () => {
                     </div>
                     <div>
                       <dt>Auditor líder</dt>
-                      <dd>{editando.auditorLider ? <PessoaResumo nome={editando.auditorLider} /> : '—'}</dd>
+                      <dd>{editando.auditorLider ? <PessoaResumo nome={editando.auditorLider} foto={fotosPorNome.get(editando.auditorLider)} /> : '—'}</dd>
                     </div>
                     <div>
                       <dt>Auditores</dt>
                       <dd>
                         {editando.auditores?.length ? (
                           <div className="sgq-aud-auditores">
-                            {editando.auditores.map((nome) => <PessoaResumo key={nome} nome={nome} />)}
+                            {editando.auditores.map((nome) => <PessoaResumo key={nome} nome={nome} foto={fotosPorNome.get(nome)} />)}
                           </div>
                         ) : '—'}
                       </dd>
@@ -912,7 +913,7 @@ const SGQAuditorias: React.FC = () => {
                     <div className="sgq-aud-auditores">
                       {form.auditores.map((nome) => (
                         <span key={nome} className="sgq-aud-auditor">
-                          <PessoaResumo nome={nome} />
+                          <PessoaResumo nome={nome} foto={fotosPorNome.get(nome)} />
                           <button
                             type="button"
                             aria-label={`Remover ${nome}`}

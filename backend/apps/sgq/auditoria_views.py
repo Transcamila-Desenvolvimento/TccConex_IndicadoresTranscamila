@@ -201,13 +201,24 @@ def _filial_da_sessao(request) -> str:
 
 def _usuarios_sgq(filial: str) -> list[dict]:
     """Usuários ativos com o SGQ liberado na filial — candidatos a auditor líder."""
-    pessoas: dict[str, str] = {}
-    for u in get_user_model().objects.filter(status='ativo', is_active=True):
+    pessoas: dict[str, dict] = {}
+    for u in get_user_model().objects.filter(status='ativo', is_active=True).order_by('pk'):
         if not (user_has_module_access(u, 'SGQ') and user_has_filial_access(u, 'SGQ', filial)):
             continue
         nome = (u.name or u.get_full_name() or u.get_username()).strip()
-        pessoas[nome] = pessoas.get(nome) or (u.cargo or '').strip()
-    return [{'nome': nome, 'cargo': pessoas[nome]} for nome in sorted(pessoas, key=str.casefold)]
+        if not nome:
+            continue
+        foto = (u.google_picture_url or '').strip()
+        cargo = (u.cargo or '').strip()
+        atual = pessoas.get(nome)
+        if atual is None:
+            pessoas[nome] = {'nome': nome, 'cargo': cargo, 'foto': foto}
+            continue
+        if not atual['cargo'] and cargo:
+            atual['cargo'] = cargo
+        if not atual['foto'] and foto:
+            atual['foto'] = foto
+    return [pessoas[nome] for nome in sorted(pessoas, key=str.casefold)]
 
 
 def _dados_atualizacao_norma(user) -> dict:

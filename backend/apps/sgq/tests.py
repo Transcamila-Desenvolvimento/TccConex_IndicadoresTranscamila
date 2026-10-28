@@ -1564,8 +1564,19 @@ class AuditoriaSGQTests(APITestCase):
             environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
         )
 
+        com_foto = User.objects.create_user(
+            username='sgq.com.foto', password='x', name='Com Foto', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]}, cargo='Auditor',
+        )
+        com_foto.google_picture_url = 'https://lh3.googleusercontent.com/a/foto'
+        com_foto.save(update_fields=['google_picture_url'])
+
         auditores = self.client.get(f'{self.URL}sugestoes/', **_headers()).data['auditores']
-        self.assertEqual(auditores, ['Gestor Auditorias', 'Leitor Auditorias'])
+        self.assertEqual(auditores, [
+            {'nome': 'Com Foto', 'cargo': 'Auditor', 'foto': 'https://lh3.googleusercontent.com/a/foto'},
+            {'nome': 'Gestor Auditorias', 'cargo': '', 'foto': ''},
+            {'nome': 'Leitor Auditorias', 'cargo': '', 'foto': ''},
+        ])
 
     def test_herda_normas_ativas_da_categoria(self):
         hoje = timezone.localdate()
