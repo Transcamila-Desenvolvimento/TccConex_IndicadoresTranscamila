@@ -41,6 +41,12 @@ export function useResumoUniformes() {
   });
 }
 
+export function useExportarEstoqueUniformes() {
+  return useMutation({
+    mutationFn: () => apiService.exportarEstoqueUniformes(),
+  });
+}
+
 export function useCreateUniforme() {
   const invalidar = useInvalidarUniformes();
   return useMutation({

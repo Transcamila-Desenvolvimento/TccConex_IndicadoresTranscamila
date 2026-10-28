@@ -2634,6 +2634,18 @@ export const apiService = {
     return data;
   },
 
+  async exportarEstoqueUniformes(): Promise<Blob> {
+    const { data, headers, status } = await api.get('/api/compras/uniformes/exportar/', {
+      responseType: 'blob',
+      validateStatus: () => true,
+    });
+    const tipo = String(headers['content-type'] || '');
+    if (status < 200 || status >= 300 || !tipo.includes('spreadsheet')) {
+      throw new Error(await readBlobErrorMessage(data, 'Não foi possível exportar o estoque.'));
+    }
+    return data as Blob;
+  },
+
   async createUniforme(payload: UniformePayload): Promise<Uniforme> {
     const { data } = await api.post('/api/compras/uniformes/', payload);
     return data;

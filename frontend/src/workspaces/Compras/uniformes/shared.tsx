@@ -1,4 +1,6 @@
 import React from 'react';
+import { EmailSuggestInput } from '../../../components/EmailTagsInput';
+import { useGoogleContacts } from '../../../hooks/useGoogleContacts';
 import type { CondicaoUniforme, StatusEntregaUniforme, TipoMovimentacaoUniforme } from '../../../types/domain';
 import { CONDICAO_LABEL, PAGE_SIZE_OPTIONS } from './format';
 
@@ -150,6 +152,31 @@ export function Segmentado<T extends string>({ opcoes, value, onChange }: {
     </div>
   );
 }
+
+export const AvisoEmail: React.FC<{ id: string; value: string; onChange: (valor: string) => void; texto: string }> = ({
+  id, value, onChange, texto,
+}) => {
+  const { data: contatos } = useGoogleContacts(true);
+  const lista = contatos?.contacts ?? [];
+  return (
+    <div style={{ marginTop: '12px' }}>
+      <label htmlFor={id}>Avisar por e-mail <span style={{ color: '#e11d48' }}>*</span></label>
+      <EmailSuggestInput
+        id={id}
+        value={value}
+        contacts={lista}
+        placeholder="Nome ou e-mail do contato"
+        onChange={(email) => onChange(email)}
+      />
+      <span className="gerencial-email-hint">
+        {lista.length > 0
+          ? 'Digite para buscar os contatos da conta Google vinculada.'
+          : 'Vincule sua conta Google no perfil para ver a lista de contatos.'}
+      </span>
+      <span style={{ display: 'block', marginTop: '4px', fontSize: '12px', color: '#64748b' }}>{texto}</span>
+    </div>
+  );
+};
 
 export const Dica: React.FC<{ children: React.ReactNode; cor?: 'info' | 'alerta' }> = ({ children, cor = 'info' }) => (
   <div

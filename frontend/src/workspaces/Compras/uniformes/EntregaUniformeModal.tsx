@@ -4,7 +4,7 @@ import { useRegistrarEntregaUniforme, useUniformes } from '../../../hooks/useUni
 import type { CondicaoUniforme, EntregaUniforme, Uniforme } from '../../../types/domain';
 import ColaboradorPicker from './ColaboradorPicker';
 import { compararTamanho, normalizarBusca, todayIso } from './format';
-import { Dica, ModalUniformes, SecaoTitulo } from './shared';
+import { AvisoEmail, Dica, ModalUniformes, SecaoTitulo } from './shared';
 import { baixarTermoUniforme, imprimirTermoUniforme } from './termoUniformePdf';
 
 interface Linha {
@@ -86,6 +86,7 @@ const EntregaUniformeModal: React.FC<{ colaboradorIdInicial?: string; onClose: (
   const [colaboradorId, setColaboradorId] = useState(colaboradorIdInicial);
   const [dataEntrega, setDataEntrega] = useState(todayIso());
   const [observacoes, setObservacoes] = useState('');
+  const [emailDestino, setEmailDestino] = useState('');
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [registrada, setRegistrada] = useState<EntregaUniforme | null>(null);
 
@@ -134,8 +135,13 @@ const EntregaUniformeModal: React.FC<{ colaboradorIdInicial?: string; onClose: (
       alert(`Não há ${excedida.quantidade} peça(s) ${excedida.condicao === 'novo' ? 'novas' : 'usadas'} de ${u?.nome} ${u?.tamanho}.`);
       return;
     }
+    const email = emailDestino.trim();
+    if (!email || !email.includes('@')) {
+      alert('Informe o e-mail que vai receber o aviso.');
+      return;
+    }
     registrar.mutate(
-      { colaboradorId, dataEntrega, observacoes: observacoes.trim(), itens: linhas },
+      { colaboradorId, dataEntrega, observacoes: observacoes.trim(), emailDestino: email, itens: linhas },
       { onSuccess: (entrega) => setRegistrada(entrega) },
     );
   };
@@ -165,6 +171,11 @@ const EntregaUniformeModal: React.FC<{ colaboradorIdInicial?: string; onClose: (
           <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
             {registrada.totalEntregue} peça(s) entregue(s) para {registrada.colaboradorNome}. O estoque já foi atualizado.
             Imprima o termo para o colaborador assinar.
+            {registrada.emailAviso && (
+              registrada.emailEnviado
+                ? ` O aviso foi enviado para ${registrada.emailAviso}.`
+                : ` A entrega foi registrada, mas o aviso não saiu para ${registrada.emailAviso}.`
+            )}
           </p>
         </div>
       </ModalUniformes>
@@ -264,6 +275,12 @@ const EntregaUniformeModal: React.FC<{ colaboradorIdInicial?: string; onClose: (
             Observações
             <textarea className="form-input" rows={2} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Opcional — sai impresso no termo" />
           </label>
+          <AvisoEmail
+            id="uniforme-entrega-email"
+            value={emailDestino}
+            onChange={setEmailDestino}
+            texto="Obrigatório. O aviso leva as peças da entrega e o termo em PDF."
+          />
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db.models import F
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.accounts.tests import auth_headers
@@ -364,6 +364,7 @@ class ControleUniformesTests(TestCase):
             data={
                 'colaboradorId': self.colaborador.pk,
                 'dataEntrega': '2026-10-20',
+                'emailDestino': 'almoxarifado@transcamila.com.br',
                 'itens': [{'uniformeId': self.uniforme_id, 'condicao': condicao, 'quantidade': quantidade}],
             },
             format='json', **self.headers,
@@ -375,14 +376,25 @@ class ControleUniformesTests(TestCase):
         observacoes = qtds.pop('observacoes', '')
         return self.client.post(
             f"/api/compras/uniformes-entregas/{entrega['id']}/devolver/",
-            data={'dataDevolucao': '2026-10-25', 'observacoes': observacoes, 'itens': [{'entregaItemId': item_id, **qtds}]},
+            data={
+                'dataDevolucao': '2026-10-25',
+                'observacoes': observacoes,
+                'emailDestino': 'almoxarifado@transcamila.com.br',
+                'itens': [{'entregaItemId': item_id, **qtds}],
+            },
             format='json', **self.headers,
         )
 
     def _devolucao_total(self, itens, observacoes=''):
         return self.client.post(
             '/api/compras/uniformes-entregas/devolucao-total/',
-            data={'colaboradorId': self.colaborador.pk, 'dataDevolucao': '2026-10-25', 'observacoes': observacoes, 'itens': itens},
+            data={
+                'colaboradorId': self.colaborador.pk,
+                'dataDevolucao': '2026-10-25',
+                'observacoes': observacoes,
+                'emailDestino': 'almoxarifado@transcamila.com.br',
+                'itens': itens,
+            },
             format='json', **self.headers,
         )
 
@@ -517,6 +529,46 @@ class ControleUniformesTests(TestCase):
         entregas = self.client.get('/api/compras/uniformes-entregas/?status=abertas&q=pedro', **self.headers).data
         self.assertEqual(entregas['count'], 1)
 
+    def test_exportar_estoque_traz_saldo_e_pecas_com_colaborador(self):
+        self._entregar(5)
+        resposta = self.client.get('/api/compras/uniformes/exportar/', **self.headers)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            resposta['Content-Type'],
+        )
+        self.assertIn('estoque_uniformes_', resposta['Content-Disposition'])
+
+        import openpyxl
+        from io import BytesIO
+
+        livro = openpyxl.load_workbook(BytesIO(resposta.content))
+        self.assertEqual(livro.sheetnames, ['Estoque', 'Com colaboradores'])
+        estoque = list(livro['Estoque'].iter_rows(values_only=True))
+        self.assertEqual(estoque[0][0], 'Item')
+        self.assertEqual(estoque[1][:9], (
+            'Camiseta', 'CAM-01', 'M', 5, 0, 5, 3, 5, 'Disponível',
+        ))
+        posse = list(livro['Com colaboradores'].iter_rows(values_only=True))
+        self.assertEqual(posse[1][0], 'Pedro Motorista')
+        self.assertEqual(posse[1][1], '123.456.789-01')
+        self.assertEqual(posse[1][4], f"TRU-{int(EntregaUniforme.objects.get().pk):06d}")
+        self.assertEqual((posse[1][6], posse[1][8], posse[1][9], posse[1][10]), ('Camiseta', 'M', 'Novo', 5))
+
+        self._devolver(self.client.get('/api/compras/uniformes-entregas/', **self.headers).data['results'][0], qtdBoa=5)
+        devolta = self.client.get('/api/compras/uniformes/exportar/', **self.headers)
+        livro = openpyxl.load_workbook(BytesIO(devolta.content))
+        self.assertEqual(livro['Com colaboradores'].max_row, 1)
+        self.assertEqual(list(livro['Estoque'].iter_rows(min_row=2, values_only=True))[0][7], 0)
+
+    def test_exportar_estoque_exige_ambiente_compras(self):
+        outro = User.objects.create_user(
+            username='sem_compras_exportar', password='x', role_id='2',
+            environments=['Financeiro'], filiais={},
+        )
+        resposta = self.client.get('/api/compras/uniformes/exportar/', **auth_headers(outro, 'Compras'))
+        self.assertEqual(resposta.status_code, 403)
+
     def test_por_colaborador_soma_pecas_em_posse(self):
         primeira = self._entregar(3).data
         self._entregar(2)
@@ -526,3 +578,85 @@ class ControleUniformesTests(TestCase):
         self.assertEqual(response.data['count'], 1)
         linha = response.data['results'][0]
         self.assertEqual((linha['nome'], linha['pecasEmPosse'], linha['totalEntregas']), ('Pedro Motorista', 4, 2))
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_aviso_de_entrega_e_devolucao_sai_por_email(self):
+        from django.core import mail
+
+        invalido = self.client.post(
+            '/api/compras/uniformes-entregas/',
+            data={
+                'colaboradorId': self.colaborador.pk,
+                'dataEntrega': '2026-10-20',
+                'emailDestino': 'sem-arroba',
+                'itens': [{'uniformeId': self.uniforme_id, 'condicao': 'novo', 'quantidade': 1}],
+            },
+            format='json', **self.headers,
+        )
+        self.assertEqual(invalido.status_code, 400)
+        sem_email = self.client.post(
+            '/api/compras/uniformes-entregas/',
+            data={
+                'colaboradorId': self.colaborador.pk,
+                'dataEntrega': '2026-10-20',
+                'itens': [{'uniformeId': self.uniforme_id, 'condicao': 'novo', 'quantidade': 1}],
+            },
+            format='json', **self.headers,
+        )
+        self.assertEqual(sem_email.status_code, 400)
+        self.assertFalse(EntregaUniforme.objects.exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+        entrega = self.client.post(
+            '/api/compras/uniformes-entregas/',
+            data={
+                'colaboradorId': self.colaborador.pk,
+                'dataEntrega': '2026-10-20',
+                'emailDestino': 'luis@transcamila.com.br',
+                'itens': [{'uniformeId': self.uniforme_id, 'condicao': 'novo', 'quantidade': 5}],
+            },
+            format='json', **self.headers,
+        )
+        self.assertEqual(entrega.status_code, 201, entrega.data)
+        self.assertTrue(entrega.data['emailEnviado'])
+        self.assertEqual(mail.outbox[0].to, ['luis@transcamila.com.br'])
+        self.assertIn('Entrega de uniforme', mail.outbox[0].subject)
+        self.assertIn('Pedro Motorista', mail.outbox[0].body)
+        self.assertIn('Camiseta', mail.outbox[0].body)
+        self.assertIn('em anexo', mail.outbox[0].body)
+        anexo = mail.outbox[0].attachments[0]
+        self.assertTrue(anexo[0].startswith('Termo_TRU-'))
+        self.assertEqual(anexo[2], 'application/pdf')
+        self.assertTrue(anexo[1].startswith(b'%PDF'))
+
+        item_id = entrega.data['itens'][0]['id']
+        devolucao = self.client.post(
+            f"/api/compras/uniformes-entregas/{entrega.data['id']}/devolver/",
+            data={
+                'dataDevolucao': '2026-10-25',
+                'emailDestino': 'luis@transcamila.com.br',
+                'itens': [{'entregaItemId': item_id, 'qtdBoa': 5}],
+            },
+            format='json', **self.headers,
+        )
+        self.assertEqual(devolucao.status_code, 200, devolucao.data)
+        self.assertTrue(devolucao.data['emailEnviado'])
+        self.assertIn('Devolução de uniforme', mail.outbox[1].subject)
+        self.assertIn('5 em boas condições', mail.outbox[1].body)
+        self.assertEqual(len(mail.outbox), 2)
+
+        outra = self._entregar(1)
+        total = self.client.post(
+            '/api/compras/uniformes-entregas/devolucao-total/',
+            data={
+                'colaboradorId': self.colaborador.pk,
+                'dataDevolucao': '2026-10-26',
+                'emailDestino': 'luis@transcamila.com.br',
+                'itens': [{'entregaItemId': outra.data['itens'][0]['id'], 'qtdBoa': 1}],
+            },
+            format='json', **self.headers,
+        )
+        self.assertEqual(total.status_code, 200, total.data)
+        self.assertTrue(total.data['emailEnviado'])
+        self.assertEqual(len(mail.outbox), 4)
+        self.assertIn('Devolução de uniforme', mail.outbox[3].subject)

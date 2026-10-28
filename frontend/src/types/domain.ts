@@ -1331,6 +1331,8 @@ export interface EntregaUniforme {
   status: StatusEntregaUniforme;
   totalEntregue: number;
   totalPendente: number;
+  emailEnviado?: boolean;
+  emailAviso?: string;
 }
 
 export interface EntregaUniformeFiltros {
@@ -1347,12 +1349,14 @@ export interface RegistrarEntregaUniformePayload {
   colaboradorId: string;
   dataEntrega: string;
   observacoes: string;
+  emailDestino?: string;
   itens: Array<{ uniformeId: string; condicao: CondicaoUniforme; quantidade: number }>;
 }
 
 export interface RegistrarDevolucaoUniformePayload {
   dataDevolucao: string;
   observacoes: string;
+  emailDestino?: string;
   itens: Array<{
     entregaItemId: string;
     qtdBoa: number;
@@ -1369,6 +1373,8 @@ export interface DevolucaoTotalUniformePayload extends RegistrarDevolucaoUniform
 export interface DevolucaoTotalUniformeResultado {
   termos: string[];
   totalPecas: number;
+  emailEnviado?: boolean;
+  emailAviso?: string;
 }
 
 export interface ColaboradorUniformes {

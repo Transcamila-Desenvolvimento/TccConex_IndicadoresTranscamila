@@ -4,7 +4,7 @@ import { useEntregasUniforme, useRegistrarDevolucaoUniforme } from '../../../hoo
 import type { EntregaUniforme } from '../../../types/domain';
 import ColaboradorPicker from './ColaboradorPicker';
 import { formatDateBr, inputCelula, todayIso } from './format';
-import { CondicaoBadge, Dica, ModalUniformes, SecaoTitulo } from './shared';
+import { AvisoEmail, CondicaoBadge, Dica, ModalUniformes, SecaoTitulo } from './shared';
 
 interface Qtds {
   qtdBoa: number;
@@ -51,6 +51,8 @@ const DevolucaoUniformeModal: React.FC<{
   const [entregaId, setEntregaId] = useState(entregaInicial?.id ?? '');
   const [dataDevolucao, setDataDevolucao] = useState(todayIso());
   const [observacoes, setObservacoes] = useState('');
+  const [emailDestino, setEmailDestino] = useState('');
+  const [aviso, setAviso] = useState('');
   const [qtds, setQtds] = useState<Record<string, Qtds>>({});
 
   const abertasQuery = useEntregasUniforme(
@@ -93,11 +95,35 @@ const DevolucaoUniformeModal: React.FC<{
       alert('Explique na observação o motivo das peças perdidas.');
       return;
     }
+    const email = emailDestino.trim();
+    if (!email || !email.includes('@')) {
+      alert('Informe o e-mail que vai receber o aviso.');
+      return;
+    }
     registrar.mutate(
-      { entregaId: entrega.id, dataDevolucao, observacoes: observacoes.trim(), itens },
-      { onSuccess: onClose },
+      { entregaId: entrega.id, dataDevolucao, observacoes: observacoes.trim(), emailDestino: email, itens },
+      {
+        onSuccess: (resultado) => {
+          setAviso(
+            resultado.emailEnviado
+              ? `Aviso enviado para ${resultado.emailAviso}.`
+              : `A devolução foi registrada, mas o aviso não saiu para ${email}.`,
+          );
+        },
+      },
     );
   };
+
+  if (aviso) {
+    return (
+      <ModalUniformes title="Devolução registrada" width={480} onClose={onClose}>
+        <div style={{ textAlign: 'center', padding: '8px 0' }}>
+          <i className="bi bi-check-circle" style={{ fontSize: '34px', color: '#10b981' }} aria-hidden="true" />
+          <p style={{ margin: '10px 0 0', fontSize: '13px', color: '#64748b' }}>{aviso}</p>
+        </div>
+      </ModalUniformes>
+    );
+  }
 
   return (
     <ModalUniformes
@@ -253,6 +279,12 @@ const DevolucaoUniformeModal: React.FC<{
               />
             </label>
           </div>
+          <AvisoEmail
+            id="uniforme-devolucao-email"
+            value={emailDestino}
+            onChange={setEmailDestino}
+            texto="Obrigatório. O aviso leva o que foi devolvido e o termo em PDF."
+          />
         </>
       )}
     </ModalUniformes>

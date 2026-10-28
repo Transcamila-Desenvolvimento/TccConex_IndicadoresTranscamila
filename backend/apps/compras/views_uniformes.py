@@ -1,6 +1,8 @@
 import re
+from datetime import date
 
 from django.db import IntegrityError, transaction
+from django.http import HttpResponse
 from django.db.models import Count, F, Max, Prefetch, Q, Sum
 from django.db.models.functions import Coalesce
 from rest_framework import status, viewsets
@@ -10,7 +12,7 @@ from rest_framework.response import Response
 from apps.accounts.mixins import ModuleScopedViewMixin
 from apps.audit.services import record_audit
 
-from . import uniformes_service as service
+from . import uniforme_email, uniformes_service as service
 from .models import (
     MOV_TIPO_CHOICES,
     Colaborador,
@@ -213,6 +215,18 @@ class UniformeViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     def resumo(self, request):
         return Response(service.resumo())
 
+    @action(detail=False, methods=['get'])
+    def exportar(self, request):
+        conteudo = service.planilha_estoque()
+        record_audit(request.user, 'compras.uniforme.exportado', 'Planilha de estoque e peças com colaboradores.')
+        resposta = HttpResponse(
+            conteudo,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        resposta['Content-Disposition'] = f'attachment; filename="estoque_uniformes_{date.today().isoformat()}.xlsx"'
+        resposta['Content-Length'] = str(len(conteudo))
+        return resposta
+
 
 class EntregaUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):
     permission_module = 'Compras'
@@ -249,6 +263,7 @@ class EntregaUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSe
 
     def create(self, request, *args, **kwargs):
         try:
+            destino = uniforme_email.validar_email_aviso(request.data.get('emailDestino'))
             entrega = service.registrar_entrega(
                 colaborador_id=request.data.get('colaboradorId'),
                 data_entrega=request.data.get('dataEntrega'),
@@ -258,13 +273,16 @@ class EntregaUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSe
             )
         except service.UniformeError as exc:
             return _erro(str(exc))
-        return Response(self.get_serializer(self.get_queryset().get(pk=entrega.pk)).data, status=status.HTTP_201_CREATED)
+        dados = dict(self.get_serializer(self.get_queryset().get(pk=entrega.pk)).data)
+        dados.update(uniforme_email.enviar_aviso_entrega(entrega, destino))
+        return Response(dados, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
     def devolver(self, request, pk=None):
         entrega = self.get_object()
         try:
-            service.registrar_devolucao(
+            destino = uniforme_email.validar_email_aviso(request.data.get('emailDestino'))
+            devolucao = service.registrar_devolucao(
                 entrega.pk,
                 data_devolucao=request.data.get('dataDevolucao'),
                 observacoes=request.data.get('observacoes'),
@@ -273,12 +291,15 @@ class EntregaUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSe
             )
         except service.UniformeError as exc:
             return _erro(str(exc))
-        return Response(self.get_serializer(self.get_queryset().get(pk=entrega.pk)).data)
+        dados = dict(self.get_serializer(self.get_queryset().get(pk=entrega.pk)).data)
+        dados.update(uniforme_email.enviar_aviso_devolucao([devolucao], destino))
+        return Response(dados)
 
     @action(detail=False, methods=['post'], url_path='devolucao-total')
     def devolucao_total(self, request):
         """Devolve de uma vez as peças de todos os termos pendentes do colaborador."""
         try:
+            destino = uniforme_email.validar_email_aviso(request.data.get('emailDestino'))
             devolucoes = service.registrar_devolucao_total(
                 request.data.get('colaboradorId'),
                 data_devolucao=request.data.get('dataDevolucao'),
@@ -288,13 +309,15 @@ class EntregaUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSe
             )
         except service.UniformeError as exc:
             return _erro(str(exc))
-        return Response({
+        dados = {
             'termos': [d.entrega.numero for d in devolucoes],
             'totalPecas': sum(
                 i.qtd_boa + i.qtd_danificada + i.qtd_sem_condicoes + i.qtd_perdida
                 for d in devolucoes for i in d.itens.all()
             ),
-        })
+        }
+        dados.update(uniforme_email.enviar_aviso_devolucao(devolucoes, destino))
+        return Response(dados)
 
     @action(detail=False, methods=['get'], url_path='por-colaborador')
     def por_colaborador(self, request):

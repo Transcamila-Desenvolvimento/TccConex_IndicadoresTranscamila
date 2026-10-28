@@ -96,18 +96,27 @@ async function montarTermo(entrega: EntregaUniforme): Promise<jsPDF> {
     ['SETOR', (entrega.colaboradorSetor || '—').toUpperCase()],
   ];
   doc.setFontSize(10);
-  campos.forEach(([label, valor], index) => {
-    const x = margin + (index % 2 === 0 ? 0 : contentWidth * 0.62);
-    const y = 41 + Math.floor(index / 2) * 7;
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${label}:`, x, y);
-    doc.setFont('helvetica', 'normal');
-    const offset = doc.getTextWidth(`${label}: `);
-    const largura = (index % 2 === 0 ? contentWidth * 0.6 : contentWidth * 0.38) - offset;
-    doc.text(doc.splitTextToSize(valor, largura)[0] ?? '', x + offset, y);
-  });
+  const coluna = (contentWidth - 8) / 2;
+  let camposY = 41;
+  for (let indice = 0; indice < campos.length; indice += 2) {
+    const alturas = campos.slice(indice, indice + 2).map(([label, valor], colunaIndice) => {
+      const x = margin + colunaIndice * (coluna + 8);
+      doc.setFont('helvetica', 'bold');
+      const prefixo = `${label}: `;
+      doc.text(prefixo, x, camposY);
+      const offset = doc.getTextWidth(prefixo);
+      doc.setFont('helvetica', 'normal');
+      const linhas = doc.splitTextToSize(valor, Math.max(coluna - offset, 24)) as string[];
+      doc.text(linhas[0] ?? '', x + offset, camposY);
+      linhas.slice(1).forEach((linha, linhaIndice) => {
+        doc.text(linha, x, camposY + (linhaIndice + 1) * 4.6);
+      });
+      return linhas.length;
+    });
+    camposY += Math.max(...alturas, 1) * 4.6 + 2.4;
+  }
 
-  let y = 58;
+  let y = camposY + 4;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   const declaracao = doc.splitTextToSize(DECLARACAO, contentWidth) as string[];

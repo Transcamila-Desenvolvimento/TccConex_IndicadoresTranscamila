@@ -4,7 +4,7 @@ import { useRegistrarDevolucaoTotalUniforme, useUniformesEmPosse } from '../../.
 import type { DevolucaoTotalUniformeResultado } from '../../../types/domain';
 import ColaboradorPicker from './ColaboradorPicker';
 import { formatDateBr, inputCelula, todayIso } from './format';
-import { CondicaoBadge, Dica, ModalUniformes, SecaoTitulo } from './shared';
+import { AvisoEmail, CondicaoBadge, Dica, ModalUniformes, SecaoTitulo } from './shared';
 
 interface Qtds {
   qtdBoa: number;
@@ -26,6 +26,7 @@ const DevolucaoTotalUniformeModal: React.FC<{ colaboradorIdInicial?: string; onC
   const [colaboradorId, setColaboradorId] = useState(colaboradorIdInicial);
   const [dataDevolucao, setDataDevolucao] = useState(todayIso());
   const [observacoes, setObservacoes] = useState('');
+  const [emailDestino, setEmailDestino] = useState('');
   const [qtds, setQtds] = useState<Record<string, Qtds>>({});
   const [resultado, setResultado] = useState<DevolucaoTotalUniformeResultado | null>(null);
 
@@ -54,11 +55,17 @@ const DevolucaoTotalUniformeModal: React.FC<{ colaboradorIdInicial?: string; onC
       alert('Explique na observação o motivo das peças não devolvidas.');
       return;
     }
+    const email = emailDestino.trim();
+    if (!email || !email.includes('@')) {
+      alert('Informe o e-mail que vai receber o aviso.');
+      return;
+    }
     registrar.mutate(
       {
         colaboradorId,
         dataDevolucao,
         observacoes: observacoes.trim(),
+        emailDestino: email,
         itens: itens.map((i) => ({ entregaItemId: i.id, ...(qtds[i.id] ?? VAZIO), qtdSemCondicoes: 0 })),
       },
       { onSuccess: setResultado },
@@ -75,6 +82,11 @@ const DevolucaoTotalUniformeModal: React.FC<{ colaboradorIdInicial?: string; onC
           </p>
           <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
             Termos encerrados: {resultado.termos.join(', ')}. O colaborador não tem mais uniformes pendentes.
+            {resultado.emailAviso && (
+              resultado.emailEnviado
+                ? ` O aviso foi enviado para ${resultado.emailAviso}.`
+                : ` A devolução foi registrada, mas o aviso não saiu para ${resultado.emailAviso}.`
+            )}
           </p>
         </div>
       </ModalUniformes>
@@ -198,6 +210,12 @@ const DevolucaoTotalUniformeModal: React.FC<{ colaboradorIdInicial?: string; onC
               onChange={(e) => setObservacoes(e.target.value)}
             />
           </label>
+          <AvisoEmail
+            id="uniforme-devolucao-total-email"
+            value={emailDestino}
+            onChange={setEmailDestino}
+            texto="Obrigatório. O aviso leva todas as peças desta baixa e o termo de cada entrega em PDF."
+          />
           <Dica>
             Na devolução total todas as peças precisam ter destino. Uma devolução é registrada em cada termo e todos são encerrados.
           </Dica>

@@ -136,14 +136,6 @@ const CartaoItem: React.FC<{
               </td>
             ))}
           </tr>
-          <tr>
-            <td style={rotuloLinha}>Com colaboradores</td>
-            {grupo.tamanhos.map((u) => (
-              <td key={u.id} style={{ textAlign: 'center', fontSize: '13px', color: u.destinados ? '#0f85c1' : '#cbd5e1', fontWeight: 600 }}>
-                {u.destinados}
-              </td>
-            ))}
-          </tr>
         </tbody>
       </table>
     </div>

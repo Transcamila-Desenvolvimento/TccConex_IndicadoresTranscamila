@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { useResumoUniformes, useUniformes } from '../../hooks/useUniformes';
+import React, { useMemo, useState } from 'react';
+import { useExportarEstoqueUniformes, useResumoUniformes, useUniformes } from '../../hooks/useUniformes';
+import { downloadBlobAsFile } from '../../hooks/useFaturamentoProtocolos';
 import type { ColaboradorUniformes, CondicaoUniforme, EntregaUniforme, Uniforme } from '../../types/domain';
+import { compararTamanho } from './uniformes/format';
 import NovoItemUniformeModal from './uniformes/NovoItemUniformeModal';
 import ColaboradoresUniformesTab from './uniformes/ColaboradoresUniformesTab';
 import ColaboradorUniformesModal from './uniformes/ColaboradorUniformesModal';
@@ -31,6 +33,11 @@ const ABAS: Array<[Aba, string, string]> = [
   ['historico', 'Histórico', 'bi-clock-history'],
 ];
 
+const precisaRepor = (uniforme: Uniforme) => {
+  const disponivel = uniforme.qtdNova + uniforme.qtdUsada;
+  return disponivel === 0 || (uniforme.estoqueMinimo > 0 && disponivel < uniforme.estoqueMinimo);
+};
+
 const ComprasControleUniformes: React.FC = () => {
   const [aba, setAba] = useState<Aba>('estoque');
   const [modal, setModal] = useState<ModalState>(null);
@@ -38,12 +45,47 @@ const ComprasControleUniformes: React.FC = () => {
   const [historicoBusca, setHistoricoBusca] = useState('');
   const resumo = useResumoUniformes().data;
   const uniformes = useUniformes().data ?? [];
+  const exportarEstoque = useExportarEstoqueUniformes();
   const valor = (n: number | undefined) => (n === undefined ? '—' : n);
+  const tamanhosBaixos = useMemo(() => {
+    const baixos = uniformes.filter(precisaRepor);
+    const repetidos = new Set<string>();
+    const vistos = new Set<string>();
+    baixos.forEach((uniforme) => {
+      if (vistos.has(uniforme.tamanho)) repetidos.add(uniforme.tamanho);
+      vistos.add(uniforme.tamanho);
+    });
+    return [...baixos]
+      .sort((a, b) => compararTamanho(a.tamanho, b.tamanho) || a.nome.localeCompare(b.nome))
+      .map((uniforme) => ({
+        id: uniforme.id,
+        rotulo: repetidos.has(uniforme.tamanho) ? `${uniforme.nome} ${uniforme.tamanho}` : uniforme.tamanho,
+      }));
+  }, [uniformes]);
+  const comColaboradores = useMemo(() => {
+    const mapa = new Map<string, number>();
+    uniformes.forEach((uniforme) => {
+      if (uniforme.destinados <= 0) return;
+      mapa.set(uniforme.nome, (mapa.get(uniforme.nome) ?? 0) + uniforme.destinados);
+    });
+    return [...mapa.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'))
+      .map(([nome, quantidade]) => ({ nome, quantidade }));
+  }, [uniformes]);
 
   const fechar = () => setModal(null);
   const abrirDevolucao = (entrega: EntregaUniforme | null) => setModal({ tipo: 'devolucao', entrega });
   const abrirDevolucaoTotal = (colaboradorId: string) => setModal({ tipo: 'devolucaoTotal', colaboradorId });
   const irParaAba = (destino: Aba) => { setHistoricoBusca(''); setAba(destino); };
+  const baixarEstoque = async () => {
+    try {
+      const arquivo = await exportarEstoque.mutateAsync();
+      const hoje = new Date().toISOString().slice(0, 10);
+      downloadBlobAsFile(arquivo, `estoque_uniformes_${hoje}.xlsx`);
+    } catch (erro) {
+      window.alert(erro instanceof Error ? erro.message : 'Não foi possível exportar o estoque.');
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '0 4px 4px' }}>
@@ -53,6 +95,15 @@ const ComprasControleUniformes: React.FC = () => {
           <h1 className="view-page-title">Controle Uniformes</h1>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="reports-action-btn secondary"
+            onClick={baixarEstoque}
+            disabled={exportarEstoque.isPending}
+          >
+            <i className={`bi ${exportarEstoque.isPending ? 'bi-hourglass-split' : 'bi-download'}`} />
+            <span>{exportarEstoque.isPending ? 'Exportando...' : 'Exportar estoque'}</span>
+          </button>
           <button type="button" className="reports-action-btn secondary" onClick={() => abrirDevolucao(null)}>
             <i className="bi bi-arrow-return-left" />
             <span>Receber devolução</span>
@@ -79,11 +130,43 @@ const ComprasControleUniformes: React.FC = () => {
           <div className="stat-card-label">Com colaboradores</div>
           <div className="stat-card-value">{valor(resumo?.destinados)}</div>
           <div className="stat-card-desc">Entregues e ainda não devolvidas</div>
+          {comColaboradores.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+              {comColaboradores.map((item) => (
+                <span
+                  key={item.nome}
+                  style={{
+                    fontSize: '12px', fontWeight: 700, color: '#2563eb',
+                    background: '#eff6ff', border: '1px solid #bfdbfe',
+                    borderRadius: '6px', padding: '2px 8px', lineHeight: 1.4,
+                  }}
+                >
+                  {item.nome} · {item.quantidade}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div className="stat-card card-negative" style={{ cursor: 'pointer' }} onClick={() => irParaAba('estoque')}>
           <div className="stat-card-label">Estoque baixo ou esgotado</div>
           <div className="stat-card-value">{valor(resumo?.estoqueBaixo)}</div>
           <div className="stat-card-desc">Tamanhos para repor</div>
+          {tamanhosBaixos.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+              {tamanhosBaixos.map((item) => (
+                <span
+                  key={item.id}
+                  style={{
+                    fontSize: '12px', fontWeight: 700, color: '#e11d48',
+                    background: '#fff1f2', border: '1px solid #fecdd3',
+                    borderRadius: '6px', padding: '2px 8px', lineHeight: 1.4,
+                  }}
+                >
+                  {item.rotulo}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

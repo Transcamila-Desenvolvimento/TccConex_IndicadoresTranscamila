@@ -4,6 +4,7 @@ Toda alteração de saldo passa por `_movimentar`, que grava uma `MovimentacaoUn
 com o saldo resultante. Nenhum registro de histórico é alterado ou apagado: correções
 são feitas com novos lançamentos (ajuste/descarte)."""
 from datetime import date
+from io import BytesIO
 
 from django.db import transaction
 from django.db.models import F, Q, Sum
@@ -428,3 +429,108 @@ def resumo() -> dict[str, int]:
         'estoqueBaixo': baixo,
         'modelos': Uniforme.objects.count(),
     }
+
+
+def planilha_estoque() -> bytes:
+    """Estoque por tamanho e as peças que ainda estão com colaboradores."""
+    import openpyxl
+
+    totais = totais_por_uniforme()
+    wb = openpyxl.Workbook()
+    estoque = wb.active
+    estoque.title = 'Estoque'
+    _cabecalho(estoque, [
+        'Item', 'Código', 'Tamanho', 'Novas', 'Usadas', 'Disponível',
+        'Estoque mínimo', 'Com colaboradores', 'Situação',
+    ])
+    for uniforme in Uniforme.objects.order_by('nome', 'tamanho'):
+        novas = uniforme.qtd_nova
+        usadas = uniforme.qtd_usada
+        disponivel = novas + usadas
+        com_colaboradores = totais.get(uniforme.pk, {}).get('destinados', 0)
+        estoque.append([
+            uniforme.nome,
+            uniforme.codigo,
+            uniforme.tamanho,
+            novas,
+            usadas,
+            disponivel,
+            uniforme.estoque_minimo,
+            com_colaboradores,
+            _situacao_estoque(disponivel, uniforme.estoque_minimo),
+        ])
+    _ajustar_planilha(estoque)
+
+    posse = wb.create_sheet('Com colaboradores')
+    _cabecalho(posse, [
+        'Colaborador', 'CPF', 'Cargo', 'Setor', 'Termo', 'Data da entrega',
+        'Item', 'Código', 'Tamanho', 'Condição', 'Quantidade',
+    ])
+    condicao = dict(CONDICAO_CHOICES)
+    itens = (
+        EntregaUniformeItem.objects
+        .annotate(em_posse=F('quantidade') - F('qtd_devolvida') - F('qtd_descartada') - F('qtd_perdida'))
+        .filter(em_posse__gt=0)
+        .select_related('entrega')
+        .order_by('entrega__colaborador_nome', 'uniforme_nome', 'uniforme_tamanho', 'entrega__data_entrega')
+    )
+    for item in itens:
+        entrega = item.entrega
+        posse.append([
+            entrega.colaborador_nome,
+            _formatar_cpf(entrega.colaborador_cpf),
+            entrega.colaborador_cargo,
+            entrega.colaborador_setor,
+            entrega.numero,
+            entrega.data_entrega,
+            item.uniforme_nome,
+            item.uniforme_codigo,
+            item.uniforme_tamanho,
+            condicao.get(item.condicao, item.condicao),
+            item.em_posse,
+        ])
+    for linha in posse.iter_rows(min_row=2, min_col=6, max_col=6):
+        for celula in linha:
+            celula.number_format = 'DD/MM/YYYY'
+    _ajustar_planilha(posse)
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+def _situacao_estoque(disponivel: int, minimo: int) -> str:
+    if disponivel == 0:
+        return 'Esgotado'
+    if minimo > 0 and disponivel < minimo:
+        return 'Estoque baixo'
+    return 'Disponível'
+
+
+def _formatar_cpf(valor: str) -> str:
+    digitos = ''.join(caractere for caractere in (valor or '') if caractere.isdigit())
+    if len(digitos) != 11:
+        return valor or ''
+    return f'{digitos[:3]}.{digitos[3:6]}.{digitos[6:9]}-{digitos[9:]}'
+
+
+def _cabecalho(planilha, colunas: list[str]) -> None:
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    planilha.append(colunas)
+    preenchimento = PatternFill('solid', fgColor='118CC4')
+    fonte = Font(bold=True, color='FFFFFF')
+    for celula in planilha[1]:
+        celula.fill = preenchimento
+        celula.font = fonte
+        celula.alignment = Alignment(horizontal='center')
+
+
+def _ajustar_planilha(planilha) -> None:
+    from openpyxl.utils import get_column_letter
+
+    planilha.freeze_panes = 'A2'
+    planilha.auto_filter.ref = planilha.dimensions
+    for indice, coluna in enumerate(planilha.columns, start=1):
+        largura = max(len(str(celula.value or '')) for celula in coluna)
+        planilha.column_dimensions[get_column_letter(indice)].width = min(max(largura + 2, 12), 36)
