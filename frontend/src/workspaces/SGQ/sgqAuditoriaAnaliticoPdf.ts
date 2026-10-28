@@ -353,12 +353,12 @@ export async function downloadSgqAuditoriaAnaliticoPdf(dados: SgqAuditoriaExecuc
           labels: {
             boxWidth: 14,
             font: { size: 20 },
-            generateLabels(chart) {
+            generateLabels(chart: Chart<'pie'>) {
               const dataset = chart.data.datasets[0];
               const valores = (dataset?.data ?? []) as number[];
               const cores = (dataset?.backgroundColor ?? []) as string[];
               const total = valores.reduce((soma, valor) => soma + Number(valor || 0), 0);
-              return (chart.data.labels ?? []).map((label, index) => {
+              return (chart.data.labels ?? []).map((label: unknown, index: number) => {
                 const valor = Number(valores[index] ?? 0);
                 const pct = total ? Math.round((valor / total) * 100) : 0;
                 return {
@@ -375,7 +375,7 @@ export async function downloadSgqAuditoriaAnaliticoPdf(dados: SgqAuditoriaExecuc
           },
         },
       },
-    }, 900, 760, [rotuloPizzaPdf]);
+    }, 900, 760, [rotuloPizzaPdf as unknown as Plugin]);
 
     const alturaBarra = Math.max(52, agregado.categorias.length * 14 + 28);
     if (y + alturaBarra > pageHeight - 18) {
