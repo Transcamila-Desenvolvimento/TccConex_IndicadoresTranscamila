@@ -24,6 +24,7 @@ import type {
   AuditLogFacets,
   UserQueryParams,
   Colaborador, DocumentoRH, PastaMatrizRH, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
+  ConsultaCaepiResultado,
   Uniforme, UniformePayload, UniformeLotePayload, ResumoUniformes, MovimentoEstoqueUniformeTipo, MovimentoEstoqueUniformePayload,
   EntregaUniforme, EntregaUniformeFiltros, RegistrarEntregaUniformePayload, RegistrarDevolucaoUniformePayload,
   UniformeEmPosse, MovimentacaoUniforme, MovimentacaoUniformeFiltros, ColaboradorUniformes, ColaboradorUniformesFiltros,
@@ -2619,6 +2620,16 @@ export const apiService = {
 
   async registrarSaida(payload: RegistrarSaidaPayload): Promise<SaidaEstoque[]> {
     const { data } = await api.post('/api/compras/saidas/registrar_saida/', payload);
+    return data;
+  },
+
+  // ─── Compras — Consulta de CA (EPI) ─────────────────────────────────────────
+
+  async consultarCaepi(numero: string): Promise<ConsultaCaepiResultado> {
+    const { data } = await api.get('/api/caepi/', {
+      params: { numero },
+      timeout: 60000,
+    });
     return data;
   },
 

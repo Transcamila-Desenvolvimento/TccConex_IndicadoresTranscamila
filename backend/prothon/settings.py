@@ -249,9 +249,9 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get('FILE_UPLOAD_MAX_MEMORY_SIZE', 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# JWT Configuration
+# JWT Configuration. 10080 minutos = 7 dias. O valor fica gravado no token no login.
 JWT_SETTINGS = {
-    'ACCESS_TOKEN_LIFETIME_MINUTES': int(os.environ.get('ACCESS_TOKEN_LIFETIME_MINUTES', '480')),
+    'ACCESS_TOKEN_LIFETIME_MINUTES': int(os.environ.get('ACCESS_TOKEN_LIFETIME_MINUTES', '10080')),
     'ALGORITHM': 'HS256',
 }
 

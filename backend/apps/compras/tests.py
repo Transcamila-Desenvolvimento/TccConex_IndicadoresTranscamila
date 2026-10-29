@@ -723,3 +723,117 @@ class ControleUniformesTests(TestCase):
         self.assertTrue(total.data['emailEnviado'])
         self.assertEqual(len(mail.outbox), 4)
         self.assertIn('Devolução de uniforme', mail.outbox[3].subject)
+
+
+_DETALHE_CA = """
+<span id="PlaceHolderConteudo_lblNRRegistroCA">12345</span>
+<span id="PlaceHolderConteudo_lblSituacao" style="color:Red;">VENCIDO</span>
+<span id="PlaceHolderConteudo_lblDTValidade">08/07/2007 00:00:00</span>
+<span id="PlaceHolderConteudo_lblNRProcesso">46000005029200259</span>
+<span id="PlaceHolderConteudo_lblNRCNPJ">15.699.457/0001-03</span>
+<span id="PlaceHolderConteudo_lblNORazaoSocial">INCOLBA INDUSTRIA</span>
+<span id="PlaceHolderConteudo_lblNatureza">Nacional</span>
+<span id="PlaceHolderConteudo_lblNOEquipamento">PERNEIRA</span>
+<span id="PlaceHolderConteudo_lblDSAprovadoParaLaudo">PROTEÇÃO DAS PERNAS</span>
+<span id="PlaceHolderConteudo_grdListaHistoricoAlteracao_lblDataHistoricoAlteracao_0">08/07/2007</span>
+<span id="PlaceHolderConteudo_grdListaHistoricoAlteracao_lblSituacaoHistoricoAlteracao_0">CA Vencido</span>
+<span id="PlaceHolderConteudo_grdListaHistoricoAlteracao_lblDataHistoricoAlteracao_1">12/05/2009</span>
+<span id="PlaceHolderConteudo_grdListaHistoricoAlteracao_lblSituacaoHistoricoAlteracao_1">Expedido</span>
+"""
+
+
+class ConsultaCaepiTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='compras_caepi', password='compras123', role_id='2',
+            environments=['Compras'], filiais={},
+        )
+        self.headers = auth_headers(self.user, 'Compras')
+
+    def test_interpreta_o_certificado_da_pagina_publica(self):
+        from apps.compras.caepi import certificado_da_pagina, campos_delta
+
+        certificado = certificado_da_pagina(_DETALHE_CA, '12345')
+        self.assertEqual(certificado['numero'], '12345')
+        self.assertEqual(certificado['situacao'], 'VENCIDO')
+        self.assertEqual(certificado['validade'], '08/07/2007')
+        self.assertEqual(certificado['equipamento'], 'PERNEIRA')
+        self.assertEqual(certificado['historico'], [
+            {'data': '08/07/2007', 'situacao': 'CA Vencido'},
+            {'data': '12/05/2009', 'situacao': 'Expedido'},
+        ])
+        self.assertEqual(
+            campos_delta('0|hiddenField|__EVENTTARGET||5|hiddenField|__VIEWSTATE|abcde|'),
+            {'__EVENTTARGET': '', '__VIEWSTATE': 'abcde'},
+        )
+
+    def test_consulta_exige_login_e_numero(self):
+        anonimo = self.client.get('/api/caepi/', {'numero': '12345'})
+        self.assertEqual(anonimo.status_code, 403)
+
+        invalido = self.client.get('/api/caepi/', {'numero': 'abc'}, **self.headers)
+        self.assertEqual(invalido.status_code, 400)
+
+    def test_consulta_devolve_o_certificado_sem_chamar_o_site(self):
+        from unittest.mock import patch
+
+        certificado = {
+            'numero': '12345',
+            'situacao': 'VÁLIDO',
+            'validade': '01/01/2030',
+            'processo': '1',
+            'cnpj': '00.000.000/0001-00',
+            'razaoSocial': 'EPI LTDA',
+            'natureza': 'Nacional',
+            'equipamento': 'LUVA',
+            'descricao': 'Proteção das mãos',
+            'historico': [],
+            'fonte': 'CAEPI — Ministério do Trabalho e Emprego',
+        }
+        with patch('apps.compras.views_caepi.consultar_ca', return_value=certificado) as consulta:
+            resposta = self.client.get('/api/caepi/', {'numero': '12345'}, **self.headers)
+            self.client.get('/api/caepi/', {'numero': '12345'}, **self.headers)
+        self.assertEqual(resposta.status_code, 200, resposta.data)
+        self.assertTrue(resposta.data['encontrado'])
+        self.assertEqual(resposta.data['certificado']['equipamento'], 'LUVA')
+        consulta.assert_called_once_with('12345')
+
+    def test_numero_inexistente_nao_e_erro(self):
+        from unittest.mock import patch
+
+        with patch('apps.compras.views_caepi.consultar_ca', return_value=None):
+            resposta = self.client.get('/api/caepi/', {'numero': '999999'}, **self.headers)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertFalse(resposta.data['encontrado'])
+        self.assertIsNone(resposta.data['certificado'])
+
+    def test_falha_do_site_publico_vira_502(self):
+        from unittest.mock import patch
+        from apps.compras.caepi import CaepiIndisponivel
+
+        with patch(
+            'apps.compras.views_caepi.consultar_ca',
+            side_effect=CaepiIndisponivel('A consulta pública de CA está indisponível no momento.'),
+        ):
+            resposta = self.client.get('/api/caepi/', {'numero': '12345'}, **self.headers)
+        self.assertEqual(resposta.status_code, 502)
+
+    def test_usuario_sem_modulo_de_compras_tambem_consulta(self):
+        from unittest.mock import patch
+        from apps.accounts.views import generate_jwt_token
+
+        outro = User.objects.create_user(
+            username='sem_modulo_caepi', password='compras123', role_id='2',
+            environments=[], filiais={},
+        )
+        with patch('apps.compras.views_caepi.consultar_ca', return_value=None):
+            resposta = self.client.get(
+                '/api/caepi/',
+                {'numero': '321'},
+                HTTP_AUTHORIZATION=f'Bearer {generate_jwt_token(outro)}',
+            )
+        self.assertEqual(resposta.status_code, 200, resposta.data)
+        self.assertFalse(resposta.data['encontrado'])

@@ -32,6 +32,7 @@ const FrotaWorkspace = lazyWithMinDuration(() => import('../workspaces/Frota/Fro
 const ComercialWorkspace = lazyWithMinDuration(() => import('../workspaces/Comercial/ComercialWorkspace'));
 const AgenteCamiloWorkspace = lazyWithMinDuration(() => import('../workspaces/AgenteCamilo/AgenteCamiloWorkspace'));
 const SGQWorkspace = lazyWithMinDuration(() => import('../workspaces/SGQ/SGQWorkspace'));
+const ConsultaCaPage = lazyWithMinDuration(() => import('../pages/ConsultaCaPage'));
 // Autenticado, sem bloquear quem precisa trocar a senha (usado em /change-password).
 const ProtectedRouteAllowPasswordChange: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -161,6 +162,17 @@ const AppRoutes: React.FC = () => {
               <SelectionPage />
             </ProtectedRoute>
           } 
+        />
+
+        <Route
+          path="/consulta-ca"
+          element={
+            <ProtectedRoute>
+              <Suspense fallback={<PageLoader />}>
+                <ConsultaCaPage />
+              </Suspense>
+            </ProtectedRoute>
+          }
         />
 
         <Route 

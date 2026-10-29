@@ -4,6 +4,8 @@ from django.http import HttpResponse, HttpResponseNotFound
 from django.urls import include, path, re_path
 from django.views.static import serve as static_serve
 
+from apps.compras.views_caepi import ConsultaCaepiView
+
 
 def health_check(_request):
     return HttpResponse('ok', content_type='text/plain')
@@ -19,6 +21,7 @@ urlpatterns = [
     path('api/audit/', include('apps.audit.urls')),
     path('api/rh/', include('apps.rh.urls')),
     path('api/compras/', include('apps.compras.urls')),
+    path('api/caepi/', ConsultaCaepiView.as_view(), name='consulta-caepi'),
     path('api/faturamento/', include('apps.faturamento.urls')),
     path('api/sgq/', include('apps.sgq.urls')),
     path('api/marketing/', include('apps.marketing.urls')),

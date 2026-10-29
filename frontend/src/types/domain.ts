@@ -1231,6 +1231,33 @@ export interface RegistrarSaidaPayload {
   linhas: Array<{ itemId: string; quantidade: number }>;
 }
 
+// --- COMPRAS: CONSULTA DE CA (EPI) ---
+
+export interface HistoricoCaepi {
+  data: string;
+  situacao: string;
+}
+
+export interface CertificadoAprovacaoEpi {
+  numero: string;
+  situacao: string;
+  validade: string;
+  processo: string;
+  cnpj: string;
+  razaoSocial: string;
+  natureza: string;
+  equipamento: string;
+  descricao: string;
+  historico: HistoricoCaepi[];
+  fonte: string;
+}
+
+export interface ConsultaCaepiResultado {
+  encontrado: boolean;
+  numero: string;
+  certificado: CertificadoAprovacaoEpi | null;
+}
+
 // --- COMPRAS: CONTROLE DE UNIFORMES ---
 
 export type CondicaoUniforme = 'novo' | 'usado';
@@ -4322,6 +4349,7 @@ export interface CamiloTermoAceiteLista {
   count: number;
   results: CamiloTermoAceite[];
 }
+
 
 
 
