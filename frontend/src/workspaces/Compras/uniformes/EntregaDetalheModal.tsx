@@ -13,16 +13,17 @@ const Campo: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
 
 const EntregaDetalheModal: React.FC<{
   entrega: EntregaUniforme;
+  podeDevolver: boolean;
   onClose: () => void;
   onDevolver: (entrega: EntregaUniforme) => void;
-}> = ({ entrega, onClose, onDevolver }) => (
+}> = ({ entrega, podeDevolver, onClose, onDevolver }) => (
   <ModalUniformes
     title={`Termo ${entrega.numero}`}
     width={860}
     onClose={onClose}
     footerExtra={
       <>
-        {entrega.totalPendente > 0 && (
+        {podeDevolver && entrega.totalPendente > 0 && (
           <button type="button" className="reports-action-btn secondary" onClick={() => onDevolver(entrega)}>
             <i className="bi bi-arrow-return-left" /> Registrar devolução
           </button>

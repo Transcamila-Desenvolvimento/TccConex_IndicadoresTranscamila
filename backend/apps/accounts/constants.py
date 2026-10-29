@@ -146,6 +146,15 @@ FUNCOES_POR_AMBIENTE = {
         'validar-clientes',
         'receber-email-homologacao',
     }),
+    'Compras': frozenset({
+        'cadastrar-uniformes',
+        'editar-uniformes',
+        'movimentar-uniformes',
+        'entregar-uniformes',
+        'devolver-uniformes',
+        'exportar-uniformes',
+        'ocultar-observacoes-ajustes',
+    }),
 }
 
 

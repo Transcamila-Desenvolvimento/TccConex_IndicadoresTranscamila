@@ -317,6 +317,10 @@ class ControleUniformesTests(TestCase):
         self.user = User.objects.create_user(
             username='uniformes_tests', password='teste123', role_id='2',
             environments=['Compras'], filiais={}, name='Almoxarife Teste',
+            funcoes={'Compras': [
+                'cadastrar-uniformes', 'editar-uniformes', 'movimentar-uniformes',
+                'entregar-uniformes', 'devolver-uniformes', 'exportar-uniformes',
+            ]},
         )
         self.headers = auth_headers(self.user, 'Compras')
         setor = Setor.objects.create(nome='Operação')
@@ -517,6 +521,44 @@ class ControleUniformesTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertTrue(Uniforme.objects.filter(pk=self.uniforme_id).exists())
 
+    def test_restricao_oculta_observacao_e_ajustes_do_historico(self):
+        self.client.post(
+            f'/api/compras/uniformes/{self.uniforme_id}/ajuste/',
+            data={'condicao': 'novo', 'quantidade': -1, 'observacao': 'Inventário sigiloso'},
+            format='json', **self.headers,
+        )
+        entrega = self._entregar(1)
+        self.assertEqual(entrega.status_code, 201, entrega.data)
+
+        completo = self.client.get('/api/compras/uniformes-movimentacoes/', **self.headers)
+        tipos = {item['tipo'] for item in completo.data['results']}
+        self.assertIn('ajuste', tipos)
+        self.assertTrue(any(item['observacao'] for item in completo.data['results']))
+        por_texto = self.client.get(
+            '/api/compras/uniformes-movimentacoes/?q=sigiloso', **self.headers,
+        )
+        self.assertEqual(por_texto.data['count'], 1)
+
+        restrito = User.objects.create_user(
+            username='uniformes_sem_ajuste', password='teste123', role_id='2',
+            environments=['Compras'], filiais={},
+            funcoes={'Compras': ['ocultar-observacoes-ajustes']},
+        )
+        headers = auth_headers(restrito, 'Compras')
+        response = self.client.get('/api/compras/uniformes-movimentacoes/', **headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['results'])
+        self.assertNotIn('ajuste', {item['tipo'] for item in response.data['results']})
+        self.assertTrue(all(item['observacao'] == '' for item in response.data['results']))
+        self.assertEqual(
+            self.client.get('/api/compras/uniformes-movimentacoes/?tipo=ajuste', **headers).data['count'],
+            0,
+        )
+        self.assertEqual(
+            self.client.get('/api/compras/uniformes-movimentacoes/?q=sigiloso', **headers).data['count'],
+            0,
+        )
+
     def test_historico_paginado_e_filtrado_por_colaborador(self):
         self._entregar(2)
         response = self.client.get(
@@ -560,6 +602,27 @@ class ControleUniformesTests(TestCase):
         livro = openpyxl.load_workbook(BytesIO(devolta.content))
         self.assertEqual(livro['Com colaboradores'].max_row, 1)
         self.assertEqual(list(livro['Estoque'].iter_rows(min_row=2, values_only=True))[0][7], 0)
+
+    def test_operador_sem_funcao_so_consulta_uniformes(self):
+        consulta = User.objects.create_user(
+            username='uniformes_so_consulta', password='teste123', role_id='2',
+            environments=['Compras'], filiais={}, funcoes={},
+        )
+        headers = auth_headers(consulta, 'Compras')
+        self.assertEqual(self.client.get('/api/compras/uniformes/', **headers).status_code, 200)
+        self.assertEqual(
+            self.client.post('/api/compras/uniformes/', data={'nome': 'Boné', 'tamanho': 'U'}, format='json', **headers).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(f'/api/compras/uniformes/{self.uniforme_id}/ajuste/', data={'condicao': 'novo', 'quantidade': -1, 'observacao': 'x'}, format='json', **headers).status_code,
+            403,
+        )
+        self.assertEqual(self.client.get('/api/compras/uniformes/exportar/', **headers).status_code, 403)
+        self.assertEqual(
+            self.client.post('/api/compras/uniformes-entregas/', data={'colaboradorId': self.colaborador.pk, 'itens': []}, format='json', **headers).status_code,
+            403,
+        )
 
     def test_exportar_estoque_exige_ambiente_compras(self):
         outro = User.objects.create_user(

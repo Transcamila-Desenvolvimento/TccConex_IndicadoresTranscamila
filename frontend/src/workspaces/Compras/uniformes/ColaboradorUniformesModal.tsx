@@ -13,10 +13,12 @@ const ColaboradorUniformesModal: React.FC<{
   colaborador: ColaboradorUniformes;
   onClose: () => void;
   onNovaEntrega: (colaboradorId: string) => void;
+  podeEntregar: boolean;
+  podeDevolver: boolean;
   onDetalhe: (entrega: EntregaUniforme) => void;
   onDevolver: (entrega: EntregaUniforme) => void;
   onDevolucaoTotal: (colaboradorId: string) => void;
-}> = ({ colaborador, onClose, onNovaEntrega, onDetalhe, onDevolver, onDevolucaoTotal }) => {
+}> = ({ colaborador, onClose, onNovaEntrega, podeEntregar, podeDevolver, onDetalhe, onDevolver, onDevolucaoTotal }) => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const emPosseQuery = useUniformesEmPosse(colaborador.colaboradorId);
@@ -34,14 +36,16 @@ const ColaboradorUniformesModal: React.FC<{
       onClose={onClose}
       footerExtra={
         <>
-          <button
-            type="button"
-            className="reports-action-btn primary"
-            onClick={() => onNovaEntrega(colaborador.colaboradorId)}
-          >
-            <i className="bi bi-box-arrow-right" /> Nova entrega para {colaborador.nome.split(' ')[0]}
-          </button>
-          {totalEmPosse > 0 && (
+          {podeEntregar && (
+            <button
+              type="button"
+              className="reports-action-btn primary"
+              onClick={() => onNovaEntrega(colaborador.colaboradorId)}
+            >
+              <i className="bi bi-box-arrow-right" /> Nova entrega para {colaborador.nome.split(' ')[0]}
+            </button>
+          )}
+          {podeDevolver && totalEmPosse > 0 && (
             <button
               type="button"
               className="reports-action-btn secondary"
@@ -117,7 +121,7 @@ const ColaboradorUniformesModal: React.FC<{
                   <td style={{ textAlign: 'center' }}><StatusEntregaBadge status={e.status} /></td>
                   <td>
                     <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
-                      {e.totalPendente > 0 && (
+                      {podeDevolver && e.totalPendente > 0 && (
                         <button type="button" className="btn-table-action" onClick={() => onDevolver(e)}>
                           <i className="bi bi-arrow-return-left" /> Devolução
                         </button>

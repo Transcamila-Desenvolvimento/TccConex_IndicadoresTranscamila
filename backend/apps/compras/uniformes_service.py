@@ -31,6 +31,14 @@ from .models import (
 )
 
 CONDICOES_VALIDAS = {c for c, _ in CONDICAO_CHOICES}
+FUNCAO_OCULTAR_OBSERVACOES_AJUSTES = 'ocultar-observacoes-ajustes'
+
+
+def oculta_observacoes_ajustes(user) -> bool:
+    """Restrição marcada no usuário: esconde observação e ajustes do histórico."""
+    if not getattr(user, 'is_authenticated', False):
+        return False
+    return FUNCAO_OCULTAR_OBSERVACOES_AJUSTES in ((getattr(user, 'funcoes', None) or {}).get('Compras') or [])
 
 
 class UniformeError(ValueError):

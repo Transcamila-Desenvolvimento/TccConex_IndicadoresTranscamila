@@ -43,23 +43,39 @@ const corDoTamanho = (u: Uniforme) => {
   return '#10b981';
 };
 
+const situacaoDoTamanho = (u: Uniforme) => {
+  if (u.qtdNova + u.qtdUsada === 0) return 'esgotado';
+  if (abaixoDoMinimo(u)) return 'baixo';
+  return 'ok';
+};
+
 const celulaBotao: React.CSSProperties = {
   width: '100%', minWidth: '52px', padding: '8px 6px', border: '1px solid transparent', borderRadius: '6px',
   background: 'transparent', fontSize: '15px', fontWeight: 700, cursor: 'pointer', color: '#1e293b',
 };
 
-const CelulaQtd: React.FC<{ valor: number; titulo: string; onClick: () => void }> = ({ valor, titulo, onClick }) => (
-  <button
-    type="button"
-    title={titulo}
-    onClick={onClick}
-    style={{ ...celulaBotao, color: valor === 0 ? '#cbd5e1' : '#1e293b' }}
-    onMouseEnter={(e) => { e.currentTarget.style.background = '#f0f9ff'; e.currentTarget.style.borderColor = '#bae6fd'; }}
-    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
-  >
-    {valor}
-  </button>
-);
+const CelulaQtd: React.FC<{ valor: number; titulo: string; onClick?: () => void }> = ({ valor, titulo, onClick }) => {
+  if (!onClick) {
+    return (
+      <span className={valor === 0 ? 'uniforme-qtd is-zero' : 'uniforme-qtd'} style={{ ...celulaBotao, cursor: 'default', color: valor === 0 ? '#cbd5e1' : '#1e293b' }}>
+        {valor}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={valor === 0 ? 'uniforme-qtd is-zero' : 'uniforme-qtd'}
+      title={titulo}
+      onClick={onClick}
+      style={{ ...celulaBotao, color: valor === 0 ? '#cbd5e1' : '#1e293b' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = '#f0f9ff'; e.currentTarget.style.borderColor = '#bae6fd'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
+    >
+      {valor}
+    </button>
+  );
+};
 
 const rotuloLinha: React.CSSProperties = {
   textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap', width: '150px',
@@ -67,33 +83,34 @@ const rotuloLinha: React.CSSProperties = {
 
 const CartaoItem: React.FC<{
   grupo: Grupo;
+  podeCadastrar: boolean;
+  podeEditar: boolean;
+  podeMovimentar: boolean;
   onEditar: (uniforme: Uniforme) => void;
   onMovimentar: (uniforme: Uniforme, condicao: CondicaoUniforme) => void;
   onNovoTamanho: (grupo: Grupo) => void;
-  onHistorico: (nome: string) => void;
-}> = ({ grupo, onEditar, onMovimentar, onNovoTamanho, onHistorico }) => (
-  <div className="reports-table-card" style={{ marginBottom: '16px' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '12px 16px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+}> = ({ grupo, podeCadastrar, podeEditar, podeMovimentar, onEditar, onMovimentar, onNovoTamanho }) => (
+  <div className="reports-table-card uniforme-item" style={{ marginBottom: '16px' }}>
+    <div className="uniforme-item-topo" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '12px 16px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
       <div>
-        <div style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>
+        <div className="uniforme-item-nome" style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>
           {grupo.nome}
           {grupo.alerta && <i className="bi bi-exclamation-triangle-fill" style={{ color: '#f59e0b', marginLeft: '8px', fontSize: '13px' }} title="Algum tamanho está com estoque baixo ou esgotado" />}
         </div>
-        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+        <div className="uniforme-item-meta" style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
           {grupo.codigo && <>Ref. {grupo.codigo} · </>}
           <strong>{grupo.novas}</strong> novas · <strong>{grupo.usadas}</strong> usadas · <strong>{grupo.comColaboradores}</strong> com colaboradores
         </div>
       </div>
-      <div style={{ display: 'flex', gap: '6px' }}>
-        <button type="button" className="btn-table-action" onClick={() => onHistorico(grupo.nome)}>
-          <i className="bi bi-clock-history" /> Histórico
-        </button>
-        <button type="button" className="btn-table-action" onClick={() => onNovoTamanho(grupo)}>
-          <i className="bi bi-plus-lg" /> Tamanho
-        </button>
-      </div>
+      {podeCadastrar && (
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button type="button" className="btn-table-action" onClick={() => onNovoTamanho(grupo)}>
+            <i className="bi bi-plus-lg" /> Tamanho
+          </button>
+        </div>
+      )}
     </div>
-    <div style={{ overflowX: 'auto', padding: '4px 8px 8px' }}>
+    <div className="uniforme-matriz" style={{ overflowX: 'auto', padding: '4px 8px 8px' }}>
       <table className="reports-table" style={{ tableLayout: 'auto' }}>
         <thead>
           <tr>
@@ -102,18 +119,32 @@ const CartaoItem: React.FC<{
               const cor = corDoTamanho(u);
               return (
                 <th key={u.id} style={{ textAlign: 'center', padding: '6px 4px' }}>
-                  <button
-                    type="button"
-                    title="Editar este tamanho"
-                    onClick={() => onEditar(u)}
-                    style={{
-                      background: `${cor}14`, color: cor,
-                      border: `1px solid ${cor}55`, borderRadius: '6px',
-                      padding: '4px 10px', fontWeight: 700, fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {u.tamanho}
-                  </button>
+                  {podeEditar ? (
+                    <button
+                      type="button"
+                      className={`uniforme-tamanho uniforme-tamanho--${situacaoDoTamanho(u)}`}
+                      title="Editar este tamanho"
+                      onClick={() => onEditar(u)}
+                      style={{
+                        background: `${cor}14`, color: cor,
+                        border: `1px solid ${cor}55`, borderRadius: '6px',
+                        padding: '4px 10px', fontWeight: 700, fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {u.tamanho}
+                    </button>
+                  ) : (
+                    <span
+                      className={`uniforme-tamanho uniforme-tamanho--${situacaoDoTamanho(u)}`}
+                      style={{
+                        background: `${cor}14`, color: cor,
+                        border: `1px solid ${cor}55`, borderRadius: '6px',
+                        padding: '4px 10px', fontWeight: 700, fontSize: '12px', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {u.tamanho}
+                    </span>
+                  )}
                 </th>
               );
             })}
@@ -124,7 +155,7 @@ const CartaoItem: React.FC<{
             <td style={rotuloLinha}>Novas</td>
             {grupo.tamanhos.map((u) => (
               <td key={u.id} style={{ textAlign: 'center', padding: '2px' }}>
-                <CelulaQtd valor={u.qtdNova} titulo={`Movimentar ${u.nome} ${u.tamanho} (novas)`} onClick={() => onMovimentar(u, 'novo')} />
+                <CelulaQtd valor={u.qtdNova} titulo={`Movimentar ${u.nome} ${u.tamanho} (novas)`} onClick={podeMovimentar ? () => onMovimentar(u, 'novo') : undefined} />
               </td>
             ))}
           </tr>
@@ -132,7 +163,7 @@ const CartaoItem: React.FC<{
             <td style={rotuloLinha}>Usadas</td>
             {grupo.tamanhos.map((u) => (
               <td key={u.id} style={{ textAlign: 'center', padding: '2px' }}>
-                <CelulaQtd valor={u.qtdUsada} titulo={`Movimentar ${u.nome} ${u.tamanho} (usadas)`} onClick={() => onMovimentar(u, 'usado')} />
+                <CelulaQtd valor={u.qtdUsada} titulo={`Movimentar ${u.nome} ${u.tamanho} (usadas)`} onClick={podeMovimentar ? () => onMovimentar(u, 'usado') : undefined} />
               </td>
             ))}
           </tr>
@@ -143,11 +174,13 @@ const CartaoItem: React.FC<{
 );
 
 const EstoqueUniformesTab: React.FC<{
+  podeCadastrar: boolean;
+  podeEditar: boolean;
+  podeMovimentar: boolean;
   onNovo: (base?: { nome: string; codigo: string }) => void;
   onEditar: (uniforme: Uniforme) => void;
   onMovimentar: (uniforme: Uniforme, condicao: CondicaoUniforme) => void;
-  onHistorico: (nome: string) => void;
-}> = ({ onNovo, onEditar, onMovimentar, onHistorico }) => {
+}> = ({ podeCadastrar, podeEditar, podeMovimentar, onNovo, onEditar, onMovimentar }) => {
   const query = useUniformes();
   const { canShowEmpty } = useAsyncQueryState(query);
   const [busca, setBusca] = useState('');
@@ -164,7 +197,7 @@ const EstoqueUniformesTab: React.FC<{
   const vazio = (query.data ?? []).length === 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div>
       <div className="reports-filters-bar" style={{ flexShrink: 0 }}>
         <div className="reports-filter-left">
           <Busca value={busca} placeholder="Buscar item, referência ou tamanho..." onChange={setBusca} />
@@ -175,22 +208,15 @@ const EstoqueUniformesTab: React.FC<{
         </div>
         <div className="reports-filter-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span className="reports-records-count"><strong>{grupos.length}</strong> Itens</span>
-          <button type="button" className="reports-action-btn primary" onClick={() => onNovo()}>
-            <i className="bi bi-plus-lg" /> Cadastrar item
-          </button>
+          {podeCadastrar && (
+            <button type="button" className="reports-action-btn primary" onClick={() => onNovo()}>
+              <i className="bi bi-plus-lg" /> Cadastrar item
+            </button>
+          )}
         </div>
       </div>
 
-      {!vazio && (
-        <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', fontSize: '12px', color: '#64748b', margin: '-4px 0 12px', flexShrink: 0 }}>
-          <span><i className="bi bi-hand-index" /> Clique numa quantidade para dar <strong>entrada</strong>, <strong>ajustar</strong> ou <strong>descartar</strong></span>
-          <span><span style={{ color: '#10b981', fontWeight: 700 }}>■</span> Disponível</span>
-          <span><span style={{ color: '#f59e0b', fontWeight: 700 }}>■</span> Estoque baixo</span>
-          <span><span style={{ color: '#ef4444', fontWeight: 700 }}>■</span> Esgotado</span>
-        </div>
-      )}
-
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      <div className="uniforme-lista">
       <QueryDataPanel
         query={query}
         variant="compact"
@@ -204,9 +230,11 @@ const EstoqueUniformesTab: React.FC<{
               <>
                 <i className="bi bi-box-seam" style={{ fontSize: '32px', color: '#cbd5e1' }} />
                 <p style={{ margin: '10px 0 14px' }}>Nenhum uniforme cadastrado ainda.</p>
-                <button type="button" className="reports-action-btn primary" onClick={() => onNovo()}>
-                  <i className="bi bi-plus-lg" /> Cadastrar o primeiro item
-                </button>
+                {podeCadastrar && (
+                  <button type="button" className="reports-action-btn primary" onClick={() => onNovo()}>
+                    <i className="bi bi-plus-lg" /> Cadastrar o primeiro item
+                  </button>
+                )}
               </>
             ) : 'Nenhum item encontrado com esse filtro.'}
           </div>
@@ -215,10 +243,12 @@ const EstoqueUniformesTab: React.FC<{
             <CartaoItem
               key={g.nome}
               grupo={g}
+              podeCadastrar={podeCadastrar}
+              podeEditar={podeEditar}
+              podeMovimentar={podeMovimentar}
               onEditar={onEditar}
               onMovimentar={onMovimentar}
               onNovoTamanho={(grupo) => onNovo({ nome: grupo.nome, codigo: grupo.codigo })}
-              onHistorico={onHistorico}
             />
           ))
         )}

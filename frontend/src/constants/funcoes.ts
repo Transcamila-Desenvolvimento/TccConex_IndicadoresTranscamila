@@ -153,6 +153,56 @@ export const FUNCAO_ITEMS = [
     description: 'Permite registrar a recorrência de cada mês do Olho vivo na estrada.',
   },
   {
+    module: 'Compras',
+    aba: 'controle-uniformes',
+    key: 'cadastrar-uniformes',
+    label: 'Cadastrar itens',
+    description: 'Permite cadastrar itens e novos tamanhos no controle de uniformes.',
+  },
+  {
+    module: 'Compras',
+    aba: 'controle-uniformes',
+    key: 'editar-uniformes',
+    label: 'Editar itens',
+    description: 'Permite alterar o cadastro de um tamanho e excluir o que nunca teve movimentação.',
+  },
+  {
+    module: 'Compras',
+    aba: 'controle-uniformes',
+    key: 'movimentar-uniformes',
+    label: 'Movimentar estoque',
+    description: 'Permite registrar entrada, ajuste e descarte de peças.',
+  },
+  {
+    module: 'Compras',
+    aba: 'controle-uniformes',
+    key: 'entregar-uniformes',
+    label: 'Entregar',
+    description: 'Permite registrar a entrega de uniformes a colaboradores.',
+  },
+  {
+    module: 'Compras',
+    aba: 'controle-uniformes',
+    key: 'devolver-uniformes',
+    label: 'Receber devolução',
+    description: 'Permite registrar devolução parcial ou total dos uniformes.',
+  },
+  {
+    module: 'Compras',
+    aba: 'controle-uniformes',
+    key: 'exportar-uniformes',
+    label: 'Exportar estoque',
+    description: 'Permite baixar a planilha de estoque e das peças com colaboradores.',
+  },
+  {
+    module: 'Compras',
+    aba: 'controle-uniformes',
+    key: 'ocultar-observacoes-ajustes',
+    label: 'Ocultar observações e ajustes',
+    description: 'Esconde a coluna Observação e os eventos de ajuste no histórico de uniformes.',
+    optIn: true,
+  },
+  {
     module: 'Comercial',
     aba: 'cadastro-clientes',
     key: 'gerenciar-clientes',
@@ -236,4 +286,9 @@ export function funcoesDaAba(module: string, aba: string) {
 export function userHasFuncao(user: User | null, module: string, key: FuncaoKey): boolean {
   if (user?.roleId === '1') return true;
   return (user?.funcoes?.[module] ?? []).includes(key);
+}
+
+/** Restrição explícita: vale para administrador e operador quando a caixa está marcada. */
+export function userOcultaObservacoesAjustesUniformes(user: User | null): boolean {
+  return (user?.funcoes?.Compras ?? []).includes('ocultar-observacoes-ajustes');
 }

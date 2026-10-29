@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import QueryDataPanel from '../../../components/QueryDataPanel';
+import { userOcultaObservacoesAjustesUniformes } from '../../../constants/funcoes';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useAsyncQueryState } from '../../../hooks/useAsyncQueryState';
 import { useMovimentacoesUniforme, useUniformes } from '../../../hooks/useUniformes';
 import type { MovimentacaoUniformeFiltros, TipoMovimentacaoUniforme } from '../../../types/domain';
@@ -16,6 +18,10 @@ const TIPOS: Array<[TipoMovimentacaoUniforme, string]> = [
 ];
 
 const HistoricoUniformesTab: React.FC<{ buscaInicial?: string }> = ({ buscaInicial = '' }) => {
+  const { user } = useAuth();
+  const ocultarSensivel = userOcultaObservacoesAjustesUniformes(user);
+  const tipos = TIPOS.filter(([valor]) => !ocultarSensivel || valor !== 'ajuste');
+  const colunas = ocultarSensivel ? 6 : 7;
   const [filtros, setFiltros] = useState<MovimentacaoUniformeFiltros>({
     page: 1, pageSize: 20, q: buscaInicial, tipo: '', uniformeId: '', dataInicio: '', dataFim: '',
   });
@@ -26,36 +32,41 @@ const HistoricoUniformesTab: React.FC<{ buscaInicial?: string }> = ({ buscaInici
   const filtrar = (patch: Partial<MovimentacaoUniformeFiltros>) => setFiltros((f) => ({ ...f, ...patch, page: 1 }));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      <div className="reports-filters-bar" style={{ flexShrink: 0 }}>
+    <div className="uniforme-lista-fixa">
+      <div className="reports-filters-bar uniforme-historico-filtros" style={{ flexShrink: 0 }}>
         <div className="reports-filter-left">
-          <Busca value={filtros.q ?? ''} placeholder="Item, colaborador, responsável, observação..." onChange={(q) => filtrar({ q })} />
-          <div className="reports-select-wrapper" style={{ minWidth: '150px' }}>
+          <Busca
+            value={filtros.q ?? ''}
+            placeholder={ocultarSensivel ? 'Item, colaborador, responsável...' : 'Item, colaborador, responsável, observação...'}
+            onChange={(q) => filtrar({ q })}
+          />
+          <div className="reports-select-wrapper uniforme-filtro-tipo">
             <select value={filtros.tipo} onChange={(e) => filtrar({ tipo: e.target.value as MovimentacaoUniformeFiltros['tipo'] })}>
               <option value="">Tipo: Todos</option>
-              {TIPOS.map(([valor, label]) => <option key={valor} value={valor}>{label}</option>)}
+              {tipos.map(([valor, label]) => <option key={valor} value={valor}>{label}</option>)}
             </select>
           </div>
-          <div className="reports-select-wrapper" style={{ minWidth: '190px' }}>
+          <div className="reports-select-wrapper uniforme-filtro-item">
             <select value={filtros.uniformeId} onChange={(e) => filtrar({ uniformeId: e.target.value })}>
               <option value="">Item: Todos</option>
               {uniformes.map((u) => <option key={u.id} value={u.id}>{u.nome} — {u.tamanho}</option>)}
             </select>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#475569' }}>
+          <label className="uniforme-filtro-data">
             <span>De</span>
-            <input type="date" className="form-input" style={{ width: '145px', height: '38px' }} value={filtros.dataInicio} onChange={(e) => filtrar({ dataInicio: e.target.value })} />
-            <span>até</span>
-            <input type="date" className="form-input" style={{ width: '145px', height: '38px' }} value={filtros.dataFim} onChange={(e) => filtrar({ dataFim: e.target.value })} />
-          </div>
+            <input type="date" aria-label="Data inicial" value={filtros.dataInicio} onChange={(e) => filtrar({ dataInicio: e.target.value })} />
+          </label>
+          <label className="uniforme-filtro-data">
+            <span>Até</span>
+            <input type="date" aria-label="Data final" value={filtros.dataFim} onChange={(e) => filtrar({ dataFim: e.target.value })} />
+          </label>
           {(filtros.q || filtros.tipo || filtros.uniformeId || filtros.dataInicio || filtros.dataFim) && (
             <button
               type="button"
               className="reports-action-btn secondary"
-              style={{ height: '38px' }}
               onClick={() => filtrar({ q: '', tipo: '', uniformeId: '', dataInicio: '', dataFim: '' })}
             >
-              Limpar filtros
+              Limpar
             </button>
           )}
         </div>
@@ -70,9 +81,8 @@ const HistoricoUniformesTab: React.FC<{ buscaInicial?: string }> = ({ buscaInici
         refreshingMessage="Atualizando histórico..."
         errorMessage="Não foi possível carregar o histórico. Tente novamente."
       >
-        <div className="erp-card reports-table-card" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div className="table-container" style={{ flex: 1, overflow: 'auto' }}>
-            <table className="reports-table">
+        <div className="table-container">
+            <table className="reports-table uniforme-listagem">
               <thead>
                 <tr>
                   <th>Data</th>
@@ -80,13 +90,13 @@ const HistoricoUniformesTab: React.FC<{ buscaInicial?: string }> = ({ buscaInici
                   <th>Uniforme</th>
                   <th className="num" style={{ textAlign: 'right' }} title="+ entrou no estoque, − saiu do estoque">Qtd.</th>
                   <th>Colaborador</th>
-                  <th>Observação</th>
+                  {!ocultarSensivel && <th>Observação</th>}
                   <th>Responsável</th>
                 </tr>
               </thead>
               <tbody>
                 {canShowEmpty && movimentacoes.length === 0 ? (
-                  <EmptyRow colSpan={7}>Nenhuma movimentação encontrada.</EmptyRow>
+                  <EmptyRow colSpan={colunas}>Nenhuma movimentação encontrada.</EmptyRow>
                 ) : (
                   movimentacoes.map((m) => (
                     <tr key={m.id}>
@@ -111,9 +121,11 @@ const HistoricoUniformesTab: React.FC<{ buscaInicial?: string }> = ({ buscaInici
                         {m.variacaoEstoque > 0 ? `+${m.quantidade}` : m.variacaoEstoque < 0 ? `−${m.quantidade}` : m.quantidade}
                       </td>
                       <td>{m.colaboradorNome || '—'}</td>
-                      <td style={{ color: '#475569', minWidth: '220px', maxWidth: '360px', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
-                        {m.observacao || '—'}
-                      </td>
+                      {!ocultarSensivel && (
+                        <td style={{ color: '#475569', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                          {m.observacao || '—'}
+                        </td>
+                      )}
                       <td style={{ color: '#475569' }}>{m.usuarioNome || '—'}</td>
                     </tr>
                   ))
@@ -121,7 +133,6 @@ const HistoricoUniformesTab: React.FC<{ buscaInicial?: string }> = ({ buscaInici
               </tbody>
             </table>
           </div>
-        </div>
         <BarraPaginacaoServidor
           id="uniformes-historico-page-size"
           page={filtros.page}

@@ -15,6 +15,7 @@ from .models import (
     DevolucaoUniformeItem,
     MovimentacaoUniforme,
 )
+from .uniformes_service import oculta_observacoes_ajustes
 
 
 class UnidadeMedidaSerializer(serializers.ModelSerializer):
@@ -260,3 +261,11 @@ class MovimentacaoUniformeSerializer(serializers.ModelSerializer):
 
     def get_entregaNumero(self, obj):
         return obj.entrega.numero if obj.entrega_id else ''
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        user = getattr(request, 'user', None) if request is not None else None
+        if oculta_observacoes_ajustes(user):
+            data['observacao'] = ''
+        return data

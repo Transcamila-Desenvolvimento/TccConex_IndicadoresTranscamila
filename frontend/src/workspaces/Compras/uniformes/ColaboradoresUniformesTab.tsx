@@ -23,7 +23,7 @@ const ColaboradoresUniformesTab: React.FC<{ onAbrir: (colaborador: ColaboradorUn
   const linhas = query.data?.results ?? [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div className="uniforme-lista-fixa">
       <div className="reports-filters-bar" style={{ flexShrink: 0 }}>
         <div className="reports-filter-left">
           <Busca value={busca} placeholder="Buscar nome, CPF, setor ou nº do termo (TRU-...)" onChange={setBusca} />
@@ -47,9 +47,8 @@ const ColaboradoresUniformesTab: React.FC<{ onAbrir: (colaborador: ColaboradorUn
         refreshingMessage="Atualizando colaboradores..."
         errorMessage="Não foi possível carregar os colaboradores. Tente novamente."
       >
-        <div className="erp-card reports-table-card" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
-            <table className="reports-table">
+        <div className="table-container">
+            <table className="reports-table uniforme-listagem">
               <thead>
                 <tr>
                   <th>Colaborador</th>
@@ -57,7 +56,7 @@ const ColaboradoresUniformesTab: React.FC<{ onAbrir: (colaborador: ColaboradorUn
                   <th className="num" style={{ textAlign: 'right' }}>Peças com ele</th>
                   <th className="num" style={{ textAlign: 'right' }}>Entregas</th>
                   <th>Última entrega</th>
-                  <th style={{ width: '110px' }} />
+                  <th className="uniforme-col-acao" />
                 </tr>
               </thead>
               <tbody>
@@ -80,7 +79,7 @@ const ColaboradoresUniformesTab: React.FC<{ onAbrir: (colaborador: ColaboradorUn
                       </td>
                       <td className="num" style={{ textAlign: 'right' }}>{c.totalEntregas}</td>
                       <td style={{ color: '#64748b' }}>{c.ultimaEntrega ? formatDateBr(c.ultimaEntrega) : '—'}</td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td className="uniforme-col-acao">
                         <button type="button" className="btn-table-action" onClick={(e) => { e.stopPropagation(); onAbrir(c); }}>
                           Ver uniformes
                         </button>
@@ -91,7 +90,6 @@ const ColaboradoresUniformesTab: React.FC<{ onAbrir: (colaborador: ColaboradorUn
               </tbody>
             </table>
           </div>
-        </div>
         <BarraPaginacaoServidor
           id="uniformes-colaboradores-page-size"
           page={page}

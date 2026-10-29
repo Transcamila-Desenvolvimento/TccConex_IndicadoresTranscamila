@@ -37,6 +37,12 @@ def _erro(mensagem: str) -> Response:
     return Response({'error': mensagem}, status=status.HTTP_400_BAD_REQUEST)
 
 
+def _exige_funcao(request, funcao: str, detail: str):
+    if request.user.has_funcao('Compras', funcao):
+        return None
+    return Response({'detail': detail}, status=status.HTTP_403_FORBIDDEN)
+
+
 def _primeiro_erro(errors) -> str:
     if isinstance(errors, dict):
         for value in errors.values():
@@ -78,6 +84,9 @@ class UniformeViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return Response(self.get_serializer(uniforme).data, status=status_code)
 
     def create(self, request, *args, **kwargs):
+        negado = _exige_funcao(request, 'cadastrar-uniformes', 'Acesso negado. Solicite a função "Cadastrar itens" do Controle de Uniformes.')
+        if negado:
+            return negado
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             return _erro(_primeiro_erro(serializer.errors))
@@ -102,6 +111,9 @@ class UniformeViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def lote(self, request):
         """Cadastra um item em vários tamanhos de uma vez, com estoque inicial novo e usado."""
+        negado = _exige_funcao(request, 'cadastrar-uniformes', 'Acesso negado. Solicite a função "Cadastrar itens" do Controle de Uniformes.')
+        if negado:
+            return negado
         nome = (request.data.get('nome') or '').strip()
         codigo = (request.data.get('codigo') or '').strip()
         tamanhos = request.data.get('tamanhos') or []
@@ -160,6 +172,9 @@ class UniformeViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return Response(UniformeSerializer(criados, many=True, context=context).data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
+        negado = _exige_funcao(request, 'editar-uniformes', 'Acesso negado. Solicite a função "Editar itens" do Controle de Uniformes.')
+        if negado:
+            return negado
         partial = kwargs.pop('partial', False)
         serializer = self.get_serializer(self.get_object(), data=request.data, partial=partial)
         if not serializer.is_valid():
@@ -172,6 +187,9 @@ class UniformeViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return self._resposta(uniforme)
 
     def destroy(self, request, *args, **kwargs):
+        negado = _exige_funcao(request, 'editar-uniformes', 'Acesso negado. Solicite a função "Editar itens" do Controle de Uniformes.')
+        if negado:
+            return negado
         uniforme = self.get_object()
         if uniforme.movimentacoes.exists() or uniforme.itens_entregues.exists():
             return _erro('Este uniforme já possui movimentações e não pode ser excluído; o histórico é preservado.')
@@ -189,6 +207,9 @@ class UniformeViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def entrada(self, request, pk=None):
+        negado = _exige_funcao(request, 'movimentar-uniformes', 'Acesso negado. Solicite a função "Movimentar estoque" do Controle de Uniformes.')
+        if negado:
+            return negado
         return self._executar(
             request, service.registrar_entrada,
             condicao=request.data.get('condicao'), quantidade=request.data.get('quantidade'),
@@ -197,6 +218,9 @@ class UniformeViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def ajuste(self, request, pk=None):
+        negado = _exige_funcao(request, 'movimentar-uniformes', 'Acesso negado. Solicite a função "Movimentar estoque" do Controle de Uniformes.')
+        if negado:
+            return negado
         return self._executar(
             request, service.registrar_ajuste,
             condicao=request.data.get('condicao'), quantidade=request.data.get('quantidade'),
@@ -205,6 +229,9 @@ class UniformeViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def descarte(self, request, pk=None):
+        negado = _exige_funcao(request, 'movimentar-uniformes', 'Acesso negado. Solicite a função "Movimentar estoque" do Controle de Uniformes.')
+        if negado:
+            return negado
         return self._executar(
             request, service.registrar_descarte,
             condicao=request.data.get('condicao'), quantidade=request.data.get('quantidade'),
@@ -217,6 +244,9 @@ class UniformeViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def exportar(self, request):
+        negado = _exige_funcao(request, 'exportar-uniformes', 'Acesso negado. Solicite a função "Exportar estoque" do Controle de Uniformes.')
+        if negado:
+            return negado
         conteudo = service.planilha_estoque()
         record_audit(request.user, 'compras.uniforme.exportado', 'Planilha de estoque e peças com colaboradores.')
         resposta = HttpResponse(
@@ -262,6 +292,9 @@ class EntregaUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSe
         return qs.order_by('-data_entrega', '-criado_em')
 
     def create(self, request, *args, **kwargs):
+        negado = _exige_funcao(request, 'entregar-uniformes', 'Acesso negado. Solicite a função "Entregar" do Controle de Uniformes.')
+        if negado:
+            return negado
         try:
             destino = uniforme_email.validar_email_aviso(request.data.get('emailDestino'))
             entrega = service.registrar_entrega(
@@ -279,6 +312,9 @@ class EntregaUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSe
 
     @action(detail=True, methods=['post'])
     def devolver(self, request, pk=None):
+        negado = _exige_funcao(request, 'devolver-uniformes', 'Acesso negado. Solicite a função "Receber devolução" do Controle de Uniformes.')
+        if negado:
+            return negado
         entrega = self.get_object()
         try:
             destino = uniforme_email.validar_email_aviso(request.data.get('emailDestino'))
@@ -298,6 +334,9 @@ class EntregaUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSe
     @action(detail=False, methods=['post'], url_path='devolucao-total')
     def devolucao_total(self, request):
         """Devolve de uma vez as peças de todos os termos pendentes do colaborador."""
+        negado = _exige_funcao(request, 'devolver-uniformes', 'Acesso negado. Solicite a função "Receber devolução" do Controle de Uniformes.')
+        if negado:
+            return negado
         try:
             destino = uniforme_email.validar_email_aviso(request.data.get('emailDestino'))
             devolucoes = service.registrar_devolucao_total(
@@ -405,11 +444,17 @@ class MovimentacaoUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelV
             valor = (params.get(param) or '').strip()
             if valor:
                 qs = qs.filter(**{campo: valor})
+        ocultar = service.oculta_observacoes_ajustes(self.request.user)
+        if ocultar:
+            qs = qs.exclude(tipo='ajuste')
         termo = (params.get('q') or '').strip()
         if termo:
-            qs = qs.filter(
+            busca = (
                 Q(uniforme_nome__icontains=termo) | Q(colaborador_nome__icontains=termo)
-                | Q(observacao__icontains=termo) | Q(usuario_nome__icontains=termo)
+                | Q(usuario_nome__icontains=termo)
             )
+            if not ocultar:
+                busca |= Q(observacao__icontains=termo)
+            qs = qs.filter(busca)
         qs = _filtrar_periodo(qs, self.request, 'data')
         return qs.order_by('-criado_em', '-id')
