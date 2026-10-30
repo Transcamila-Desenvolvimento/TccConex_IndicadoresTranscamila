@@ -405,7 +405,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
       <QueryDataPanel
         query={execucaoQuery}
         loadingMessage="Carregando perguntas da auditoria..."
-        refreshingMessage="Atualizando auditoria..."
+        refreshingMessage="Atualizando"
         errorMessage="Não foi possível carregar a auditoria. Tente novamente."
       >
         {canShowEmpty && perguntas.length === 0 ? (

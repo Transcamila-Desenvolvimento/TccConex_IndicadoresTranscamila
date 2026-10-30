@@ -6132,17 +6132,50 @@ fieldset:disabled .sgq-import-arquivo-limpar {
 }
 
 .sgq-exec-page > .async-query-content {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
-.sgq-exec-page > .async-query-content > div {
+.sgq-exec-page > .async-query-content.async-query-content--refreshing {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sgq-exec-page > .async-query-content > .async-query-content-body--page {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.sgq-exec-page .async-query-loading--inline {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 4;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 3px 10px;
+  transform: translateX(-50%);
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.1);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.sgq-exec-page .async-query-loading--inline .async-query-spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
 }
 
 .sgq-exec-page .sgq-req-layout {
