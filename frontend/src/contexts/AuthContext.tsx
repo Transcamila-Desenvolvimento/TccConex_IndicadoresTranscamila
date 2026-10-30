@@ -6,6 +6,13 @@ import { endpointDoNavegador } from '../services/webPush';
 import { ACTIVE_ENVIRONMENTS, environmentRequiresFilial, normalizeEnvironment } from '../constants/environments';
 import { branchesForModule } from '../constants/filiais';
 import { AUTH_PROFILE_QUERY_KEY, useAuthProfile, useLogin } from '../hooks/useAuthProfile';
+import {
+  clearSessionContext,
+  getSessionEnvironment,
+  getSessionFilial,
+  setSessionContext,
+  setSessionEnvironment,
+} from '../services/sessionContext';
 
 const activeEnvSet = new Set<string>(ACTIVE_ENVIRONMENTS);
 
@@ -34,25 +41,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginMutation = useLogin();
 
   useEffect(() => {
-    const rawEnv = localStorage.getItem('prothon_env');
+    const rawEnv = getSessionEnvironment();
     const savedEnv = rawEnv ? normalizeEnvironment(rawEnv) : null;
-    const savedFilial = localStorage.getItem('prothon_filial');
+    const savedFilial = getSessionFilial();
     if (savedEnv && activeEnvSet.has(savedEnv)) {
-      if (rawEnv !== savedEnv) localStorage.setItem('prothon_env', savedEnv);
+      if (rawEnv !== savedEnv) setSessionEnvironment(savedEnv);
       // Sessões antigas do SGQ (quando era global) ficam sem filial e a API passa a responder 403.
       if (environmentRequiresFilial(savedEnv)) {
         const allowed = branchesForModule(savedEnv);
         if (!savedFilial || !allowed.includes(savedFilial)) {
-          localStorage.removeItem('prothon_env');
-          localStorage.removeItem('prothon_filial');
+          clearSessionContext();
           return;
         }
       }
       setSelectedEnvironment(savedEnv);
       if (savedFilial) setSelectedFilial(savedFilial);
     } else if (savedEnv) {
-      localStorage.removeItem('prothon_env');
-      localStorage.removeItem('prothon_filial');
+      clearSessionContext();
     }
   }, []);
 
@@ -92,23 +97,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     queryClient.removeQueries({ queryKey: ['camilo'] });
     setSelectedEnvironment(null);
     setSelectedFilial(null);
-    localStorage.removeItem('prothon_env');
-    localStorage.removeItem('prothon_filial');
+    clearSessionContext();
   };
 
   const selectEnvironmentAndFilial = (env: string, filial: string) => {
     if (!activeEnvSet.has(env)) return;
     setSelectedEnvironment(env);
     setSelectedFilial(filial);
-    localStorage.setItem('prothon_env', env);
-    localStorage.setItem('prothon_filial', filial);
+    setSessionContext(env, filial);
   };
 
   const clearEnvironment = () => {
     setSelectedEnvironment(null);
     setSelectedFilial(null);
-    localStorage.removeItem('prothon_env');
-    localStorage.removeItem('prothon_filial');
+    clearSessionContext();
   };
 
   return (

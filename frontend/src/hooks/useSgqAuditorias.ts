@@ -5,6 +5,7 @@ import { downloadSgqAuditoriaAnaliticoPdf } from '../workspaces/SGQ/sgqAuditoria
 import { downloadSgqAuditoriaRegistroPdf } from '../workspaces/SGQ/sgqAuditoriaRegistroPdf';
 import type {
   SgqAuditoriaExecucao,
+  SgqAuditoriaFormDraft,
   SgqAuditoriaPayload,
   SgqAuditoriaQueryParams,
   SgqAuditoriaResposta,
@@ -19,6 +20,7 @@ export const SGQ_AUDITORIAS_KEYS = {
   resumo: (filial: string | null) => ['sgq', 'auditorias', 'resumo', filial] as const,
   visao: (filial: string | null, ano: number) => ['sgq', 'auditorias', 'visao', filial, ano] as const,
   sugestoes: (filial: string | null) => ['sgq', 'auditorias', 'sugestoes', filial] as const,
+  formDraft: (filial: string | null) => ['sgq', 'auditorias', 'form-draft', filial] as const,
 };
 
 export function useSgqAuditorias(filial: string | null, params: SgqAuditoriaQueryParams) {
@@ -152,6 +154,59 @@ export function useExcluirSgqAuditoriaAnexo(filial: string | null, id: string) {
   return useMutation({
     mutationFn: (anexoId: string) => apiService.excluirSgqAuditoriaAnexo(id, anexoId),
     onSuccess: aplicar,
+  });
+}
+
+const EMPTY_AUDITORIA_FORM_DRAFT: SgqAuditoriaPayload = {
+  titulo: '',
+  categoria: '',
+  dataInicio: '',
+  dataTermino: '',
+  auditorLider: '',
+  auditores: [],
+  status: 'planejamento',
+  escopo: '',
+  criterios: '',
+  processosAreas: '',
+  responsaveisProcessos: '',
+  metodologia: '',
+  planejamento: [],
+};
+
+/** Rascunho server-side de nova auditoria — isolado por usuário + filial. */
+export function useSgqAuditoriaFormDraft(filial: string | null) {
+  return useQuery({
+    queryKey: SGQ_AUDITORIAS_KEYS.formDraft(filial),
+    queryFn: () => apiService.getSgqAuditoriaFormDraft(),
+    enabled: Boolean(filial),
+    staleTime: 15_000,
+  });
+}
+
+export function useSaveSgqAuditoriaFormDraft(filial: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (form: SgqAuditoriaPayload) => apiService.saveSgqAuditoriaFormDraft(form),
+    onSuccess: (data: SgqAuditoriaFormDraft) => {
+      queryClient.setQueryData(SGQ_AUDITORIAS_KEYS.formDraft(filial), data);
+    },
+  });
+}
+
+export function useDeleteSgqAuditoriaFormDraft(filial: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiService.deleteSgqAuditoriaFormDraft(),
+    onSuccess: () => {
+      queryClient.setQueryData(SGQ_AUDITORIAS_KEYS.formDraft(filial), {
+        version: 1,
+        updatedAt: null,
+        filial: filial ?? '',
+        hasDraft: false,
+        form: { ...EMPTY_AUDITORIA_FORM_DRAFT, auditores: [], planejamento: [] },
+      } satisfies SgqAuditoriaFormDraft);
+      queryClient.invalidateQueries({ queryKey: SGQ_AUDITORIAS_KEYS.formDraft(filial) });
+    },
   });
 }
 

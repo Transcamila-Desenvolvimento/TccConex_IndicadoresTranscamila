@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    AuditoriaFormDraft,
     AuditoriaSGQ,
     CategoriaAuditoriaSGQ,
     DocumentoSGQ,
@@ -25,6 +26,14 @@ class PesquisaSatisfacaoAdmin(admin.ModelAdmin):
 
 @admin.register(PesquisaSatisfacaoLoteDraft)
 class PesquisaSatisfacaoLoteDraftAdmin(admin.ModelAdmin):
+    list_display = ('id', 'usuario', 'filial', 'updated_at')
+    list_filter = ('filial',)
+    search_fields = ('usuario__username', 'filial')
+    readonly_fields = ('updated_at',)
+
+
+@admin.register(AuditoriaFormDraft)
+class AuditoriaFormDraftAdmin(admin.ModelAdmin):
     list_display = ('id', 'usuario', 'filial', 'updated_at')
     list_filter = ('filial',)
     search_fields = ('usuario__username', 'filial')

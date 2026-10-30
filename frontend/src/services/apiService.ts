@@ -45,7 +45,7 @@ import type {
   GoogleDriveStatus, GoogleDriveBrowseResponse,
   UserDirectoryEntry,
   SgqLoteDraft, SgqLoteDraftRow, SgqFormDraft,
-  SgqAuditoria, SgqAuditoriaPayload, SgqAuditoriaQueryParams, SgqAuditoriaResumo, SgqAuditoriaSugestoes, SgqAuditoriaVisao,
+  SgqAuditoria, SgqAuditoriaFormDraft, SgqAuditoriaPayload, SgqAuditoriaQueryParams, SgqAuditoriaResumo, SgqAuditoriaSugestoes, SgqAuditoriaVisao,
   SendSgqCronogramaEmailParams,
   SgqAuditoriaExecucao, SgqAuditoriaResposta, SgqAuditoriaRespostaPayload,
   SgqNorma, SgqNormaPayload, SgqNormaQueryParams, SgqNormaResumo, SgqNormaItem, SgqNormaItemPayload,
@@ -84,6 +84,7 @@ import {
   parseProdutoComercialTipo,
 } from '../types/domain';
 import { filterActiveEnvironments, ACTIVE_ENVIRONMENTS } from '../constants/environments';
+import { getSessionEnvironment, getSessionFilial } from './sessionContext';
 
 const activeEnvSet = new Set<string>(ACTIVE_ENVIRONMENTS);
 
@@ -91,15 +92,13 @@ const activeEnvSet = new Set<string>(ACTIVE_ENVIRONMENTS);
 const api = axios.create();
 
 const TOKEN_KEY = 'prothon_token';
-const ENV_KEY = 'prothon_env';
-const FILIAL_KEY = 'prothon_filial';
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) config.headers.Authorization = `Bearer ${token}`;
 
-  const env = localStorage.getItem(ENV_KEY);
-  const filial = localStorage.getItem(FILIAL_KEY);
+  const env = getSessionEnvironment();
+  const filial = getSessionFilial();
   if (env && !config.headers['X-Prothon-Environment']) {
     config.headers['X-Prothon-Environment'] = encodeURIComponent(env);
   }
@@ -2120,6 +2119,20 @@ export const apiService = {
   async createSgqAuditoria(payload: SgqAuditoriaPayload): Promise<SgqAuditoria> {
     const { data } = await api.post('/api/sgq/auditorias/', payload);
     return data as SgqAuditoria;
+  },
+
+  async getSgqAuditoriaFormDraft(): Promise<SgqAuditoriaFormDraft> {
+    const { data } = await api.get('/api/sgq/auditorias/form-draft/');
+    return data as SgqAuditoriaFormDraft;
+  },
+
+  async saveSgqAuditoriaFormDraft(form: SgqAuditoriaPayload): Promise<SgqAuditoriaFormDraft> {
+    const { data } = await api.put('/api/sgq/auditorias/form-draft/', { form });
+    return data as SgqAuditoriaFormDraft;
+  },
+
+  async deleteSgqAuditoriaFormDraft(): Promise<void> {
+    await api.delete('/api/sgq/auditorias/form-draft/');
   },
 
   async updateSgqAuditoria(id: string, payload: Partial<SgqAuditoriaPayload>): Promise<SgqAuditoria> {

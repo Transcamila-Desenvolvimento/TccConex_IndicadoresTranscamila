@@ -2832,3 +2832,90 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
                 await bia.disconnect()
 
         async_to_sync(conversar)()
+
+
+class AuditoriaFormDraftTests(APITestCase):
+    URL = '/api/sgq/auditorias/form-draft/'
+
+    def setUp(self):
+        self.gestor = User.objects.create_user(
+            username='sgq.aud.draft.a', password='x', name='Gestor Rascunho', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA, RONDONOPOLIS]},
+            funcoes={'SGQ': ['gerenciar-auditorias']},
+        )
+        self.outro = User.objects.create_user(
+            username='sgq.aud.draft.b', password='x', name='Outro Rascunho', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA, RONDONOPOLIS]},
+            funcoes={'SGQ': ['gerenciar-auditorias']},
+        )
+        self.leitor = User.objects.create_user(
+            username='sgq.aud.draft.leitor', password='x', name='Leitor Rascunho', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]}, funcoes={},
+        )
+        self.client.force_authenticate(self.gestor)
+
+    def test_put_get_isolado_por_usuario(self):
+        response = self.client.put(
+            self.URL,
+            {'form': {'titulo': 'Auditoria da expedição', 'status': 'planejamento'}},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['hasDraft'])
+        self.assertEqual(response.data['form']['titulo'], 'Auditoria da expedição')
+        self.assertEqual(response.data['filial'], IBIPORA)
+
+        self.client.force_authenticate(self.outro)
+        outro = self.client.get(self.URL, **_headers(IBIPORA))
+        self.assertEqual(outro.status_code, 200)
+        self.assertFalse(outro.data['hasDraft'])
+
+    def test_formulario_vazio_nao_persiste(self):
+        response = self.client.put(
+            self.URL,
+            {'form': {'titulo': '   ', 'status': 'planejamento', 'escopo': '<p></p>'}},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(response.data['hasDraft'])
+
+    def test_draft_isolado_por_filial(self):
+        self.client.put(
+            self.URL,
+            {'form': {'titulo': 'Só Rondonópolis'}},
+            format='json',
+            **_headers(RONDONOPOLIS),
+        )
+        response = self.client.get(self.URL, **_headers(IBIPORA))
+        self.assertFalse(response.data['hasDraft'])
+        self.assertEqual(response.data['filial'], IBIPORA)
+
+    def test_html_do_escopo_e_limpo(self):
+        response = self.client.put(
+            self.URL,
+            {'form': {'escopo': '<p>Auditar <b>expedição</b></p><script>alert(1)</script>'}},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn('script', response.data['form']['escopo'].lower())
+        self.assertIn('expedição', response.data['form']['escopo'])
+
+    def test_delete_descarta_rascunho(self):
+        self.client.put(self.URL, {'form': {'titulo': 'X'}}, format='json', **_headers(IBIPORA))
+        deleted = self.client.delete(self.URL, **_headers(IBIPORA))
+        self.assertEqual(deleted.status_code, 204)
+        response = self.client.get(self.URL, **_headers(IBIPORA))
+        self.assertFalse(response.data['hasDraft'])
+
+    def test_sem_gerenciar_nao_salva_rascunho(self):
+        self.client.force_authenticate(self.leitor)
+        response = self.client.put(
+            self.URL,
+            {'form': {'titulo': 'Bloqueado'}},
+            format='json',
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 403)

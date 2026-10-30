@@ -9,8 +9,11 @@ import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
   getSgqAuditoriaErrorMessage,
   useBaixarRelatorioSgqAuditoria,
+  useDeleteSgqAuditoriaFormDraft,
   useDeleteSgqAuditorias,
   useSaveSgqAuditoria,
+  useSaveSgqAuditoriaFormDraft,
+  useSgqAuditoriaFormDraft,
   useSgqAuditorias,
   useSgqAuditoriasResumo,
   useSgqAuditoriasSugestoes,
@@ -275,6 +278,32 @@ function mesmoNome(a: string, b: string) {
   return a.trim().toLocaleLowerCase('pt-BR') === b.trim().toLocaleLowerCase('pt-BR');
 }
 
+function formatarHoraRascunho(iso: string | null): string {
+  if (!iso) return '';
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return '';
+  return data.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function formDoRascunho(origem: Partial<SgqAuditoriaPayload> | undefined): SgqAuditoriaPayload {
+  const base = origem ?? {};
+  const status = base.status === 'execucao' || base.status === 'concluida' ? base.status : 'planejamento';
+  return {
+    ...emptyForm,
+    ...base,
+    status,
+    auditores: Array.isArray(base.auditores) ? base.auditores.filter((nome) => typeof nome === 'string') : [],
+    planejamento: Array.isArray(base.planejamento)
+      ? base.planejamento.map((item) => ({
+        data: item?.data ?? '',
+        horaInicio: item?.horaInicio ?? '',
+        horaFim: item?.horaFim ?? '',
+        atividade: item?.atividade ?? '',
+      }))
+      : [],
+  };
+}
+
 function rotuloPlanejamento(item: SgqAuditoriaPlanejamento) {
   if (!item.data || !item.horaInicio || !item.horaFim || !item.atividade.trim()) return '';
   const [ano, mes, dia] = item.data.split('-');
@@ -325,6 +354,18 @@ const SGQAuditorias: React.FC = () => {
   const resumoQuery = useSgqAuditoriasResumo(selectedFilial);
   const sugestoesQuery = useSgqAuditoriasSugestoes(selectedFilial, true);
   const salvar = useSaveSgqAuditoria();
+  const formDraftQuery = useSgqAuditoriaFormDraft(canManage ? selectedFilial : null);
+  const saveFormDraft = useSaveSgqAuditoriaFormDraft(selectedFilial);
+  const deleteFormDraft = useDeleteSgqAuditoriaFormDraft(selectedFilial);
+  const skipNextFormDraftSave = useRef(true);
+  const registroConcluido = useRef(false);
+  const filialDoRascunho = useRef(selectedFilial);
+  const [hydratedFormDraft, setHydratedFormDraft] = useState(false);
+  const [restoredFormDraft, setRestoredFormDraft] = useState(false);
+  const [formDraftUpdatedAt, setFormDraftUpdatedAt] = useState<string | null>(null);
+  const [formDraftUnavailable, setFormDraftUnavailable] = useState(false);
+  const formBusy = salvar.isPending || deleteFormDraft.isPending;
+  const hasFormDraft = Boolean(formDraftQuery.data?.hasDraft);
   const excluir = useDeleteSgqAuditorias();
   const baixarRelatorio = useBaixarRelatorioSgqAuditoria(selectedFilial);
 
@@ -402,8 +443,12 @@ const SGQAuditorias: React.FC = () => {
 
   const abrirNova = () => {
     setEditando(null);
-    setForm(emptyForm);
     setAbaModal('dados');
+    setRestoredFormDraft(false);
+    setFormDraftUpdatedAt(null);
+    setFormDraftUnavailable(false);
+    setHydratedFormDraft(false);
+    registroConcluido.current = false;
     setModalAberto(true);
   };
 
@@ -450,9 +495,83 @@ const SGQAuditorias: React.FC = () => {
   };
 
   const fecharModal = () => {
-    if (salvar.isPending) return;
+    if (formBusy) return;
+    if (!editando && hydratedFormDraft && !formDraftUnavailable && selectedFilial && canManage && !registroConcluido.current) {
+      skipNextFormDraftSave.current = true;
+      saveFormDraft.mutate(form);
+    }
     setModalAberto(false);
     setEditando(null);
+  };
+
+  useEffect(() => {
+    if (filialDoRascunho.current === selectedFilial) return;
+    filialDoRascunho.current = selectedFilial;
+    setHydratedFormDraft(false);
+  }, [selectedFilial]);
+
+  useEffect(() => {
+    if (!modalAberto || editando) return;
+    if (hydratedFormDraft) return;
+    if (formDraftQuery.isLoading && !formDraftQuery.data) return;
+
+    if (formDraftQuery.isError) {
+      setForm(emptyForm);
+      setFormDraftUnavailable(true);
+      setHydratedFormDraft(true);
+      skipNextFormDraftSave.current = true;
+      return;
+    }
+
+    const draft = formDraftQuery.data;
+    if (draft?.hasDraft && draft.form) {
+      setForm(formDoRascunho(draft.form));
+      setFormDraftUpdatedAt(draft.updatedAt);
+      setRestoredFormDraft(true);
+      setFormDraftUnavailable(false);
+    } else {
+      setForm(emptyForm);
+      setFormDraftUpdatedAt(null);
+      setRestoredFormDraft(false);
+    }
+    setHydratedFormDraft(true);
+    skipNextFormDraftSave.current = true;
+  }, [modalAberto, editando, hydratedFormDraft, formDraftQuery.data, formDraftQuery.isError, formDraftQuery.isLoading]);
+
+  useEffect(() => {
+    if (!modalAberto || editando || !hydratedFormDraft || formDraftUnavailable || !selectedFilial || !canManage) return;
+    if (registroConcluido.current) return;
+    if (skipNextFormDraftSave.current) {
+      skipNextFormDraftSave.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      saveFormDraft.mutate(form, {
+        onSuccess: (result) => {
+          if (registroConcluido.current) return;
+          setFormDraftUpdatedAt(result.hasDraft ? result.updatedAt : null);
+          if (!result.hasDraft) setRestoredFormDraft(false);
+          setFormDraftUnavailable(false);
+        },
+        onError: () => setFormDraftUnavailable(true),
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [modalAberto, editando, hydratedFormDraft, formDraftUnavailable, selectedFilial, canManage, form]); // eslint-disable-line react-hooks/exhaustive-deps -- debounce do rascunho
+
+  const descartarRascunho = () => {
+    if (!window.confirm('Descartar o rascunho desta auditoria? Os dados salvos na sua conta serão apagados.')) return;
+    skipNextFormDraftSave.current = true;
+    deleteFormDraft.mutate(undefined, {
+      onSuccess: () => {
+        setRestoredFormDraft(false);
+        setFormDraftUpdatedAt(null);
+        setForm(emptyForm);
+        setModalAberto(false);
+        setEditando(null);
+      },
+      onError: () => alert('Não foi possível descartar o rascunho. Tente novamente.'),
+    });
   };
 
   const enviar = (e: React.FormEvent<HTMLFormElement>) => {
@@ -486,7 +605,18 @@ const SGQAuditorias: React.FC = () => {
         },
       },
       {
-        onSuccess: () => { setModalAberto(false); setEditando(null); },
+        onSuccess: () => {
+          if (!editando) {
+            registroConcluido.current = true;
+            skipNextFormDraftSave.current = true;
+            deleteFormDraft.mutate(undefined, {
+              onSettled: () => { setModalAberto(false); setEditando(null); },
+            });
+            return;
+          }
+          setModalAberto(false);
+          setEditando(null);
+        },
         onError: (err) => alert(getSgqAuditoriaErrorMessage(err)),
       },
     );
@@ -578,10 +708,23 @@ const SGQAuditorias: React.FC = () => {
             </div>
           </div>
           {canManage && (
-            <button type="button" className="reports-action-btn primary" onClick={abrirNova}>
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-              <span>Nova auditoria</span>
-            </button>
+            hasFormDraft ? (
+              <button
+                type="button"
+                className="reports-action-btn primary"
+                style={{ backgroundColor: '#118CC4', borderColor: '#118CC4' }}
+                onClick={abrirNova}
+                title="Continuar rascunho da auditoria"
+              >
+                <i className="bi bi-journal-text" aria-hidden="true" />
+                <span>Rascunho</span>
+              </button>
+            ) : (
+              <button type="button" className="reports-action-btn primary" onClick={abrirNova}>
+                <i className="bi bi-plus-lg" aria-hidden="true" />
+                <span>Nova auditoria</span>
+              </button>
+            )
           )}
         </div>
       </header>
@@ -842,7 +985,20 @@ const SGQAuditorias: React.FC = () => {
         <SGQAuditoriaCronogramaEmailModal auditoria={cronogramaDe} onClose={() => setCronogramaDe(null)} />
       )}
 
-      {modalAberto && (
+      {modalAberto && !editando && !hydratedFormDraft && (
+        <div className="search-backdrop sgq-aud-modal-backdrop">
+          <div className="modal-card sgq-aud-modal" role="dialog" aria-modal="true" aria-busy="true">
+            <div className="modal-header">
+              <div>
+                <h3>Nova Auditoria</h3>
+                <p className="sgq-aud-modal-sub">Carregando rascunho...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalAberto && (editando || hydratedFormDraft) && (
         <div className="search-backdrop sgq-aud-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) fecharModal(); }}>
           <div className="modal-card sgq-aud-modal is-fixo" role="dialog" aria-modal="true" aria-labelledby="sgq-aud-modal-title">
             <div className="modal-header">
@@ -850,10 +1006,14 @@ const SGQAuditorias: React.FC = () => {
                 <h3 id="sgq-aud-modal-title">
                   {editando ? (canManage ? 'Editar Auditoria' : 'Auditoria') : 'Nova Auditoria'}
                 </h3>
-                <p className="sgq-aud-modal-sub">
+                <p className="sgq-aud-modal-sub" style={!editando && formDraftUnavailable ? { color: '#b45309' } : undefined}>
                   {editando
                     ? `${editando.codigo} · criada por ${editando.criadoPor || '—'}`
-                    : 'O código é gerado automaticamente ao salvar.'}
+                    : formDraftUnavailable
+                      ? 'Rascunho indisponível no servidor — você pode preencher normalmente, mas nada será salvo automaticamente.'
+                      : (restoredFormDraft || formDraftUpdatedAt)
+                        ? `Rascunho na sua conta${formDraftUpdatedAt ? ` · ${formatarHoraRascunho(formDraftUpdatedAt)}` : ''}${saveFormDraft.isPending ? ' · salvando…' : ''}`
+                        : 'O código é gerado automaticamente ao salvar.'}
                 </p>
               </div>
               <button type="button" className="btn-icon" onClick={fecharModal} aria-label="Fechar">
@@ -972,7 +1132,7 @@ const SGQAuditorias: React.FC = () => {
               {editando && abaModal === 'visao' && (
                 <SGQAuditoriaResultados auditoriaId={editando.id} />
               )}
-              <fieldset data-aba="dados" hidden={abaModal !== 'dados'} disabled={!canManage || salvar.isPending}>
+              <fieldset data-aba="dados" hidden={abaModal !== 'dados'} disabled={!canManage || formBusy}>
                 <label className="is-wide">
                   <span>Título <em>*</em></span>
                   <input
@@ -1079,7 +1239,7 @@ const SGQAuditorias: React.FC = () => {
                   )}
                 </div>
               </fieldset>
-              <fieldset data-aba="planejamento" hidden={abaModal !== 'planejamento'} disabled={!canManage || salvar.isPending}>
+              <fieldset data-aba="planejamento" hidden={abaModal !== 'planejamento'} disabled={!canManage || formBusy}>
                 <label>
                   <span>Data de início <em>*</em></span>
                   <input
@@ -1270,15 +1430,30 @@ const SGQAuditorias: React.FC = () => {
               </fieldset>
               </div>
 
-              <div className="modal-footer">
-                <button type="button" className="reports-action-btn secondary" onClick={fecharModal} disabled={salvar.isPending}>
-                  {canManage ? 'Cancelar' : 'Fechar'}
-                </button>
-                {canManage && (
-                  <button type="submit" className="reports-action-btn primary" disabled={salvar.isPending}>
-                    {salvar.isPending ? 'Salvando...' : editando ? 'Salvar Alterações' : 'Registrar Auditoria'}
+              <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+                <div>
+                  {!editando && (restoredFormDraft || formDraftUpdatedAt) && (
+                    <button
+                      type="button"
+                      className="reports-action-btn secondary"
+                      onClick={descartarRascunho}
+                      disabled={formBusy}
+                      title="Apaga o rascunho da sua conta nesta filial"
+                    >
+                      {deleteFormDraft.isPending ? 'Descartando...' : 'Descartar rascunho'}
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="button" className="reports-action-btn secondary" onClick={fecharModal} disabled={formBusy}>
+                    {canManage ? 'Cancelar' : 'Fechar'}
                   </button>
-                )}
+                  {canManage && (
+                    <button type="submit" className="reports-action-btn primary" disabled={formBusy}>
+                      {salvar.isPending ? 'Salvando...' : editando ? 'Salvar Alterações' : 'Registrar Auditoria'}
+                    </button>
+                  )}
+                </div>
               </div>
             </form>
           </div>

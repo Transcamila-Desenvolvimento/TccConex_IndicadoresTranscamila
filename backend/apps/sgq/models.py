@@ -126,6 +126,37 @@ class PesquisaSatisfacaoFormDraft(models.Model):
         return f'Rascunho formulário SGQ — {self.usuario_id} / {self.filial}'
 
 
+class AuditoriaFormDraft(models.Model):
+    """Rascunho de nova auditoria — um por usuário e filial da sessão.
+
+    O payload JSON é camelCase, no formato do formulário. A validação
+    completa só ocorre ao registrar a auditoria.
+    """
+
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sgq_auditoria_form_drafts',
+    )
+    filial = models.CharField(max_length=100)
+    version = models.PositiveSmallIntegerField(default=1)
+    payload = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Rascunho de Auditoria'
+        verbose_name_plural = 'Rascunhos de Auditoria'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario', 'filial'],
+                name='uniq_sgq_auditoria_form_draft_usuario_filial',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Rascunho auditoria SGQ — {self.usuario_id} / {self.filial}'
+
+
 class EscopoAnalise(models.Model):
     """Categoria do escopo da análise — catálogo global (todas as filiais SGQ)."""
 

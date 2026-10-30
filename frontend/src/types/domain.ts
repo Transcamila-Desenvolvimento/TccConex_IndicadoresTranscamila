@@ -2204,6 +2204,15 @@ export type SgqAuditoriaPayload = Pick<
   'categoria' | 'titulo' | 'dataInicio' | 'dataTermino' | 'auditorLider' | 'auditores' | 'status' | 'escopo' | 'criterios' | 'processosAreas' | 'responsaveisProcessos' | 'metodologia' | 'planejamento'
 >;
 
+/** Rascunho de nova auditoria — isolado por usuário autenticado + filial da sessão. */
+export interface SgqAuditoriaFormDraft {
+  version: number;
+  updatedAt: string | null;
+  filial: string;
+  hasDraft: boolean;
+  form: SgqAuditoriaPayload;
+}
+
 export type SgqAuditoriaOrdering =
   | 'data_inicio' | '-data_inicio'
   | 'data_termino' | '-data_termino'

@@ -27,9 +27,15 @@ from apps.sgq.auditoria_realtime import notify_auditoria_changed
 from apps.financeiro.pagination import ReportPagination
 from apps.rh.drive_documento import EXTENSOES
 
+from .auditoria_form_draft import (
+    auditoria_form_draft_payload,
+    has_meaningful_auditoria_form_draft,
+    sanitize_auditoria_form_draft,
+)
 from .models import (
     AUDITORIA_STATUS_CHOICES,
     AnexoRespostaAuditoriaSGQ,
+    AuditoriaFormDraft,
     AuditoriaSGQ,
     CategoriaAuditoriaSGQ,
     ItemNormaSGQ,
@@ -257,7 +263,7 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     serializer_class = AuditoriaSGQSerializer
     queryset = AuditoriaSGQ.objects.select_related('criado_por').prefetch_related('normas')
     pagination_class = ReportPagination
-    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+    http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
@@ -320,6 +326,58 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             qs = qs.filter(categoria=categoria)
         ordering = _ORDENACOES.get(params.get('ordering') or '', _ORDENACOES['-data_inicio'])
         return qs.order_by(*ordering)
+
+    def update(self, request, *args, **kwargs):
+        # A auditoria existente segue só por PATCH. PUT fica reservado ao rascunho.
+        return self.http_method_not_allowed(request)
+
+    @action(detail=False, methods=['get', 'put', 'delete'], url_path='form-draft')
+    def form_draft(self, request):
+        """Rascunho de nova auditoria — um por usuário e filial da sessão."""
+        filial = _filial_da_sessao(request)
+        if not filial:
+            return Response(
+                {'detail': 'Filial da sessão é obrigatória para o rascunho.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        draft = AuditoriaFormDraft.objects.filter(usuario=request.user, filial=filial).first()
+
+        if request.method == 'GET':
+            return Response(auditoria_form_draft_payload(draft, filial))
+
+        if request.method == 'DELETE':
+            if draft:
+                draft.delete()
+                record_audit(
+                    request.user,
+                    'sgq.auditoria.form_draft_descartado',
+                    f'Rascunho de auditoria descartado ({filial}).',
+                )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        form = sanitize_auditoria_form_draft(request.data)
+        if not has_meaningful_auditoria_form_draft(form):
+            if draft:
+                draft.delete()
+                record_audit(
+                    request.user,
+                    'sgq.auditoria.form_draft_descartado',
+                    f'Rascunho de auditoria limpo ({filial}).',
+                )
+            return Response(auditoria_form_draft_payload(None, filial))
+
+        draft, _created = AuditoriaFormDraft.objects.update_or_create(
+            usuario=request.user,
+            filial=filial,
+            defaults={'version': 1, 'payload': form},
+        )
+        record_audit(
+            request.user,
+            'sgq.auditoria.form_draft_salvo',
+            f'Rascunho de auditoria salvo ({filial}).',
+        )
+        return Response(auditoria_form_draft_payload(draft, filial))
 
     def perform_create(self, serializer):
         ano = serializer.validated_data['data_inicio'].year
