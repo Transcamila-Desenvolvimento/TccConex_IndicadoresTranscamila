@@ -273,9 +273,11 @@ function formatarTamanho(bytes: number) {
 
 function classeResposta(resposta: { opcaoCodigo?: string; valor?: number | null } | undefined) {
   if (!resposta?.opcaoCodigo) return 'is-pendente';
-  if (resposta.valor === null) return 'is-na';
-  if (resposta.valor >= 100) return 'is-conforme';
-  return resposta.valor > 0 ? 'is-parcial' : 'is-nao-conforme';
+  const valor = resposta.valor;
+  if (valor === null) return 'is-na';
+  if (typeof valor !== 'number') return 'is-nao-conforme';
+  if (valor >= 100) return 'is-conforme';
+  return valor > 0 ? 'is-parcial' : 'is-nao-conforme';
 }
 
 const SGQAuditoriaExecucao: React.FC = () => {

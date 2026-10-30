@@ -143,7 +143,7 @@ export function useAuditoriaPresenca(auditoriaId: string, itemId: string | null)
               });
               setRascunhoLocal((atual) => (atual?.itemId === item ? null : atual));
             }
-            agendarSync(data);
+            agendarSync(data as MensagemResposta);
           }
         } catch {
           /* quadro malformado */
