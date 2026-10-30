@@ -10,6 +10,7 @@ from apps.comercial.proposta_email_service import LOGO_CID, _logo_mime_subtype, 
 
 from .models import AUDITORIA_STATUS_CHOICES
 from .pesquisa_email_service import parse_emails
+from .serializers import html_email_texto_formatado
 
 
 def _usuario_display(user) -> str:
@@ -102,7 +103,7 @@ def send_cronograma_auditoria_email(user, auditoria, *, to_emails, cc_emails=Non
         'auditores': ', '.join(auditoria.auditores or []) or '—',
         'normas': ', '.join(auditoria.normas.order_by('nome').values_list('nome', flat=True)) or '—',
         'assunto': _assunto_cronograma(auditoria),
-        'escopo': (auditoria.escopo or '').strip(),
+        'escopo': html_email_texto_formatado(auditoria.escopo),
         'itens': itens,
         'saudacao': 'Prezados,',
         'enviado_por': _usuario_display(user),

@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import logoTranscamila from '../../assets/logo-transcamila-30-anos.png';
 import type { SgqAuditoriaExecucao, SgqAuditoriaResposta, SgqNormaItem } from '../../types/domain';
 import { SGQ_AUDITORIA_STATUS_LABEL } from '../../types/domain';
+import { textoPlanoFormatado } from './SGQEditorTexto';
 
 type Rgb = [number, number, number];
 type Norma = SgqAuditoriaExecucao['normas'][number];
@@ -233,7 +234,7 @@ export async function downloadSgqAuditoriaRegistroPdf(dados: SgqAuditoriaExecuca
     y += Math.max(esquerda, direita);
   }
 
-  const escopo = doc.splitTextToSize(auditoria.escopo.trim() || '—', contentWidth) as string[];
+  const escopo = doc.splitTextToSize(textoPlanoFormatado(auditoria.escopo) || '—', contentWidth) as string[];
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   textColor(doc, MUTED);

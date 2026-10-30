@@ -4884,8 +4884,92 @@ fieldset:disabled .sgq-import-arquivo-limpar {
 }
 
 /* display:grid no fieldset faz o navegador ignorar o atributo disabled. */
-.sgq-aud-form fieldset[disabled] :is(input, textarea, select, button) {
+.sgq-aud-form fieldset[disabled] :is(input, textarea, select, button, .sgq-editor) {
   pointer-events: none;
+}
+
+.sgq-editor {
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.sgq-editor-barra {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.sgq-editor-barra button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #334155;
+  font-size: 14px;
+}
+
+.sgq-editor-barra button:hover,
+.sgq-editor-barra button.is-ativo {
+  background: #e2e8f0;
+}
+
+.sgq-editor-area {
+  position: relative;
+  min-height: 72px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px 10px;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.45;
+  outline: none;
+}
+
+.sgq-editor-area:focus {
+  box-shadow: inset 0 0 0 1px var(--primary-color, #0076ce);
+}
+
+.sgq-editor-area[data-vazio='true']:not(:focus)::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  left: 10px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.sgq-editor-area :is(p, div),
+.sgq-texto-formatado :is(p, div) {
+  margin: 0;
+}
+
+.sgq-editor-area :is(ul, ol),
+.sgq-texto-formatado :is(ul, ol) {
+  margin: 0.2em 0 0.2em 1.25em;
+  padding: 0;
+}
+
+.sgq-editor-area ul,
+.sgq-texto-formatado ul {
+  list-style: disc;
+}
+
+.sgq-editor-area ol,
+.sgq-texto-formatado ol {
+  list-style: decimal;
+}
+
+.sgq-texto-formatado {
+  white-space: normal;
 }
 
 .sgq-aud-form label,

@@ -1,5 +1,8 @@
+import re
 from datetime import date
 from decimal import Decimal
+from html import escape, unescape
+from html.parser import HTMLParser
 
 from django.db.models import Q
 from django.utils import timezone
@@ -25,6 +28,61 @@ from .models import (
 
 TIPO_RESPOSTA_MIN_OPCOES = 2
 PLANEJAMENTO_MAX_ITENS = 40
+_TAGS_TEXTO_FORMATADO = {'p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li'}
+
+
+class _LimpadorTextoFormatado(HTMLParser):
+    """Mantém só negrito, itálico, sublinhado e listas. Descarta o resto."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.partes: list[str] = []
+        self._ignorar = 0
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if tag in ('script', 'style'):
+            self._ignorar += 1
+            return
+        if self._ignorar or tag not in _TAGS_TEXTO_FORMATADO:
+            return
+        if tag == 'br':
+            self.partes.append('<br>')
+            return
+        self.partes.append(f'<{tag}>')
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        if tag in ('script', 'style') and self._ignorar:
+            self._ignorar -= 1
+            return
+        if self._ignorar or tag not in _TAGS_TEXTO_FORMATADO or tag == 'br':
+            return
+        self.partes.append(f'</{tag}>')
+
+    def handle_data(self, data):
+        if not self._ignorar:
+            self.partes.append(escape(data))
+
+
+def limpar_texto_formatado(valor: str) -> str:
+    texto = str(valor or '').replace('\r\n', '\n').strip()
+    if '<' not in texto:
+        return texto
+    limpador = _LimpadorTextoFormatado()
+    limpador.feed(texto)
+    limpador.close()
+    html = ''.join(limpador.partes).strip()
+    visivel = unescape(re.sub(r'<[^>]+>', '', html)).replace('\xa0', ' ').strip()
+    return html if visivel else ''
+
+
+def html_email_texto_formatado(valor: str) -> str:
+    """HTML seguro para e-mail: texto comum vira quebra de linha; marcação fica só a permitida."""
+    texto = limpar_texto_formatado(valor)
+    if '<' not in texto:
+        return escape(texto).replace('\n', '<br>')
+    return texto
 TIPO_RESPOSTA_MAX_OPCOES = 20
 
 # Nome do campo no model (source) → nome do campo camelCase no serializer.
@@ -399,13 +457,13 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
                     ),
                 })
         if self.instance is None or 'escopo' in attrs:
-            texto = str(attrs.get('escopo', '') or '').strip()
+            texto = limpar_texto_formatado(attrs.get('escopo', '') or '')
             if not texto:
                 raise serializers.ValidationError({'escopo': 'Informe o escopo / objetivo.'})
             attrs['escopo'] = texto
         for campo in ('criterios', 'processos_areas', 'responsaveis_processos', 'metodologia'):
             if campo in attrs:
-                attrs[campo] = str(attrs.get(campo) or '').strip()
+                attrs[campo] = limpar_texto_formatado(attrs.get(campo) or '')
         if self.instance is None or 'auditores' in attrs or 'auditor_lider' in attrs:
             lider = (attrs.get('auditor_lider') or getattr(self.instance, 'auditor_lider', '') or '').strip()
             nomes = attrs.get('auditores')

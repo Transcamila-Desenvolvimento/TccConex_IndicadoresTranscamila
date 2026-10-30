@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
+import EditorTexto, { normalizarTextoFormatado, TextoFormatado, textoVisivel } from './SGQEditorTexto';
 import SGQAuditoriaCronogramaEmailModal from './SGQAuditoriaCronogramaEmailModal';
 import SGQAuditoriaResultados from './SGQAuditoriaResultados';
 import { useAuth } from '../../contexts/AuthContext';
@@ -457,10 +458,6 @@ const SGQAuditorias: React.FC = () => {
   const enviar = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formEl = e.currentTarget;
-    const escopoEl = formEl.querySelector<HTMLTextAreaElement>('textarea');
-    if (escopoEl) {
-      escopoEl.setCustomValidity(escopoEl.value.trim() ? '' : 'Informe o escopo / objetivo.');
-    }
     const invalido = formEl.querySelector<HTMLElement>('input:invalid, select:invalid, textarea:invalid');
     if (invalido) {
       const aba = invalido.closest<HTMLElement>('[data-aba]')?.dataset.aba as AbaModal | undefined;
@@ -480,11 +477,11 @@ const SGQAuditorias: React.FC = () => {
           ...form,
           titulo: form.titulo.trim(),
           categoria: form.categoria.trim(),
-          escopo: form.escopo.trim(),
-          criterios: form.criterios.trim(),
-          processosAreas: form.processosAreas.trim(),
-          responsaveisProcessos: form.responsaveisProcessos.trim(),
-          metodologia: form.metodologia.trim(),
+          escopo: normalizarTextoFormatado(form.escopo),
+          criterios: normalizarTextoFormatado(form.criterios),
+          processosAreas: normalizarTextoFormatado(form.processosAreas),
+          responsaveisProcessos: normalizarTextoFormatado(form.responsaveisProcessos),
+          metodologia: normalizarTextoFormatado(form.metodologia),
           planejamento: form.planejamento.map((item) => ({ ...item, atividade: item.atividade.trim() })),
         },
       },
@@ -931,19 +928,19 @@ const SGQAuditorias: React.FC = () => {
                         ) : '—'}
                       </dd>
                     </div>
-                    {editando.escopo.trim() && (
+                    {textoVisivel(editando.escopo) && (
                       <div className="sgq-aud-ficha-largo">
                         <dt>Escopo / objetivo</dt>
-                        <dd className="sgq-aud-visao-texto">{editando.escopo}</dd>
+                        <dd className="sgq-aud-visao-texto"><TextoFormatado valor={editando.escopo} /></dd>
                       </div>
                     )}
                     {CAMPOS_PLANO_OPCIONAIS.map(([campo, rotulo]) => {
-                      const texto = (editando[campo] ?? '').trim();
-                      if (!texto) return null;
+                      const texto = editando[campo] ?? '';
+                      if (!textoVisivel(texto)) return null;
                       return (
                         <div key={campo} className="sgq-aud-ficha-largo">
                           <dt>{rotulo}</dt>
-                          <dd className="sgq-aud-visao-texto">{texto}</dd>
+                          <dd className="sgq-aud-visao-texto"><TextoFormatado valor={texto} /></dd>
                         </div>
                       );
                     })}
@@ -1217,31 +1214,35 @@ const SGQAuditorias: React.FC = () => {
                     <small className="sgq-aud-plano-ajuda">Informe a data de início e a de término para incluir o planejamento.</small>
                   )}
                 </div>
-                <label className="is-wide">
+                <div className="is-wide sgq-aud-campo">
                   <span>Escopo / objetivo <em>*</em></span>
-                  <textarea
-                    className="form-input"
-                    rows={3}
+                  <input
+                    className="sgq-pessoa-validacao"
                     required
-                    value={form.escopo}
-                    onChange={(e) => {
-                      e.currentTarget.setCustomValidity('');
-                      setForm({ ...form, escopo: e.target.value });
-                    }}
-                    placeholder="Processos, áreas e critérios que serão auditados."
+                    value={textoVisivel(form.escopo)}
+                    onChange={() => undefined}
+                    onInvalid={(e) => e.currentTarget.setCustomValidity('Informe o escopo / objetivo.')}
+                    ref={(elemento) => { elemento?.setCustomValidity(''); }}
+                    tabIndex={-1}
+                    aria-hidden="true"
                   />
-                </label>
+                  <EditorTexto
+                    valor={form.escopo}
+                    rotulo="Escopo / objetivo"
+                    placeholder="Processos, áreas e critérios que serão auditados."
+                    onChange={(valor) => setForm({ ...form, escopo: valor })}
+                  />
+                </div>
                 {CAMPOS_PLANO_OPCIONAIS.map(([campo, rotulo, placeholder]) => (
-                  <label key={campo} className="is-wide">
+                  <div key={campo} className="is-wide sgq-aud-campo">
                     <span>{rotulo}</span>
-                    <textarea
-                      className="form-input"
-                      rows={2}
-                      value={form[campo]}
-                      onChange={(e) => setForm({ ...form, [campo]: e.target.value })}
+                    <EditorTexto
+                      valor={form[campo]}
+                      rotulo={rotulo}
                       placeholder={placeholder}
+                      onChange={(valor) => setForm({ ...form, [campo]: valor })}
                     />
-                  </label>
+                  </div>
                 ))}
                 <div className="is-wide sgq-aud-status-picker" role="radiogroup" aria-label="Status">
                   <span>Status</span>

@@ -1472,6 +1472,19 @@ class AuditoriaSGQTests(APITestCase):
         self.assertEqual(sem.data['responsaveisProcessos'], '')
         self.assertEqual(sem.data['metodologia'], '')
 
+        formatada = self.client.post(self.URL, _auditoria(
+            titulo='Com formatação',
+            escopo='<p>Auditar <b>expedição</b></p><script>alert(1)</script>',
+            criterios='<ul><li>ISO</li><li>SASSMAQ</li></ul><script>alert(1)</script>',
+            metodologia='<b>Entrevista</b> e amostragem',
+        ), format='json', **_headers())
+        self.assertEqual(formatada.status_code, 201, formatada.data)
+        self.assertEqual(formatada.data['escopo'], '<p>Auditar <b>expedição</b></p>')
+        self.assertEqual(formatada.data['criterios'], '<ul><li>ISO</li><li>SASSMAQ</li></ul>')
+        self.assertEqual(formatada.data['metodologia'], '<b>Entrevista</b> e amostragem')
+        self.assertNotIn('script', formatada.data['criterios'])
+        self.assertNotIn('script', formatada.data['escopo'])
+
     def test_exige_planejamento_e_escopo(self):
         sem_plano = self.client.post(self.URL, _auditoria(planejamento=[]), format='json', **_headers())
         self.assertEqual(sem_plano.status_code, 400)
