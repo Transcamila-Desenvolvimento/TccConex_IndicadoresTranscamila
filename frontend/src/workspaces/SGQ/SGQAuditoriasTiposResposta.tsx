@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
+import { branchesForModule } from '../../constants/filiais';
 import { userHasFuncao } from '../../constants/funcoes';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import { getSgqAuditoriaErrorMessage } from '../../hooks/useSgqAuditorias';
@@ -19,14 +20,15 @@ import type {
 } from '../../types/domain';
 import { descreverOpcoes, novaOpcao } from './sgqRespostas';
 
+const FILIAL_QUE_COMPARTILHA = branchesForModule('SGQ')[0];
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
 type FiltroPublica = NonNullable<SgqTipoRespostaQueryParams['publica']>;
 type CampoOrdenavel = 'codigo' | 'nome' | 'emissor' | 'atualizado_em' | 'publica';
 
 const FILTROS: Array<{ value: FiltroPublica; label: string; resumo: 'total' | 'sim' | 'nao' }> = [
-  { value: '', label: 'Resposta pública: Todas', resumo: 'total' },
-  { value: 'sim', label: 'Públicas', resumo: 'sim' },
-  { value: 'nao', label: 'Não públicas', resumo: 'nao' },
+  { value: '', label: 'Compartilhamento: Todos', resumo: 'total' },
+  { value: 'sim', label: 'Compartilhados', resumo: 'sim' },
+  { value: 'nao', label: 'Sem compartilhamento', resumo: 'nao' },
 ];
 
 const emptyForm: SgqTipoRespostaPayload = {
@@ -90,6 +92,12 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
   const filtrando = Boolean(buscaAplicada || filtroPublica);
   const paginaAtual = Math.min(page, totalPaginas);
   const tipoSelecionado = selecionados.size === 1 ? linhas.find((linha) => selecionados.has(linha.id)) : undefined;
+  const podeAlterar = canManage && (!editando || editando.editavel);
+  const podeExcluirSelecao = canManage && selecionados.size > 0 && [...selecionados].every((id) => (
+    linhas.find((linha) => linha.id === id)?.editavel === true
+  ));
+  const filialDoTipo = editando?.filial ?? selectedFilial;
+  const podeDefinirCompartilhamento = podeAlterar && filialDoTipo === FILIAL_QUE_COMPARTILHA;
 
   const mudarFiltro = (valor: FiltroPublica) => {
     setFiltroPublica(valor);
@@ -177,6 +185,10 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
 
   const excluirIds = (ids: string[], descricao: string) => {
     setAcoesAbertas(false);
+    if (linhas.some((linha) => ids.includes(linha.id) && !linha.editavel)) {
+      alert('Tipos de resposta compartilhados só podem ser excluídos na filial em que foram lançados.');
+      return;
+    }
     if (!window.confirm(`Excluir ${descricao}? Essa ação não pode ser desfeita.`)) return;
     excluir.mutate(ids, {
       onSuccess: () => setSelecionados((atual) => {
@@ -216,12 +228,12 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
               {tipoSelecionado && (
                 <span className="reports-dropdown-item" onClick={() => abrirEdicao(tipoSelecionado)}>
                   <span className="reports-dropdown-item-left">
-                    <i className={`bi ${canManage ? 'bi-pencil' : 'bi-eye'}`} aria-hidden="true" />
-                    {canManage ? 'Editar' : 'Visualizar'}
+                    <i className={`bi ${canManage && tipoSelecionado.editavel ? 'bi-pencil' : 'bi-eye'}`} aria-hidden="true" />
+                    {canManage && tipoSelecionado.editavel ? 'Editar' : 'Visualizar'}
                   </span>
                 </span>
               )}
-              {canManage && (
+              {podeExcluirSelecao && (
                 <span
                   className={`reports-dropdown-item is-danger${excluir.isPending ? ' is-disabled' : ''}`}
                   onClick={() => excluirIds(
@@ -267,7 +279,7 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
             <select
               value={filtroPublica}
               onChange={(e) => mudarFiltro(e.target.value as FiltroPublica)}
-              aria-label="Filtrar por resposta pública"
+              aria-label="Filtrar por compartilhamento"
             >
               {FILTROS.map((filtro) => (
                 <option key={filtro.value || 'todas'} value={filtro.value}>
@@ -313,7 +325,7 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
                   <th>Opções de resposta</th>
                   <th>{cabecalhoOrdenavel('emissor', 'Emissor')}</th>
                   <th>{cabecalhoOrdenavel('atualizado_em', 'Última atualização')}</th>
-                  <th>{cabecalhoOrdenavel('publica', 'Resposta pública?')}</th>
+                  <th>{cabecalhoOrdenavel('publica', 'Compartilhamento')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -347,7 +359,12 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
                         <td>{tipo.emissor || '—'}</td>
                         <td>{formatarDataHora(tipo.atualizadoEm)}</td>
                         <td>
-                          <span className={`sgq-aud-status ${tipo.publica ? 'is-sim' : 'is-nao'}`}>
+                          <span
+                            className={`sgq-aud-status ${tipo.publica ? 'is-sim' : 'is-nao'}`}
+                            title={tipo.editavel
+                              ? 'Compartilha este tipo de resposta com a outra filial'
+                              : `Lançado em ${tipo.filial}. Disponível aqui só para uso.`}
+                          >
                             {tipo.publica ? 'Sim' : 'Não'}
                           </span>
                         </td>
@@ -394,13 +411,15 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
               <div>
                 <h3 id="sgq-tipo-resposta-modal-title">
                   {editando
-                    ? `${canManage ? 'Editar Tipo de Resposta' : 'Tipo de Resposta'} ${editando.codigo}`
+                    ? `${podeAlterar ? 'Editar Tipo de Resposta' : 'Tipo de Resposta'} ${editando.codigo}`
                     : 'Novo Tipo de Resposta'}
                 </h3>
                 <p className="sgq-aud-modal-sub">
-                  {editando
-                    ? `Emitido por ${editando.emissor || '—'} · última atualização em ${formatarDataHora(editando.atualizadoEm)}`
-                    : `Código e emissor (${user?.name || user?.username || 'você'}) são preenchidos automaticamente.`}
+                  {editando && !editando.editavel
+                    ? `Lançado em ${editando.filial}. Nesta filial o tipo de resposta fica só para visualização.`
+                    : editando
+                      ? `Emitido por ${editando.emissor || '—'} · última atualização em ${formatarDataHora(editando.atualizadoEm)}`
+                      : `Código e emissor (${user?.name || user?.username || 'você'}) são preenchidos automaticamente.`}
                 </p>
               </div>
               <button type="button" className="btn-icon" onClick={fecharModal} aria-label="Fechar">
@@ -409,12 +428,13 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
             </div>
 
             <form className="modal-body sgq-aud-form" onSubmit={enviar}>
-              <fieldset disabled={!canManage || salvar.isPending}>
+              <fieldset disabled={!podeAlterar || salvar.isPending} inert={!podeAlterar || salvar.isPending ? true : undefined}>
                 <label className="is-wide">
                   <span>Nome <em>*</em></span>
                   <input
                     className="form-input"
                     required
+                    readOnly={!podeAlterar}
                     maxLength={120}
                     value={form.nome}
                     onChange={(e) => setForm({ ...form, nome: e.target.value })}
@@ -430,6 +450,7 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
                         <span className="sgq-tr-opcao-num">{indice + 1}</span>
                         <input
                           className="form-input sgq-tr-codigo"
+                          readOnly={!podeAlterar}
                           maxLength={10}
                           value={opcao.codigo}
                           onChange={(e) => alterarOpcao(indice, { codigo: e.target.value })}
@@ -439,6 +460,7 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
                         />
                         <input
                           className="form-input"
+                          readOnly={!podeAlterar}
                           maxLength={100}
                           value={opcao.texto}
                           onChange={(e) => alterarOpcao(indice, { texto: e.target.value })}
@@ -453,7 +475,8 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
                             max={100}
                             step={1}
                             required={opcao.valor !== null}
-                            disabled={opcao.valor === null}
+                            readOnly={!podeAlterar}
+                            disabled={opcao.valor === null || !podeAlterar}
                             value={opcao.valor ?? ''}
                             onChange={(e) => alterarOpcao(indice, { valor: e.target.value === '' ? 0 : Number(e.target.value) })}
                             aria-label={`Valor da opção ${indice + 1} (%)`}
@@ -464,6 +487,7 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={opcao.valor === null}
+                            disabled={!podeAlterar}
                             onChange={(e) => alterarOpcao(indice, { valor: e.target.checked ? null : 0 })}
                           />
                           <span>N/A</span>
@@ -472,41 +496,46 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={opcao.exigeJustificativa}
+                            disabled={!podeAlterar}
                             onChange={(e) => alterarOpcao(indice, { exigeJustificativa: e.target.checked })}
                           />
                           <span>Justificar</span>
                         </label>
-                        <button
-                          type="button"
-                          className="btn-icon"
-                          onClick={() => moverOpcao(indice, indice - 1)}
-                          disabled={indice === 0}
-                          aria-label="Mover para cima"
-                        >
-                          <i className="bi bi-arrow-up" aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-icon"
-                          onClick={() => moverOpcao(indice, indice + 1)}
-                          disabled={indice === form.opcoes.length - 1}
-                          aria-label="Mover para baixo"
-                        >
-                          <i className="bi bi-arrow-down" aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-icon"
-                          onClick={() => removerOpcao(indice)}
-                          disabled={form.opcoes.length <= 2}
-                          aria-label="Remover opção"
-                        >
-                          <i className="bi bi-trash3" aria-hidden="true" />
-                        </button>
+                        {podeAlterar && (
+                          <>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={() => moverOpcao(indice, indice - 1)}
+                              disabled={indice === 0}
+                              aria-label="Mover para cima"
+                            >
+                              <i className="bi bi-arrow-up" aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={() => moverOpcao(indice, indice + 1)}
+                              disabled={indice === form.opcoes.length - 1}
+                              aria-label="Mover para baixo"
+                            >
+                              <i className="bi bi-arrow-down" aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={() => removerOpcao(indice)}
+                              disabled={form.opcoes.length <= 2}
+                              aria-label="Remover opção"
+                            >
+                              <i className="bi bi-trash3" aria-hidden="true" />
+                            </button>
+                          </>
+                        )}
                       </li>
                     ))}
                   </ol>
-                  {canManage && (
+                  {podeAlterar && (
                     <button
                       type="button"
                       className="reports-action-btn secondary sgq-tr-adicionar"
@@ -522,29 +551,35 @@ const SGQAuditoriasTiposResposta: React.FC = () => {
                     50%, Não conforme 0%); N/A tira a pergunta do cálculo; Justificar exige justificativa do auditor.
                   </small>
                 </div>
-                <div className="sgq-aud-status-picker" role="radiogroup" aria-label="Resposta pública?">
-                  <span>Resposta pública?</span>
-                  <div>
-                    {[true, false].map((valor) => (
-                      <button
-                        key={String(valor)}
-                        type="button"
-                        role="radio"
-                        aria-checked={form.publica === valor}
-                        className={`sgq-aud-status ${valor ? 'is-sim' : 'is-nao'}${form.publica === valor ? ' is-picked' : ''}`}
-                        onClick={() => setForm({ ...form, publica: valor })}
-                      >
-                        {valor ? 'Sim' : 'Não'}
-                      </button>
-                    ))}
+                {podeDefinirCompartilhamento && (
+                  <div className="sgq-aud-status-picker" role="radiogroup" aria-label="Compartilhamento">
+                    <span>Compartilhamento</span>
+                    <div>
+                      {[true, false].map((valor) => (
+                        <button
+                          key={String(valor)}
+                          type="button"
+                          role="radio"
+                          aria-checked={form.publica === valor}
+                          className={`sgq-aud-status ${valor ? 'is-sim' : 'is-nao'}${form.publica === valor ? ' is-picked' : ''}`}
+                          disabled={!podeAlterar}
+                          onClick={() => { if (podeAlterar) setForm({ ...form, publica: valor }); }}
+                        >
+                          {valor ? 'Sim' : 'Não'}
+                        </button>
+                      ))}
+                    </div>
+                    <small className="sgq-cat-aviso">
+                      Com o compartilhamento ativo, a outra filial pode usar este tipo de resposta. A edição continua só aqui.
+                    </small>
                   </div>
-                </div>
+                )}
               </fieldset>
               <div className="modal-footer">
                 <button type="button" className="reports-action-btn secondary" onClick={fecharModal} disabled={salvar.isPending}>
-                  {canManage ? 'Cancelar' : 'Fechar'}
+                  {podeAlterar ? 'Cancelar' : 'Fechar'}
                 </button>
-                {canManage && (
+                {podeAlterar && (
                   <button type="submit" className="reports-action-btn primary" disabled={salvar.isPending}>
                     {salvar.isPending ? 'Salvando...' : editando ? 'Salvar Alterações' : 'Registrar Tipo de Resposta'}
                   </button>

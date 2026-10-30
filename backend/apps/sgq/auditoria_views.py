@@ -23,6 +23,7 @@ from apps.accounts.permissions import (
     user_has_module_access,
 )
 from apps.audit.services import record_audit
+from apps.sgq.auditoria_realtime import notify_auditoria_changed
 from apps.financeiro.pagination import ReportPagination
 from apps.rh.drive_documento import EXTENSOES
 
@@ -36,7 +37,9 @@ from .models import (
     RespostaAuditoriaSGQ,
     TipoRespostaSGQ,
 )
+from .cronograma_email_service import send_cronograma_auditoria_email
 from .norma_itens_import_service import NormaItensImportError, importar_itens_norma, modelo_importacao_itens
+from .pesquisa_email_service import parse_emails
 from .serializers import (
     AreaNormaSerializer,
     AuditoriaSGQSerializer,
@@ -44,9 +47,13 @@ from .serializers import (
     ClassificacaoNormaSerializer,
     ItemNormaSGQSerializer,
     NormaSGQSerializer,
+    queryset_normas_visiveis,
+    queryset_tipos_visiveis,
     ResponderItemAuditoriaSerializer,
     RespostaAuditoriaSGQSerializer,
     TipoRespostaSGQSerializer,
+    pendencias_questionario,
+    usuario_e_auditor_lider,
 )
 
 _GERENCIAR_DETAIL = 'Acesso negado. Solicite ao administrador a função "Gerenciar auditorias" do SGQ.'
@@ -58,6 +65,14 @@ _ACOES_EXECUCAO = {'responder', 'anexar', 'anexo'}
 ANEXO_MAX_BYTES = 15 * 1024 * 1024
 RESPOSTA_MAX_ANEXOS = 20
 _GERENCIAR_NORMAS_DETAIL = 'Acesso negado. Solicite ao administrador a função "Gerenciar normas" do SGQ.'
+_NORMA_SOMENTE_USO_DETAIL = (
+    'Esta norma foi lançada em outra filial. O compartilhamento permite usá-la aqui; '
+    'a edição fica na filial em que ela foi lançada.'
+)
+_TIPO_SOMENTE_USO_DETAIL = (
+    'Este tipo de resposta foi lançado em outra filial. O compartilhamento permite usá-lo aqui; '
+    'a edição fica na filial em que ele foi lançado.'
+)
 _GERENCIAR_CATEGORIAS_DETAIL = 'Acesso negado. Solicite ao administrador a função "Gerenciar categorias" do SGQ.'
 _GERENCIAR_TIPOS_RESPOSTA_DETAIL = (
     'Acesso negado. Solicite ao administrador a função "Gerenciar tipos de resposta" do SGQ.'
@@ -108,17 +123,15 @@ _ORDENACOES = {
 _STATUS_VALIDOS = {valor for valor, _ in AUDITORIA_STATUS_CHOICES}
 
 
-def _semestre_atual(hoje):
-    """Janela e rótulo do semestre civil que contém a data."""
-    if hoje.month <= 6:
-        inicio = hoje.replace(month=1, day=1)
-        fim = hoje.replace(month=6, day=30)
-        rotulo = f'1º semestre de {hoje.year}'
-    else:
-        inicio = hoje.replace(month=7, day=1)
-        fim = hoje.replace(month=12, day=31)
-        rotulo = f'2º semestre de {hoje.year}'
-    return inicio, fim, rotulo
+def _ano_da_visao(request, hoje) -> int:
+    """Ano do painel. Sem parâmetro válido, fica o ano corrente."""
+    try:
+        ano = int(request.query_params.get('ano'))
+    except (TypeError, ValueError):
+        return hoje.year
+    if ano < 2000 or ano > 2100:
+        return hoje.year
+    return ano
 
 
 def _auditoria_liberada(user, aba: str) -> bool:
@@ -251,6 +264,10 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         sem_auditorias = _sem_aba(request.user, 'auditorias')
         sem_questionario = _sem_aba(request.user, 'auditorias-minhas-acoes')
         sem_visao = _sem_aba(request.user, 'auditorias-visao-geral')
+        if self.action == 'concluir':
+            if sem_auditorias and sem_questionario:
+                self.permission_denied(request, message='Sem acesso às Auditorias.')
+            return
         consulta_ou_resposta = request.method in ('GET', 'HEAD', 'OPTIONS') or self.action in _ACOES_EXECUCAO
         if consulta_ou_resposta:
             vê_visao = self.action == 'visao' and not sem_visao
@@ -258,7 +275,7 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 self.permission_denied(request, message='Sem acesso às Auditorias.')
         elif sem_auditorias:
             self.permission_denied(request, message='Sem acesso às Auditorias.')
-        if request.method in ('GET', 'HEAD', 'OPTIONS'):
+        if request.method in ('GET', 'HEAD', 'OPTIONS') or self.action == 'enviar_cronograma':
             return
         if self.action in _ACOES_EXECUCAO:
             if not request.user.has_funcao('SGQ', 'executar-auditorias'):
@@ -346,23 +363,18 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def visao(self, request):
-        """Painel da aba Visão geral: atraso do semestre, status e não conformidades por auditoria."""
+        """Painel da aba Visão geral, recortado pelo ano da auditoria."""
         hoje = timezone.localdate()
-        inicio, fim, rotulo = _semestre_atual(hoje)
-        qs = self._escopo()
+        ano = _ano_da_visao(request, hoje)
+        base = self._escopo()
+        anos = sorted({*base.values_list('ano', flat=True), hoje.year, ano}, reverse=True)
+        qs = base.filter(ano=ano)
         contagem = qs.aggregate(
+            total=Count('pk'),
             planejamento=Count('pk', filter=Q(status='planejamento')),
             execucao=Count('pk', filter=Q(status='execucao')),
             concluida=Count('pk', filter=Q(status='concluida')),
-            atrasadas=Count(
-                'pk',
-                filter=(
-                    ~Q(status='concluida')
-                    & Q(data_termino__lt=hoje)
-                    & Q(data_termino__gte=inicio)
-                    & Q(data_termino__lte=fim)
-                ),
-            ),
+            atrasadas=Count('pk', filter=~Q(status='concluida') & Q(data_termino__lt=hoje)),
         )
         ocorrencias = (
             RespostaAuditoriaSGQ.objects.filter(auditoria__in=qs, valor=0)
@@ -372,7 +384,9 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             .order_by('-valor', 'auditoria__titulo')[:8]
         )
         return Response({
-            'semestre': rotulo,
+            'ano': ano,
+            'anos': anos,
+            'total': contagem['total'],
             'atrasadas': contagem['atrasadas'],
             'planejamento': contagem['planejamento'],
             'execucao': contagem['execucao'],
@@ -410,6 +424,53 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         alvo.delete()
         record_audit(request.user, 'sgq.auditoria.excluida', f'Auditorias excluídas: {", ".join(codigos)}.')
         return Response({'excluidas': len(codigos)})
+
+    @action(detail=True, methods=['post'], url_path='enviar-cronograma')
+    def enviar_cronograma(self, request, pk=None):
+        auditoria = self.get_object()
+        try:
+            send_cronograma_auditoria_email(
+                request.user,
+                auditoria,
+                to_emails=request.data.get('to') or request.data.get('email'),
+                cc_emails=request.data.get('cc') or request.data.get('emailCopia'),
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({'error': f'Falha ao enviar e-mail: {exc}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        destinatarios = parse_emails(request.data.get('to') or request.data.get('email'))
+        record_audit(
+            request.user,
+            'sgq.auditoria.cronograma_enviado',
+            f'Cronograma da auditoria {auditoria.codigo} enviado para {", ".join(destinatarios)}.',
+        )
+        return Response({
+            'success': True,
+            'message': f'Cronograma enviado para {", ".join(destinatarios)}.',
+        })
+
+    @action(detail=True, methods=['post'])
+    def concluir(self, request, pk=None):
+        auditoria = self.get_object()
+        if not usuario_e_auditor_lider(request.user, auditoria.auditor_lider):
+            return Response(
+                {'detail': 'Só o auditor líder pode concluir a auditoria.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if auditoria.status == 'concluida':
+            return Response({'detail': 'Esta auditoria já está concluída.'}, status=status.HTTP_400_BAD_REQUEST)
+        pendencias = pendencias_questionario(auditoria.normas.all(), auditoria.respostas.all())
+        if pendencias:
+            return Response({'detail': ' '.join(pendencias)}, status=status.HTTP_400_BAD_REQUEST)
+        auditoria.status = 'concluida'
+        auditoria.save(update_fields=['status', 'atualizado_em'])
+        record_audit(
+            request.user,
+            'sgq.auditoria.concluida',
+            f'Auditoria {auditoria.codigo} concluída pelo auditor líder.',
+        )
+        return Response(self.get_serializer(auditoria).data)
 
     @action(detail=True, methods=['get'])
     def execucao(self, request, pk=None):
@@ -475,6 +536,9 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             request.user, 'sgq.auditoria.resposta',
             f'Auditoria {auditoria.codigo}: item {item.codigo or item.titulo[:60]} → {resposta.opcao_texto or "sem resposta"}.',
         )
+        notify_auditoria_changed(
+            auditoria_id=auditoria.pk, item_id=item.pk, actor_user_id=request.user.pk, event='resposta',
+        )
         return self._resposta_atualizada(resposta)
 
     @action(detail=True, methods=['post'], url_path='anexos', parser_classes=[MultiPartParser, FormParser])
@@ -520,6 +584,9 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             request.user, 'sgq.auditoria.anexo',
             f'Auditoria {auditoria.codigo}: anexo "{arquivo.name}" no item {item.codigo or item.titulo[:60]}.',
         )
+        notify_auditoria_changed(
+            auditoria_id=auditoria.pk, item_id=item.pk, actor_user_id=request.user.pk, event='anexo',
+        )
         return self._resposta_atualizada(resposta)
 
     @action(detail=True, methods=['get', 'delete'], url_path=r'anexos/(?P<anexo_id>\d+)')
@@ -539,6 +606,9 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         anexo.arquivo.delete(save=False)
         anexo.delete()
         record_audit(request.user, 'sgq.auditoria.anexo.excluido', f'Auditoria {auditoria.codigo}: anexo "{nome}" excluído.')
+        notify_auditoria_changed(
+            auditoria_id=auditoria.pk, item_id=resposta.item_id, actor_user_id=request.user.pk, event='anexo',
+        )
         return self._resposta_atualizada(resposta)
 
 
@@ -556,8 +626,15 @@ class NormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.has_funcao('SGQ', 'gerenciar-normas'):
             self.permission_denied(request, message=_GERENCIAR_NORMAS_DETAIL)
 
-    def _escopo(self):
+    def _editaveis(self):
         return self.scope_queryset(self.queryset, filial_field='filial', admin_bypass=False)
+
+    def _visiveis(self):
+        return queryset_normas_visiveis(_filial_da_sessao(self.request)).select_related('criado_por')
+
+    def _negar_se_somente_uso(self, norma):
+        if norma.filial != _filial_da_sessao(self.request):
+            self.permission_denied(self.request, message=_NORMA_SOMENTE_USO_DETAIL)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -565,7 +642,7 @@ class NormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return context
 
     def get_queryset(self):
-        qs = self._escopo()
+        qs = self._visiveis()
         if self.action != 'list':
             return qs
         params = self.request.query_params
@@ -590,11 +667,14 @@ class NormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         record_audit(self.request.user, 'sgq.norma.criada', f'Norma {norma.nome} criada.')
 
     def perform_update(self, serializer):
+        self._negar_se_somente_uso(serializer.instance)
         norma = serializer.save(**_dados_atualizacao_norma(self.request.user))
         record_audit(self.request.user, 'sgq.norma.atualizada', f'Norma {norma.nome} atualizada.')
 
     def destroy(self, request, *args, **kwargs):
-        if RespostaAuditoriaSGQ.objects.filter(item__norma=self.get_object()).exists():
+        norma = self.get_object()
+        self._negar_se_somente_uso(norma)
+        if RespostaAuditoriaSGQ.objects.filter(item__norma=norma).exists():
             return Response({'detail': _NORMA_RESPONDIDA_DETAIL}, status=status.HTTP_400_BAD_REQUEST)
         return super().destroy(request, *args, **kwargs)
 
@@ -604,7 +684,7 @@ class NormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def resumo(self, request):
-        contagem = self._escopo().aggregate(
+        contagem = self._visiveis().aggregate(
             total=Count('pk'),
             n_ativas=Count('pk', filter=Q(ativa=True)),
             n_inativas=Count('pk', filter=Q(ativa=False)),
@@ -616,7 +696,10 @@ class NormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         ids = request.data.get('ids') if isinstance(request.data, dict) else None
         if not isinstance(ids, list) or not ids:
             return Response({'detail': 'Selecione ao menos uma norma.'}, status=status.HTTP_400_BAD_REQUEST)
-        alvo = self._escopo().filter(pk__in=[str(i) for i in ids])
+        visiveis = self._visiveis().filter(pk__in=[str(i) for i in ids])
+        if visiveis.exclude(filial=_filial_da_sessao(request)).exists():
+            return Response({'detail': _NORMA_SOMENTE_USO_DETAIL}, status=status.HTTP_403_FORBIDDEN)
+        alvo = self._editaveis().filter(pk__in=[str(i) for i in ids])
         nomes = list(alvo.values_list('nome', flat=True))
         if not nomes:
             return Response({'detail': 'Nenhuma norma encontrada.'}, status=status.HTTP_404_NOT_FOUND)
@@ -628,11 +711,14 @@ class NormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], url_path='tipos-resposta')
     def tipos_resposta(self, request, pk=None):
-        """Tipos de resposta da unidade da norma, para as perguntas (não exige acesso ao cadastro de tipos)."""
+        """Tipos da unidade da norma e, nas demais, os compartilhados pela matriz."""
         norma = self.get_object()
-        tipos = TipoRespostaSGQ.objects.filter(filial=norma.filial).order_by('nome')
+        tipos = queryset_tipos_visiveis(norma.filial).order_by('nome')
         return Response([
-            {'id': str(tipo.pk), 'codigo': tipo.codigo, 'nome': tipo.nome, 'opcoes': tipo.opcoes}
+            {
+                'id': str(tipo.pk), 'codigo': tipo.codigo, 'nome': tipo.nome, 'opcoes': tipo.opcoes,
+                'compartilhada': tipo.filial != norma.filial,
+            }
             for tipo in tipos
         ])
 
@@ -654,6 +740,7 @@ class NormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     def importar_itens(self, request, pk=None):
         """Importa requisitos/subitens de uma lista de verificação (.xlsx). `dryRun=true` só analisa."""
         norma = self.get_object()
+        self._negar_se_somente_uso(norma)
         arquivo = request.FILES.get('file') or request.FILES.get('arquivo')
         if not arquivo:
             return Response({'detail': 'Arquivo Excel (.xlsx) não fornecido.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -726,7 +813,7 @@ class CategoriaAuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet)
         return self.scope_queryset(qs, filial_field='filial', admin_bypass=False)
 
     def _normas(self):
-        return self.scope_queryset(NormaSGQ.objects.all(), filial_field='filial', admin_bypass=False)
+        return queryset_normas_visiveis(_filial_da_sessao(self.request))
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -795,9 +882,13 @@ class CategoriaAuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet)
 
     @action(detail=False, methods=['get'])
     def sugestoes(self, request):
-        """Normas ativas da filial que podem ser vinculadas à categoria."""
+        """Normas ativas da filial, e as compartilhadas pela matriz, que podem ser vinculadas à categoria."""
+        filial = _filial_da_sessao(request)
         normas = self._normas().filter(ativa=True).order_by('nome')
-        return Response({'normas': [{'id': str(n.pk), 'nome': n.nome, 'descricao': n.descricao} for n in normas]})
+        return Response({'normas': [
+            {'id': str(n.pk), 'nome': n.nome, 'descricao': n.descricao, 'compartilhada': n.filial != filial}
+            for n in normas
+        ]})
 
     @action(detail=False, methods=['post'], url_path='excluir-lote')
     def excluir_lote(self, request):
@@ -835,8 +926,15 @@ class TipoRespostaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.has_funcao('SGQ', 'gerenciar-tipos-resposta'):
             self.permission_denied(request, message=_GERENCIAR_TIPOS_RESPOSTA_DETAIL)
 
-    def _escopo(self):
+    def _editaveis(self):
         return self.scope_queryset(self.queryset, filial_field='filial', admin_bypass=False)
+
+    def _visiveis(self):
+        return queryset_tipos_visiveis(_filial_da_sessao(self.request))
+
+    def _negar_se_somente_uso(self, tipo):
+        if tipo.filial != _filial_da_sessao(self.request):
+            self.permission_denied(self.request, message=_TIPO_SOMENTE_USO_DETAIL)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -844,7 +942,7 @@ class TipoRespostaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return context
 
     def get_queryset(self):
-        qs = self._escopo()
+        qs = self._visiveis()
         if self.action != 'list':
             return qs
         params = self.request.query_params
@@ -878,11 +976,14 @@ class TipoRespostaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         record_audit(self.request.user, 'sgq.tipo_resposta.criado', f'Tipo de resposta {tipo.codigo} ({tipo.nome}) criado.')
 
     def perform_update(self, serializer):
+        self._negar_se_somente_uso(serializer.instance)
         tipo = serializer.save()
         record_audit(self.request.user, 'sgq.tipo_resposta.atualizado', f'Tipo de resposta {tipo.codigo} ({tipo.nome}) atualizado.')
 
     def destroy(self, request, *args, **kwargs):
-        if self.get_object().itens.exists():
+        tipo = self.get_object()
+        self._negar_se_somente_uso(tipo)
+        if tipo.itens.exists():
             return Response({'detail': _TIPO_RESPOSTA_EM_USO_DETAIL}, status=status.HTTP_400_BAD_REQUEST)
         return super().destroy(request, *args, **kwargs)
 
@@ -892,7 +993,7 @@ class TipoRespostaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def resumo(self, request):
-        contagem = self._escopo().aggregate(
+        contagem = self._visiveis().aggregate(
             total=Count('pk'),
             n_publicas=Count('pk', filter=Q(publica=True)),
             n_privadas=Count('pk', filter=Q(publica=False)),
@@ -904,7 +1005,10 @@ class TipoRespostaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         ids = request.data.get('ids') if isinstance(request.data, dict) else None
         if not isinstance(ids, list) or not ids:
             return Response({'detail': 'Selecione ao menos um tipo de resposta.'}, status=status.HTTP_400_BAD_REQUEST)
-        alvo = self._escopo().filter(pk__in=[str(i) for i in ids])
+        visiveis = self._visiveis().filter(pk__in=[str(i) for i in ids])
+        if visiveis.exclude(filial=_filial_da_sessao(request)).exists():
+            return Response({'detail': _TIPO_SOMENTE_USO_DETAIL}, status=status.HTTP_403_FORBIDDEN)
+        alvo = self._editaveis().filter(pk__in=[str(i) for i in ids])
         nomes = [f'{tipo.codigo} ({tipo.nome})' for tipo in alvo]
         if not nomes:
             return Response({'detail': 'Nenhum tipo de resposta encontrado.'}, status=status.HTTP_404_NOT_FOUND)
@@ -935,16 +1039,20 @@ class ItemNormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.has_funcao('SGQ', 'gerenciar-normas'):
             self.permission_denied(request, message=_GERENCIAR_NORMAS_DETAIL)
 
-    def _normas(self):
-        return self.scope_queryset(NormaSGQ.objects.all(), filial_field='filial', admin_bypass=False)
+    def _visiveis(self):
+        return queryset_normas_visiveis(_filial_da_sessao(self.request))
+
+    def _negar_se_somente_uso(self, norma):
+        if norma.filial != _filial_da_sessao(self.request):
+            self.permission_denied(self.request, message=_NORMA_SOMENTE_USO_DETAIL)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
-        context['normas'] = self._normas()
+        context['normas'] = self._visiveis()
         return context
 
     def get_queryset(self):
-        qs = ItemNormaSGQ.objects.filter(norma__in=self._normas())
+        qs = ItemNormaSGQ.objects.filter(norma__in=self._visiveis())
         if self.action == 'list':
             norma = (self.request.query_params.get('norma') or '').strip()
             if not norma.isdigit():
@@ -954,12 +1062,14 @@ class ItemNormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         norma = serializer.validated_data['norma']
+        self._negar_se_somente_uso(norma)
         parent = serializer.validated_data.get('parent')
         item = serializer.save(ordem=_proxima_ordem(norma.pk, parent.pk if parent else None))
         _marcar_norma_atualizada(norma.pk, self.request.user)
         record_audit(self.request.user, 'sgq.norma.item.criado', f'Item "{item.titulo}" criado na norma {norma.nome}.')
 
     def perform_update(self, serializer):
+        self._negar_se_somente_uso(serializer.instance.norma)
         anterior = serializer.instance.parent_id
         novo_parent = serializer.validated_data.get('parent', serializer.instance.parent)
         extra = {}
@@ -979,6 +1089,7 @@ class ItemNormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         _marcar_norma_atualizada(norma_id, self.request.user)
 
     def destroy(self, request, *args, **kwargs):
+        self._negar_se_somente_uso(self.get_object().norma)
         try:
             with transaction.atomic():
                 return super().destroy(request, *args, **kwargs)
@@ -988,6 +1099,7 @@ class ItemNormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def mover(self, request, pk=None):
         item = self.get_object()
+        self._negar_se_somente_uso(item.norma)
         direcao = request.data.get('direcao') if isinstance(request.data, dict) else None
         if direcao not in ('cima', 'baixo'):
             return Response({'detail': 'Direção inválida.'}, status=status.HTTP_400_BAD_REQUEST)

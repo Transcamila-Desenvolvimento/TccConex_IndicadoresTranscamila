@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Chart as ChartJS,
   ArcElement,
@@ -74,8 +74,14 @@ const rotuloDaBarra: Plugin<'bar'> = {
 
 const SGQAuditoriasVisaoGeral: React.FC = () => {
   const { selectedFilial } = useAuth();
-  const visaoQuery = useSgqAuditoriasVisao(selectedFilial);
+  const anoAtual = new Date().getFullYear();
+  const [ano, setAno] = useState(anoAtual);
+  const visaoQuery = useSgqAuditoriasVisao(selectedFilial, ano);
   const visao = visaoQuery.data;
+  const anos = useMemo(() => {
+    const lista = new Set<number>([anoAtual, ano, ...(visao?.anos ?? [])]);
+    return [...lista].sort((a, b) => b - a);
+  }, [ano, anoAtual, visao?.anos]);
 
   const status = useMemo(() => [
     { label: 'Em planejamento', valor: visao?.planejamento ?? 0 },
@@ -111,6 +117,18 @@ const SGQAuditoriasVisaoGeral: React.FC = () => {
 
   return (
     <section className="view active sgq-aud-visao-page" aria-label="Visão geral das auditorias">
+      <div className="sgq-aud-visao-topo">
+        <label className="sgq-aud-visao-ano">
+          Ano
+          <select
+            value={ano}
+            onChange={(evento) => setAno(Number(evento.target.value))}
+            aria-label="Ano das auditorias"
+          >
+            {anos.map((opcao) => <option key={opcao} value={opcao}>{opcao}</option>)}
+          </select>
+        </label>
+      </div>
       <QueryDataPanel
         query={visaoQuery}
         variant="compact"
@@ -120,17 +138,27 @@ const SGQAuditoriasVisaoGeral: React.FC = () => {
       >
       <div className="sgq-aud-visao">
         <article className="sgq-aud-card sgq-aud-kpi">
-          <header className="sgq-aud-card-head">
-            <span className="sgq-aud-alert" aria-hidden="true">
-              <i className="bi bi-exclamation-lg" />
-            </span>
-            <div>
-              <h2>Auditorias atrasadas</h2>
-              <p>{visao?.semestre ?? 'Semestre atual'}</p>
+          <div className="sgq-aud-kpi-par">
+            <div className="sgq-aud-kpi-item">
+              <header className="sgq-aud-card-head">
+                <div>
+                  <h2>Quantidade total</h2>
+                </div>
+              </header>
+              <strong className="sgq-aud-kpi-valor">{visao?.total ?? 0}</strong>
             </div>
-          </header>
-          <strong className="sgq-aud-kpi-valor">{visao?.atrasadas ?? 0}</strong>
-          <span className="sgq-aud-kpi-rodape">Contagem</span>
+            <div className="sgq-aud-kpi-item">
+              <header className="sgq-aud-card-head">
+                <span className="sgq-aud-alert" aria-hidden="true">
+                  <i className="bi bi-exclamation-lg" />
+                </span>
+                <div>
+                  <h2>Atrasadas</h2>
+                </div>
+              </header>
+              <strong className="sgq-aud-kpi-valor">{visao?.atrasadas ?? 0}</strong>
+            </div>
+          </div>
         </article>
 
         <article className="sgq-aud-card">

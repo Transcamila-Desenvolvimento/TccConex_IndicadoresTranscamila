@@ -91,6 +91,11 @@ def exportar(destino: Path) -> dict:
             'auditores': auditoria.auditores or [],
             'status': auditoria.status,
             'escopo': auditoria.escopo,
+            'criterios': auditoria.criterios,
+            'processosAreas': auditoria.processos_areas,
+            'responsaveisProcessos': auditoria.responsaveis_processos,
+            'metodologia': auditoria.metodologia,
+            'planejamento': auditoria.planejamento or [],
             'normas': list(auditoria.normas.order_by('nome').values_list('nome', flat=True)),
         })
     pacote = {'tiposResposta': tipos, 'normas': normas, 'categorias': categorias, 'auditorias': auditorias}
@@ -177,6 +182,11 @@ class Command(BaseCommand):
                     auditores=dados.get('auditores') or [],
                     status=dados.get('status') or 'planejamento',
                     escopo=dados.get('escopo') or '',
+                    criterios=dados.get('criterios') or '',
+                    processos_areas=dados.get('processosAreas') or '',
+                    responsaveis_processos=dados.get('responsaveisProcessos') or '',
+                    metodologia=dados.get('metodologia') or '',
+                    planejamento=dados.get('planejamento') or [],
                 )
                 vinculadas = [normas[(dados['filial'], nome)] for nome in dados.get('normas') or [] if (dados['filial'], nome) in normas]
                 if vinculadas:

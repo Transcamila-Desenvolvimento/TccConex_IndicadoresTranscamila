@@ -6,6 +6,7 @@ interface NormaOpcao {
   nome: string;
   descricao?: string;
   ativa?: boolean;
+  compartilhada?: boolean;
 }
 
 interface SGQNormasPickerProps {
@@ -121,6 +122,7 @@ const SGQNormasPicker: React.FC<SGQNormasPickerProps> = ({
                       <strong>
                         {norma.nome}
                         {norma.ativa === false && <em> · inativa</em>}
+                        {norma.compartilhada && <em> · compartilhada</em>}
                       </strong>
                       {norma.descricao && <small>{norma.descricao}</small>}
                     </span>

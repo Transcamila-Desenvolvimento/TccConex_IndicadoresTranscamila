@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
+import SGQAuditoriaCronogramaEmailModal from './SGQAuditoriaCronogramaEmailModal';
 import SGQAuditoriaResultados from './SGQAuditoriaResultados';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
@@ -17,6 +18,7 @@ import type {
   SgqAuditoria,
   SgqAuditoriaOrdering,
   SgqAuditoriaPayload,
+  SgqAuditoriaPlanejamento,
   SgqAuditoriaQueryParams,
   SgqAuditoriaStatus,
   SgqPessoa,
@@ -100,10 +102,11 @@ interface SeletorPessoaProps {
   placeholder: string;
   vazio: string;
   obrigatorio?: boolean;
+  disabled?: boolean;
   onChange: (valor: string) => void;
 }
 
-const SeletorPessoa: React.FC<SeletorPessoaProps> = ({ valor, opcoes, carregando, placeholder, vazio, obrigatorio = true, onChange }) => {
+const SeletorPessoa: React.FC<SeletorPessoaProps> = ({ valor, opcoes, carregando, placeholder, vazio, obrigatorio = true, disabled = false, onChange }) => {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
   const [destaque, setDestaque] = useState(0);
@@ -154,7 +157,9 @@ const SeletorPessoa: React.FC<SeletorPessoaProps> = ({ valor, opcoes, carregando
         className={`sgq-pessoa-campo${aberto ? ' is-aberto' : ''}`}
         aria-haspopup="listbox"
         aria-expanded={aberto}
+        disabled={disabled}
         onClick={() => {
+          if (disabled) return;
           setBusca('');
           setDestaque(Math.max(opcoes.findIndex((pessoa) => pessoa.nome === valor), 0));
           setAberto((atual) => !atual);
@@ -176,7 +181,7 @@ const SeletorPessoa: React.FC<SeletorPessoaProps> = ({ valor, opcoes, carregando
       {obrigatorio && (
         <input className="sgq-pessoa-validacao" required value={valor} onChange={() => undefined} tabIndex={-1} aria-hidden="true" />
       )}
-      {aberto && (
+      {aberto && !disabled && (
         <div className="sgq-pessoa-menu">
           <div className="sgq-pessoa-busca">
             <i className="bi bi-search" aria-hidden="true" />
@@ -232,6 +237,13 @@ const SeletorPessoa: React.FC<SeletorPessoaProps> = ({ valor, opcoes, carregando
   );
 };
 
+const CAMPOS_PLANO_OPCIONAIS = [
+  ['criterios', 'Critérios', 'Normas, políticas e requisitos usados como referência.'],
+  ['processosAreas', 'Processos e áreas a serem auditados', 'Processos e áreas incluídos na auditoria.'],
+  ['responsaveisProcessos', 'Responsáveis pelo processo', 'Quem responde pelos processos auditados.'],
+  ['metodologia', 'Metodologia', 'Como a auditoria será conduzida.'],
+] as const;
+
 const emptyForm: SgqAuditoriaPayload = {
   titulo: '',
   categoria: '',
@@ -241,12 +253,31 @@ const emptyForm: SgqAuditoriaPayload = {
   auditores: [],
   status: 'planejamento',
   escopo: '',
+  criterios: '',
+  processosAreas: '',
+  responsaveisProcessos: '',
+  metodologia: '',
+  planejamento: [],
 };
 
 function formatarData(iso: string) {
   if (!iso) return '—';
   const [ano, mes, dia] = iso.split('-').map(Number);
   return new Date(ano, mes - 1, dia).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function horaAgenda(valor: string) {
+  return valor.slice(0, 5).replace(':', 'h');
+}
+
+function mesmoNome(a: string, b: string) {
+  return a.trim().toLocaleLowerCase('pt-BR') === b.trim().toLocaleLowerCase('pt-BR');
+}
+
+function rotuloPlanejamento(item: SgqAuditoriaPlanejamento) {
+  if (!item.data || !item.horaInicio || !item.horaFim || !item.atividade.trim()) return '';
+  const [ano, mes, dia] = item.data.split('-');
+  return `${dia}/${mes}/${ano} - ${horaAgenda(item.horaInicio)} às ${horaAgenda(item.horaFim)} - ${item.atividade.trim()}`;
 }
 
 const SGQAuditorias: React.FC = () => {
@@ -263,9 +294,11 @@ const SGQAuditorias: React.FC = () => {
   const [acoesAbertas, setAcoesAbertas] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<SgqAuditoria | null>(null);
+  const podeAlterarEquipe = !editando || mesmoNome(user?.name ?? '', editando.auditorLider);
   const [form, setForm] = useState<SgqAuditoriaPayload>(emptyForm);
   const [abaModal, setAbaModal] = useState<AbaModal>('dados');
   const [relatorioDe, setRelatorioDe] = useState<SgqAuditoria | null>(null);
+  const [cronogramaDe, setCronogramaDe] = useState<SgqAuditoria | null>(null);
   const [tipoRelatorio, setTipoRelatorio] = useState<'detalhado' | 'analitico'>('detalhado');
 
   useEffect(() => {
@@ -385,9 +418,34 @@ const SGQAuditorias: React.FC = () => {
       auditores: auditoria.auditores ?? [],
       status: auditoria.status,
       escopo: auditoria.escopo,
+      criterios: auditoria.criterios ?? '',
+      processosAreas: auditoria.processosAreas ?? '',
+      responsaveisProcessos: auditoria.responsaveisProcessos ?? '',
+      metodologia: auditoria.metodologia ?? '',
+      planejamento: auditoria.planejamento ?? [],
     });
     setAbaModal('visao');
     setModalAberto(true);
+  };
+
+  const periodoValido = Boolean(form.dataInicio && form.dataTermino && form.dataTermino >= form.dataInicio);
+
+  const alterarPlanejamento = (indice: number, parcial: Partial<SgqAuditoriaPlanejamento>) => {
+    setForm((atual) => ({
+      ...atual,
+      planejamento: atual.planejamento.map((item, i) => (i === indice ? { ...item, ...parcial } : item)),
+    }));
+  };
+
+  const adicionarPlanejamento = () => {
+    if (!periodoValido) return;
+    setForm((atual) => ({
+      ...atual,
+      planejamento: [
+        ...atual.planejamento,
+        { data: atual.dataInicio, horaInicio: '08:00', horaFim: '08:30', atividade: '' },
+      ],
+    }));
   };
 
   const fecharModal = () => {
@@ -399,6 +457,10 @@ const SGQAuditorias: React.FC = () => {
   const enviar = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formEl = e.currentTarget;
+    const escopoEl = formEl.querySelector<HTMLTextAreaElement>('textarea');
+    if (escopoEl) {
+      escopoEl.setCustomValidity(escopoEl.value.trim() ? '' : 'Informe o escopo / objetivo.');
+    }
     const invalido = formEl.querySelector<HTMLElement>('input:invalid, select:invalid, textarea:invalid');
     if (invalido) {
       const aba = invalido.closest<HTMLElement>('[data-aba]')?.dataset.aba as AbaModal | undefined;
@@ -406,8 +468,26 @@ const SGQAuditorias: React.FC = () => {
       window.setTimeout(() => formEl.reportValidity());
       return;
     }
+    if (form.planejamento.some((item) => item.horaInicio && item.horaFim && item.horaFim <= item.horaInicio)) {
+      setAbaModal('planejamento');
+      alert('O horário de término precisa ser depois do início.');
+      return;
+    }
     salvar.mutate(
-      { id: editando?.id, payload: { ...form, titulo: form.titulo.trim(), categoria: form.categoria.trim() } },
+      {
+        id: editando?.id,
+        payload: {
+          ...form,
+          titulo: form.titulo.trim(),
+          categoria: form.categoria.trim(),
+          escopo: form.escopo.trim(),
+          criterios: form.criterios.trim(),
+          processosAreas: form.processosAreas.trim(),
+          responsaveisProcessos: form.responsaveisProcessos.trim(),
+          metodologia: form.metodologia.trim(),
+          planejamento: form.planejamento.map((item) => ({ ...item, atividade: item.atividade.trim() })),
+        },
+      },
       {
         onSuccess: () => { setModalAberto(false); setEditando(null); },
         onError: (err) => alert(getSgqAuditoriaErrorMessage(err)),
@@ -467,6 +547,20 @@ const SGQAuditorias: React.FC = () => {
                   <span className="reports-dropdown-item-left">
                     <i className="bi bi-file-earmark-bar-graph" aria-hidden="true" />
                     Relatórios
+                  </span>
+                </span>
+              )}
+              {auditoriaSelecionada && (
+                <span
+                  className="reports-dropdown-item"
+                  onClick={() => {
+                    setCronogramaDe(auditoriaSelecionada);
+                    setAcoesAbertas(false);
+                  }}
+                >
+                  <span className="reports-dropdown-item-left">
+                    <i className="bi bi-envelope" aria-hidden="true" />
+                    Enviar cronograma
                   </span>
                 </span>
               )}
@@ -747,6 +841,10 @@ const SGQAuditorias: React.FC = () => {
         </div>
       )}
 
+      {cronogramaDe && (
+        <SGQAuditoriaCronogramaEmailModal auditoria={cronogramaDe} onClose={() => setCronogramaDe(null)} />
+      )}
+
       {modalAberto && (
         <div className="search-backdrop sgq-aud-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) fecharModal(); }}>
           <div className="modal-card sgq-aud-modal is-fixo" role="dialog" aria-modal="true" aria-labelledby="sgq-aud-modal-title">
@@ -839,6 +937,34 @@ const SGQAuditorias: React.FC = () => {
                         <dd className="sgq-aud-visao-texto">{editando.escopo}</dd>
                       </div>
                     )}
+                    {CAMPOS_PLANO_OPCIONAIS.map(([campo, rotulo]) => {
+                      const texto = (editando[campo] ?? '').trim();
+                      if (!texto) return null;
+                      return (
+                        <div key={campo} className="sgq-aud-ficha-largo">
+                          <dt>{rotulo}</dt>
+                          <dd className="sgq-aud-visao-texto">{texto}</dd>
+                        </div>
+                      );
+                    })}
+                    {(editando.planejamento?.length ?? 0) > 0 && (
+                      <div className="sgq-aud-ficha-largo">
+                        <details className="sgq-aud-plano-expansivel">
+                          <summary>
+                            <span>Planejamento</span>
+                            <span className="sgq-aud-plano-expansivel-meta">
+                              {editando.planejamento.length}
+                              <i className="bi bi-chevron-down" aria-hidden="true" />
+                            </span>
+                          </summary>
+                          <ul className="sgq-aud-plano-lista">
+                            {editando.planejamento.map((item, indice) => (
+                              <li key={`${item.data}-${indice}`}>{rotuloPlanejamento(item)}</li>
+                            ))}
+                          </ul>
+                        </details>
+                      </div>
+                    )}
                   </dl>
                   <footer className="sgq-aud-ficha-rodape">
                     <span>Criada por {editando.criadoPor || '—'} · {formatarDataHora(editando.criadoEm)}</span>
@@ -900,6 +1026,7 @@ const SGQAuditorias: React.FC = () => {
                     carregando={sugestoesQuery.isLoading}
                     placeholder="Selecione o auditor líder"
                     vazio="Nenhum usuário com o SGQ liberado."
+                    disabled={!podeAlterarEquipe}
                     onChange={(nome) => setForm({
                       ...form,
                       auditorLider: nome,
@@ -908,19 +1035,31 @@ const SGQAuditorias: React.FC = () => {
                   />
                 </div>
                 <div className="is-wide sgq-aud-campo">
-                  <span>Auditores</span>
+                  <span>Auditores <em>*</em></span>
+                  <input
+                    className="sgq-pessoa-validacao"
+                    required
+                    value={form.auditores.join(', ')}
+                    onChange={() => undefined}
+                    onInvalid={(e) => e.currentTarget.setCustomValidity('Selecione ao menos um auditor.')}
+                    ref={(elemento) => { elemento?.setCustomValidity(''); }}
+                    tabIndex={-1}
+                    aria-hidden="true"
+                  />
                   {form.auditores.length > 0 && (
                     <div className="sgq-aud-auditores">
                       {form.auditores.map((nome) => (
                         <span key={nome} className="sgq-aud-auditor">
                           <PessoaResumo nome={nome} foto={fotosPorNome.get(nome)} />
-                          <button
-                            type="button"
-                            aria-label={`Remover ${nome}`}
-                            onClick={() => setForm({ ...form, auditores: form.auditores.filter((auditor) => auditor !== nome) })}
-                          >
-                            <i className="bi bi-x" aria-hidden="true" />
-                          </button>
+                          {podeAlterarEquipe && (
+                            <button
+                              type="button"
+                              aria-label={`Remover ${nome}`}
+                              onClick={() => setForm({ ...form, auditores: form.auditores.filter((auditor) => auditor !== nome) })}
+                            >
+                              <i className="bi bi-x" aria-hidden="true" />
+                            </button>
+                          )}
                         </span>
                       ))}
                     </div>
@@ -932,11 +1071,15 @@ const SGQAuditorias: React.FC = () => {
                     carregando={sugestoesQuery.isLoading}
                     placeholder="Adicionar auditor"
                     vazio="Nenhum outro usuário com o SGQ liberado."
+                    disabled={!podeAlterarEquipe}
                     onChange={(nome) => {
                       if (!nome || nome === form.auditorLider || form.auditores.includes(nome)) return;
                       setForm({ ...form, auditores: [...form.auditores, nome] });
                     }}
                   />
+                  {editando && !podeAlterarEquipe && (
+                    <small className="sgq-aud-plano-ajuda">Só o auditor líder pode alterar a equipe.</small>
+                  )}
                 </div>
               </fieldset>
               <fieldset data-aba="planejamento" hidden={abaModal !== 'planejamento'} disabled={!canManage || salvar.isPending}>
@@ -961,32 +1104,166 @@ const SGQAuditorias: React.FC = () => {
                     onChange={(e) => setForm({ ...form, dataTermino: e.target.value })}
                   />
                 </label>
+                <div className="is-wide sgq-aud-plano">
+                  <span>Planejamento <em>*</em></span>
+                  <input
+                    className="sgq-pessoa-validacao"
+                    required
+                    value={form.planejamento.length ? 'ok' : ''}
+                    onChange={() => undefined}
+                    onInvalid={(e) => e.currentTarget.setCustomValidity('Inclua ao menos uma atividade no planejamento.')}
+                    ref={(elemento) => { elemento?.setCustomValidity(''); }}
+                    tabIndex={-1}
+                    aria-hidden="true"
+                  />
+                  {form.planejamento.length > 0 && (
+                    <div className="sgq-aud-plano-cabecalho" aria-hidden="true">
+                      <span>Data</span>
+                      <span>Horário</span>
+                      <span>Atividade</span>
+                    </div>
+                  )}
+                  {form.planejamento.map((item, indice) => {
+                    const foraDoPeriodo = Boolean(
+                      item.data && periodoValido && (item.data < form.dataInicio || item.data > form.dataTermino),
+                    );
+                    const horarioInvalido = Boolean(item.horaInicio && item.horaFim && item.horaFim <= item.horaInicio);
+                    return (
+                      <div key={indice} className="sgq-aud-plano-item">
+                        <label>
+                          <span className="sgq-sr-only">Data</span>
+                          <input
+                            className="form-input"
+                            type="date"
+                            required
+                            min={form.dataInicio || undefined}
+                            max={form.dataTermino || undefined}
+                            value={item.data}
+                            aria-invalid={foraDoPeriodo || undefined}
+                            onChange={(e) => alterarPlanejamento(indice, { data: e.target.value })}
+                          />
+                        </label>
+                        <div className="sgq-aud-plano-horario">
+                          <label>
+                            <span className="sgq-sr-only">Horário de início</span>
+                            <input
+                              className="form-input"
+                              type="time"
+                              required
+                              value={item.horaInicio}
+                              aria-invalid={horarioInvalido || undefined}
+                              onChange={(e) => alterarPlanejamento(indice, { horaInicio: e.target.value })}
+                            />
+                          </label>
+                          <span>às</span>
+                          <label>
+                            <span className="sgq-sr-only">Horário de término</span>
+                            <input
+                              className="form-input"
+                              type="time"
+                              required
+                              value={item.horaFim}
+                              aria-invalid={horarioInvalido || undefined}
+                              onChange={(e) => alterarPlanejamento(indice, { horaFim: e.target.value })}
+                            />
+                          </label>
+                        </div>
+                        <label>
+                          <span className="sgq-sr-only">Atividade</span>
+                          <input
+                            className="form-input"
+                            required
+                            maxLength={200}
+                            value={item.atividade}
+                            placeholder="Reunião de Abertura"
+                            onChange={(e) => alterarPlanejamento(indice, { atividade: e.target.value })}
+                          />
+                        </label>
+                        {canManage && (
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            aria-label={`Remover ${item.atividade.trim() || 'atividade'}`}
+                            onClick={() => setForm({
+                              ...form,
+                              planejamento: form.planejamento.filter((_, i) => i !== indice),
+                            })}
+                          >
+                            <i className="bi bi-trash3" aria-hidden="true" />
+                          </button>
+                        )}
+                        {(foraDoPeriodo || horarioInvalido) && (
+                          <p className="sgq-aud-plano-rotulo is-erro">
+                            {foraDoPeriodo
+                              ? 'A data precisa estar dentro do período da auditoria.'
+                              : 'O horário de término precisa ser depois do início.'}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {canManage && (
+                    <button
+                      type="button"
+                      className="sgq-aud-plano-adicionar"
+                      disabled={!periodoValido}
+                      onClick={adicionarPlanejamento}
+                    >
+                      <i className="bi bi-plus-lg" aria-hidden="true" />
+                      Adicionar atividade
+                    </button>
+                  )}
+                  {!periodoValido && (
+                    <small className="sgq-aud-plano-ajuda">Informe a data de início e a de término para incluir o planejamento.</small>
+                  )}
+                </div>
                 <label className="is-wide">
-                  <span>Escopo / objetivo</span>
+                  <span>Escopo / objetivo <em>*</em></span>
                   <textarea
                     className="form-input"
                     rows={3}
+                    required
                     value={form.escopo}
-                    onChange={(e) => setForm({ ...form, escopo: e.target.value })}
+                    onChange={(e) => {
+                      e.currentTarget.setCustomValidity('');
+                      setForm({ ...form, escopo: e.target.value });
+                    }}
                     placeholder="Processos, áreas e critérios que serão auditados."
                   />
                 </label>
+                {CAMPOS_PLANO_OPCIONAIS.map(([campo, rotulo, placeholder]) => (
+                  <label key={campo} className="is-wide">
+                    <span>{rotulo}</span>
+                    <textarea
+                      className="form-input"
+                      rows={2}
+                      value={form[campo]}
+                      onChange={(e) => setForm({ ...form, [campo]: e.target.value })}
+                      placeholder={placeholder}
+                    />
+                  </label>
+                ))}
                 <div className="is-wide sgq-aud-status-picker" role="radiogroup" aria-label="Status">
                   <span>Status</span>
                   <div>
-                    {SGQ_AUDITORIA_STATUS_OPTIONS.map((opcao) => (
+                    {SGQ_AUDITORIA_STATUS_OPTIONS.map((opcao) => {
+                      const bloqueiaConclusao = opcao.value === 'concluida' && !mesmoNome(user?.name ?? '', form.auditorLider);
+                      return (
                       <button
                         key={opcao.value}
                         type="button"
                         role="radio"
                         aria-checked={form.status === opcao.value}
                         className={`sgq-aud-status is-${opcao.value}${form.status === opcao.value ? ' is-picked' : ''}`}
+                        disabled={bloqueiaConclusao}
+                        title={bloqueiaConclusao ? 'Só o auditor líder pode concluir a auditoria.' : undefined}
                         onClick={() => setForm({ ...form, status: opcao.value })}
                       >
                         <i className={`bi bi-${STATUS_ICON[opcao.value]}`} aria-hidden="true" />
                         {opcao.label}
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </fieldset>

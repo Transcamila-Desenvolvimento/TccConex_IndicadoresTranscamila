@@ -2018,6 +2018,11 @@ export interface SendSgqResumoEmailResponse {
   message: string;
 }
 
+export interface SendSgqCronogramaEmailParams {
+  to: string[];
+  cc?: string[];
+}
+
 export interface SgqSatisfacaoIndicadorQueryParams {
   filial?: string;
   motorista?: string;
@@ -2151,6 +2156,13 @@ export const SGQ_AUDITORIA_STATUS_LABEL: Record<SgqAuditoriaStatus, string> = {
   concluida: 'Concluída',
 };
 
+export interface SgqAuditoriaPlanejamento {
+  data: string;
+  horaInicio: string;
+  horaFim: string;
+  atividade: string;
+}
+
 export interface SgqAuditoria {
   id: string;
   codigo: string;
@@ -2163,6 +2175,11 @@ export interface SgqAuditoria {
   auditores: string[];
   status: SgqAuditoriaStatus;
   escopo: string;
+  criterios: string;
+  processosAreas: string;
+  responsaveisProcessos: string;
+  metodologia: string;
+  planejamento: SgqAuditoriaPlanejamento[];
   filial: string;
   atrasada: boolean;
   /** Perguntas das normas vinculadas à auditoria. */
@@ -2178,11 +2195,13 @@ export interface SgqAuditoriaNorma {
   id: string;
   nome: string;
   ativa: boolean;
+  /** Norma da matriz, disponível nesta filial só para uso. */
+  compartilhada?: boolean;
 }
 
 export type SgqAuditoriaPayload = Pick<
   SgqAuditoria,
-  'categoria' | 'titulo' | 'dataInicio' | 'dataTermino' | 'auditorLider' | 'auditores' | 'status' | 'escopo'
+  'categoria' | 'titulo' | 'dataInicio' | 'dataTermino' | 'auditorLider' | 'auditores' | 'status' | 'escopo' | 'criterios' | 'processosAreas' | 'responsaveisProcessos' | 'metodologia' | 'planejamento'
 >;
 
 export type SgqAuditoriaOrdering =
@@ -2208,7 +2227,9 @@ export interface SgqAuditoriaResumo {
 }
 
 export interface SgqAuditoriaVisao {
-  semestre: string;
+  ano: number;
+  anos: number[];
+  total: number;
   atrasadas: number;
   planejamento: number;
   execucao: number;
@@ -2237,7 +2258,10 @@ export interface SgqNorma {
   descricao: string;
   dataAtualizacao: string;
   emissor: string;
+  /** Compartilhamento com a outra filial. Só a matriz (Ibiporã) pode ativar. */
   publica: boolean;
+  /** Falso quando a norma foi lançada em outra filial e chegou aqui pelo compartilhamento. */
+  editavel: boolean;
   ativa: boolean;
   classificacoes: SgqNormaClassificacao[];
   areas: SgqNormaArea[];
@@ -2302,8 +2326,8 @@ export interface SgqCategoria {
 export type SgqCategoriaPayload = Pick<SgqCategoria, 'nome' | 'ativa'> & { normaIds: string[] };
 
 export interface SgqCategoriaSugestoes {
-  /** Normas ativas da filial disponíveis para vincular. */
-  normas: { id: string; nome: string; descricao: string }[];
+  /** Normas ativas da filial e, na outra unidade, as compartilhadas pela matriz. */
+  normas: { id: string; nome: string; descricao: string; compartilhada?: boolean }[];
 }
 
 export type SgqCategoriaOrdering =
@@ -2338,7 +2362,10 @@ export interface SgqTipoResposta {
   codigo: string;
   nome: string;
   opcoes: SgqTipoRespostaOpcao[];
+  /** Compartilhamento com a outra filial. Só a matriz (Ibiporã) pode ativar. */
   publica: boolean;
+  /** Falso quando o tipo foi lançado em outra filial e chegou aqui pelo compartilhamento. */
+  editavel: boolean;
   emissor: string;
   filial: string;
   criadoEm: string;
@@ -2398,7 +2425,9 @@ export interface SgqNormaItem {
 export type SgqNormaItemPayload = Omit<SgqNormaItem, 'id' | 'ordem'>;
 
 /** Tipo de resposta disponível para as perguntas de uma norma (unidade da norma). */
-export type SgqNormaTipoResposta = Pick<SgqTipoResposta, 'id' | 'codigo' | 'nome' | 'opcoes'>;
+export type SgqNormaTipoResposta = Pick<SgqTipoResposta, 'id' | 'codigo' | 'nome' | 'opcoes'> & {
+  compartilhada?: boolean;
+};
 
 export type SgqRespostaDestaque = '' | 'forte' | 'fraco';
 
@@ -4350,6 +4379,21 @@ export interface CamiloTermoAceiteLista {
   results: CamiloTermoAceite[];
 }
 
+export interface ArquivoAmbiente {
+  id: string;
+  nome: string;
+  ambiente: string;
+  filial: string;
+  mime: string;
+  tamanho: number;
+  criadoEm: string;
+  criadoPor: string;
+}
+
+export interface ArquivoAmbienteLista {
+  configurado: boolean;
+  arquivos: ArquivoAmbiente[];
+}
 
 
 

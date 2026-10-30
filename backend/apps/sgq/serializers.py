@@ -1,5 +1,7 @@
+from datetime import date
 from decimal import Decimal
 
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -22,6 +24,7 @@ from .models import (
 )
 
 TIPO_RESPOSTA_MIN_OPCOES = 2
+PLANEJAMENTO_MAX_ITENS = 40
 TIPO_RESPOSTA_MAX_OPCOES = 20
 
 # Nome do campo no model (source) → nome do campo camelCase no serializer.
@@ -213,6 +216,84 @@ class DocumentoSGQSerializer(serializers.ModelSerializer):
         return str(obj.pasta_id) if obj.pasta_id else None
 
 
+class ItemPlanejamentoAuditoriaSerializer(serializers.Serializer):
+    data = serializers.DateField(input_formats=['%Y-%m-%d'])
+    horaInicio = serializers.TimeField(format='%H:%M', input_formats=['%H:%M', '%H:%M:%S'])
+    horaFim = serializers.TimeField(format='%H:%M', input_formats=['%H:%M', '%H:%M:%S'])
+    atividade = serializers.CharField(max_length=200, trim_whitespace=True)
+
+    def validate(self, attrs):
+        if attrs['horaFim'] <= attrs['horaInicio']:
+            raise serializers.ValidationError({'horaFim': 'O horário de término precisa ser depois do início.'})
+        return attrs
+
+
+def nome_exibicao_usuario(user) -> str:
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return ''
+    return (getattr(user, 'name', None) or user.get_full_name() or user.get_username() or '').strip()
+
+
+def usuario_e_auditor_lider(user, auditor_lider: str) -> bool:
+    lider = (auditor_lider or '').strip()
+    nome = nome_exibicao_usuario(user)
+    return bool(lider) and nome.casefold() == lider.casefold()
+
+
+def _amostra_itens(rotulos: list[str]) -> str:
+    amostra = ', '.join(rotulos[:6])
+    if len(rotulos) > 6:
+        amostra += f' e mais {len(rotulos) - 6}'
+    return amostra
+
+
+def pendencias_questionario(normas, respostas) -> list[str]:
+    """Toda pergunta respondida e justificativas exigidas pela opção escolhida."""
+    perguntas = list(
+        ItemNormaSGQ.objects.filter(norma__in=normas, tipo='pergunta')
+        .select_related('tipo_resposta')
+        .order_by('norma__nome', 'ordem', 'pk')
+    )
+    if not perguntas:
+        return ['O questionário desta auditoria não tem perguntas para validar.']
+    por_item = {resposta.item_id: resposta for resposta in respostas}
+    faltando = []
+    sem_justificativa = []
+    invalidas = []
+    for pergunta in perguntas:
+        resposta = por_item.get(pergunta.pk)
+        codigo = (resposta.opcao_codigo if resposta else '').strip()
+        rotulo = pergunta.codigo or pergunta.titulo[:80]
+        if not codigo:
+            faltando.append(rotulo)
+            continue
+        opcoes = pergunta.tipo_resposta.opcoes if pergunta.tipo_resposta_id else []
+        opcao = next((item for item in opcoes if str(item.get('codigo', '')).casefold() == codigo.casefold()), None)
+        if opcao is None:
+            invalidas.append(rotulo)
+            continue
+        if opcao.get('exigeJustificativa') and not (resposta.observacoes or '').strip():
+            sem_justificativa.append(rotulo)
+    mensagens = []
+    if faltando:
+        mensagens.append(
+            'Responda todas as perguntas antes de concluir. '
+            'Se alguma não se aplicar, marque Não aplicável, conforme a norma: '
+            f'{_amostra_itens(faltando)}.'
+        )
+    if sem_justificativa:
+        mensagens.append(
+            'Justifique nas observações as respostas que exigem justificativa: '
+            f'{_amostra_itens(sem_justificativa)}.'
+        )
+    if invalidas:
+        mensagens.append(
+            'Há respostas que não correspondem às opções atuais da pergunta: '
+            f'{_amostra_itens(invalidas)}.'
+        )
+    return mensagens
+
+
 class AuditoriaSGQSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='pk', read_only=True)
     codigo = serializers.CharField(read_only=True)
@@ -228,6 +309,17 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
         max_length=30,
     )
     escopo = serializers.CharField(required=False, allow_blank=True, default='')
+    criterios = serializers.CharField(required=False, allow_blank=True, default='')
+    processosAreas = serializers.CharField(source='processos_areas', required=False, allow_blank=True, default='')
+    responsaveisProcessos = serializers.CharField(
+        source='responsaveis_processos', required=False, allow_blank=True, default='',
+    )
+    metodologia = serializers.CharField(required=False, allow_blank=True, default='')
+    planejamento = serializers.ListField(
+        child=ItemPlanejamentoAuditoriaSerializer(),
+        required=False,
+        max_length=PLANEJAMENTO_MAX_ITENS,
+    )
     filial = serializers.CharField(read_only=True)
     atrasada = serializers.SerializerMethodField()
     totalPerguntas = serializers.SerializerMethodField()
@@ -240,7 +332,9 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
         model = AuditoriaSGQ
         fields = [
             'id', 'codigo', 'categoria', 'titulo', 'dataInicio', 'dataTermino',
-            'normas', 'auditorLider', 'auditores', 'status', 'escopo', 'filial', 'atrasada',
+            'normas', 'auditorLider', 'auditores', 'status', 'escopo',
+            'criterios', 'processosAreas', 'responsaveisProcessos', 'metodologia',
+            'planejamento', 'filial', 'atrasada',
             'totalPerguntas', 'perguntasRespondidas',
             'criadoPor', 'criadoEm', 'atualizadoEm',
         ]
@@ -267,6 +361,17 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
             .count()
         )
 
+    def validate_planejamento(self, value):
+        return [
+            {
+                'data': item['data'].isoformat(),
+                'horaInicio': item['horaInicio'].strftime('%H:%M'),
+                'horaFim': item['horaFim'].strftime('%H:%M'),
+                'atividade': item['atividade'],
+            }
+            for item in value
+        ]
+
     def get_criadoPor(self, obj):
         if not obj.criado_por:
             return ''
@@ -277,7 +382,31 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
         termino = attrs.get('data_termino', getattr(self.instance, 'data_termino', None))
         if inicio and termino and termino < inicio:
             raise serializers.ValidationError({'dataTermino': 'A data de término não pode ser antes do início.'})
-        if 'auditores' in attrs or 'auditor_lider' in attrs:
+        itens = attrs.get('planejamento')
+        if itens is None and self.instance is not None:
+            itens = list(self.instance.planejamento or [])
+        if not itens and (self.instance is None or 'planejamento' in attrs):
+            raise serializers.ValidationError({
+                'planejamento': 'Inclua ao menos uma atividade no planejamento.',
+            })
+        for item in itens or []:
+            dia = date.fromisoformat(item['data']) if isinstance(item['data'], str) else item['data']
+            if inicio and termino and not (inicio <= dia <= termino):
+                raise serializers.ValidationError({
+                    'planejamento': (
+                        f'A atividade "{item["atividade"]}" precisa estar entre '
+                        'a data de início e a de término da auditoria.'
+                    ),
+                })
+        if self.instance is None or 'escopo' in attrs:
+            texto = str(attrs.get('escopo', '') or '').strip()
+            if not texto:
+                raise serializers.ValidationError({'escopo': 'Informe o escopo / objetivo.'})
+            attrs['escopo'] = texto
+        for campo in ('criterios', 'processos_areas', 'responsaveis_processos', 'metodologia'):
+            if campo in attrs:
+                attrs[campo] = str(attrs.get(campo) or '').strip()
+        if self.instance is None or 'auditores' in attrs or 'auditor_lider' in attrs:
             lider = (attrs.get('auditor_lider') or getattr(self.instance, 'auditor_lider', '') or '').strip()
             nomes = attrs.get('auditores')
             if nomes is None and self.instance is not None:
@@ -291,7 +420,24 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
                     continue
                 vistos.add(chave)
                 limpos.append(nome)
+            if not limpos:
+                raise serializers.ValidationError({'auditores': 'Selecione ao menos um auditor.'})
             attrs['auditores'] = limpos
+            if self.instance is not None:
+                lider_novo = (attrs.get('auditor_lider') or self.instance.auditor_lider or '').strip()
+                lider_igual = lider_novo.casefold() == (self.instance.auditor_lider or '').strip().casefold()
+                equipe_igual = sorted(nome.casefold() for nome in limpos) == sorted(
+                    str(nome).strip().casefold()
+                    for nome in (self.instance.auditores or [])
+                    if str(nome).strip()
+                )
+                request = self.context.get('request')
+                if not (lider_igual and equipe_igual) and not usuario_e_auditor_lider(
+                    getattr(request, 'user', None), self.instance.auditor_lider,
+                ):
+                    raise serializers.ValidationError({
+                        'auditores': 'Só o auditor líder pode alterar a equipe da auditoria.',
+                    })
         filial = self.instance.filial if self.instance is not None else self.context.get('filial')
         categoria = attrs.get('categoria')
         if categoria is not None and (self.instance is None or categoria != self.instance.categoria):
@@ -301,14 +447,61 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
             attrs['categoria'] = cadastrada.nome
             # As normas da auditoria são sempre as normas ativas da categoria.
             attrs['normas'] = list(cadastrada.normas.filter(ativa=True))
+        status = attrs.get('status', getattr(self.instance, 'status', 'planejamento'))
+        if status == 'concluida' and getattr(self.instance, 'status', None) != 'concluida':
+            request = self.context.get('request')
+            lider = attrs.get('auditor_lider', getattr(self.instance, 'auditor_lider', ''))
+            if not usuario_e_auditor_lider(getattr(request, 'user', None), lider):
+                raise serializers.ValidationError({'status': 'Só o auditor líder pode concluir a auditoria.'})
+            normas = attrs.get('normas')
+            if normas is None and self.instance is not None:
+                normas = self.instance.normas.all()
+            respostas = self.instance.respostas.all() if self.instance is not None else []
+            pendencias = pendencias_questionario(normas or [], respostas)
+            if pendencias:
+                raise serializers.ValidationError({'status': ' '.join(pendencias)})
         return attrs
 
 
+def filial_que_compartilha_normas() -> str:
+    """A matriz do SGQ é quem pode compartilhar normas com a outra filial."""
+    from apps.accounts.constants import MODULE_BRANCHES
+    return MODULE_BRANCHES['SGQ'][0]
+
+
+def queryset_normas_visiveis(filial: str):
+    """Normas da filial e, nas demais, as da matriz com compartilhamento ativo."""
+    origem = filial_que_compartilha_normas()
+    if filial == origem:
+        return NormaSGQ.objects.filter(filial=filial)
+    return NormaSGQ.objects.filter(Q(filial=filial) | Q(filial=origem, publica=True))
+
+
+def queryset_tipos_visiveis(filial: str):
+    """Tipos de resposta da filial e, nas demais, os da matriz com compartilhamento ativo."""
+    origem = filial_que_compartilha_normas()
+    if filial == origem:
+        return TipoRespostaSGQ.objects.filter(filial=filial)
+    return TipoRespostaSGQ.objects.filter(Q(filial=filial) | Q(filial=origem, publica=True))
+
+
+def tipo_resposta_utilizavel(tipo, norma) -> bool:
+    if tipo.filial == norma.filial:
+        return True
+    return bool(tipo.publica) and tipo.filial == filial_que_compartilha_normas()
+
+
+def _norma_utilizavel(norma, filial: str) -> bool:
+    if norma.filial == filial:
+        return True
+    return norma.publica and norma.filial == filial_que_compartilha_normas()
+
+
 def _validar_normas(normas, filial, vinculadas_atuais=None) -> None:
-    """Normas precisam ser da filial e ativas — exceto as que já estavam vinculadas."""
-    if any(norma.filial != filial for norma in normas):
-        raise serializers.ValidationError({'normaIds': 'Selecione apenas normas da mesma unidade.'})
+    """Normas da filial — ou compartilhadas pela matriz — e ativas, salvo as já vinculadas."""
     ja_vinculadas = set(vinculadas_atuais.values_list('pk', flat=True)) if vinculadas_atuais is not None else set()
+    if any(not _norma_utilizavel(norma, filial) and norma.pk not in ja_vinculadas for norma in normas):
+        raise serializers.ValidationError({'normaIds': 'Selecione apenas normas desta unidade ou compartilhadas pela matriz.'})
     if any(not norma.ativa and norma.pk not in ja_vinculadas for norma in normas):
         raise serializers.ValidationError({'normaIds': 'Normas inativas não podem ser vinculadas.'})
 
@@ -352,6 +545,7 @@ class NormaSGQSerializer(serializers.ModelSerializer):
     dataAtualizacao = serializers.DateField(source='data_atualizacao', read_only=True)
     emissor = serializers.CharField(read_only=True)
     publica = serializers.BooleanField(required=False, default=False)
+    editavel = serializers.SerializerMethodField()
     ativa = serializers.BooleanField(required=False, default=True)
     classificacoes = serializers.ListField(
         child=ClassificacaoNormaSerializer(), max_length=NORMA_MAX_CLASSIFICACOES, required=False,
@@ -365,8 +559,8 @@ class NormaSGQSerializer(serializers.ModelSerializer):
     class Meta:
         model = NormaSGQ
         fields = [
-            'id', 'nome', 'descricao', 'dataAtualizacao', 'emissor', 'publica', 'ativa', 'classificacoes', 'areas',
-            'filial', 'criadoPor', 'criadoEm', 'atualizadoEm',
+            'id', 'nome', 'descricao', 'dataAtualizacao', 'emissor', 'publica', 'editavel', 'ativa',
+            'classificacoes', 'areas', 'filial', 'criadoPor', 'criadoEm', 'atualizadoEm',
         ]
 
     def validate_areas(self, value):
@@ -408,6 +602,15 @@ class NormaSGQSerializer(serializers.ModelSerializer):
             return ''
         return obj.criado_por.name or obj.criado_por.username
 
+    def get_editavel(self, obj):
+        return obj.filial == self.context.get('filial')
+
+    def validate(self, attrs):
+        filial = self.instance.filial if self.instance is not None else self.context.get('filial')
+        if filial != filial_que_compartilha_normas():
+            attrs['publica'] = False
+        return attrs
+
     def validate_nome(self, value):
         filial = self.instance.filial if self.instance else self.context.get('filial')
         duplicada = NormaSGQ.objects.filter(filial=filial, nome__iexact=value)
@@ -444,10 +647,21 @@ class CategoriaAuditoriaSGQSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         normas = self.context.get('normas')
         if normas is not None:
-            self.fields['normaIds'].child_relation.queryset = normas
+            qs = normas
+            if self.instance is not None and getattr(self.instance, 'pk', None):
+                qs = (qs | self.instance.normas.all()).distinct()
+            self.fields['normaIds'].child_relation.queryset = qs
 
     def get_normas(self, obj):
-        return [{'id': str(norma.pk), 'nome': norma.nome, 'ativa': norma.ativa} for norma in obj.normas.all()]
+        return [
+            {
+                'id': str(norma.pk),
+                'nome': norma.nome,
+                'ativa': norma.ativa,
+                'compartilhada': norma.filial != obj.filial,
+            }
+            for norma in obj.normas.all()
+        ]
 
     def validate(self, attrs):
         normas = attrs.get('normas')
@@ -487,6 +701,7 @@ class TipoRespostaSGQSerializer(serializers.ModelSerializer):
     nome = serializers.CharField(max_length=120, trim_whitespace=True)
     opcoes = serializers.ListField(child=OpcaoRespostaSerializer(), max_length=TIPO_RESPOSTA_MAX_OPCOES)
     publica = serializers.BooleanField(required=False, default=False)
+    editavel = serializers.SerializerMethodField()
     emissor = serializers.CharField(read_only=True)
     filial = serializers.CharField(read_only=True)
     criadoEm = serializers.DateTimeField(source='criado_em', read_only=True)
@@ -494,7 +709,16 @@ class TipoRespostaSGQSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TipoRespostaSGQ
-        fields = ['id', 'codigo', 'nome', 'opcoes', 'publica', 'emissor', 'filial', 'criadoEm', 'atualizadoEm']
+        fields = ['id', 'codigo', 'nome', 'opcoes', 'publica', 'editavel', 'emissor', 'filial', 'criadoEm', 'atualizadoEm']
+
+    def get_editavel(self, obj):
+        return obj.filial == self.context.get('filial')
+
+    def validate(self, attrs):
+        filial = self.instance.filial if self.instance is not None else self.context.get('filial')
+        if filial != filial_que_compartilha_normas():
+            attrs['publica'] = False
+        return attrs
 
     def validate_nome(self, value):
         filial = self.instance.filial if self.instance else self.context.get('filial')
@@ -605,8 +829,8 @@ class ItemNormaSGQSerializer(serializers.ModelSerializer):
         tipo_resposta = attrs.get('tipo_resposta', getattr(self.instance, 'tipo_resposta', None))
         if tipo_resposta is None:
             raise serializers.ValidationError({'tipoRespostaId': 'Informe o tipo de resposta da pergunta.'})
-        if tipo_resposta.filial != norma.filial:
-            raise serializers.ValidationError({'tipoRespostaId': 'O tipo de resposta precisa ser da mesma unidade da norma.'})
+        if not tipo_resposta_utilizavel(tipo_resposta, norma):
+            raise serializers.ValidationError({'tipoRespostaId': 'O tipo de resposta precisa ser desta unidade ou compartilhado pela matriz.'})
 
         sigla = attrs.get('classificacao', getattr(self.instance, 'classificacao', ''))
         if sigla:

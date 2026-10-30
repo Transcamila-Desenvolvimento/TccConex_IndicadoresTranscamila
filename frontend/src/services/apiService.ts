@@ -46,6 +46,7 @@ import type {
   UserDirectoryEntry,
   SgqLoteDraft, SgqLoteDraftRow, SgqFormDraft,
   SgqAuditoria, SgqAuditoriaPayload, SgqAuditoriaQueryParams, SgqAuditoriaResumo, SgqAuditoriaSugestoes, SgqAuditoriaVisao,
+  SendSgqCronogramaEmailParams,
   SgqAuditoriaExecucao, SgqAuditoriaResposta, SgqAuditoriaRespostaPayload,
   SgqNorma, SgqNormaPayload, SgqNormaQueryParams, SgqNormaResumo, SgqNormaItem, SgqNormaItemPayload,
   SgqCategoria, SgqCategoriaPayload, SgqCategoriaQueryParams, SgqCategoriaResumo, SgqCategoriaSugestoes,
@@ -71,6 +72,7 @@ import type {
   ProdutoComercial, ProdutoComercialPayload, ProdutoComercialLotePayload, ProdutoComercialQueryParams, HomologacaoProdutoEvento,
   Notificacao, PushNotificacoesConfig, PushInscricaoPayload,
   CamiloAgente, CamiloAgentePayload, CamiloAta, CamiloChatPadrao, CamiloChatPadraoPayload, CamiloConsulta, CamiloMeuTermo, CamiloParteGrupo, CamiloTermoAceite, CamiloTermoAceiteLista, CamiloTermoPublicacao, CamiloTermoSecao, CamiloTermoVersao,
+  ArquivoAmbiente, ArquivoAmbienteLista,
 } from '../types/domain';
 import {
   cloneTabelaArmazenagem,
@@ -2105,8 +2107,8 @@ export const apiService = {
     return data as SgqAuditoriaResumo;
   },
 
-  async getSgqAuditoriasVisao(): Promise<SgqAuditoriaVisao> {
-    const { data } = await api.get('/api/sgq/auditorias/visao/');
+  async getSgqAuditoriasVisao(ano: number): Promise<SgqAuditoriaVisao> {
+    const { data } = await api.get('/api/sgq/auditorias/visao/', { params: { ano } });
     return data as SgqAuditoriaVisao;
   },
 
@@ -2127,6 +2129,16 @@ export const apiService = {
 
   async deleteSgqAuditorias(ids: string[]): Promise<void> {
     await api.post('/api/sgq/auditorias/excluir-lote/', { ids });
+  },
+
+  async concluirSgqAuditoria(id: string): Promise<SgqAuditoria> {
+    const { data } = await api.post(`/api/sgq/auditorias/${id}/concluir/`);
+    return data as SgqAuditoria;
+  },
+
+  async enviarCronogramaSgqAuditoria(id: string, payload: SendSgqCronogramaEmailParams): Promise<SendSgqResumoEmailResponse> {
+    const { data } = await api.post(`/api/sgq/auditorias/${id}/enviar-cronograma/`, payload);
+    return data as SendSgqResumoEmailResponse;
   },
 
   async getSgqAuditoriaExecucao(id: string): Promise<SgqAuditoriaExecucao> {
@@ -4241,6 +4253,40 @@ export const apiService = {
       throw new Error(await readBlobErrorMessage(data, 'Não foi possível gerar o comprovante.'));
     }
     return assertPdfBlob(data, headers);
+  },
+
+  async listarArquivosAmbiente(): Promise<ArquivoAmbienteLista> {
+    const { data } = await api.get('/api/arquivos/');
+    const arquivos = Array.isArray(data?.arquivos) ? data.arquivos : [];
+    return {
+      configurado: data?.configurado === true,
+      arquivos: arquivos.map((item: ArquivoAmbiente) => ({
+        id: String(item.id),
+        nome: item.nome || '',
+        ambiente: item.ambiente || '',
+        filial: item.filial || '',
+        mime: item.mime || '',
+        tamanho: Number(item.tamanho) || 0,
+        criadoEm: item.criadoEm || '',
+        criadoPor: item.criadoPor || '',
+      })),
+    };
+  },
+
+  async enviarArquivoAmbiente(arquivo: File): Promise<ArquivoAmbiente> {
+    const form = new FormData();
+    form.append('arquivo', arquivo);
+    const { data } = await api.post('/api/arquivos/', form);
+    return data as ArquivoAmbiente;
+  },
+
+  async baixarArquivoAmbiente(id: string): Promise<Blob> {
+    const { data } = await api.get(`/api/arquivos/${id}/baixar/`, { responseType: 'blob' });
+    return data as Blob;
+  },
+
+  async removerArquivoAmbiente(id: string): Promise<void> {
+    await api.delete(`/api/arquivos/${id}/`);
   },
 
 };

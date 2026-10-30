@@ -50,9 +50,8 @@ function achatar(nos: NoArvore[]): NoArvore[] {
 const SGQAuditoriasNormaItens: React.FC = () => {
   const { normaId = '' } = useParams();
   const { user, selectedFilial } = useAuth();
-  const canManage = userHasFuncao(user, 'SGQ', 'gerenciar-normas');
-
   const normaQuery = useSgqNorma(selectedFilial, normaId);
+  const canManage = userHasFuncao(user, 'SGQ', 'gerenciar-normas') && normaQuery.data?.editavel === true;
   const itensQuery = useSgqNormaItens(selectedFilial, normaId);
   const { canShowEmpty } = useAsyncQueryState(itensQuery);
   const salvar = useSaveSgqNormaItem(selectedFilial, normaId);
@@ -351,7 +350,9 @@ const SGQAuditoriasNormaItens: React.FC = () => {
           </Link>
           <h1 className="view-page-title">{normaQuery.data?.nome ?? 'Norma'}</h1>
           <p className="sgq-aud-subtitle">
-            {normaQuery.data?.descricao || 'Requisitos e subitens da norma.'}
+            {normaQuery.data && !normaQuery.data.editavel
+              ? `Compartilhada por ${normaQuery.data.filial}. Os requisitos ficam só para visualização nesta filial.`
+              : (normaQuery.data?.descricao || 'Requisitos e subitens da norma.')}
             {itens.length > 0 && ` · ${itens.length} item(ns), ${totalPerguntas} pergunta(s)`}
           </p>
         </div>
@@ -377,7 +378,11 @@ const SGQAuditoriasNormaItens: React.FC = () => {
               <div className="sgq-aud-empty">
                 <i className="bi bi-list-nested" aria-hidden="true" />
                 <strong>Nenhum requisito cadastrado</strong>
-                <span>Cadastre os requisitos da norma e, dentro deles, os subitens e perguntas, ou importe uma lista de verificação em Excel.</span>
+                <span>
+                  {canManage
+                    ? 'Cadastre os requisitos da norma e, dentro deles, os subitens e perguntas, ou importe uma lista de verificação em Excel.'
+                    : 'Não há requisitos para visualizar.'}
+                </span>
                 {canManage && (
                   <div className="sgq-norma-header-acoes">
                     {botaoImportar}
@@ -509,7 +514,7 @@ const SGQAuditoriasNormaItens: React.FC = () => {
             </div>
 
             <form className="modal-body sgq-aud-form" onSubmit={(e) => { e.preventDefault(); enviar(false); }}>
-              <fieldset disabled={somenteLeitura || salvar.isPending}>
+              <fieldset disabled={somenteLeitura || salvar.isPending} inert={somenteLeitura || salvar.isPending ? true : undefined}>
                 <label className="is-wide">
                   <span>Título <em>*</em></span>
                   <textarea
@@ -583,7 +588,7 @@ const SGQAuditoriasNormaItens: React.FC = () => {
                         <option value="">Selecione...</option>
                         {(tiposResposta ?? []).map((tipo) => (
                           <option key={tipo.id} value={tipo.id} title={descreverOpcoes(tipo.opcoes)}>
-                            {tipo.codigo} - {tipo.nome}
+                            {tipo.codigo} - {tipo.nome}{tipo.compartilhada ? ' (compartilhado)' : ''}
                           </option>
                         ))}
                       </select>

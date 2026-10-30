@@ -17,7 +17,7 @@ export const SGQ_AUDITORIAS_KEYS = {
   all: ['sgq', 'auditorias'] as const,
   lista: (filial: string | null, params: SgqAuditoriaQueryParams) => ['sgq', 'auditorias', 'lista', filial, params] as const,
   resumo: (filial: string | null) => ['sgq', 'auditorias', 'resumo', filial] as const,
-  visao: (filial: string | null) => ['sgq', 'auditorias', 'visao', filial] as const,
+  visao: (filial: string | null, ano: number) => ['sgq', 'auditorias', 'visao', filial, ano] as const,
   sugestoes: (filial: string | null) => ['sgq', 'auditorias', 'sugestoes', filial] as const,
 };
 
@@ -36,10 +36,10 @@ export function useSgqAuditoriasResumo(filial: string | null) {
   });
 }
 
-export function useSgqAuditoriasVisao(filial: string | null) {
+export function useSgqAuditoriasVisao(filial: string | null, ano: number) {
   return useQuery({
-    queryKey: SGQ_AUDITORIAS_KEYS.visao(filial),
-    queryFn: () => apiService.getSgqAuditoriasVisao(),
+    queryKey: SGQ_AUDITORIAS_KEYS.visao(filial, ano),
+    queryFn: () => apiService.getSgqAuditoriasVisao(ano),
   });
 }
 
@@ -59,6 +59,14 @@ export function useSaveSgqAuditoria() {
       id ? apiService.updateSgqAuditoria(id, payload) : apiService.createSgqAuditoria(payload)
     ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: SGQ_AUDITORIAS_KEYS.all }),
+  });
+}
+
+export function useEnviarCronogramaSgqAuditoria() {
+  return useMutation({
+    mutationFn: ({ id, to, cc }: { id: string; to: string[]; cc?: string[] }) => (
+      apiService.enviarCronogramaSgqAuditoria(id, { to, cc })
+    ),
   });
 }
 
@@ -83,6 +91,19 @@ export function useBaixarRelatorioSgqAuditoria(filial: string | null) {
       });
       if (tipo === 'analitico') await downloadSgqAuditoriaAnaliticoPdf(dados);
       else await downloadSgqAuditoriaRegistroPdf(dados);
+    },
+  });
+}
+
+export function useConcluirSgqAuditoria(filial: string | null, id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiService.concluirSgqAuditoria(id),
+    onSuccess: (auditoria) => {
+      queryClient.setQueryData<SgqAuditoriaExecucao>(SGQ_AUDITORIA_EXECUCAO_KEY(filial, id), (atual) => (
+        atual ? { ...atual, auditoria } : atual
+      ));
+      queryClient.invalidateQueries({ queryKey: SGQ_AUDITORIAS_KEYS.all });
     },
   });
 }

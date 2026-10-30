@@ -232,6 +232,12 @@ class AuditoriaSGQ(models.Model):
     auditores = models.JSONField(default=list, blank=True, verbose_name='Auditores')
     status = models.CharField(max_length=20, choices=AUDITORIA_STATUS_CHOICES, default='planejamento', verbose_name='Status')
     escopo = models.TextField(blank=True, default='', verbose_name='Escopo / objetivo')
+    criterios = models.TextField(blank=True, default='', verbose_name='Critérios')
+    processos_areas = models.TextField(blank=True, default='', verbose_name='Processos e áreas a serem auditados')
+    responsaveis_processos = models.TextField(blank=True, default='', verbose_name='Responsáveis pelo processo')
+    metodologia = models.TextField(blank=True, default='', verbose_name='Metodologia')
+    # [{"data": "YYYY-MM-DD", "horaInicio": "HH:MM", "horaFim": "HH:MM", "atividade": "..."}]
+    planejamento = models.JSONField(default=list, blank=True, verbose_name='Planejamento')
     criado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -263,7 +269,7 @@ class NormaSGQ(models.Model):
     descricao = models.CharField(max_length=500, blank=True, default='', verbose_name='Descrição')
     data_atualizacao = models.DateField(verbose_name='Data da última atualização')
     emissor = models.CharField(max_length=150, verbose_name='Emissor')
-    publica = models.BooleanField(default=False, verbose_name='Norma pública')
+    publica = models.BooleanField(default=False, verbose_name='Compartilhamento')
     ativa = models.BooleanField(default=True, verbose_name='Ativa')
     # Classificações das perguntas (ex.: SASSMAQ M/I/D):
     # [{"sigla", "nome", "critica", "metaPrimeira", "metaReavaliacao"}], metas em % de conformidade.
@@ -342,7 +348,7 @@ class TipoRespostaSGQ(models.Model):
     # [{"codigo", "texto", "valor", "exigeJustificativa"}]: codigo é o que se digita/importa (ex.: 1, 0, X);
     # valor é o % de conformidade (0 a 100) ou null = "não se aplica", que tira a pergunta do cálculo.
     opcoes = models.JSONField(default=list, verbose_name='Opções de resposta')
-    publica = models.BooleanField(default=False, verbose_name='Resposta pública')
+    publica = models.BooleanField(default=False, verbose_name='Compartilhamento')
     emissor = models.CharField(max_length=150, blank=True, default='', verbose_name='Emissor')
     criado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,

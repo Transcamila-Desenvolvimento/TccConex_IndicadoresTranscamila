@@ -1373,10 +1373,18 @@ def _auditoria(**overrides):
         'dataInicio': '2026-09-24',
         'dataTermino': '2026-09-29',
         'auditorLider': 'Ana Luiza Juliani',
+        'auditores': ['Miguel Ribeiro'],
         'status': 'execucao',
-        'escopo': '',
+        'escopo': 'Processos e áreas auditados.',
     }
     data.update(overrides)
+    if 'planejamento' not in overrides:
+        data['planejamento'] = [{
+            'data': data['dataInicio'],
+            'horaInicio': '08:00',
+            'horaFim': '08:30',
+            'atividade': 'Reunião de Abertura',
+        }]
     return data
 
 
@@ -1427,6 +1435,62 @@ class AuditoriaSGQTests(APITestCase):
         self.assertEqual(criada.status_code, 201, criada.data)
         self.assertEqual(criada.data['auditores'], ['Miguel Ribeiro'])
 
+    def test_exige_ao_menos_um_auditor_alem_do_lider(self):
+        sem = self.client.post(self.URL, _auditoria(auditores=[]), format='json', **_headers())
+        self.assertEqual(sem.status_code, 400)
+        self.assertIn('auditores', sem.data)
+
+        so_lider = self.client.post(
+            self.URL, _auditoria(auditores=['Ana Luiza Juliani']), format='json', **_headers(),
+        )
+        self.assertEqual(so_lider.status_code, 400)
+
+        criada = self.client.post(self.URL, _auditoria(), format='json', **_headers())
+        self.assertEqual(criada.status_code, 201, criada.data)
+        esvaziada = self.client.patch(
+            f"{self.URL}{criada.data['id']}/", {'auditores': []}, format='json', **_headers(),
+        )
+        self.assertEqual(esvaziada.status_code, 400)
+
+    def test_grava_detalhes_opcionais_do_plano(self):
+        criada = self.client.post(self.URL, _auditoria(
+            criterios=' ISO e SASSMAQ ',
+            processosAreas='Expedição',
+            responsaveisProcessos='Coordenador de pátio',
+            metodologia='Entrevista e amostragem',
+        ), format='json', **_headers())
+        self.assertEqual(criada.status_code, 201, criada.data)
+        self.assertEqual(criada.data['criterios'], 'ISO e SASSMAQ')
+        self.assertEqual(criada.data['processosAreas'], 'Expedição')
+        self.assertEqual(criada.data['responsaveisProcessos'], 'Coordenador de pátio')
+        self.assertEqual(criada.data['metodologia'], 'Entrevista e amostragem')
+
+        sem = self.client.post(self.URL, _auditoria(titulo='Sem detalhes'), format='json', **_headers())
+        self.assertEqual(sem.status_code, 201, sem.data)
+        self.assertEqual(sem.data['criterios'], '')
+        self.assertEqual(sem.data['processosAreas'], '')
+        self.assertEqual(sem.data['responsaveisProcessos'], '')
+        self.assertEqual(sem.data['metodologia'], '')
+
+    def test_exige_planejamento_e_escopo(self):
+        sem_plano = self.client.post(self.URL, _auditoria(planejamento=[]), format='json', **_headers())
+        self.assertEqual(sem_plano.status_code, 400)
+        self.assertIn('planejamento', sem_plano.data)
+
+        sem_escopo = self.client.post(self.URL, _auditoria(escopo='   '), format='json', **_headers())
+        self.assertEqual(sem_escopo.status_code, 400)
+        self.assertIn('escopo', sem_escopo.data)
+
+        criada = self.client.post(self.URL, _auditoria(), format='json', **_headers())
+        self.assertEqual(criada.status_code, 201, criada.data)
+        esvaziada = self.client.patch(
+            f"{self.URL}{criada.data['id']}/",
+            {'planejamento': [], 'escopo': ''},
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(esvaziada.status_code, 400)
+
     def test_cria_com_codigo_sequencial_por_ano_e_filial_da_sessao(self):
         primeira = self.client.post(self.URL, _auditoria(), format='json', **_headers())
         segunda = self.client.post(self.URL, _auditoria(titulo='Auditoria V&Z'), format='json', **_headers())
@@ -1440,7 +1504,8 @@ class AuditoriaSGQTests(APITestCase):
 
     def test_lista_paginada_segregada_por_filial_com_filtros(self):
         self.client.post(self.URL, _auditoria(), format='json', **_headers())
-        self.client.post(self.URL, _auditoria(titulo='5S Julho', status='concluida'), format='json', **_headers())
+        concluida = self.client.post(self.URL, _auditoria(titulo='5S Julho'), format='json', **_headers())
+        AuditoriaSGQ.objects.filter(pk=concluida.data['id']).update(status='concluida')
         self.client.post(self.URL, _auditoria(titulo='De Rondonópolis'), format='json', **_headers(RONDONOPOLIS))
 
         lista = self.client.get(self.URL, **_headers())
@@ -1455,12 +1520,99 @@ class AuditoriaSGQTests(APITestCase):
 
     def test_atrasada_e_resumo(self):
         self.client.post(self.URL, _auditoria(dataInicio='2020-01-01', dataTermino='2020-01-05'), format='json', **_headers())
-        self.client.post(self.URL, _auditoria(dataInicio='2020-02-01', dataTermino='2020-02-05', status='concluida'), format='json', **_headers())
+        encerrada = self.client.post(
+            self.URL, _auditoria(dataInicio='2020-02-01', dataTermino='2020-02-05'), format='json', **_headers(),
+        )
+        AuditoriaSGQ.objects.filter(pk=encerrada.data['id']).update(status='concluida')
         atrasadas = self.client.get(self.URL, {'status': 'atrasada'}, **_headers())
         self.assertEqual(atrasadas.data['count'], 1)
         self.assertTrue(atrasadas.data['results'][0]['atrasada'])
         resumo = self.client.get(f'{self.URL}resumo/', **_headers())
         self.assertEqual(resumo.data, {'total': 2, 'planejamento': 0, 'execucao': 1, 'concluida': 1, 'atrasada': 1})
+
+    def test_planejamento_fica_dentro_do_periodo(self):
+        item = {
+            'data': '2026-03-07', 'horaInicio': '08:00', 'horaFim': '08:30', 'atividade': 'Reunião de Abertura',
+        }
+        criada = self.client.post(
+            self.URL,
+            _auditoria(dataInicio='2026-03-07', dataTermino='2026-03-09', planejamento=[item]),
+            format='json', **_headers(),
+        )
+        self.assertEqual(criada.status_code, 201, criada.data)
+        self.assertEqual(criada.data['planejamento'], [item])
+
+        fora = self.client.post(
+            self.URL,
+            _auditoria(planejamento=[{**item, 'data': '2026-03-01'}]),
+            format='json', **_headers(),
+        )
+        self.assertEqual(fora.status_code, 400)
+        self.assertIn('planejamento', fora.data)
+
+        horario = self.client.post(
+            self.URL,
+            _auditoria(dataInicio='2026-03-07', dataTermino='2026-03-09', planejamento=[
+                {**item, 'horaInicio': '09:00', 'horaFim': '08:30'},
+            ]),
+            format='json', **_headers(),
+        )
+        self.assertEqual(horario.status_code, 400)
+
+        encolhida = self.client.patch(
+            f"{self.URL}{criada.data['id']}/",
+            {'dataInicio': '2026-03-08'},
+            format='json', **_headers(),
+        )
+        self.assertEqual(encolhida.status_code, 400)
+        self.assertIn('planejamento', encolhida.data)
+
+    def test_envia_cronograma_por_email(self):
+        from django.core import mail
+
+        criada = self.client.post(self.URL, _auditoria(
+            dataInicio='2026-03-07', dataTermino='2026-03-09',
+            planejamento=[{
+                'data': '2026-03-07', 'horaInicio': '08:00', 'horaFim': '08:30', 'atividade': 'Reunião de Abertura',
+            }],
+        ), format='json', **_headers()).data
+        resposta = self.client.post(
+            f"{self.URL}{criada['id']}/enviar-cronograma/",
+            {'to': ['destino@example.com'], 'cc': ['copia@example.com', 'destino@example.com']},
+            format='json', **_headers(),
+        )
+        self.assertEqual(resposta.status_code, 200, resposta.data)
+        self.assertEqual(len(mail.outbox), 1)
+        mensagem = mail.outbox[0]
+        self.assertEqual(mensagem.to, ['destino@example.com'])
+        self.assertEqual(mensagem.cc, ['copia@example.com'])
+        self.assertEqual(
+            mensagem.subject,
+            'Cronograma Auditoria Auditoria interna - ISO 9001:2015 - 07/03/2026 a 09/03/2026 (26-00001)',
+        )
+        self.assertIn('Reunião de Abertura', mensagem.body)
+        self.assertIn('07/03/2026', mensagem.body)
+        self.assertIn('08h00 às 08h30', mensagem.body)
+        self.assertIn('Transcamila Cargas e Armazéns Gerais Ltda.', mensagem.body)
+        self.assertIn('Segue o cronograma da auditoria', mensagem.body)
+        self.assertIn('Em execução', mensagem.body)
+        self.assertIn('Auditor líder', mensagem.body)
+        self.assertIn('sábado', mensagem.body)
+
+        sem_agenda = self.client.post(self.URL, _auditoria(titulo='Sem agenda'), format='json', **_headers()).data
+        AuditoriaSGQ.objects.filter(pk=sem_agenda['id']).update(planejamento=[])
+        vazia = self.client.post(
+            f"{self.URL}{sem_agenda['id']}/enviar-cronograma/",
+            {'to': ['destino@example.com']}, format='json', **_headers(),
+        )
+        self.assertEqual(vazia.status_code, 400)
+
+        self.client.force_authenticate(self.leitor)
+        do_leitor = self.client.post(
+            f"{self.URL}{criada['id']}/enviar-cronograma/",
+            {'to': ['leitor@example.com']}, format='json', **_headers(),
+        )
+        self.assertEqual(do_leitor.status_code, 200, do_leitor.data)
 
     def test_termino_antes_do_inicio_e_rejeitado(self):
         resposta = self.client.post(self.URL, _auditoria(dataTermino='2026-09-01'), format='json', **_headers())
@@ -1475,12 +1627,49 @@ class AuditoriaSGQTests(APITestCase):
         excluir = self.client.post(f'{self.URL}excluir-lote/', {'ids': [criada.data['id']]}, format='json', **_headers())
         self.assertEqual(excluir.status_code, 403)
 
+    def test_so_o_auditor_lider_altera_a_equipe(self):
+        criada = self.client.post(self.URL, _auditoria(), format='json', **_headers())
+        self.assertEqual(criada.status_code, 201, criada.data)
+        url = f"{self.URL}{criada.data['id']}/"
+
+        troca_auditores = self.client.patch(url, {'auditores': ['Carlos Souza']}, format='json', **_headers())
+        self.assertEqual(troca_auditores.status_code, 400)
+        self.assertIn('auditores', troca_auditores.data)
+
+        troca_lider = self.client.patch(url, {'auditorLider': 'Gestor Auditorias'}, format='json', **_headers())
+        self.assertEqual(troca_lider.status_code, 400)
+
+        mantida = self.client.patch(url, {
+            'titulo': 'Título novo',
+            'auditorLider': 'Ana Luiza Juliani',
+            'auditores': ['Miguel Ribeiro'],
+        }, format='json', **_headers())
+        self.assertEqual(mantida.status_code, 200, mantida.data)
+        self.assertEqual(mantida.data['titulo'], 'Título novo')
+        self.assertEqual(mantida.data['auditorLider'], 'Ana Luiza Juliani')
+        self.assertEqual(mantida.data['auditores'], ['Miguel Ribeiro'])
+
+        lider = User.objects.create_user(
+            username='sgq.ana.equipe', password='x', name='Ana Luiza Juliani', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['gerenciar-auditorias']},
+        )
+        self.client.force_authenticate(lider)
+        alterada = self.client.patch(url, {
+            'auditorLider': 'Ana Luiza Juliani',
+            'auditores': ['Carlos Souza'],
+        }, format='json', **_headers())
+        self.assertEqual(alterada.status_code, 200, alterada.data)
+        self.assertEqual(alterada.data['auditores'], ['Carlos Souza'])
+
     def test_edita_e_exclui_em_lote(self):
         a = self.client.post(self.URL, _auditoria(), format='json', **_headers()).data
         b = self.client.post(self.URL, _auditoria(titulo='Outra'), format='json', **_headers()).data
-        editada = self.client.patch(f"{self.URL}{a['id']}/", {'status': 'concluida'}, format='json', **_headers())
+        editada = self.client.patch(f"{self.URL}{a['id']}/", {'titulo': 'Renomeada'}, format='json', **_headers())
         self.assertEqual(editada.status_code, 200, editada.data)
-        self.assertFalse(editada.data['atrasada'])
+        AuditoriaSGQ.objects.filter(pk=a['id']).update(status='concluida')
+        detalhe = self.client.get(f"{self.URL}{a['id']}/", **_headers())
+        self.assertFalse(detalhe.data['atrasada'])
         excluir = self.client.post(f'{self.URL}excluir-lote/', {'ids': [a['id'], b['id']]}, format='json', **_headers())
         self.assertEqual(excluir.data, {'excluidas': 2})
         self.assertEqual(self.client.get(self.URL, **_headers()).data['count'], 0)
@@ -1525,7 +1714,7 @@ class AuditoriaSGQTests(APITestCase):
         NormaSGQ.objects.filter(pk=iso.pk).update(ativa=False)
 
         mantida = self.client.patch(
-            f"{self.URL}{criada.data['id']}/", {'categoria': 'Auditoria interna', 'status': 'concluida'},
+            f"{self.URL}{criada.data['id']}/", {'categoria': 'Auditoria interna', 'escopo': 'Mantido'},
             format='json', **_headers(),
         )
         self.assertEqual(mantida.status_code, 200, mantida.data)
@@ -1544,7 +1733,7 @@ class AuditoriaSGQTests(APITestCase):
         inativa = self.client.post(self.URL, _auditoria(), format='json', **_headers())
         self.assertEqual(inativa.status_code, 400)
         mantida = self.client.patch(
-            f"{self.URL}{criada.data['id']}/", {'categoria': 'Auditoria interna', 'status': 'concluida'},
+            f"{self.URL}{criada.data['id']}/", {'categoria': 'Auditoria interna', 'escopo': 'Mantido'},
             format='json', **_headers(),
         )
         self.assertEqual(mantida.status_code, 200, mantida.data)
@@ -1645,6 +1834,34 @@ class CategoriaAuditoriaSGQTests(APITestCase):
 
         opcoes = self.client.get(f'{self.URL}sugestoes/', **_headers()).data['normas']
         self.assertEqual([n['nome'] for n in opcoes], ['ISO 9001:2015'])
+
+    def test_norma_compartilhada_da_matriz_pode_ser_usada_na_outra_filial(self):
+        hoje = timezone.localdate()
+        compartilhada = NormaSGQ.objects.create(
+            filial=IBIPORA, nome='ISO 9001:2015', data_atualizacao=hoje, publica=True,
+        )
+        privada = NormaSGQ.objects.create(
+            filial=IBIPORA, nome='SASSMAQ', data_atualizacao=hoje, publica=False,
+        )
+
+        criada = self._categoria(RONDONOPOLIS, nome='Uso da matriz', normaIds=[str(compartilhada.pk)])
+        self.assertEqual(criada.status_code, 201, criada.data)
+        self.assertEqual(criada.data['normas'], [{
+            'id': str(compartilhada.pk), 'nome': 'ISO 9001:2015', 'ativa': True, 'compartilhada': True,
+        }])
+        self.assertEqual(
+            self._categoria(RONDONOPOLIS, nome='Bloqueada', normaIds=[str(privada.pk)]).status_code, 400,
+        )
+        opcoes = self.client.get(f'{self.URL}sugestoes/', **_headers(RONDONOPOLIS)).data['normas']
+        self.assertEqual(opcoes, [{
+            'id': str(compartilhada.pk), 'nome': 'ISO 9001:2015', 'descricao': '', 'compartilhada': True,
+        }])
+
+        auditoria = self.client.post(
+            '/api/sgq/auditorias/', _auditoria(categoria='Uso da matriz'), format='json', **_headers(RONDONOPOLIS),
+        )
+        self.assertEqual(auditoria.status_code, 201, auditoria.data)
+        self.assertEqual([n['nome'] for n in auditoria.data['normas']], ['ISO 9001:2015'])
 
     def test_renomear_propaga_e_em_uso_nao_exclui(self):
         categoria = self._categoria().data
@@ -1786,6 +2003,34 @@ class TipoRespostaSGQTests(APITestCase):
         self.assertEqual(self._tipo(nome='Novo').status_code, 403)
         self.assertEqual(self.client.delete(f"{self.URL}{criado['id']}/", **_headers()).status_code, 403)
 
+    def test_compartilhamento_da_matriz_aparece_na_outra_filial_sem_edicao(self):
+        criado = self._tipo(nome='ISO 9001 — Conformidade')
+        self.assertEqual(criado.status_code, 201, criado.data)
+        self.assertTrue(criado.data['editavel'])
+        self._tipo(nome='Interno', publica=False)
+        local = self._tipo(RONDONOPOLIS, nome='Local')
+        self.assertFalse(local.data['publica'])
+
+        na_outra = self.client.get(self.URL, **_headers(RONDONOPOLIS))
+        self.assertEqual(
+            {t['nome'] for t in na_outra.data['results']},
+            {'Local', 'ISO 9001 — Conformidade'},
+        )
+        compartilhado = next(t for t in na_outra.data['results'] if t['nome'] == 'ISO 9001 — Conformidade')
+        self.assertEqual((compartilhado['filial'], compartilhado['publica'], compartilhado['editavel']), (IBIPORA, True, False))
+        self.assertNotIn('Interno', [t['nome'] for t in na_outra.data['results']])
+
+        edicao = self.client.patch(
+            f"{self.URL}{criado.data['id']}/", {'nome': 'Alterado'}, format='json', **_headers(RONDONOPOLIS),
+        )
+        self.assertEqual(edicao.status_code, 403)
+        self.assertEqual(self.client.delete(f"{self.URL}{criado.data['id']}/", **_headers(RONDONOPOLIS)).status_code, 403)
+        lote = self.client.post(
+            f'{self.URL}excluir-lote/', {'ids': [criado.data['id']]}, format='json', **_headers(RONDONOPOLIS),
+        )
+        self.assertEqual(lote.status_code, 403)
+        self.assertTrue(TipoRespostaSGQ.objects.filter(pk=criado.data['id'], nome='ISO 9001 — Conformidade').exists())
+
 
 _AREA_SS = {'sigla': 'SS', 'nome': 'Saúde e Segurança'}
 
@@ -1873,6 +2118,41 @@ class NormaSGQTests(APITestCase):
         self.assertEqual(self.client.get(self.URL, **_headers()).status_code, 200)
         self.assertEqual(self.client.post(self.URL, _norma(), format='json', **_headers()).status_code, 403)
 
+    def test_compartilhamento_da_matriz_aparece_na_outra_filial_sem_edicao(self):
+        criada = self.client.post(self.URL, _norma(nome='ISO 9001:2015'), format='json', **_headers())
+        self.assertEqual(criada.status_code, 201, criada.data)
+        self.assertTrue(criada.data['editavel'])
+        privada = self.client.post(self.URL, _norma(nome='SASSMAQ', publica=False), format='json', **_headers())
+        self.client.post(self.URL, _norma(nome='Local', publica=True), format='json', **_headers(RONDONOPOLIS))
+
+        na_outra = self.client.get(self.URL, **_headers(RONDONOPOLIS))
+        self.assertEqual([n['nome'] for n in na_outra.data['results']], ['ISO 9001:2015', 'Local'])
+        compartilhada = na_outra.data['results'][0]
+        self.assertEqual((compartilhada['filial'], compartilhada['publica'], compartilhada['editavel']), (IBIPORA, True, False))
+        self.assertEqual(self.client.get(f'{self.URL}resumo/', **_headers(RONDONOPOLIS)).data['total'], 2)
+        self.assertNotIn('SASSMAQ', [n['nome'] for n in na_outra.data['results']])
+
+        detalhe = self.client.get(f"{self.URL}{criada.data['id']}/", **_headers(RONDONOPOLIS))
+        self.assertEqual(detalhe.status_code, 200)
+        self.assertFalse(detalhe.data['editavel'])
+        edicao = self.client.patch(
+            f"{self.URL}{criada.data['id']}/", {'nome': 'ISO alterada'}, format='json', **_headers(RONDONOPOLIS),
+        )
+        self.assertEqual(edicao.status_code, 403)
+        exclusao = self.client.delete(f"{self.URL}{criada.data['id']}/", **_headers(RONDONOPOLIS))
+        self.assertEqual(exclusao.status_code, 403)
+        lote = self.client.post(
+            f'{self.URL}excluir-lote/', {'ids': [criada.data['id']]}, format='json', **_headers(RONDONOPOLIS),
+        )
+        self.assertEqual(lote.status_code, 403)
+        self.assertTrue(NormaSGQ.objects.filter(pk=criada.data['id'], nome='ISO 9001:2015').exists())
+        self.assertFalse(NormaSGQ.objects.get(pk=privada.data['id']).publica)
+
+        local = NormaSGQ.objects.get(filial=RONDONOPOLIS, nome='Local')
+        self.assertFalse(local.publica)
+        so_matriz = self.client.get(self.URL, **_headers())
+        self.assertEqual([n['nome'] for n in so_matriz.data['results']], ['ISO 9001:2015', 'SASSMAQ'])
+
 class ItemNormaSGQTests(APITestCase):
     URL = '/api/sgq/normas-itens/'
 
@@ -1920,6 +2200,28 @@ class ItemNormaSGQTests(APITestCase):
         self.assertEqual(
             (orientativo.data['tipoRespostaId'], orientativo.data['classificacao'], orientativo.data['areas']), (None, '', []),
         )
+
+    def test_pergunta_da_outra_filial_usa_tipo_compartilhado_da_matriz(self):
+        TipoRespostaSGQ.objects.filter(pk=self.tipo_resposta.pk).update(publica=True)
+        norma = self.client.post(
+            '/api/sgq/normas/', _norma(nome='Norma local'), format='json', **_headers(RONDONOPOLIS),
+        ).data['id']
+        usada = self.client.post(
+            self.URL,
+            {'normaId': norma, 'titulo': 'Pergunta?', 'tipo': 'pergunta', 'tipoRespostaId': str(self.tipo_resposta.pk)},
+            format='json', **_headers(RONDONOPOLIS),
+        )
+        self.assertEqual(usada.status_code, 201, usada.data)
+        self.assertEqual(usada.data['tipoRespostaId'], str(self.tipo_resposta.pk))
+
+        TipoRespostaSGQ.objects.filter(pk=self.tipo_resposta.pk).update(publica=False)
+        bloqueada = self.client.post(
+            self.URL,
+            {'normaId': norma, 'titulo': 'Outra?', 'tipo': 'pergunta', 'tipoRespostaId': str(self.tipo_resposta.pk)},
+            format='json', **_headers(RONDONOPOLIS),
+        )
+        self.assertEqual(bloqueada.status_code, 400)
+        self.assertIn('tipoRespostaId', bloqueada.data)
 
     def test_tipo_de_resposta_precisa_ser_da_filial_da_norma(self):
         de_fora = TipoRespostaSGQ.objects.create(
@@ -1988,12 +2290,21 @@ class ItemNormaSGQTests(APITestCase):
         self.client.delete(f"{self.URL}{r1['id']}/", **_headers())
         self.assertEqual(len(self.client.get(self.URL, {'norma': self.norma}, **_headers()).data), 1)
 
-    def test_norma_de_outra_filial_fica_inacessivel(self):
-        self._item()
+    def test_norma_compartilhada_pode_ser_lida_na_outra_filial_mas_nao_alterada(self):
+        item = self._item()
         lista = self.client.get(self.URL, {'norma': self.norma}, **_headers(RONDONOPOLIS))
-        self.assertEqual(lista.data, [])
+        self.assertEqual([i['id'] for i in lista.data], [item.data['id']])
         criar = self.client.post(self.URL, {'normaId': self.norma, 'titulo': 'X'}, format='json', **_headers(RONDONOPOLIS))
-        self.assertEqual(criar.status_code, 400)
+        self.assertEqual(criar.status_code, 403)
+        editar = self.client.patch(f"{self.URL}{item.data['id']}/", {'titulo': 'Outro'}, format='json', **_headers(RONDONOPOLIS))
+        self.assertEqual(editar.status_code, 403)
+        self.assertEqual(self.client.delete(f"{self.URL}{item.data['id']}/", **_headers(RONDONOPOLIS)).status_code, 403)
+        mover = self.client.post(f"{self.URL}{item.data['id']}/mover/", {'direcao': 'cima'}, format='json', **_headers(RONDONOPOLIS))
+        self.assertEqual(mover.status_code, 403)
+        self.assertEqual(ItemNormaSGQ.objects.get(pk=item.data['id']).titulo, item.data['titulo'])
+
+        NormaSGQ.objects.filter(pk=self.norma).update(publica=False)
+        self.assertEqual(self.client.get(self.URL, {'norma': self.norma}, **_headers(RONDONOPOLIS)).data, [])
 
     def _planilha(self):
         import openpyxl
@@ -2247,18 +2558,31 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
             f'{self.base}responder/', {'itemId': str(self.pergunta.pk), **dados}, format='json', **_headers(),
         )
 
-    def test_visao_conta_status_atraso_do_semestre_e_nao_conformidade(self):
+    def test_visao_conta_total_atraso_do_ano_e_nao_conformidade(self):
         hoje = timezone.localdate()
-        inicio = hoje.replace(month=1 if hoje.month <= 6 else 7, day=1)
-        termo = max(inicio, hoje - timedelta(days=1))
-        AuditoriaSGQ.objects.filter(pk=self.auditoria.pk).update(status='execucao', data_termino=termo)
+        termo = hoje - timedelta(days=1)
+        AuditoriaSGQ.objects.filter(pk=self.auditoria.pk).update(status='execucao', data_termino=termo, ano=hoje.year)
+        anterior = hoje.year - 1
+        AuditoriaSGQ.objects.create(
+            filial=IBIPORA, ano=anterior, sequencia=1, codigo=f'{anterior % 100:02d}-00001',
+            categoria='Interna', titulo='Ano anterior',
+            data_inicio=f'{anterior}-10-01', data_termino=f'{anterior}-10-30',
+            auditor_lider='Ana', status='execucao',
+        )
         self._responder(opcaoCodigo='0')
         resposta = self.client.get(f'{self.URL}visao/', **_headers())
         self.assertEqual(resposta.status_code, 200, resposta.data)
+        self.assertEqual(resposta.data['ano'], hoje.year)
+        self.assertEqual(resposta.data['total'], 1)
         self.assertEqual(resposta.data['execucao'], 1)
+        self.assertEqual(resposta.data['atrasadas'], 1)
+        self.assertIn(hoje.year, resposta.data['anos'])
+        self.assertIn(anterior, resposta.data['anos'])
         self.assertEqual(resposta.data['ocorrencias'], [{'label': 'SASSMAQ 2026', 'valor': 1}])
-        self.assertEqual(resposta.data['atrasadas'], 1 if termo < hoje else 0)
-        self.assertIn(str(hoje.year), resposta.data['semestre'])
+
+        outro_ano = self.client.get(f'{self.URL}visao/', {'ano': anterior}, **_headers())
+        self.assertEqual(outro_ano.data['total'], 1)
+        self.assertEqual(outro_ano.data['ocorrencias'], [])
 
     def test_lista_traz_progresso_do_questionario(self):
         outra = ItemNormaSGQ.objects.create(
@@ -2344,6 +2668,79 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         self.assertEqual(self.client.get(f'{self.base}execucao/', **_headers()).status_code, 200)
         self.assertEqual(self._responder(opcaoCodigo='1').status_code, 403)
 
+    def test_so_o_auditor_lider_conclui_com_questionario_valido(self):
+        gestor = User.objects.create_user(
+            username='sgq.gestor.conclusao', password='x', name='Gestor', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['gerenciar-auditorias']},
+        )
+        self.client.force_authenticate(gestor)
+        self.assertEqual(self.client.post(f'{self.base}concluir/', format='json', **_headers()).status_code, 403)
+        patch = self.client.patch(self.base, {'status': 'concluida'}, format='json', **_headers())
+        self.assertEqual(patch.status_code, 400)
+        self.assertIn('auditor líder', str(patch.data))
+
+        self.auditoria.auditor_lider = 'Ana Gestora'
+        self.auditoria.save(update_fields=['auditor_lider'])
+        lider = User.objects.create_user(
+            username='sgq.ana.gestora', password='x', name='Ana Gestora', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['gerenciar-auditorias', 'executar-auditorias']},
+        )
+        self.client.force_authenticate(lider)
+        sem_perguntas = AuditoriaSGQ.objects.create(
+            filial=IBIPORA, ano=2026, sequencia=2, codigo='26-00002', categoria='Interna', titulo='Sem questionário',
+            data_inicio='2026-10-01', data_termino='2026-10-30', auditor_lider='Ana Gestora', status='execucao',
+        )
+        vazia = self.client.post(f'{self.URL}{sem_perguntas.pk}/concluir/', format='json', **_headers())
+        self.assertEqual(vazia.status_code, 400)
+        self.assertIn('não tem perguntas', vazia.data['detail'])
+
+        incompleta = self.client.post(f'{self.base}concluir/', format='json', **_headers())
+        self.assertEqual(incompleta.status_code, 400)
+        self.assertIn('Não aplicável', incompleta.data['detail'])
+        self.assertIn('1.1', incompleta.data['detail'])
+
+        opcional = ItemNormaSGQ.objects.create(
+            norma=self.norma, parent=self.pergunta.parent, codigo='1.2', titulo='Opcional?',
+            tipo='pergunta', tipo_resposta=self.pergunta.tipo_resposta, obrigatorio=False,
+        )
+        self._responder(opcaoCodigo='1')
+        falta_opcional = self.client.post(f'{self.base}concluir/', format='json', **_headers())
+        self.assertEqual(falta_opcional.status_code, 400)
+        self.assertIn('1.2', falta_opcional.data['detail'])
+        respondida = self.client.post(
+            f'{self.base}responder/',
+            {'itemId': str(opcional.pk), 'opcaoCodigo': '1'},
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(respondida.status_code, 200, respondida.data)
+        ok = self.client.post(f'{self.base}concluir/', format='json', **_headers())
+        self.assertEqual(ok.status_code, 200, ok.data)
+        self.assertEqual(ok.data['status'], 'concluida')
+
+        AuditoriaSGQ.objects.filter(pk=self.auditoria.pk).update(status='execucao')
+        RespostaAuditoriaSGQ.objects.filter(item=self.pergunta).update(opcao_codigo='X', observacoes='', valor=None)
+        sem_justificativa = self.client.post(f'{self.base}concluir/', format='json', **_headers())
+        self.assertEqual(sem_justificativa.status_code, 400)
+        self.assertIn('Justifique', sem_justificativa.data['detail'])
+
+        RespostaAuditoriaSGQ.objects.filter(item=self.pergunta).update(opcao_codigo='Z', observacoes='fora das opções')
+        invalida = self.client.post(f'{self.base}concluir/', format='json', **_headers())
+        self.assertEqual(invalida.status_code, 400)
+        self.assertIn('não correspondem', invalida.data['detail'])
+
+        RespostaAuditoriaSGQ.objects.filter(item=self.pergunta).update(
+            opcao_codigo='1', opcao_texto='Sim', valor=100, observacoes='',
+        )
+        via_edicao = self.client.patch(self.base, {'status': 'concluida'}, format='json', **_headers())
+        self.assertEqual(via_edicao.status_code, 200, via_edicao.data)
+        self.assertEqual(via_edicao.data['status'], 'concluida')
+
+        self.client.force_authenticate(self.auditor)
+        self.assertEqual(self.client.post(f'{self.base}concluir/', format='json', **_headers()).status_code, 403)
+
     def test_perguntas_respondidas_protegem_norma_e_itens(self):
         self._responder(opcaoCodigo='1')
         gestor = User.objects.create_user(
@@ -2356,3 +2753,69 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         norma = self.client.delete(f'/api/sgq/normas/{self.norma.pk}/', **_headers())
         self.assertEqual(norma.status_code, 400)
         self.assertTrue(ItemNormaSGQ.objects.filter(pk=self.pergunta.pk).exists())
+
+    def test_presenca_so_de_quem_tem_a_filial_da_auditoria(self):
+        from apps.sgq.auditoria_realtime import usuario_pode_acompanhar
+
+        self.assertTrue(usuario_pode_acompanhar(self.auditor, self.auditoria.pk))
+        outra_filial = User.objects.create_user(
+            username='sgq.rondonopolis', password='x', name='Outra Filial', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': ['Rondonópolis']}, funcoes={'SGQ': ['executar-auditorias']},
+        )
+        self.assertFalse(usuario_pode_acompanhar(outra_filial, self.auditoria.pk))
+        self.assertFalse(usuario_pode_acompanhar(self.auditor, 999999))
+
+    def test_dois_usuarios_na_mesma_pergunta_se_enxergam(self):
+        from asgiref.sync import async_to_sync
+        from channels.routing import URLRouter
+        from channels.testing import WebsocketCommunicator
+        from django.urls import path
+
+        from apps.sgq.consumers import AuditoriaPresencaConsumer
+
+        colega = User.objects.create_user(
+            username='sgq.colega', password='x', name='Colega Ao Vivo', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]}, funcoes={'SGQ': ['executar-auditorias']},
+        )
+        rota = URLRouter([
+            path('ws/sgq/auditorias/<int:auditoria_id>/presence/', AuditoriaPresencaConsumer.as_asgi()),
+        ])
+        caminho = f'/ws/sgq/auditorias/{self.auditoria.pk}/presence/'
+
+        async def conversar():
+            ana = WebsocketCommunicator(rota, caminho)
+            bia = WebsocketCommunicator(rota, caminho)
+            ana.scope['user'] = self.auditor
+            bia.scope['user'] = colega
+            try:
+                ok_ana, _ = await ana.connect()
+                ok_bia, _ = await bia.connect()
+                self.assertTrue(ok_ana)
+                self.assertTrue(ok_bia)
+                await ana.send_json_to({'type': 'foco', 'itemId': str(self.pergunta.pk)})
+                await bia.send_json_to({'type': 'foco', 'itemId': str(self.pergunta.pk)})
+                visto = False
+                for _ in range(8):
+                    quadro = await ana.receive_json_from(timeout=2)
+                    if quadro.get('type') != 'presence':
+                        continue
+                    nomes = {p['name']: p.get('itemId') for p in quadro['online']}
+                    if nomes.get('Colega Ao Vivo') == str(self.pergunta.pk):
+                        visto = True
+                        break
+                self.assertTrue(visto)
+                await ana.send_json_to({
+                    'type': 'rascunho', 'itemId': str(self.pergunta.pk), 'opcaoCodigo': 'NA', 'destaque': 'forte',
+                })
+                marcado = False
+                for _ in range(6):
+                    quadro = await bia.receive_json_from(timeout=2)
+                    if quadro.get('type') == 'rascunho' and quadro.get('opcaoCodigo') == 'NA' and quadro.get('destaque') == 'forte':
+                        marcado = True
+                        break
+                self.assertTrue(marcado)
+            finally:
+                await ana.disconnect()
+                await bia.disconnect()
+
+        async_to_sync(conversar)()

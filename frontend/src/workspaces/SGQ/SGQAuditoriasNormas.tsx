@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
+import { branchesForModule } from '../../constants/filiais';
 import { userHasFuncao } from '../../constants/funcoes';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import { getSgqAuditoriaErrorMessage } from '../../hooks/useSgqAuditorias';
@@ -20,6 +21,7 @@ import type {
   SgqNormaQueryParams,
 } from '../../types/domain';
 
+const FILIAL_QUE_COMPARTILHA = branchesForModule('SGQ')[0];
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
 type FiltroSituacao = NonNullable<SgqNormaQueryParams['situacao']>;
 type CampoOrdenavel = 'nome' | 'descricao' | 'data_atualizacao' | 'emissor';
@@ -99,6 +101,12 @@ const SGQAuditoriasNormas: React.FC = () => {
   const filtrando = Boolean(buscaAplicada || filtroSituacao);
   const paginaAtual = Math.min(page, totalPaginas);
   const normaSelecionada = selecionadas.size === 1 ? linhas.find((linha) => selecionadas.has(linha.id)) : undefined;
+  const podeAlterar = canManage && (!editando || editando.editavel);
+  const podeExcluirSelecao = canManage && selecionadas.size > 0 && [...selecionadas].every((id) => (
+    linhas.find((linha) => linha.id === id)?.editavel === true
+  ));
+  const filialDaNorma = editando?.filial ?? selectedFilial;
+  const podeDefinirCompartilhamento = podeAlterar && filialDaNorma === FILIAL_QUE_COMPARTILHA;
 
   const mudarFiltro = (valor: FiltroSituacao) => {
     setFiltroSituacao(valor);
@@ -190,6 +198,10 @@ const SGQAuditoriasNormas: React.FC = () => {
 
   const excluirIds = (ids: string[], descricao: string) => {
     setAcoesAbertas(false);
+    if (linhas.some((linha) => ids.includes(linha.id) && !linha.editavel)) {
+      alert('Normas compartilhadas só podem ser excluídas na filial em que foram lançadas.');
+      return;
+    }
     if (!window.confirm(`Excluir ${descricao}? Essa ação não pode ser desfeita.`)) return;
     excluir.mutate(ids, {
       onSuccess: () => setSelecionadas((atual) => {
@@ -231,18 +243,18 @@ const SGQAuditoriasNormas: React.FC = () => {
                   <span className="reports-dropdown-item" onClick={() => abrirRequisitos(normaSelecionada)}>
                     <span className="reports-dropdown-item-left">
                       <i className="bi bi-list-nested" aria-hidden="true" />
-                      Requisitos
+                      {normaSelecionada.editavel ? 'Requisitos' : 'Visualizar requisitos'}
                     </span>
                   </span>
                   <span className="reports-dropdown-item" onClick={() => abrirEdicao(normaSelecionada)}>
                     <span className="reports-dropdown-item-left">
-                      <i className={`bi ${canManage ? 'bi-pencil' : 'bi-eye'}`} aria-hidden="true" />
-                      {canManage ? 'Editar' : 'Visualizar'}
+                      <i className={`bi ${canManage && normaSelecionada.editavel ? 'bi-pencil' : 'bi-eye'}`} aria-hidden="true" />
+                      {canManage && normaSelecionada.editavel ? 'Editar' : 'Visualizar'}
                     </span>
                   </span>
                 </>
               )}
-              {canManage && (
+              {podeExcluirSelecao && (
                 <span
                   className={`reports-dropdown-item is-danger${excluir.isPending ? ' is-disabled' : ''}`}
                   onClick={() => excluirIds([...selecionadas], selecionadas.size === 1 ? 'a norma selecionada' : `${selecionadas.size} normas`)}
@@ -328,7 +340,7 @@ const SGQAuditoriasNormas: React.FC = () => {
                   <th>{cabecalhoOrdenavel('descricao', 'Descrição')}</th>
                   <th>{cabecalhoOrdenavel('data_atualizacao', 'Última atualização')}</th>
                   <th>{cabecalhoOrdenavel('emissor', 'Emissor')}</th>
-                  <th>Norma pública?</th>
+                  <th>Compartilhamento</th>
                   <th>Situação</th>
                 </tr>
               </thead>
@@ -363,7 +375,12 @@ const SGQAuditoriasNormas: React.FC = () => {
                         <td>{formatarData(norma.dataAtualizacao)}</td>
                         <td>{norma.emissor || '—'}</td>
                         <td>
-                          <span className={`sgq-aud-status ${norma.publica ? 'is-sim' : 'is-nao'}`}>
+                          <span
+                            className={`sgq-aud-status ${norma.publica ? 'is-sim' : 'is-nao'}`}
+                            title={norma.editavel
+                              ? 'Compartilha esta norma com a outra filial'
+                              : `Lançada em ${norma.filial}. Disponível aqui só para uso.`}
+                          >
                             {norma.publica ? 'Sim' : 'Não'}
                           </span>
                         </td>
@@ -414,12 +431,14 @@ const SGQAuditoriasNormas: React.FC = () => {
             <div className="modal-header">
               <div>
                 <h3 id="sgq-norma-modal-title">
-                  {editando ? (canManage ? 'Editar Norma' : 'Norma') : 'Nova Norma'}
+                  {editando ? (podeAlterar ? 'Editar Norma' : 'Norma') : 'Nova Norma'}
                 </h3>
                 <p className="sgq-aud-modal-sub">
-                  {editando
-                    ? `Última atualização em ${formatarData(editando.dataAtualizacao)} por ${editando.emissor || '—'}`
-                    : `Data da última atualização e emissor (${user?.name || user?.username || 'você'}) são preenchidos automaticamente.`}
+                  {editando && !editando.editavel
+                    ? `Lançada em ${editando.filial}. Nesta filial a norma fica só para visualização.`
+                    : editando
+                      ? `Última atualização em ${formatarData(editando.dataAtualizacao)} por ${editando.emissor || '—'}`
+                      : `Data da última atualização e emissor (${user?.name || user?.username || 'você'}) são preenchidos automaticamente.`}
                 </p>
               </div>
               <button type="button" className="btn-icon" onClick={fecharModal} aria-label="Fechar">
@@ -428,12 +447,13 @@ const SGQAuditoriasNormas: React.FC = () => {
             </div>
 
             <form className="modal-body sgq-aud-form" onSubmit={enviar}>
-              <fieldset disabled={!canManage || salvar.isPending}>
+              <fieldset disabled={!podeAlterar || salvar.isPending} inert={!podeAlterar || salvar.isPending ? true : undefined}>
                 <label className="is-wide">
                   <span>Nome <em>*</em></span>
                   <input
                     className="form-input"
                     required
+                    readOnly={!podeAlterar}
                     maxLength={150}
                     value={form.nome}
                     onChange={(e) => setForm({ ...form, nome: e.target.value })}
@@ -446,29 +466,35 @@ const SGQAuditoriasNormas: React.FC = () => {
                   <textarea
                     className="form-input"
                     rows={2}
+                    readOnly={!podeAlterar}
                     maxLength={500}
                     value={form.descricao}
                     onChange={(e) => setForm({ ...form, descricao: e.target.value })}
                     placeholder="Ex.: Sistemas de gestão da qualidade - Requisitos"
                   />
                 </label>
-                <div className="sgq-aud-status-picker" role="radiogroup" aria-label="Norma pública?">
-                  <span>Norma pública?</span>
-                  <div>
-                    {[true, false].map((valor) => (
-                      <button
-                        key={String(valor)}
-                        type="button"
-                        role="radio"
-                        aria-checked={form.publica === valor}
-                        className={`sgq-aud-status ${valor ? 'is-sim' : 'is-nao'}${form.publica === valor ? ' is-picked' : ''}`}
-                        onClick={() => setForm({ ...form, publica: valor })}
-                      >
-                        {valor ? 'Sim' : 'Não'}
-                      </button>
-                    ))}
+                {podeDefinirCompartilhamento && (
+                  <div className="sgq-aud-status-picker" role="radiogroup" aria-label="Compartilhamento">
+                    <span>Compartilhamento</span>
+                    <div>
+                      {[true, false].map((valor) => (
+                        <button
+                          key={String(valor)}
+                          type="button"
+                          role="radio"
+                          aria-checked={form.publica === valor}
+                          className={`sgq-aud-status ${valor ? 'is-sim' : 'is-nao'}${form.publica === valor ? ' is-picked' : ''}`}
+                          onClick={() => setForm({ ...form, publica: valor })}
+                        >
+                          {valor ? 'Sim' : 'Não'}
+                        </button>
+                      ))}
+                    </div>
+                    <small className="sgq-cat-aviso">
+                      Com o compartilhamento ativo, a outra filial pode usar esta norma. A edição continua só aqui.
+                    </small>
                   </div>
-                </div>
+                )}
                 <div className="sgq-aud-status-picker" role="radiogroup" aria-label="Situação">
                   <span>Situação</span>
                   <div>
@@ -479,7 +505,8 @@ const SGQAuditoriasNormas: React.FC = () => {
                         role="radio"
                         aria-checked={form.ativa === valor}
                         className={`sgq-aud-status ${valor ? 'is-ativa' : 'is-inativa'}${form.ativa === valor ? ' is-picked' : ''}`}
-                        onClick={() => setForm({ ...form, ativa: valor })}
+                        disabled={!podeAlterar}
+                        onClick={() => { if (podeAlterar) setForm({ ...form, ativa: valor }); }}
                       >
                         <i className={`bi ${valor ? 'bi-check-circle-fill' : 'bi-slash-circle'}`} aria-hidden="true" />
                         {valor ? 'Ativa' : 'Inativa'}
@@ -498,6 +525,7 @@ const SGQAuditoriasNormas: React.FC = () => {
                             <input
                               className="form-input"
                               required
+                              readOnly={!podeAlterar}
                               maxLength={10}
                               value={classe.sigla}
                               onChange={(e) => alterarClassificacao(indice, { sigla: e.target.value.toUpperCase() })}
@@ -509,6 +537,7 @@ const SGQAuditoriasNormas: React.FC = () => {
                             <input
                               className="form-input"
                               required
+                              readOnly={!podeAlterar}
                               maxLength={60}
                               value={classe.nome}
                               onChange={(e) => alterarClassificacao(indice, { nome: e.target.value })}
@@ -519,6 +548,7 @@ const SGQAuditoriasNormas: React.FC = () => {
                             <input
                               type="checkbox"
                               checked={classe.critica}
+                              disabled={!podeAlterar}
                               onChange={(e) => alterarClassificacao(indice, { critica: e.target.checked })}
                             />
                             <span>Crítica</span>
@@ -529,6 +559,7 @@ const SGQAuditoriasNormas: React.FC = () => {
                               className="form-input"
                               type="number"
                               required
+                              readOnly={!podeAlterar}
                               min={0}
                               max={100}
                               value={classe.metaPrimeira}
@@ -541,25 +572,28 @@ const SGQAuditoriasNormas: React.FC = () => {
                               className="form-input"
                               type="number"
                               required
+                              readOnly={!podeAlterar}
                               min={0}
                               max={100}
                               value={classe.metaReavaliacao}
                               onChange={(e) => alterarClassificacao(indice, { metaReavaliacao: Number(e.target.value) })}
                             />
                           </label>
-                          <button
-                            type="button"
-                            className="btn-icon"
-                            onClick={() => setForm({ ...form, classificacoes: form.classificacoes.filter((_, i) => i !== indice) })}
-                            aria-label={`Remover classificação ${classe.sigla}`}
-                          >
-                            <i className="bi bi-trash3" aria-hidden="true" />
-                          </button>
+                          {podeAlterar && (
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={() => setForm({ ...form, classificacoes: form.classificacoes.filter((_, i) => i !== indice) })}
+                              aria-label={`Remover classificação ${classe.sigla}`}
+                            >
+                              <i className="bi bi-trash3" aria-hidden="true" />
+                            </button>
+                          )}
                         </li>
                       ))}
                     </ol>
                   )}
-                  {canManage && (
+                  {podeAlterar && (
                     <button
                       type="button"
                       className="reports-action-btn secondary sgq-tr-adicionar"
@@ -585,6 +619,7 @@ const SGQAuditoriasNormas: React.FC = () => {
                             <input
                               className="form-input"
                               required
+                              readOnly={!podeAlterar}
                               maxLength={10}
                               value={area.sigla}
                               onChange={(e) => alterarArea(indice, { sigla: e.target.value.toUpperCase() })}
@@ -596,25 +631,28 @@ const SGQAuditoriasNormas: React.FC = () => {
                             <input
                               className="form-input"
                               required
+                              readOnly={!podeAlterar}
                               maxLength={60}
                               value={area.nome}
                               onChange={(e) => alterarArea(indice, { nome: e.target.value })}
                               placeholder="Saúde e Segurança"
                             />
                           </label>
-                          <button
-                            type="button"
-                            className="btn-icon"
-                            onClick={() => setForm({ ...form, areas: form.areas.filter((_, i) => i !== indice) })}
-                            aria-label={`Remover área ${area.sigla}`}
-                          >
-                            <i className="bi bi-trash3" aria-hidden="true" />
-                          </button>
+                          {podeAlterar && (
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={() => setForm({ ...form, areas: form.areas.filter((_, i) => i !== indice) })}
+                              aria-label={`Remover área ${area.sigla}`}
+                            >
+                              <i className="bi bi-trash3" aria-hidden="true" />
+                            </button>
+                          )}
                         </li>
                       ))}
                     </ol>
                   )}
-                  {canManage && (
+                  {podeAlterar && (
                     <button
                       type="button"
                       className="reports-action-btn secondary sgq-tr-adicionar"
@@ -631,9 +669,9 @@ const SGQAuditoriasNormas: React.FC = () => {
               </fieldset>
               <div className="modal-footer">
                 <button type="button" className="reports-action-btn secondary" onClick={fecharModal} disabled={salvar.isPending}>
-                  {canManage ? 'Cancelar' : 'Fechar'}
+                  {podeAlterar ? 'Cancelar' : 'Fechar'}
                 </button>
-                {canManage && (
+                {podeAlterar && (
                   <button type="submit" className="reports-action-btn primary" disabled={salvar.isPending}>
                     {salvar.isPending ? 'Salvando...' : editando ? 'Salvar Alterações' : 'Registrar Norma'}
                   </button>

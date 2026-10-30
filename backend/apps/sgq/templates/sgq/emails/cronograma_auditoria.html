@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cronograma de Auditoria</title>
+</head>
+<body style="margin:0;padding:0;background:#e9ecef;color:#1a2330;font-family:'Segoe UI',Calibri,Arial,sans-serif;-webkit-text-size-adjust:100%;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;background:#e9ecef;padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;max-width:600px;width:100%;background:#ffffff;font-family:'Segoe UI',Calibri,Arial,sans-serif;">
+          <tr>
+            <td style="font-family:'Segoe UI',Calibri,Arial,sans-serif;background:#0f2744;padding:26px 36px 22px;">
+              <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#9cc3e6;">Gestão da Qualidade</p>
+              <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:8px 0 0;font-size:22px;line-height:1.25;font-weight:600;color:#ffffff;">Cronograma de Auditoria</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="font-family:'Segoe UI',Calibri,Arial,sans-serif;height:3px;line-height:3px;font-size:0;background:#1179b9;">&nbsp;</td>
+          </tr>
+          {% if logo_cid %}
+          <tr>
+            <td style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:26px 36px 0;">
+              <img src="cid:{{ logo_cid }}" alt="Transcamila" height="34" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;display:block;border:0;outline:none;height:34px;width:auto;max-width:180px;" />
+            </td>
+          </tr>
+          {% endif %}
+          <tr>
+            <td style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:{% if logo_cid %}18px{% else %}28px{% endif %} 36px 0;font-size:15px;line-height:1.65;color:#2a3340;">
+              <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 16px;">{{ saudacao }}</p>
+              <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;">Segue o cronograma da auditoria <strong style="font-family:'Segoe UI',Calibri,Arial,sans-serif;color:#0f2744;">{{ codigo }}</strong>, {{ titulo }}, de <strong style="font-family:'Segoe UI',Calibri,Arial,sans-serif;color:#0f2744;">{{ periodo }}</strong>.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:24px 36px 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td width="42%" valign="top" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;background:#0f2744;padding:16px 18px;">
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#9cc3e6;">Início</p>
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:6px 0 0;font-size:26px;line-height:1;font-weight:600;color:#ffffff;">{{ inicio.numero }} {{ inicio.mes }}</p>
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:6px 0 0;font-size:13px;color:#ffffff;">{{ inicio.semana }} · {{ inicio.data }}</p>
+                  </td>
+                  <td width="16%" align="center" valign="middle" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:22px;color:#1179b9;">→</td>
+                  <td width="42%" valign="top" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;background:#f6f7f9;padding:16px 18px;border:1px solid #e4e7eb;">
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#1179b9;">Término</p>
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:6px 0 0;font-size:26px;line-height:1;font-weight:600;color:#0f2744;">{{ termino.numero }} {{ termino.mes }}</p>
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:6px 0 0;font-size:13px;color:#4a5563;">{{ termino.semana }} · {{ termino.data }}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:26px 36px 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;background:#f6f7f9;">
+                <tr>
+                  <td style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:20px 22px 6px;">
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 14px;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#6b7380;">Dados da auditoria</p>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td width="50%" valign="top" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:0 12px 14px 0;">
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 3px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Código</p>
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:14px;font-weight:600;color:#0f2744;">{{ codigo }}</p>
+                        </td>
+                        <td width="50%" valign="top" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:0 0 14px 12px;">
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 3px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Status</p>
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:14px;color:#1a2330;">{{ status }}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="50%" valign="top" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:0 12px 14px 0;">
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 3px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Período</p>
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:14px;color:#1a2330;">{{ periodo }}</p>
+                        </td>
+                        <td width="50%" valign="top" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:0 0 14px 12px;">
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 3px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Filial</p>
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:14px;color:#1a2330;">{{ filial }}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="50%" valign="top" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:0 12px 14px 0;">
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 3px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Categoria</p>
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:14px;color:#1a2330;">{{ categoria }}</p>
+                        </td>
+                        <td width="50%" valign="top" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:0 0 14px 12px;">
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 3px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Auditor líder</p>
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:14px;color:#1a2330;">{{ auditor_lider }}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" valign="top" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:0 0 14px;">
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 3px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Auditores</p>
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:14px;color:#1a2330;">{{ auditores }}</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" valign="top" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:0 0 {% if escopo %}14px{% else %}4px{% endif %};">
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 3px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Normas</p>
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:14px;line-height:1.45;color:#1a2330;">{{ normas }}</p>
+                        </td>
+                      </tr>
+                      {% if escopo %}
+                      <tr>
+                        <td colspan="2" valign="top" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:0 0 4px;">
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 3px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8a93a0;">Escopo / objetivo</p>
+                          <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:14px;line-height:1.5;color:#1a2330;">{{ escopo|linebreaksbr }}</p>
+                        </td>
+                      </tr>
+                      {% endif %}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:26px 36px 8px;">
+              <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 14px;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#1179b9;">Agenda</p>
+              {% for item in itens %}
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0 0 10px;">
+                <tr>
+                  <td width="92" valign="middle" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;background:#0f2744;padding:14px 10px;text-align:center;">
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:22px;line-height:1;font-weight:600;color:#ffffff;">{{ item.numero }}</p>
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:4px 0 0;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#9cc3e6;">{{ item.mes }}</p>
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:4px 0 0;font-size:11px;color:#d6e6f5;">{{ item.data }}</p>
+                  </td>
+                  <td valign="middle" style="font-family:'Segoe UI',Calibri,Arial,sans-serif;background:#ffffff;border:1px solid #e4e7eb;border-left:0;padding:14px 16px;">
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;font-size:12px;font-weight:600;color:#1179b9;">{{ item.semana }} · {{ item.horario }}</p>
+                    <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:6px 0 0;font-size:16px;line-height:1.35;font-weight:600;color:#0f2744;">{{ item.atividade }}</p>
+                  </td>
+                </tr>
+              </table>
+              {% endfor %}
+            </td>
+          </tr>
+          <tr>
+            <td style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:22px 36px 8px;font-size:14px;line-height:1.6;color:#2a3340;">
+              <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:0;">Qualquer ajuste de horário pode ser alinhado diretamente com a auditoria.</p>
+              <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:18px 0 0;font-size:15px;font-weight:600;color:#0f2744;">{{ enviado_por }}</p>
+              {% if enviado_por_cargo %}
+              <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:4px 0 0;font-size:13px;color:#5c6570;">{{ enviado_por_cargo }}</p>
+              {% endif %}
+              {% if enviado_por_telefone %}
+              <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:2px 0 0;font-size:13px;color:#5c6570;">{{ enviado_por_telefone }}</p>
+              {% endif %}
+              <p style="font-family:'Segoe UI',Calibri,Arial,sans-serif;margin:4px 0 0;font-size:13px;color:#5c6570;">Gestão da Qualidade · Transcamila Cargas e Armazéns Gerais Ltda.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="font-family:'Segoe UI',Calibri,Arial,sans-serif;padding:22px 36px 28px;font-size:11px;line-height:1.55;color:#8a93a0;border-top:1px solid #eceff2;">
+              Esta mensagem destina-se exclusivamente ao destinatário identificado e tem caráter confidencial.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
