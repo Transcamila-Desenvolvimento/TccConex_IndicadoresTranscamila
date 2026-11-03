@@ -1227,7 +1227,8 @@ const AdminUsersPanel: React.FC = () => {
                                         </div>
                                       );
                                     };
-                                    const filiaisDoGrupo = requiresFilial && branches.length > 1 && (
+                                    const algumaLigada = keys.some((key) => visivel(key));
+                                    const filiaisDoGrupo = algumaLigada && requiresFilial && branches.length > 1 && (
                                       isSelectedAdmin ? (
                                         <span className="perm-matrix-muted">Todas as filiais</span>
                                       ) : (
@@ -1271,7 +1272,7 @@ const AdminUsersPanel: React.FC = () => {
                                                 <span className="perm-matrix-sub">{detalheDaRotina(group.module, unico.key)}</span>
                                               )}
                                             </div>
-                                            {filiaisDoGrupo}
+                                            {ligado && filiaisDoGrupo}
                                           </div>
                                           <div className="perm-bloco-foot">{acoesDaLinha(unico.key, ligado)}</div>
                                         </div>
