@@ -498,6 +498,39 @@ class UserManagementEnvironmentRulesTests(TestCase):
         self.assertEqual(response.data['abas']['Financeiro'], ['home', 'calendario'])
         self.assertNotIn('Indicadores', response.data['abas'])
 
+    def test_admin_restringe_filial_por_rotina(self):
+        operator = User.objects.create_user(
+            username='op_aba_filial',
+            password='oper123',
+            role_id='2',
+            environments=['SGQ'],
+            filiais={'SGQ': ['Ibiporã (Matriz)', 'Rondonópolis']},
+        )
+        response = self.client.patch(
+            f'/api/auth/users/{operator.id}/',
+            {
+                'abaFiliais': {
+                    'SGQ': {
+                        'pesquisa-satisfacao': ['Ibiporã (Matriz)'],
+                        'auditorias': ['Ibiporã (Matriz)', 'Rondonópolis', 'Paranaguá'],
+                        'home': ['Ibiporã (Matriz)'],
+                    },
+                },
+            },
+            format='json',
+            **auth_headers(self.admin, 'Administração'),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data['abaFiliais']['SGQ']['pesquisa-satisfacao'],
+            ['Ibiporã (Matriz)'],
+        )
+        self.assertEqual(
+            response.data['abaFiliais']['SGQ']['auditorias'],
+            ['Ibiporã (Matriz)', 'Rondonópolis'],
+        )
+        self.assertNotIn('home', response.data['abaFiliais']['SGQ'])
+
     def test_admin_restringe_filiais_do_indicador(self):
         operator = User.objects.create_user(
             username='op_ind_filial',

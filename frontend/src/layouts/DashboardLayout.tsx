@@ -60,7 +60,7 @@ const DashboardLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const allowedIndicadores = getAllowedIndicadores(user);
-  const canAba = (module: string, aba: string) => userCanSeeAba(user, module, aba);
+  const canAba = (module: string, aba: string) => userCanSeeAba(user, module, aba, selectedFilial);
   const showSessionFilial = environmentRequiresFilial(selectedEnvironment) && !!selectedFilial;
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
@@ -77,6 +77,7 @@ const DashboardLayout: React.FC = () => {
   const [isQuestionariosFrotaSubmenuOpen, setIsQuestionariosFrotaSubmenuOpen] = useState(false);
   const [isCadastrosComercialSubmenuOpen, setIsCadastrosComercialSubmenuOpen] = useState(false);
   const [isAuditoriasSgqSubmenuOpen, setIsAuditoriasSgqSubmenuOpen] = useState(false);
+  const [isMatrizSgqSubmenuOpen, setIsMatrizSgqSubmenuOpen] = useState(false);
   const [, setIsAdminSubmenuOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
@@ -135,6 +136,9 @@ const DashboardLayout: React.FC = () => {
     }
     if (location.pathname.startsWith('/sgq/auditorias')) {
       setIsAuditoriasSgqSubmenuOpen(true);
+    }
+    if (location.pathname.startsWith('/sgq/matriz')) {
+      setIsMatrizSgqSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/admin')) {
       setIsAdminSubmenuOpen(true);
@@ -544,15 +548,18 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'SGQ' && canAba('SGQ', 'pesquisa-satisfacao')
       },
       {
-        title: "Matriz",
-        path: "Gestão da Qualidade (SGQ) / Matriz",
-        icon: (
-          <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-          </svg>
-        ),
-        action: () => navigate('/sgq/matriz'),
+        title: "Documentos",
+        path: "Gestão da Qualidade (SGQ) / Matriz de conhecimento / Documentos",
+        icon: <i className="bi bi-file-earmark-text search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/sgq/matriz/documentos'),
         show: selectedEnvironment === 'SGQ' && canAba('SGQ', 'matriz')
+      },
+      {
+        title: "Ecossistema SGQ",
+        path: "Gestão da Qualidade (SGQ) / Matriz de conhecimento / Ecossistema SGQ",
+        icon: <i className="bi bi-diagram-3 search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/sgq/matriz/ecossistema'),
+        show: selectedEnvironment === 'SGQ' && canAba('SGQ', 'matriz-ecossistema')
       },
       ...SGQ_AUDITORIAS_MENU.map((item) => ({
         title: item.label,
@@ -789,7 +796,8 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/rh/documentos')) return `${env} / Matriz`;
     if (path.startsWith('/rh/movimentacoes')) return `${env} / Movimentações`;
     if (path.startsWith('/rh')) return env;
-    if (path.startsWith('/sgq/matriz')) return `${env} / Matriz`;
+    if (path.startsWith('/sgq/matriz/ecossistema')) return `${env} / Matriz de conhecimento / Ecossistema SGQ`;
+    if (path.startsWith('/sgq/matriz')) return `${env} / Matriz de conhecimento / Documentos`;
     if (path.startsWith('/sgq/pesquisa-satisfacao')) return `${env} / Pesquisa de Satisfação`;
     const auditoriaAtual = SGQ_AUDITORIAS_MENU.find((item) => path.startsWith(item.path));
     if (auditoriaAtual) return `${env} / Auditorias / ${auditoriaAtual.label}`;
@@ -1518,17 +1526,55 @@ const DashboardLayout: React.FC = () => {
                   </div>
                 </Link>
                 )}
-                {canAba('SGQ', 'matriz') && (
-                <Link
-                  to="/sgq/matriz"
-                  className={`nav-btn ${isRouteActive('/sgq/matriz') ? 'active' : ''}`}
-                  data-tooltip="Matriz"
-                >
-                  <div className="nav-btn-left">
-                    <NavIcon name="file-earmark-text" />
-                    <span className="nav-text">Matriz</span>
+                {(canAba('SGQ', 'matriz') || canAba('SGQ', 'matriz-ecossistema')) && (
+                <div className={`nav-group-wrapper${isMatrizSgqSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-sgq-matriz">
+                  <button
+                    type="button"
+                    className={`nav-btn ${isParentNavActive(['/sgq/matriz/documentos', '/sgq/matriz/ecossistema'], isMatrizSgqSubmenuOpen) ? 'active-parent' : ''}`}
+                    onClick={() => setIsMatrizSgqSubmenuOpen(!isMatrizSgqSubmenuOpen)}
+                    data-tooltip="Matriz de conhecimento"
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="diagram-3" />
+                      <span className="nav-text">Matriz de conhecimento</span>
+                    </div>
+                    <ChevronSubmenu open={isMatrizSgqSubmenuOpen} />
+                  </button>
+                  <div
+                    className="submenu-container"
+                    style={{
+                      display: isSidebarCollapsed ? undefined : 'block',
+                      maxHeight: isSidebarCollapsed ? undefined : (isMatrizSgqSubmenuOpen ? '140px' : '0px'),
+                      overflow: 'hidden',
+                      transition: 'max-height 0.25s ease',
+                    }}
+                  >
+                    {canAba('SGQ', 'matriz') && (
+                    <Link
+                      to="/sgq/matriz/documentos"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/sgq/matriz/documentos') ? 'active' : ''}`}
+                      data-tooltip="Documentos"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="file-earmark-text" sub />
+                        <span className="nav-text">Documentos</span>
+                      </div>
+                    </Link>
+                    )}
+                    {canAba('SGQ', 'matriz-ecossistema') && (
+                    <Link
+                      to="/sgq/matriz/ecossistema"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/sgq/matriz/ecossistema') ? 'active' : ''}`}
+                      data-tooltip="Ecossistema SGQ"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="share" sub />
+                        <span className="nav-text">Ecossistema SGQ</span>
+                      </div>
+                    </Link>
+                    )}
                   </div>
-                </Link>
+                </div>
                 )}
                 {SGQ_AUDITORIAS_MENU.some((item) => canAba('SGQ', item.key)) && (
                 <div className={`nav-group-wrapper${isAuditoriasSgqSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-sgq-auditorias">

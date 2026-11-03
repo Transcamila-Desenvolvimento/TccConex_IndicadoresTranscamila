@@ -5,6 +5,7 @@ import { abasDoModulo, firstAllowedAbaPath } from '../../constants/abas';
 import AbaRoute from '../../components/AbaRoute';
 import SGQHome from './SGQHome';
 import SGQMatriz from './SGQMatriz';
+import SGQEcossistema from './SGQEcossistema';
 import SGQPesquisaSatisfacao from './SGQPesquisaSatisfacao';
 import SGQAuditoriasVisaoGeral from './SGQAuditoriasVisaoGeral';
 import SGQAuditorias from './SGQAuditorias';
@@ -33,7 +34,9 @@ const SGQWorkspace: React.FC = () => {
     <Routes>
       <Route index element={<AbaRoute module="SGQ" aba="home" fallback={fallback}><SGQHome /></AbaRoute>} />
       <Route path="pesquisa-satisfacao" element={<AbaRoute module="SGQ" aba="pesquisa-satisfacao" fallback={fallback}><SGQPesquisaSatisfacao /></AbaRoute>} />
-      <Route path="matriz" element={<AbaRoute module="SGQ" aba="matriz" fallback={fallback}><SGQMatriz /></AbaRoute>} />
+      <Route path="matriz" element={<Navigate to="documentos" replace />} />
+      <Route path="matriz/documentos" element={<AbaRoute module="SGQ" aba="matriz" fallback={fallback}><SGQMatriz /></AbaRoute>} />
+      <Route path="matriz/ecossistema" element={<AbaRoute module="SGQ" aba="matriz-ecossistema" fallback={fallback}><SGQEcossistema /></AbaRoute>} />
       <Route path="auditorias/visao-geral" element={<AbaRoute module="SGQ" aba="auditorias-visao-geral" fallback={fallback}><SGQAuditoriasVisaoGeral /></AbaRoute>} />
       <Route path="auditorias/auditorias" element={<AbaRoute module="SGQ" aba="auditorias" fallback={fallback}><SGQAuditorias /></AbaRoute>} />
       <Route path="auditorias/auditorias/:auditoriaId" element={<RedirecionaQuestionario />} />

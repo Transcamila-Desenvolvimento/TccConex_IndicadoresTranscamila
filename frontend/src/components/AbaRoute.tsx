@@ -11,9 +11,9 @@ type Props = {
 };
 
 const AbaRoute: React.FC<Props> = ({ module, aba, fallback, children }) => {
-  const { user } = useAuth();
-  if (!userCanSeeAba(user, module, aba)) {
-    return <Navigate to={firstAllowedAbaPath(user, module, fallback)} replace />;
+  const { user, selectedFilial } = useAuth();
+  if (!userCanSeeAba(user, module, aba, selectedFilial)) {
+    return <Navigate to={firstAllowedAbaPath(user, module, fallback, selectedFilial)} replace />;
   }
   return children;
 };

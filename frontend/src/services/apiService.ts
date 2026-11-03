@@ -130,6 +130,7 @@ function normalizeUser(raw: any): User {
     indicadorFiliais: raw.indicadorFiliais && typeof raw.indicadorFiliais === 'object' ? raw.indicadorFiliais : {},
     funcoes: raw.funcoes && typeof raw.funcoes === 'object' ? raw.funcoes : {},
     abas: raw.abas && typeof raw.abas === 'object' ? raw.abas : {},
+    abaFiliais: raw.abaFiliais && typeof raw.abaFiliais === 'object' ? raw.abaFiliais : {},
     sgqAuditoriasLiberadas: raw.sgqAuditoriasLiberadas === true,
     googleEmail: raw.googleEmail ?? null,
     googleLinkedAt: raw.googleLinkedAt ?? null,

@@ -15,7 +15,7 @@ class SGQDriveStatusView(ModuleScopedViewMixin, APIView):
     permission_requires_filial = False
 
     def get(self, request):
-        if _sem_aba_matriz(request.user):
+        if _sem_aba_matriz(request.user, request):
             self.permission_denied(request, message='Sem acesso à Matriz de conhecimento.')
         return Response(drive_status(request.user))
 
@@ -25,7 +25,7 @@ class SGQDriveBrowseView(ModuleScopedViewMixin, APIView):
     permission_requires_filial = False
 
     def get(self, request):
-        if _sem_aba_matriz(request.user):
+        if _sem_aba_matriz(request.user, request):
             self.permission_denied(request, message='Sem acesso à Matriz de conhecimento.')
 
         folder_id = (request.query_params.get('folderId') or 'root').strip() or 'root'

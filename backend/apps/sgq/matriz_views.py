@@ -19,11 +19,21 @@ DOCUMENTO_MAX_BYTES = 15 * 1024 * 1024
 _PROFUNDIDADE_MAXIMA_PASTA = 8
 
 
-def _sem_aba_matriz(user) -> bool:
+def _sem_aba_matriz(user, request=None) -> bool:
+    """Documentos e Ecossistema leem a mesma matriz. Vale quem tiver uma das duas abas na filial."""
+    chaves = ('matriz', 'matriz-ecossistema')
     if getattr(user, 'is_admin', False):
+        liberadas = chaves
+    else:
+        abas = (getattr(user, 'abas', None) or {}).get('SGQ') or []
+        liberadas = chaves if not abas else tuple(chave for chave in chaves if chave in abas)
+        if not liberadas:
+            return True
+    if request is None:
         return False
-    abas = (getattr(user, 'abas', None) or {}).get('SGQ') or []
-    return bool(abas) and 'matriz' not in abas
+    from apps.accounts.permissions import get_request_context, user_has_aba_na_filial
+    _, filial = get_request_context(request)
+    return not any(user_has_aba_na_filial(user, 'SGQ', chave, filial) for chave in liberadas)
 
 
 def _aplicar_conteudo_drive(documento, dados):
@@ -93,7 +103,7 @@ class _AbaMatrizMixin:
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        if _sem_aba_matriz(request.user):
+        if _sem_aba_matriz(request.user, request):
             self.permission_denied(request, message='Sem acesso à Matriz de conhecimento.')
 
 

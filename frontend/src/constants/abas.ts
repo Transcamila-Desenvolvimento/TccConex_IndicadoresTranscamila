@@ -1,4 +1,5 @@
 import type { User } from '../types/domain';
+import { environmentRequiresFilial } from './environments';
 import { ALL_INDICADOR_KEYS, getAllowedIndicadores, type IndicadorKey } from './indicadores';
 
 /**
@@ -36,7 +37,8 @@ export const ABA_ITEMS = [
 
   { module: 'SGQ', key: 'home', label: 'Home SGQ', path: '/sgq' },
   { module: 'SGQ', key: 'pesquisa-satisfacao', label: 'Pesquisa de satisfação', path: '/sgq/pesquisa-satisfacao' },
-  { module: 'SGQ', key: 'matriz', label: 'Matriz', path: '/sgq/matriz' },
+  { module: 'SGQ', key: 'matriz', label: 'Documentos', path: '/sgq/matriz/documentos' },
+  { module: 'SGQ', key: 'matriz-ecossistema', label: 'Ecossistema SGQ', path: '/sgq/matriz/ecossistema' },
   { module: 'SGQ', key: 'auditorias-visao-geral', label: 'Visão geral', path: '/sgq/auditorias/visao-geral' },
   { module: 'SGQ', key: 'auditorias', label: 'Auditorias', path: '/sgq/auditorias/auditorias' },
   { module: 'SGQ', key: 'auditorias-minhas-acoes', label: 'Questionário', path: '/sgq/auditorias/minhas-acoes' },
@@ -80,6 +82,61 @@ export function rotinasConfiguraveisDoModulo(module: string) {
   return abasDoModulo(module).filter((item) => item.key !== HOME_ABA_KEY);
 }
 
+/** Submenus do admin. Rotinas fora da lista aparecem soltas, sem grupo. */
+const DETALHE_DA_ROTINA: Record<string, Record<string, string>> = {};
+
+export function detalheDaRotina(module: string, key: string): string {
+  return DETALHE_DA_ROTINA[module]?.[key] ?? '';
+}
+
+const GRUPOS_DE_ROTINA: Record<string, { titulo: string; keys: string[] }[]> = {
+  SGQ: [
+    { titulo: '', keys: ['pesquisa-satisfacao'] },
+    { titulo: 'Matriz de conhecimento', keys: ['matriz', 'matriz-ecossistema'] },
+    { titulo: 'Auditorias', keys: ['auditorias-visao-geral', 'auditorias', 'auditorias-minhas-acoes', 'auditorias-normas', 'auditorias-tipos-resposta', 'auditorias-categorias'] },
+  ],
+  Frota: [
+    { titulo: 'Cadastros', keys: ['cadastro-condutores', 'cadastro-veiculos'] },
+    { titulo: 'Custos', keys: ['custos-frota'] },
+    { titulo: 'Questionários', keys: ['olho-vivo'] },
+  ],
+  Faturamento: [
+    { titulo: 'Envio', keys: ['envio-nf-cliente', 'controle-nds'] },
+    { titulo: 'Cadastros', keys: ['cadastro-clientes'] },
+  ],
+  Compras: [
+    { titulo: 'Controle', keys: ['controle-estoque', 'controle-uniformes'] },
+    { titulo: 'Cadastros', keys: ['cadastro-consumidores', 'cadastro-medidas', 'cadastro-fornecedores'] },
+  ],
+  Comercial: [
+    { titulo: 'Cadastros', keys: ['cadastro-clientes', 'cadastro-tabela-frete', 'cadastro-generalidades', 'cadastro-icms-ufs', 'cadastro-parametros', 'cadastro-produtos'] },
+    { titulo: 'Propostas', keys: ['propostas-comerciais'] },
+    { titulo: 'Validação', keys: ['validacao-clientes'] },
+  ],
+};
+
+export function blocosDeRotina(module: string) {
+  const items = rotinasConfiguraveisDoModulo(module);
+  const grupos = GRUPOS_DE_ROTINA[module];
+  if (!grupos) return [{ titulo: '', items }];
+  const usados = new Set<string>();
+  const blocos = grupos.flatMap((grupo) => {
+    const doGrupo = items.filter((item) => grupo.keys.includes(item.key));
+    doGrupo.forEach((item) => usados.add(item.key));
+    return doGrupo.length ? [{ titulo: grupo.titulo, items: doGrupo }] : [];
+  });
+  const soltas = items.filter((item) => !usados.has(item.key));
+  if (soltas.length) blocos.push({ titulo: '', items: soltas });
+  return blocos;
+}
+
+function abaVisivelNaFilial(user: User | null, module: string, key: string, filial?: string | null) {
+  if (!filial || user?.roleId === '1' || !environmentRequiresFilial(module)) return true;
+  const restritas = user?.abaFiliais?.[module]?.[key] ?? [];
+  if (restritas.length === 0) return true;
+  return restritas.includes(filial);
+}
+
 function semAuditoriasBloqueadas(user: User | null, module: string, allowed: Set<string>): Set<string> {
   if (module !== 'SGQ' || user?.sgqAuditoriasLiberadas === true || user?.roleId === '1') return allowed;
   const explicitas = new Set(user?.abas?.SGQ ?? []);
@@ -101,19 +158,19 @@ export function getAllowedAbas(user: User | null, module: string): Set<string> {
   return semAuditoriasBloqueadas(user, module, allowed);
 }
 
-export function userCanSeeAba(user: User | null, module: string, key: string): boolean {
+export function userCanSeeAba(user: User | null, module: string, key: string, filial?: string | null): boolean {
   if (module === 'Indicadores') {
     return getAllowedIndicadores(user).has(key as IndicadorKey);
   }
-  return getAllowedAbas(user, module).has(key);
+  return getAllowedAbas(user, module).has(key) && abaVisivelNaFilial(user, module, key, filial);
 }
 
-export function firstAllowedAbaPath(user: User | null, module: string, fallback: string): string {
+export function firstAllowedAbaPath(user: User | null, module: string, fallback: string, filial?: string | null): string {
   if (module === 'Indicadores') {
     const allowed = getAllowedIndicadores(user);
     if (allowed.size === ALL_INDICADOR_KEYS.length || allowed.size === 0) return fallback;
   }
   const allowed = getAllowedAbas(user, module);
-  const first = abasDoModulo(module).find((item) => allowed.has(item.key));
+  const first = abasDoModulo(module).find((item) => allowed.has(item.key) && abaVisivelNaFilial(user, module, item.key, filial));
   return first?.path ?? fallback;
 }

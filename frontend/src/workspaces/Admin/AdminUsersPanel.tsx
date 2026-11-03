@@ -18,7 +18,7 @@ import {
 } from '../../constants/environments';
 import { INDICADOR_ITEMS, INDICADORES_COM_FILIAL, type IndicadorKey } from '../../constants/indicadores';
 import { funcoesDaAba, funcoesDoModulo, isFuncaoOptIn, type FuncaoKey } from '../../constants/funcoes';
-import { abasDoModulo, HOME_ABA_KEY, rotinasConfiguraveisDoModulo } from '../../constants/abas';
+import { abasDoModulo, blocosDeRotina, detalheDaRotina, HOME_ABA_KEY, rotinasConfiguraveisDoModulo } from '../../constants/abas';
 import { branchesForModule } from '../../constants/filiais';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import UserAvatar from '../../components/UserAvatar';
@@ -141,6 +141,7 @@ const AdminUsersPanel: React.FC = () => {
   const [indicadorFiliais, setIndicadorFiliais] = useState<Record<string, string[]>>({});
   const [funcoes, setFuncoes] = useState<Record<string, string[]>>({});
   const [selectedAbas, setSelectedAbas] = useState<Record<string, string[]>>({});
+  const [abaFiliais, setAbaFiliais] = useState<Record<string, Record<string, string[]>>>({});
   const [selectedModule, setSelectedModule] = useState<string>(MODULE_ACCESS_GROUPS[0].module);
 
   const isSelectedAdmin = roleId === '1';
@@ -206,6 +207,7 @@ const AdminUsersPanel: React.FC = () => {
     setIndicadorFiliais({});
     setFuncoes({});
     setSelectedAbas({});
+    setAbaFiliais({});
     setSelectedModule(MODULE_ACCESS_GROUPS[0].module);
     setIsModalOpen(true);
   };
@@ -245,6 +247,7 @@ const AdminUsersPanel: React.FC = () => {
       nextAbas[group.module] = (user.abas?.[group.module] ?? []).filter((key) => catalog.includes(key));
     });
     setSelectedAbas(nextAbas);
+    setAbaFiliais(user.abaFiliais ?? {});
     const firstOpen = MODULE_ACCESS_GROUPS.find((group) => (nextAccess[group.module]?.length ?? 0) > 0);
     setSelectedModule(firstOpen?.module ?? MODULE_ACCESS_GROUPS[0].module);
 
@@ -310,6 +313,22 @@ const AdminUsersPanel: React.FC = () => {
       }
     }
 
+    const abaFiliaisFiltradas = Object.fromEntries(
+      Object.entries(abaFiliais).flatMap(([module, porAba]) => {
+        if (!environments.includes(module)) return [];
+        const permitidas = new Set(filiais[module] ?? []);
+        const visiveis = new Set(abas[module] ?? chavesDoModulo(module));
+        const limpas = Object.fromEntries(
+          Object.entries(porAba).flatMap(([aba, lista]) => {
+            const validas = lista.filter((filial) => permitidas.has(filial));
+            if (!visiveis.has(aba) || validas.length === 0 || validas.length >= permitidas.size) return [];
+            return [[aba, validas]];
+          }),
+        );
+        return Object.keys(limpas).length ? [[module, limpas]] : [];
+      }),
+    );
+
     // Só envia funções de módulos que o usuário realmente tem acesso.
     const funcoesFiltradas = Object.fromEntries(
       Object.entries(funcoes).filter(([module, keys]) => environments.includes(module) && keys.length > 0),
@@ -329,6 +348,7 @@ const AdminUsersPanel: React.FC = () => {
       indicadorFiliais: indicadorFiliaisFiltradas,
       funcoes: funcoesFiltradas,
       abas,
+      abaFiliais: abaFiliaisFiltradas,
     };
     if (password) userData.password = password;
 
@@ -416,6 +436,14 @@ const AdminUsersPanel: React.FC = () => {
       const next = current.includes(branch) ? current.filter((b) => b !== branch) : [...current, branch];
       return { ...prev, [module]: next };
     });
+    setAbaFiliais((prev) => {
+      const porAba = prev[module];
+      if (!porAba) return prev;
+      const limpo = Object.fromEntries(
+        Object.entries(porAba).map(([aba, lista]) => [aba, lista.filter((filial) => filial !== branch)]),
+      );
+      return { ...prev, [module]: limpo };
+    });
   };
 
   // Interruptor do módulo: com qualquer acesso → remove tudo; sem acesso → libera todas as filiais.
@@ -473,7 +501,32 @@ const AdminUsersPanel: React.FC = () => {
         ...prev,
         [module]: (prev[module] ?? []).filter((fn) => !keysDaAba.includes(fn as FuncaoKey)),
       }));
+      setAbaFiliais((prev) => {
+        const porAba = { ...(prev[module] ?? {}) };
+        delete porAba[key];
+        return { ...prev, [module]: porAba };
+      });
     }
+  };
+
+  const handleToggleGrupoFilial = (module: string, keys: string[], filial: string, sessionBranches: string[]) => {
+    setAbaFiliais((prev) => {
+      const porAba = { ...(prev[module] ?? {}) };
+      const efetivas = sessionBranches.filter((branch) => keys.every((key) => {
+        const lista = (porAba[key] ?? []).filter((item) => sessionBranches.includes(item));
+        return lista.length === 0 || lista.includes(branch);
+      }));
+      const proximo = efetivas.includes(filial)
+        ? efetivas.filter((item) => item !== filial)
+        : [...efetivas, filial];
+      if (proximo.length === 0) return prev;
+      if (proximo.length >= sessionBranches.length) {
+        keys.forEach((key) => { delete porAba[key]; });
+      } else {
+        keys.forEach((key) => { porAba[key] = proximo; });
+      }
+      return { ...prev, [module]: porAba };
+    });
   };
 
   const handleToggleFuncao = (module: string, key: FuncaoKey) => {
@@ -939,7 +992,7 @@ const AdminUsersPanel: React.FC = () => {
                   </div>
                 </div>
                 <p className="admin-form-hint" style={{ margin: '0 0 8px 0' }}>
-                  Escolha o ambiente à esquerda. À direita, cada rotina tem o menu e as ações próprias.
+                    Escolha o ambiente à esquerda. A filial vale para o grupo inteiro; o menu e as ações ficam em cada rotina.
                 </p>
 
                 {isSelectedAdmin && (
@@ -956,7 +1009,6 @@ const AdminUsersPanel: React.FC = () => {
                   const funcaoItems = funcoesDoModulo(group.module);
                   const selectedFuncoes = funcoes[group.module] ?? [];
                   const requiresFilial = environmentRequiresFilial(group.module);
-                  const abaItems = group.module === 'Indicadores' ? [] : rotinasConfiguraveisDoModulo(group.module);
                   const hasAcoes = funcaoItems.length > 0 && !isSelectedAdmin;
 
                   return (
@@ -1073,6 +1125,7 @@ const AdminUsersPanel: React.FC = () => {
                               )}
                             </div>
 
+                            {group.module === 'Indicadores' && (
                             <table className="perm-matrix">
                               <thead>
                                 <tr>
@@ -1082,7 +1135,7 @@ const AdminUsersPanel: React.FC = () => {
                                 </tr>
                               </thead>
                               <tbody>
-                                {group.module === 'Indicadores' && Object.entries(INDICADOR_GROUPS).map(([groupName, items]) => (
+                                {Object.entries(INDICADOR_GROUPS).map(([groupName, items]) => (
                                   <React.Fragment key={groupName}>
                                     <tr className="perm-matrix-group">
                                       <td colSpan={3}>{groupName}</td>
@@ -1134,59 +1187,129 @@ const AdminUsersPanel: React.FC = () => {
                                     })}
                                   </React.Fragment>
                                 ))}
-
-                                {group.module !== 'Indicadores' && abaItems.map((item) => {
-                                  const visible = rotinasMarcadas(
-                                    group.module,
-                                    selectedAbas[group.module] ?? [],
-                                    auditoriasOptIn,
-                                  ).includes(item.key);
-                                  const rotinaFuncoes = funcoesDaAba(group.module, item.key);
-                                  const acoesOptIn = rotinaFuncoes.filter((fn) => isFuncaoOptIn(fn));
-                                  const acoesVisiveis = isSelectedAdmin ? acoesOptIn : rotinaFuncoes;
-                                  return (
-                                    <tr key={item.key} className={visible ? '' : 'is-off'}>
-                                      <td>
-                                        <span className="perm-matrix-name">{item.label}</span>
-                                      </td>
-                                      <td className="perm-matrix-col-menu">
-                                        <label className="perm-switch" title={visible ? 'Ocultar no menu' : 'Mostrar no menu'}>
-                                          <input
-                                            type="checkbox"
-                                            checked={visible}
-                                            onChange={() => handleToggleAba(group.module, item.key)}
-                                          />
-                                          <span className="perm-switch-slider" />
-                                        </label>
-                                      </td>
-                                      <td>
-                                        {!visible ? (
-                                          <span className="perm-matrix-muted">Oculta no menu</span>
-                                        ) : acoesVisiveis.length === 0 ? (
-                                          <span className="perm-matrix-muted">Só consulta</span>
-                                        ) : (
-                                          <div className="perm-check-row">
-                                            {acoesVisiveis.map((fn) => (
-                                              <label key={fn.key} className="perm-check" title={fn.description}>
-                                                <input
-                                                  type="checkbox"
-                                                  checked={selectedFuncoes.includes(fn.key)}
-                                                  onChange={() => handleToggleFuncao(group.module, fn.key)}
-                                                />
-                                                {fn.label}
-                                              </label>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
                               </tbody>
                             </table>
-                            {hasAcoes && (
+                            )}
+
+                            {group.module !== 'Indicadores' && (
+                              <div className="perm-blocos">
+                                {blocosDeRotina(group.module).flatMap((bloco) => {
+                                  const cartoes = bloco.titulo
+                                    ? [bloco]
+                                    : bloco.items.map((item) => ({ titulo: '', items: [item] }));
+                                  return cartoes.map((cartao) => {
+                                    const keys = cartao.items.map((item) => item.key);
+                                    const unico = cartao.items.length === 1 ? cartao.items[0] : null;
+                                    const visivel = (key: string) => rotinasMarcadas(
+                                      group.module,
+                                      selectedAbas[group.module] ?? [],
+                                      auditoriasOptIn,
+                                    ).includes(key);
+                                    const acoesDaLinha = (key: string, ligado: boolean) => {
+                                      if (!ligado) return <span className="perm-matrix-muted">Oculta no menu</span>;
+                                      const rotinaFuncoes = funcoesDaAba(group.module, key);
+                                      const acoesVisiveis = (isSelectedAdmin
+                                        ? rotinaFuncoes.filter((fn) => isFuncaoOptIn(fn))
+                                        : rotinaFuncoes);
+                                      if (acoesVisiveis.length === 0) return <span className="perm-matrix-muted">Só consulta</span>;
+                                      return (
+                                        <div className="perm-bloco-acoes">
+                                          {acoesVisiveis.map((fn) => (
+                                            <label key={fn.key} className="perm-check" title={fn.description}>
+                                              <input
+                                                type="checkbox"
+                                                checked={selectedFuncoes.includes(fn.key)}
+                                                onChange={() => handleToggleFuncao(group.module, fn.key)}
+                                              />
+                                              {fn.label}
+                                            </label>
+                                          ))}
+                                        </div>
+                                      );
+                                    };
+                                    const filiaisDoGrupo = requiresFilial && branches.length > 1 && (
+                                      isSelectedAdmin ? (
+                                        <span className="perm-matrix-muted">Todas as filiais</span>
+                                      ) : (
+                                        <div className="perm-bloco-filiais">
+                                          {branches.map((branch) => {
+                                            const marcada = keys.every((key) => {
+                                              const lista = (abaFiliais[group.module]?.[key] ?? [])
+                                                .filter((filial) => branches.includes(filial));
+                                              return lista.length === 0 || lista.includes(branch);
+                                            });
+                                            return (
+                                              <label key={branch} className="perm-check">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={marcada}
+                                                  onChange={() => handleToggleGrupoFilial(group.module, keys, branch, branches)}
+                                                />
+                                                {branch}
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      )
+                                    );
+                                    if (unico) {
+                                      const ligado = visivel(unico.key);
+                                      return (
+                                        <div key={unico.key} className={`perm-bloco ${ligado ? '' : 'is-off'}`}>
+                                          <div className="perm-bloco-head is-rotina">
+                                            <label className="perm-switch" title={ligado ? 'Ocultar no menu' : 'Mostrar no menu'}>
+                                              <input
+                                                type="checkbox"
+                                                checked={ligado}
+                                                onChange={() => handleToggleAba(group.module, unico.key)}
+                                              />
+                                              <span className="perm-switch-slider" />
+                                            </label>
+                                            <div className="perm-bloco-titulo">
+                                              <strong>{unico.label}</strong>
+                                              {detalheDaRotina(group.module, unico.key) && (
+                                                <span className="perm-matrix-sub">{detalheDaRotina(group.module, unico.key)}</span>
+                                              )}
+                                            </div>
+                                            {filiaisDoGrupo}
+                                          </div>
+                                          <div className="perm-bloco-foot">{acoesDaLinha(unico.key, ligado)}</div>
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <div key={cartao.titulo} className="perm-bloco">
+                                        <div className="perm-bloco-head">
+                                          <strong>{cartao.titulo}</strong>
+                                          {filiaisDoGrupo}
+                                        </div>
+                                        {cartao.items.map((item) => {
+                                          const ligado = visivel(item.key);
+                                          return (
+                                            <div key={item.key} className={`perm-bloco-item ${ligado ? '' : 'is-off'}`}>
+                                              <label className="perm-switch" title={ligado ? 'Ocultar no menu' : 'Mostrar no menu'}>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={ligado}
+                                                  onChange={() => handleToggleAba(group.module, item.key)}
+                                                />
+                                                <span className="perm-switch-slider" />
+                                              </label>
+                                              <span className="perm-matrix-name">{item.label}</span>
+                                              {acoesDaLinha(item.key, ligado)}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    );
+                                  });
+                                })}
+                              </div>
+                            )}
+                            {(hasAcoes || (requiresFilial && branches.length > 1)) && !isSelectedAdmin && (
                               <p className="admin-form-hint" style={{ margin: '8px 0 0' }}>
-                                Sem ação marcada na rotina, a pessoa só consulta. Consulta não precisa de caixa.
+                                {requiresFilial && branches.length > 1 && 'As filiais marcadas no topo do grupo valem para todas as rotinas dele. '}
+                                {hasAcoes && 'Sem ação marcada, a rotina fica só para consulta.'}
                               </p>
                             )}
                           </>

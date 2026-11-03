@@ -55,6 +55,10 @@ class CustomUser(AbstractUser):
     # A aba home é sempre incluída quando há recorte.
     abas = models.JSONField(default=dict, blank=True)
 
+    # Filiais de cada rotina. Example: {"SGQ": {"pesquisa-satisfacao": ["Ibiporã (Matriz)"]}}.
+    # Ausente ou lista vazia = todas as filiais liberadas no ambiente.
+    aba_filiais = models.JSONField(default=dict, blank=True)
+
     google_email = models.EmailField(blank=True, null=True)
     google_sub = models.CharField(max_length=255, blank=True, null=True)
     google_linked_at = models.DateTimeField(blank=True, null=True)

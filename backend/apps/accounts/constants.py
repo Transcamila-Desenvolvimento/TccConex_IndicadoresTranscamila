@@ -79,6 +79,7 @@ ABAS_POR_AMBIENTE = {
         'home',
         'pesquisa-satisfacao',
         'matriz',
+        'matriz-ecossistema',
         'auditorias-visao-geral',
         'auditorias',
         'auditorias-minhas-acoes',
@@ -211,6 +212,30 @@ def sanitize_funcoes(funcoes: dict | None) -> dict[str, list]:
         valid = [key for key in (keys or []) if key in allowed]
         if valid:
             result[module] = valid
+    return result
+
+
+def sanitize_aba_filiais(aba_filiais: dict | None) -> dict[str, dict]:
+    """Recorte de filiais por rotina. Lista vazia não é gravada: significa todas."""
+    result: dict[str, dict] = {}
+    for module, por_aba in (aba_filiais or {}).items():
+        module = normalize_environment(module)
+        allowed_abas = ABAS_POR_AMBIENTE.get(module)
+        allowed_filiais = set(branches_for_module(module))
+        if not allowed_abas or not isinstance(por_aba, dict):
+            continue
+        limpas: dict[str, list] = {}
+        for aba, filiais in por_aba.items():
+            if aba not in allowed_abas or aba == HOME_ABA_KEY:
+                continue
+            validas = list(dict.fromkeys(
+                filial for filial in (str(item).strip() for item in (filiais or []))
+                if filial in allowed_filiais
+            ))
+            if validas:
+                limpas[aba] = validas
+        if limpas:
+            result[module] = limpas
     return result
 
 

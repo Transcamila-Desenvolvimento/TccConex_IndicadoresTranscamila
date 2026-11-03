@@ -19,6 +19,7 @@ from apps.accounts.permissions import (
     allowed_filiais_for_module,
     get_request_context,
     resolve_filial_name,
+    user_has_aba_na_filial,
     user_has_filial_access,
     user_has_module_access,
 )
@@ -154,13 +155,17 @@ def _auditoria_liberada(user, aba: str) -> bool:
     return aba in abas
 
 
-def _sem_aba(user, aba: str) -> bool:
+def _sem_aba(user, aba: str, request=None) -> bool:
     if aba.startswith('auditorias') and not _auditoria_liberada(user, aba):
         return True
-    if getattr(user, 'is_admin', False):
+    if not getattr(user, 'is_admin', False):
+        abas = (getattr(user, 'abas', None) or {}).get('SGQ') or []
+        if abas and aba not in abas:
+            return True
+    if request is None:
         return False
-    abas = (getattr(user, 'abas', None) or {}).get('SGQ') or []
-    return bool(abas) and aba not in abas
+    _, filial = get_request_context(request)
+    return not user_has_aba_na_filial(user, 'SGQ', aba, filial)
 
 
 def _anotar_progresso_questionario(qs):
@@ -267,9 +272,9 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        sem_auditorias = _sem_aba(request.user, 'auditorias')
-        sem_questionario = _sem_aba(request.user, 'auditorias-minhas-acoes')
-        sem_visao = _sem_aba(request.user, 'auditorias-visao-geral')
+        sem_auditorias = _sem_aba(request.user, 'auditorias', request)
+        sem_questionario = _sem_aba(request.user, 'auditorias-minhas-acoes', request)
+        sem_visao = _sem_aba(request.user, 'auditorias-visao-geral', request)
         if self.action == 'concluir':
             if sem_auditorias and sem_questionario:
                 self.permission_denied(request, message='Sem acesso às Auditorias.')
@@ -679,7 +684,7 @@ class NormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        if _sem_aba(request.user, 'auditorias-normas'):
+        if _sem_aba(request.user, 'auditorias-normas', request):
             self.permission_denied(request, message='Sem acesso às Normas.')
         if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.has_funcao('SGQ', 'gerenciar-normas'):
             self.permission_denied(request, message=_GERENCIAR_NORMAS_DETAIL)
@@ -855,7 +860,7 @@ class CategoriaAuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet)
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        if _sem_aba(request.user, 'auditorias-categorias'):
+        if _sem_aba(request.user, 'auditorias-categorias', request):
             self.permission_denied(request, message='Sem acesso às Categorias.')
         if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.has_funcao('SGQ', 'gerenciar-categorias'):
             self.permission_denied(request, message=_GERENCIAR_CATEGORIAS_DETAIL)
@@ -979,7 +984,7 @@ class TipoRespostaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        if _sem_aba(request.user, 'auditorias-tipos-resposta'):
+        if _sem_aba(request.user, 'auditorias-tipos-resposta', request):
             self.permission_denied(request, message='Sem acesso aos Tipos de respostas.')
         if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.has_funcao('SGQ', 'gerenciar-tipos-resposta'):
             self.permission_denied(request, message=_GERENCIAR_TIPOS_RESPOSTA_DETAIL)
@@ -1092,7 +1097,7 @@ class ItemNormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        if _sem_aba(request.user, 'auditorias-normas'):
+        if _sem_aba(request.user, 'auditorias-normas', request):
             self.permission_denied(request, message='Sem acesso às Normas.')
         if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.has_funcao('SGQ', 'gerenciar-normas'):
             self.permission_denied(request, message=_GERENCIAR_NORMAS_DETAIL)

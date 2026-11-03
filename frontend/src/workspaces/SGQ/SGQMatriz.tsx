@@ -31,6 +31,7 @@ const SGQMatriz: React.FC = () => {
   return (
     <MatrizConhecimento
       raiz="Matriz SGQ"
+      titulo="Documentos"
       documentosQuery={documentosQuery}
       pastasQuery={pastasQuery}
       criar={criar}

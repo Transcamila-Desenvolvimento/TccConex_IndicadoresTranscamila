@@ -78,6 +78,7 @@ def _resumo_ano(filial: str, ano: int) -> dict:
 
 class OlhoVivoView(ModuleScopedViewMixin, APIView):
     permission_module = 'Frota'
+    permission_aba = 'olho-vivo'
 
     def get(self, request):
         filial = _session_filial(request)

@@ -10,6 +10,7 @@ from rest_framework.response import Response
 
 from apps.accounts.mixins import ModuleScopedViewMixin
 from apps.accounts.permissions import (
+    user_has_aba_na_filial,
     allowed_filiais_for_module,
     get_request_context,
     resolve_filial_name,
@@ -37,6 +38,7 @@ from .pesquisa_import_service import (
 )
 from .pesquisa_query import filter_pesquisas_queryset
 from .serializers import EscopoAnaliseOpcaoSerializer, EscopoAnaliseSerializer, PesquisaSatisfacaoSerializer
+from .stats_service import build_pesquisa_stats
 from .escopo_analise import escopo_usado_em_pesquisas, opcao_usada_em_pesquisas
 
 
@@ -96,12 +98,22 @@ _IMPORTAR_PESQUISAS_DETAIL = (
 )
 
 
+def _negar_rotina_na_filial(view, aba: str, mensagem: str) -> None:
+    _, filial = get_request_context(view.request)
+    if not user_has_aba_na_filial(view.request.user, 'SGQ', aba, filial):
+        view.permission_denied(view.request, message=mensagem)
+
+
 class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     permission_module = 'SGQ'
     serializer_class = PesquisaSatisfacaoSerializer
     queryset = PesquisaSatisfacao.objects.all()
     pagination_class = ReportPagination
     http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        _negar_rotina_na_filial(self, 'pesquisa-satisfacao', 'Sem acesso à Pesquisa de satisfação nesta filial.')
 
     def get_queryset(self):
         # admin_bypass=False: pesquisas do SGQ ficam sempre segregadas por filial,
@@ -555,6 +567,10 @@ class EscopoAnaliseViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     pagination_class = None
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        _negar_rotina_na_filial(self, 'pesquisa-satisfacao', 'Sem acesso à Pesquisa de satisfação nesta filial.')
+
     def get_queryset(self):
         qs = EscopoAnalise.objects.all().prefetch_related('opcoes').order_by('ordem', 'id')
         if not _truthy_query(self.request.query_params, 'incluirInativos'):
@@ -625,6 +641,10 @@ class EscopoAnaliseOpcaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     queryset = EscopoAnaliseOpcao.objects.select_related('escopo')
     pagination_class = None
     http_method_names = ['post', 'patch', 'delete', 'head', 'options']
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        _negar_rotina_na_filial(self, 'pesquisa-satisfacao', 'Sem acesso à Pesquisa de satisfação nesta filial.')
 
     def create(self, request, *args, **kwargs):
         denied = _escopos_mutation_denied(request)

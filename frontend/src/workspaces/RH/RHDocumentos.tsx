@@ -314,6 +314,7 @@ type Acao<TVars, TData = void> = Pick<UseMutationResult<TData, unknown, TVars>, 
 
 export type MatrizConhecimentoProps = {
   raiz: string;
+  titulo?: string;
   embutida?: boolean;
   documentosQuery: UseQueryResult<PaginatedResponse<DocumentoRH>>;
   pastasQuery: UseQueryResult<PaginatedResponse<PastaMatrizRH>>;
@@ -335,6 +336,7 @@ export type MatrizConhecimentoProps = {
 
 export function MatrizConhecimento({
   raiz,
+  titulo = 'Matriz de conhecimento',
   embutida = false,
   documentosQuery,
   pastasQuery,
@@ -715,7 +717,7 @@ export function MatrizConhecimento({
         <header className="view-header matriz-cabecalho">
           <div className="matriz-titulo">
             <div className="matriz-titulo__marca" />
-            <h1 className="view-page-title">Matriz de conhecimento</h1>
+            <h1 className="view-page-title">{titulo}</h1>
           </div>
         </header>
       )}

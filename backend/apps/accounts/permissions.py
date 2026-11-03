@@ -95,6 +95,28 @@ def user_has_filial_access(user, module: str, filial: str) -> bool:
     return resolve_filial_name(filial, allowed) is not None
 
 
+def aba_filiais_restritas(user, module: str, aba: str) -> list[str] | None:
+    """None quando a rotina vale para todas as filiais do ambiente."""
+    if getattr(user, 'is_admin', False):
+        return None
+    por_modulo = (getattr(user, 'aba_filiais', None) or {}).get(module) or {}
+    if not isinstance(por_modulo, dict):
+        return None
+    lista = por_modulo.get(aba) or []
+    if not isinstance(lista, list) or not lista:
+        return None
+    return lista
+
+
+def user_has_aba_na_filial(user, module: str, aba: str, filial: str) -> bool:
+    restritas = aba_filiais_restritas(user, module, aba)
+    if restritas is None:
+        return True
+    if not filial:
+        return module in GLOBAL_ENVIRONMENTS
+    return resolve_filial_name(filial, restritas) is not None
+
+
 def check_module_request_access(
     user,
     request,
@@ -164,9 +186,18 @@ class ModuleAccessPermission(BasePermission):
         if not module:
             return True
         require_filial = getattr(view, 'permission_requires_filial', None)
-        return check_module_request_access(
+        if not check_module_request_access(
             request.user,
             request,
             module,
             require_filial=require_filial,
-        )
+        ):
+            return False
+        aba = getattr(view, 'permission_aba', None)
+        if not aba:
+            return True
+        _, filial = get_request_context(request)
+        if user_has_aba_na_filial(request.user, module, aba, filial or ''):
+            return True
+        self.message = 'Sem acesso a esta rotina nesta filial.'
+        return False

@@ -57,6 +57,7 @@ _GERENCIAR_CUSTOS_DETAIL = (
 
 
 class VeiculoFrotaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+    permission_aba = 'cadastro-veiculos'
     permission_module = 'Frota'
     serializer_class = VeiculoFrotaSerializer
     queryset = VeiculoFrota.objects.all()
@@ -111,6 +112,7 @@ class VeiculoFrotaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
 
 class CondutorFrotaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+    permission_aba = 'cadastro-condutores'
     permission_module = 'Frota'
     serializer_class = CondutorFrotaSerializer
     queryset = CondutorFrota.objects.all()
@@ -153,6 +155,7 @@ class CondutorFrotaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
 
 class CustoFrotaLoteViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):
+    permission_aba = 'custos-frota'
     permission_module = 'Frota'
     serializer_class = CustoFrotaLoteSerializer
     queryset = CustoFrotaLote.objects.select_related('updated_by').order_by(
@@ -232,6 +235,7 @@ class CustoFrotaLoteViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet
 
 
 class CustoFrotaRelatorioView(ModuleScopedViewMixin, APIView):
+    permission_aba = 'custos-frota'
     permission_module = 'Frota'
     pagination_class = CustoFrotaPagination
 
