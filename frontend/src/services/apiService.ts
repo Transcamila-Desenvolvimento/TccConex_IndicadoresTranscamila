@@ -22,6 +22,7 @@ import type {
   GoogleContactsResponse,
   AuditLogQueryParams,
   AuditLogFacets,
+  ReciclarLogsPayload,
   UserQueryParams,
   Colaborador, DocumentoRH, PastaMatrizRH, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
   ConsultaCaepiResultado,
@@ -129,6 +130,7 @@ function normalizeUser(raw: any): User {
     indicadores: Array.isArray(raw.indicadores) ? raw.indicadores : [],
     indicadorFiliais: raw.indicadorFiliais && typeof raw.indicadorFiliais === 'object' ? raw.indicadorFiliais : {},
     funcoes: raw.funcoes && typeof raw.funcoes === 'object' ? raw.funcoes : {},
+    funcaoFiliais: raw.funcaoFiliais && typeof raw.funcaoFiliais === 'object' ? raw.funcaoFiliais : {},
     abas: raw.abas && typeof raw.abas === 'object' ? raw.abas : {},
     abaFiliais: raw.abaFiliais && typeof raw.abaFiliais === 'object' ? raw.abaFiliais : {},
     sgqAuditoriasLiberadas: raw.sgqAuditoriasLiberadas === true,
@@ -1442,6 +1444,11 @@ export const apiService = {
       next: Array.isArray(data) ? null : (data.next ?? null),
       previous: Array.isArray(data) ? null : (data.previous ?? null),
     };
+  },
+
+  async reciclarLogs(payload: ReciclarLogsPayload): Promise<{ removed: number }> {
+    const { data } = await api.post('/api/audit/logs/reciclar/', payload);
+    return { removed: Number(data?.removed ?? 0) };
   },
 
   async getAuditLogFacets(): Promise<AuditLogFacets> {

@@ -168,6 +168,11 @@ def _sem_aba(user, aba: str, request=None) -> bool:
     return not user_has_aba_na_filial(user, 'SGQ', aba, filial)
 
 
+def _tem_funcao_sgq(request, funcao: str) -> bool:
+    _, filial = get_request_context(request)
+    return request.user.has_funcao('SGQ', funcao, filial)
+
+
 def _anotar_progresso_questionario(qs):
     """Perguntas das normas vinculadas e quantas já têm opção escolhida."""
     total = (
@@ -289,9 +294,9 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if request.method in ('GET', 'HEAD', 'OPTIONS') or self.action == 'enviar_cronograma':
             return
         if self.action in _ACOES_EXECUCAO:
-            if not request.user.has_funcao('SGQ', 'executar-auditorias'):
+            if not _tem_funcao_sgq(request, 'executar-auditorias'):
                 self.permission_denied(request, message=_EXECUTAR_DETAIL)
-        elif not request.user.has_funcao('SGQ', 'gerenciar-auditorias'):
+        elif not _tem_funcao_sgq(request, 'gerenciar-auditorias'):
             self.permission_denied(request, message=_GERENCIAR_DETAIL)
 
     def _escopo(self):
@@ -686,7 +691,7 @@ class NormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         super().initial(request, *args, **kwargs)
         if _sem_aba(request.user, 'auditorias-normas', request):
             self.permission_denied(request, message='Sem acesso às Normas.')
-        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.has_funcao('SGQ', 'gerenciar-normas'):
+        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not _tem_funcao_sgq(request, 'gerenciar-normas'):
             self.permission_denied(request, message=_GERENCIAR_NORMAS_DETAIL)
 
     def _editaveis(self):
@@ -788,7 +793,7 @@ class NormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='exportar-modelo-itens')
     def exportar_modelo_itens(self, request):
         """Planilha padrão dos requisitos, válida para ISO 9001, SASSMAQ e outras normas."""
-        if not request.user.has_funcao('SGQ', 'gerenciar-normas'):
+        if not _tem_funcao_sgq(request, 'gerenciar-normas'):
             self.permission_denied(request, message=_GERENCIAR_NORMAS_DETAIL)
         content = modelo_importacao_itens()
         response = HttpResponse(
@@ -862,7 +867,7 @@ class CategoriaAuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet)
         super().initial(request, *args, **kwargs)
         if _sem_aba(request.user, 'auditorias-categorias', request):
             self.permission_denied(request, message='Sem acesso às Categorias.')
-        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.has_funcao('SGQ', 'gerenciar-categorias'):
+        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not _tem_funcao_sgq(request, 'gerenciar-categorias'):
             self.permission_denied(request, message=_GERENCIAR_CATEGORIAS_DETAIL)
 
     def _escopo(self):
@@ -986,7 +991,7 @@ class TipoRespostaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         super().initial(request, *args, **kwargs)
         if _sem_aba(request.user, 'auditorias-tipos-resposta', request):
             self.permission_denied(request, message='Sem acesso aos Tipos de respostas.')
-        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.has_funcao('SGQ', 'gerenciar-tipos-resposta'):
+        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not _tem_funcao_sgq(request, 'gerenciar-tipos-resposta'):
             self.permission_denied(request, message=_GERENCIAR_TIPOS_RESPOSTA_DETAIL)
 
     def _editaveis(self):
@@ -1099,7 +1104,7 @@ class ItemNormaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         super().initial(request, *args, **kwargs)
         if _sem_aba(request.user, 'auditorias-normas', request):
             self.permission_denied(request, message='Sem acesso às Normas.')
-        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.has_funcao('SGQ', 'gerenciar-normas'):
+        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not _tem_funcao_sgq(request, 'gerenciar-normas'):
             self.permission_denied(request, message=_GERENCIAR_NORMAS_DETAIL)
 
     def _visiveis(self):

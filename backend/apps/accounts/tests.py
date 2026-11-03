@@ -558,6 +558,47 @@ class UserManagementEnvironmentRulesTests(TestCase):
         self.assertIn('movimentacao-rh', opcoes.data)
 
 
+class SessionPresenceTests(TestCase):
+    def test_admin_recebe_quem_esta_conectado_sem_consulta(self):
+        from asgiref.sync import async_to_sync
+        from channels.routing import URLRouter
+        from channels.testing import WebsocketCommunicator
+        from django.urls import path
+
+        from apps.accounts.consumers import SessionPresenceConsumer
+
+        admin = User.objects.create_user(
+            username='presence.admin', password='x', role_id='1', name='Admin Vivo',
+        )
+        operador = User.objects.create_user(
+            username='presence.op', password='x', role_id='2', name='Op Vivo',
+        )
+        rota = URLRouter([
+            path('ws/presence/', SessionPresenceConsumer.as_asgi()),
+        ])
+
+        async def conversar():
+            op = WebsocketCommunicator(rota, '/ws/presence/')
+            adm = WebsocketCommunicator(rota, '/ws/presence/')
+            op.scope['user'] = operador
+            adm.scope['user'] = admin
+            try:
+                ok_op, _ = await op.connect()
+                ok_adm, _ = await adm.connect()
+                self.assertTrue(ok_op)
+                self.assertTrue(ok_adm)
+                quadro = await adm.receive_json_from(timeout=2)
+                self.assertEqual(quadro['type'], 'presence')
+                self.assertIn(str(admin.id), quadro['onlineIds'])
+                self.assertIn(str(operador.id), quadro['onlineIds'])
+                self.assertTrue(await op.receive_nothing(timeout=0.2))
+            finally:
+                await op.disconnect()
+                await adm.disconnect()
+
+        async_to_sync(conversar)()
+
+
 class ResetUserPasswordCommandTests(TestCase):
     def test_reset_password_and_activate(self):
         user = User.objects.create_user(

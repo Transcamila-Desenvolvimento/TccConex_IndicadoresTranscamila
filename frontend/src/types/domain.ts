@@ -21,6 +21,8 @@ export interface User {
   indicadorFiliais: Record<string, string[]>;
   /** Funções extras liberadas por ambiente (ex.: {"Faturamento": ["excluir-protocolos"]}). */
   funcoes: Record<string, string[]>;
+  /** Filiais de cada função. Vazio na função = todas as filiais do ambiente. */
+  funcaoFiliais: Record<string, Record<string, string[]>>;
   /** Abas de menu liberadas por ambiente (exceto Indicadores). Vazio no módulo = todas. */
   abas: Record<string, string[]>;
   /** Filiais de cada rotina. Vazio na rotina = todas as filiais do ambiente. */
@@ -79,6 +81,11 @@ export interface UserQueryParams extends ListQueryParams {
 
 export interface AuditLogFacets {
   actions: string[];
+}
+
+export interface ReciclarLogsPayload {
+  olderThanDays?: 30 | 90 | 180 | 365;
+  all?: boolean;
 }
 
 export interface PagarRow {

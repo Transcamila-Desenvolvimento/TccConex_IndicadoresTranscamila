@@ -6,6 +6,7 @@ export type UserAvatarProps = {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   title?: string;
+  online?: boolean;
 };
 
 function initialsFromName(name: string): string {
@@ -22,6 +23,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
   size = 'md',
   className = '',
   title,
+  online = false,
 }) => {
   const [photoFailed, setPhotoFailed] = useState(false);
   const initials = useMemo(() => initialsFromName(name), [name]);
@@ -29,7 +31,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
 
   return (
     <span
-      className={`user-avatar-chip user-avatar-chip--${size} ${className}`.trim()}
+      className={`user-avatar-chip user-avatar-chip--${size} ${online ? 'is-online' : ''} ${className}`.trim()}
       title={title ?? name}
       aria-hidden={title ? undefined : true}
     >

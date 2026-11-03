@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSessionOnlineIds } from '../../contexts/SessionPresence';
 import type { User } from '../../types/domain';
 import {
   useUsers,
@@ -24,7 +25,7 @@ import QueryDataPanel from '../../components/QueryDataPanel';
 import UserAvatar from '../../components/UserAvatar';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
 function chavesDoModulo(module: string): string[] {
   return abasDoModulo(module).map((item) => item.key as string);
@@ -84,22 +85,24 @@ const AdminUsersPanel: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState('todos');
   const [statusFilter, setStatusFilter] = useState('todos');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const queryParams = useMemo(() => ({
     page: currentPage,
-    pageSize: PAGE_SIZE,
+    pageSize,
     search: searchQuery.trim() || undefined,
     roleId: roleFilter !== 'todos' ? roleFilter : undefined,
     status: statusFilter !== 'todos' ? statusFilter : undefined,
-  }), [currentPage, searchQuery, roleFilter, statusFilter]);
+  }), [currentPage, pageSize, searchQuery, roleFilter, statusFilter]);
 
   const usersQuery = useUsers(queryParams);
+  const onlineIds = useSessionOnlineIds();
   const usersPage = usersQuery.data;
   const usersList = useMemo(() => usersPage?.results ?? [], [usersPage]);
   const usersQueryState = useAsyncQueryState(usersQuery);
 
   const totalItems = usersPage?.count ?? 0;
-  const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
   const clampedPage = Math.min(currentPage, totalPages) || 1;
 
   const { data: roles = [], isError: rolesError, isLoading: rolesLoading } = useRoles();
@@ -140,9 +143,11 @@ const AdminUsersPanel: React.FC = () => {
   const [selectedIndicadores, setSelectedIndicadores] = useState<IndicadorKey[]>([]);
   const [indicadorFiliais, setIndicadorFiliais] = useState<Record<string, string[]>>({});
   const [funcoes, setFuncoes] = useState<Record<string, string[]>>({});
+  const [funcaoFiliais, setFuncaoFiliais] = useState<Record<string, Record<string, string[]>>>({});
   const [selectedAbas, setSelectedAbas] = useState<Record<string, string[]>>({});
   const [abaFiliais, setAbaFiliais] = useState<Record<string, Record<string, string[]>>>({});
   const [selectedModule, setSelectedModule] = useState<string>(MODULE_ACCESS_GROUPS[0].module);
+  const [filialVista, setFilialVista] = useState<string | null>(null);
 
   const isSelectedAdmin = roleId === '1';
   const auditoriasOptIn = currentUser?.sgqAuditoriasLiberadas !== true;
@@ -206,6 +211,7 @@ const AdminUsersPanel: React.FC = () => {
     setSelectedIndicadores([]);
     setIndicadorFiliais({});
     setFuncoes({});
+    setFuncaoFiliais({});
     setSelectedAbas({});
     setAbaFiliais({});
     setSelectedModule(MODULE_ACCESS_GROUPS[0].module);
@@ -240,6 +246,7 @@ const AdminUsersPanel: React.FC = () => {
     setSelectedIndicadores(userIndicadores);
     setIndicadorFiliais(user.indicadorFiliais ?? {});
     setFuncoes(user.funcoes ?? {});
+    setFuncaoFiliais(user.funcaoFiliais ?? {});
     const nextAbas: Record<string, string[]> = {};
     MODULE_ACCESS_GROUPS.forEach((group) => {
       if (group.module === 'Indicadores') return;
@@ -334,6 +341,22 @@ const AdminUsersPanel: React.FC = () => {
       Object.entries(funcoes).filter(([module, keys]) => environments.includes(module) && keys.length > 0),
     );
 
+    const funcaoFiliaisFiltradas = Object.fromEntries(
+      Object.entries(funcaoFiliais).flatMap(([module, porFuncao]) => {
+        if (!environments.includes(module)) return [];
+        const permitidas = new Set(filiais[module] ?? []);
+        const liberadas = new Set(funcoesFiltradas[module] ?? []);
+        const limpas = Object.fromEntries(
+          Object.entries(porFuncao).flatMap(([funcao, lista]) => {
+            const validas = lista.filter((filial) => permitidas.has(filial));
+            if (!liberadas.has(funcao) || validas.length === 0 || validas.length >= permitidas.size) return [];
+            return [[funcao, validas]];
+          }),
+        );
+        return Object.keys(limpas).length ? [[module, limpas]] : [];
+      }),
+    );
+
     const userData: any = {
       username,
       name,
@@ -347,6 +370,7 @@ const AdminUsersPanel: React.FC = () => {
       indicadores,
       indicadorFiliais: indicadorFiliaisFiltradas,
       funcoes: funcoesFiltradas,
+      funcaoFiliais: funcaoFiliaisFiltradas,
       abas,
       abaFiliais: abaFiliaisFiltradas,
     };
@@ -509,24 +533,70 @@ const AdminUsersPanel: React.FC = () => {
     }
   };
 
-  const handleToggleGrupoFilial = (module: string, keys: string[], filial: string, sessionBranches: string[]) => {
+  const definirRotinaNaFilial = (module: string, key: string, filial: string, sessionBranches: string[]) => {
+    if (key === HOME_ABA_KEY) return;
+    const marcadas = rotinasMarcadas(module, selectedAbas[module] ?? [], auditoriasOptIn);
+    const noMenu = marcadas.includes(key);
+    const salvas = (abaFiliais[module]?.[key] ?? []).filter((item) => sessionBranches.includes(item));
+    const efetivas = !noMenu ? [] : (salvas.length === 0 ? [...sessionBranches] : salvas);
+    const proximo = efetivas.includes(filial)
+      ? efetivas.filter((item) => item !== filial)
+      : [...efetivas, filial];
+    if (proximo.length === 0) {
+      if (noMenu && marcadas.length <= 1) return;
+      handleToggleAba(module, key);
+      return;
+    }
+    if (!noMenu) handleToggleAba(module, key);
     setAbaFiliais((prev) => {
       const porAba = { ...(prev[module] ?? {}) };
-      const efetivas = sessionBranches.filter((branch) => keys.every((key) => {
-        const lista = (porAba[key] ?? []).filter((item) => sessionBranches.includes(item));
-        return lista.length === 0 || lista.includes(branch);
-      }));
-      const proximo = efetivas.includes(filial)
-        ? efetivas.filter((item) => item !== filial)
-        : [...efetivas, filial];
-      if (proximo.length === 0) return prev;
-      if (proximo.length >= sessionBranches.length) {
-        keys.forEach((key) => { delete porAba[key]; });
-      } else {
-        keys.forEach((key) => { porAba[key] = proximo; });
-      }
+      if (proximo.length >= sessionBranches.length) delete porAba[key];
+      else porAba[key] = proximo;
       return { ...prev, [module]: porAba };
     });
+  };
+
+  const definirFuncaoNaFilial = (module: string, funcao: string, filial: string, sessionBranches: string[]) => {
+    const tem = (funcoes[module] ?? []).includes(funcao);
+    const salvas = (funcaoFiliais[module]?.[funcao] ?? []).filter((item) => sessionBranches.includes(item));
+    const efetivas = !tem ? [] : (salvas.length === 0 ? [...sessionBranches] : salvas);
+    const proximo = efetivas.includes(filial)
+      ? efetivas.filter((item) => item !== filial)
+      : [...efetivas, filial];
+    setFuncoes((prev) => {
+      const atual = prev[module] ?? [];
+      const next = proximo.length === 0
+        ? atual.filter((item) => item !== funcao)
+        : (atual.includes(funcao) ? atual : [...atual, funcao]);
+      return { ...prev, [module]: next };
+    });
+    setFuncaoFiliais((prev) => {
+      const porFuncao = { ...(prev[module] ?? {}) };
+      if (proximo.length === 0 || proximo.length >= sessionBranches.length) delete porFuncao[funcao];
+      else porFuncao[funcao] = proximo;
+      return { ...prev, [module]: porFuncao };
+    });
+  };
+
+  const aplicarFuncoesNaFilial = (module: string, ligar: boolean, filial: string, sessionBranches: string[]) => {
+    const atuais = new Set(funcoes[module] ?? []);
+    const por = { ...(funcaoFiliais[module] ?? {}) };
+    funcoesDoModulo(module).filter((item) => !isFuncaoOptIn(item)).forEach((item) => {
+      const salvas = (por[item.key] ?? []).filter((nome) => sessionBranches.includes(nome));
+      const efetivas = !atuais.has(item.key) ? [] : (salvas.length === 0 ? [...sessionBranches] : salvas);
+      if (efetivas.includes(filial) === ligar) return;
+      const proximo = ligar ? [...efetivas, filial] : efetivas.filter((nome) => nome !== filial);
+      if (proximo.length === 0) {
+        atuais.delete(item.key);
+        delete por[item.key];
+      } else {
+        atuais.add(item.key);
+        if (proximo.length >= sessionBranches.length) delete por[item.key];
+        else por[item.key] = proximo;
+      }
+    });
+    setFuncoes((prev) => ({ ...prev, [module]: [...atuais] }));
+    setFuncaoFiliais((prev) => ({ ...prev, [module]: por }));
   };
 
   const handleToggleFuncao = (module: string, key: FuncaoKey) => {
@@ -736,7 +806,12 @@ const AdminUsersPanel: React.FC = () => {
                               name={u.name || u.username}
                               photo={u.googlePicture}
                               size="md"
-                              title={googleEmail ? `${u.name} · ${googleEmail}` : u.name}
+                              online={onlineIds.has(u.id)}
+                              title={
+                                onlineIds.has(u.id)
+                                  ? `${u.name || u.username} · Online agora`
+                                  : (googleEmail ? `${u.name} · ${googleEmail}` : u.name)
+                              }
                               className="admin-users-avatar"
                             />
                             <strong>{u.username}</strong>
@@ -790,6 +865,16 @@ const AdminUsersPanel: React.FC = () => {
 
         {/* Pagination */}
         <div className="erp-pagination-bar">
+          <div className="erp-pagination-page-size">
+            <label htmlFor="admin-users-page-size">Itens por página</label>
+            <select
+              id="admin-users-page-size"
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+            >
+              {PAGE_SIZE_OPTIONS.map((opcao) => <option key={opcao} value={opcao}>{opcao}</option>)}
+            </select>
+          </div>
           <span style={{ fontWeight: 500, marginRight: '4px' }}>
             Página <span className="erp-pagination-current">{clampedPage}</span> de <span className="erp-pagination-current">{totalPages}</span>
             <span className="erp-pagination-meta">({totalItems} registros)</span>
@@ -823,18 +908,24 @@ const AdminUsersPanel: React.FC = () => {
 
       {/* MODAL: CRIAR / EDITAR USUÁRIO */}
       {isModalOpen && (
-        <div className="search-backdrop admin-user-modal-backdrop" id="user-admin-modal" style={{ display: 'flex' }} onClick={(e) => {
+        <div className="search-backdrop admin-user-modal-backdrop" id="user-admin-modal" onClick={(e) => {
           if (e.target === e.currentTarget) setIsModalOpen(false);
         }}>
-          <div className="search-modal-card admin-user-modal-card admin-user-modal-card--wide">
-            <div className="search-input-wrapper" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 id="admin-modal-title" style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
+          <div
+            className="search-modal-card admin-user-modal-card admin-user-modal-card--wide"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-modal-title"
+          >
+            <div className="admin-user-drawer-header">
+              <h3 id="admin-modal-title">
                 {editingUserId ? 'Editar Usuário' : 'Criar Novo Usuário'}
               </h3>
-              <span className="search-close-key" style={{ cursor: 'pointer' }} onClick={() => setIsModalOpen(false)}>Fechar (X)</span>
+              <span className="search-close-key" onClick={() => setIsModalOpen(false)}>Fechar (X)</span>
             </div>
 
             <form id="admin-user-form" className="admin-user-form" onSubmit={handleSubmit}>
+              <div className="admin-user-form-body">
               <div className="admin-form-columns">
               {/* Coluna esquerda: dados do usuário */}
               <div className="admin-form-col admin-form-col--fields">
@@ -992,7 +1083,7 @@ const AdminUsersPanel: React.FC = () => {
                   </div>
                 </div>
                 <p className="admin-form-hint" style={{ margin: '0 0 8px 0' }}>
-                    Escolha o ambiente à esquerda. A filial vale para o grupo inteiro; o menu e as ações ficam em cada rotina.
+                    Escolha o ambiente à esquerda. Se houver mais de uma filial, abra a unidade e ligue só as rotinas dela.
                 </p>
 
                 {isSelectedAdmin && (
@@ -1010,6 +1101,10 @@ const AdminUsersPanel: React.FC = () => {
                   const selectedFuncoes = funcoes[group.module] ?? [];
                   const requiresFilial = environmentRequiresFilial(group.module);
                   const hasAcoes = funcaoItems.length > 0 && !isSelectedAdmin;
+                  const porFilial = requiresFilial && branches.length > 1 && !isSelectedAdmin;
+                  const filialAtiva = porFilial
+                    ? (filialVista && branches.includes(filialVista) ? filialVista : branches[0])
+                    : null;
 
                   return (
                     <div className="perm-split">
@@ -1108,17 +1203,46 @@ const AdminUsersPanel: React.FC = () => {
                               </div>
                             )}
 
+                            {porFilial && filialAtiva && (
+                              <div className="perm-filial-vista" role="tablist" aria-label="Filial em edição">
+                                {branches.map((branch) => (
+                                  <button
+                                    key={branch}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={filialAtiva === branch}
+                                    className={`perm-filial-vista-btn${filialAtiva === branch ? ' is-on' : ''}`}
+                                    onClick={() => setFilialVista(branch)}
+                                  >
+                                    {branch}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
                             <div className="perm-matrix-toolbar">
-                              <span>Neste ambiente</span>
+                              <span>{filialAtiva ? `Em ${filialAtiva}` : 'Neste ambiente'}</span>
                               <span className="module-access-quick-action" onClick={() => handleApplyModulePreset(group.module, 'todas-rotinas')}>
                                 Todas as rotinas
                               </span>
                               {hasAcoes && (
                                 <>
-                                  <span className="module-access-quick-action" onClick={() => handleApplyModulePreset(group.module, 'so-consulta')}>
+                                  <span
+                                    className="module-access-quick-action"
+                                    onClick={() => {
+                                      if (filialAtiva) aplicarFuncoesNaFilial(group.module, false, filialAtiva, branches);
+                                      else handleApplyModulePreset(group.module, 'so-consulta');
+                                    }}
+                                  >
                                     Só consulta
                                   </span>
-                                  <span className="module-access-quick-action" onClick={() => handleApplyModulePreset(group.module, 'todas-acoes')}>
+                                  <span
+                                    className="module-access-quick-action"
+                                    onClick={() => {
+                                      if (filialAtiva) aplicarFuncoesNaFilial(group.module, true, filialAtiva, branches);
+                                      else handleApplyModulePreset(group.module, 'todas-acoes');
+                                    }}
+                                  >
                                     Todas as ações
                                   </span>
                                 </>
@@ -1198,15 +1322,38 @@ const AdminUsersPanel: React.FC = () => {
                                     ? [bloco]
                                     : bloco.items.map((item) => ({ titulo: '', items: [item] }));
                                   return cartoes.map((cartao) => {
-                                    const keys = cartao.items.map((item) => item.key);
                                     const unico = cartao.items.length === 1 ? cartao.items[0] : null;
                                     const visivel = (key: string) => rotinasMarcadas(
                                       group.module,
                                       selectedAbas[group.module] ?? [],
                                       auditoriasOptIn,
                                     ).includes(key);
+                                    const porFilial = requiresFilial && branches.length > 1 && !isSelectedAdmin;
+                                    const filialAtiva = porFilial
+                                      ? (filialVista && branches.includes(filialVista) ? filialVista : branches[0])
+                                      : null;
+                                    const ligadaAqui = (key: string) => {
+                                      if (!visivel(key)) return false;
+                                      if (!filialAtiva) return true;
+                                      const lista = (abaFiliais[group.module]?.[key] ?? [])
+                                        .filter((item) => branches.includes(item));
+                                      return lista.length === 0 || lista.includes(filialAtiva);
+                                    };
+                                    const alternar = (key: string) => {
+                                      if (filialAtiva) definirRotinaNaFilial(group.module, key, filialAtiva, branches);
+                                      else handleToggleAba(group.module, key);
+                                    };
+                                    const funcaoMarcada = (funcao: string) => {
+                                      if (!selectedFuncoes.includes(funcao)) return false;
+                                      if (!filialAtiva) return true;
+                                      const lista = (funcaoFiliais[group.module]?.[funcao] ?? [])
+                                        .filter((item) => branches.includes(item));
+                                      return lista.length === 0 || lista.includes(filialAtiva);
+                                    };
                                     const acoesDaLinha = (key: string, ligado: boolean) => {
-                                      if (!ligado) return <span className="perm-matrix-muted">Oculta no menu</span>;
+                                      if (!ligado) {
+                                        return <span className="perm-matrix-muted">{filialAtiva ? 'Oculta nesta filial' : 'Oculta no menu'}</span>;
+                                      }
                                       const rotinaFuncoes = funcoesDaAba(group.module, key);
                                       const acoesVisiveis = (isSelectedAdmin
                                         ? rotinaFuncoes.filter((fn) => isFuncaoOptIn(fn))
@@ -1218,8 +1365,11 @@ const AdminUsersPanel: React.FC = () => {
                                             <label key={fn.key} className="perm-check" title={fn.description}>
                                               <input
                                                 type="checkbox"
-                                                checked={selectedFuncoes.includes(fn.key)}
-                                                onChange={() => handleToggleFuncao(group.module, fn.key)}
+                                                checked={funcaoMarcada(fn.key)}
+                                                onChange={() => {
+                                                  if (filialAtiva) definirFuncaoNaFilial(group.module, fn.key, filialAtiva, branches);
+                                                  else handleToggleFuncao(group.module, fn.key);
+                                                }}
                                               />
                                               {fn.label}
                                             </label>
@@ -1227,42 +1377,16 @@ const AdminUsersPanel: React.FC = () => {
                                         </div>
                                       );
                                     };
-                                    const algumaLigada = keys.some((key) => visivel(key));
-                                    const filiaisDoGrupo = algumaLigada && requiresFilial && branches.length > 1 && (
-                                      isSelectedAdmin ? (
-                                        <span className="perm-matrix-muted">Todas as filiais</span>
-                                      ) : (
-                                        <div className="perm-bloco-filiais">
-                                          {branches.map((branch) => {
-                                            const marcada = keys.every((key) => {
-                                              const lista = (abaFiliais[group.module]?.[key] ?? [])
-                                                .filter((filial) => branches.includes(filial));
-                                              return lista.length === 0 || lista.includes(branch);
-                                            });
-                                            return (
-                                              <label key={branch} className="perm-check">
-                                                <input
-                                                  type="checkbox"
-                                                  checked={marcada}
-                                                  onChange={() => handleToggleGrupoFilial(group.module, keys, branch, branches)}
-                                                />
-                                                {branch}
-                                              </label>
-                                            );
-                                          })}
-                                        </div>
-                                      )
-                                    );
                                     if (unico) {
-                                      const ligado = visivel(unico.key);
+                                      const ligado = ligadaAqui(unico.key);
                                       return (
-                                        <div key={unico.key} className={`perm-bloco ${ligado ? '' : 'is-off'}`}>
+                                        <div key={unico.key} className={`perm-bloco${ligado ? '' : ' is-off'}`}>
                                           <div className="perm-bloco-head is-rotina">
-                                            <label className="perm-switch" title={ligado ? 'Ocultar no menu' : 'Mostrar no menu'}>
+                                            <label className="perm-switch" title={ligado ? (filialAtiva ? 'Ocultar nesta filial' : 'Ocultar no menu') : (filialAtiva ? 'Mostrar nesta filial' : 'Mostrar no menu')}>
                                               <input
                                                 type="checkbox"
                                                 checked={ligado}
-                                                onChange={() => handleToggleAba(group.module, unico.key)}
+                                                onChange={() => alternar(unico.key)}
                                               />
                                               <span className="perm-switch-slider" />
                                             </label>
@@ -1272,7 +1396,6 @@ const AdminUsersPanel: React.FC = () => {
                                                 <span className="perm-matrix-sub">{detalheDaRotina(group.module, unico.key)}</span>
                                               )}
                                             </div>
-                                            {ligado && filiaisDoGrupo}
                                           </div>
                                           <div className="perm-bloco-foot">{acoesDaLinha(unico.key, ligado)}</div>
                                         </div>
@@ -1282,17 +1405,16 @@ const AdminUsersPanel: React.FC = () => {
                                       <div key={cartao.titulo} className="perm-bloco">
                                         <div className="perm-bloco-head">
                                           <strong>{cartao.titulo}</strong>
-                                          {filiaisDoGrupo}
                                         </div>
                                         {cartao.items.map((item) => {
-                                          const ligado = visivel(item.key);
+                                          const ligado = ligadaAqui(item.key);
                                           return (
                                             <div key={item.key} className={`perm-bloco-item ${ligado ? '' : 'is-off'}`}>
-                                              <label className="perm-switch" title={ligado ? 'Ocultar no menu' : 'Mostrar no menu'}>
+                                              <label className="perm-switch" title={ligado ? (filialAtiva ? 'Ocultar nesta filial' : 'Ocultar no menu') : (filialAtiva ? 'Mostrar nesta filial' : 'Mostrar no menu')}>
                                                 <input
                                                   type="checkbox"
                                                   checked={ligado}
-                                                  onChange={() => handleToggleAba(group.module, item.key)}
+                                                  onChange={() => alternar(item.key)}
                                                 />
                                                 <span className="perm-switch-slider" />
                                               </label>
@@ -1307,10 +1429,9 @@ const AdminUsersPanel: React.FC = () => {
                                 })}
                               </div>
                             )}
-                            {(hasAcoes || (requiresFilial && branches.length > 1)) && !isSelectedAdmin && (
+                            {hasAcoes && !isSelectedAdmin && (
                               <p className="admin-form-hint" style={{ margin: '8px 0 0' }}>
-                                {requiresFilial && branches.length > 1 && 'As filiais marcadas no topo do grupo valem para todas as rotinas dele. '}
-                                {hasAcoes && 'Sem ação marcada, a rotina fica só para consulta.'}
+                                Sem ação marcada, a rotina fica só para consulta nesta filial.
                               </p>
                             )}
                           </>
@@ -1322,8 +1443,11 @@ const AdminUsersPanel: React.FC = () => {
               </div>
               </div>
               </div>
+              </div>
 
-              <button type="submit" className="btn-login" id="btn-admin-submit-user">Salvar Usuário</button>
+              <div className="admin-user-form-footer">
+                <button type="submit" className="btn-login" id="btn-admin-submit-user">Salvar Usuário</button>
+              </div>
             </form>
           </div>
         </div>

@@ -59,6 +59,10 @@ class CustomUser(AbstractUser):
     # Ausente ou lista vazia = todas as filiais liberadas no ambiente.
     aba_filiais = models.JSONField(default=dict, blank=True)
 
+    # Filiais de cada função. Example: {"SGQ": {"criar-pesquisa": ["Ibiporã (Matriz)"]}}.
+    # Ausente ou lista vazia = a função vale em todas as filiais do ambiente.
+    funcao_filiais = models.JSONField(default=dict, blank=True)
+
     google_email = models.EmailField(blank=True, null=True)
     google_sub = models.CharField(max_length=255, blank=True, null=True)
     google_linked_at = models.DateTimeField(blank=True, null=True)
@@ -89,8 +93,20 @@ class CustomUser(AbstractUser):
             return None
         return (self.indicador_filiais or {}).get(indicador) or None
 
-    def has_funcao(self, module: str, funcao: str) -> bool:
-        """Admin tem todas as funções; operador só as liberadas em `funcoes`."""
+    def has_funcao(self, module: str, funcao: str, filial: str = '') -> bool:
+        """Admin tem todas as funções; operador só as liberadas em `funcoes`.
+
+        Com `filial`, a função também precisa valer naquela unidade.
+        Lista vazia em `funcao_filiais` significa todas as filiais.
+        """
         if self.is_admin:
             return True
-        return funcao in (self.funcoes or {}).get(module, [])
+        if funcao not in (self.funcoes or {}).get(module, []):
+            return False
+        if not filial:
+            return True
+        lista = ((self.funcao_filiais or {}).get(module) or {}).get(funcao) or []
+        if not lista:
+            return True
+        from apps.accounts.permissions import resolve_filial_name
+        return resolve_filial_name(filial, lista) is not None

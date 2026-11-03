@@ -9,6 +9,7 @@ from .constants import (
     sanitize_environments,
     sanitize_filiais,
     sanitize_funcoes,
+    sanitize_funcao_filiais,
     sanitize_indicador_filiais,
     sanitize_indicadores,
     sanitize_permissions,
@@ -59,6 +60,7 @@ def _apply_environment_rules(user):
     user.indicadores = sanitize_indicadores(user.indicadores)
     user.indicador_filiais = sanitize_indicador_filiais(user.indicador_filiais)
     user.funcoes = sanitize_funcoes(user.funcoes)
+    user.funcao_filiais = sanitize_funcao_filiais(user.funcao_filiais)
     user.abas = sanitize_abas(user.abas)
     user.aba_filiais = sanitize_aba_filiais(user.aba_filiais)
     if user.role_id == '1' and ADMIN_ENVIRONMENT not in user.environments:
@@ -74,12 +76,13 @@ class UserSerializer(serializers.ModelSerializer):
     mustChangePassword = serializers.BooleanField(source='must_change_password', read_only=True)
     indicadorFiliais = serializers.JSONField(source='indicador_filiais', required=False)
     abaFiliais = serializers.JSONField(source='aba_filiais', required=False)
+    funcaoFiliais = serializers.JSONField(source='funcao_filiais', required=False)
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status',
-            'environments', 'filiais', 'indicadores', 'indicadorFiliais', 'funcoes', 'abas', 'abaFiliais', 'lastLogin',
+            'environments', 'filiais', 'indicadores', 'indicadorFiliais', 'funcoes', 'funcaoFiliais', 'abas', 'abaFiliais', 'lastLogin',
             'googleEmail', 'googleLinkedAt', 'googlePicture', 'mustChangePassword',
         ]
         read_only_fields = [
@@ -93,6 +96,7 @@ class UserSerializer(serializers.ModelSerializer):
         data['indicadores'] = sanitize_indicadores(data.get('indicadores'))
         data['indicadorFiliais'] = sanitize_indicador_filiais(data.get('indicadorFiliais'))
         data['funcoes'] = sanitize_funcoes(data.get('funcoes'))
+        data['funcaoFiliais'] = sanitize_funcao_filiais(data.get('funcaoFiliais'))
         data['abas'] = sanitize_abas(data.get('abas'))
         data['abaFiliais'] = sanitize_aba_filiais(data.get('abaFiliais'))
         from django.conf import settings
@@ -120,10 +124,11 @@ class CreateUserSerializer(serializers.ModelSerializer):
     cpf = serializers.CharField(required=True, allow_blank=False, max_length=14)
     indicadorFiliais = serializers.JSONField(source='indicador_filiais', required=False)
     abaFiliais = serializers.JSONField(source='aba_filiais', required=False)
+    funcaoFiliais = serializers.JSONField(source='funcao_filiais', required=False)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'indicadorFiliais', 'funcoes', 'abas', 'abaFiliais', 'password']
+        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'indicadorFiliais', 'funcoes', 'funcaoFiliais', 'abas', 'abaFiliais', 'password']
         read_only_fields = ['id']
 
     def validate_cpf(self, value):
@@ -163,10 +168,11 @@ class UpdateUserSerializer(serializers.ModelSerializer):
     cpf = serializers.CharField(required=False, allow_blank=True, max_length=14)
     indicadorFiliais = serializers.JSONField(source='indicador_filiais', required=False)
     abaFiliais = serializers.JSONField(source='aba_filiais', required=False)
+    funcaoFiliais = serializers.JSONField(source='funcao_filiais', required=False)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'indicadorFiliais', 'funcoes', 'abas', 'abaFiliais', 'password']
+        fields = ['id', 'username', 'name', 'cargo', 'telefone', 'cpf', 'roleId', 'status', 'environments', 'filiais', 'indicadores', 'indicadorFiliais', 'funcoes', 'funcaoFiliais', 'abas', 'abaFiliais', 'password']
         read_only_fields = ['id', 'username']
 
     def validate_cpf(self, value):

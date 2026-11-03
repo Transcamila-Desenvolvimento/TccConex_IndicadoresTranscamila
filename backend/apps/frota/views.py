@@ -40,7 +40,8 @@ class FrotaSummaryView(ModuleScopedViewMixin, APIView):
 
 
 def _funcao_required_response(request, funcao: str, detail: str):
-    if request.user.has_funcao('Frota', funcao):
+    _, filial = get_request_context(request)
+    if request.user.has_funcao('Frota', funcao, filial):
         return None
     return Response({'detail': detail}, status=status.HTTP_403_FORBIDDEN)
 

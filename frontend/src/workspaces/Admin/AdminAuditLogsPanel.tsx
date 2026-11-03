@@ -1,9 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { useAuditLogs, useAuditLogFacets } from '../../hooks/useAuditLogs';
+import { useAuditLogs, useAuditLogFacets, useReciclarLogs } from '../../hooks/useAuditLogs';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 
 const PAGE_SIZE = 10;
+const RETENCAO_OPCOES = [
+  { value: '30', label: 'Mais de 30 dias' },
+  { value: '90', label: 'Mais de 90 dias' },
+  { value: '180', label: 'Mais de 180 dias' },
+  { value: '365', label: 'Mais de 1 ano' },
+  { value: 'todos', label: 'Todos os logs' },
+];
 
 const formatTimestamp = (iso: string) => {
   const date = new Date(iso);
@@ -16,8 +23,10 @@ const AdminAuditLogsPanel: React.FC = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [retencao, setRetencao] = useState('90');
 
   const { data: facets } = useAuditLogFacets();
+  const reciclarLogs = useReciclarLogs();
 
   const queryParams = useMemo(() => ({
     page: currentPage,
@@ -48,6 +57,26 @@ const AdminAuditLogsPanel: React.FC = () => {
     setDateFrom('');
     setDateTo('');
     setCurrentPage(1);
+  };
+
+  const handleReciclar = async () => {
+    const todos = retencao === 'todos';
+    const mensagem = todos
+      ? 'Excluir todos os logs do sistema? Essa ação não pode ser desfeita. Fica apenas o registro desta reciclagem.'
+      : `Excluir os logs com mais de ${retencao} dias? Essa ação não pode ser desfeita.`;
+    if (!window.confirm(mensagem)) return;
+    try {
+      const resultado = await reciclarLogs.mutateAsync(
+        todos ? { all: true } : { olderThanDays: Number(retencao) as 30 | 90 | 180 | 365 },
+      );
+      setCurrentPage(1);
+      window.alert(resultado.removed === 0
+        ? 'Nenhum log nesse prazo para reciclar.'
+        : `${resultado.removed} log(s) excluído(s).`);
+    } catch (err: unknown) {
+      const detalhe = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      window.alert(detalhe || 'Não foi possível reciclar os logs.');
+    }
   };
 
   return (
@@ -109,7 +138,27 @@ const AdminAuditLogsPanel: React.FC = () => {
           </button>
         </div>
 
-        <div className="reports-filter-right">
+        <div className="reports-filter-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="reports-select-wrapper">
+            <select
+              id="admin-logs-retencao"
+              aria-label="Prazo da reciclagem"
+              value={retencao}
+              onChange={(e) => setRetencao(e.target.value)}
+            >
+              {RETENCAO_OPCOES.map((opcao) => (
+                <option key={opcao.value} value={opcao.value}>{opcao.label}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            className="reports-action-btn secondary"
+            onClick={handleReciclar}
+            disabled={reciclarLogs.isPending}
+          >
+            {reciclarLogs.isPending ? 'Reciclando...' : 'Reciclar logs'}
+          </button>
           <span className="reports-records-count"><strong>{totalItems}</strong> Registros</span>
         </div>
       </div>

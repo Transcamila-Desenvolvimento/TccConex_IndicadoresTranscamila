@@ -215,6 +215,30 @@ def sanitize_funcoes(funcoes: dict | None) -> dict[str, list]:
     return result
 
 
+def sanitize_funcao_filiais(funcao_filiais: dict | None) -> dict[str, dict]:
+    """Recorte de filiais por função. Lista vazia não é gravada: significa todas."""
+    result: dict[str, dict] = {}
+    for module, por_funcao in (funcao_filiais or {}).items():
+        module = normalize_environment(module)
+        allowed_funcoes = FUNCOES_POR_AMBIENTE.get(module)
+        allowed_filiais = set(branches_for_module(module))
+        if not allowed_funcoes or not isinstance(por_funcao, dict):
+            continue
+        limpas: dict[str, list] = {}
+        for funcao, filiais in por_funcao.items():
+            if funcao not in allowed_funcoes:
+                continue
+            validas = list(dict.fromkeys(
+                filial for filial in (str(item).strip() for item in (filiais or []))
+                if filial in allowed_filiais
+            ))
+            if validas and len(validas) < len(allowed_filiais):
+                limpas[funcao] = validas
+        if limpas:
+            result[module] = limpas
+    return result
+
+
 def sanitize_aba_filiais(aba_filiais: dict | None) -> dict[str, dict]:
     """Recorte de filiais por rotina. Lista vazia não é gravada: significa todas."""
     result: dict[str, dict] = {}

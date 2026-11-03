@@ -78,8 +78,9 @@ def _resolve_criado_por_importacao(request):
 
 
 def _funcao_required_response(request, funcao: str, detail: str):
-    """Nega o acesso a operadores sem a função liberada (admin sempre pode)."""
-    if request.user.has_funcao('SGQ', funcao):
+    """Nega o acesso a operadores sem a função liberada nesta filial (admin sempre pode)."""
+    _, filial = get_request_context(request)
+    if request.user.has_funcao('SGQ', funcao, filial):
         return None
     return Response({'detail': detail}, status=status.HTTP_403_FORBIDDEN)
 
