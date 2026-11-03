@@ -657,26 +657,19 @@ class ClienteComercialTests(TestCase):
         self.assertEqual(criada.status_code, 201, criada.content)
         excel, _nome = build_proposta_excel(PropostaComercial.objects.get(pk=criada.json()['id']))
         workbook = load_workbook(BytesIO(excel))
-        self.assertEqual(workbook.sheetnames, ['Trechos', 'Grade de cálculo', 'Generalidades'])
+        self.assertEqual(workbook.sheetnames, ['Trechos', 'Generalidades'])
         trecho = workbook['Trechos']
         cabecalho = [cell.value for cell in trecho[1]]
         linha = dict(zip(cabecalho, [cell.value for cell in trecho[2]]))
-        self.assertEqual(linha['Margem aplicada'], 0.4)
-        self.assertNotEqual(linha['Margem padrão'], linha['Margem aplicada'])
-        self.assertNotEqual(linha['Tarifa tabela padrão (R$)'], linha['Tarifa calculada c/ margem (R$)'])
         self.assertEqual(float(linha['Frete (R$)']), 9999.99)
-        self.assertEqual(linha['Ajuste manual no frete'], 'Sim')
-        for coluna in ('Retirada CTNR (R$)', 'Desova CTNR (R$)', 'Outros valores', 'Operação', 'Peso'):
+        for coluna in (
+            'Retirada CTNR (R$)', 'Desova CTNR (R$)', 'Outros valores', 'Operação', 'Peso',
+            'Margem aplicada', 'Margem padrão', 'Tarifa calculada c/ margem (R$)',
+        ):
             self.assertNotIn(coluna, cabecalho)
         self.assertEqual(cabecalho[:6], ['Origem', 'Destino', 'Veículo', 'KM', 'Frete (R$)', 'Pedágio (R$)'])
-        self.assertEqual(cabecalho[-7], 'Faixa usada (até km)')
-        self.assertEqual(cabecalho[-1], 'Ajuste manual no frete')
-        self.assertNotEqual(trecho.cell(row=1, column=1).fill.fgColor.rgb, trecho.cell(row=1, column=len(cabecalho)).fill.fgColor.rgb)
-        grade = list(workbook['Grade de cálculo'].iter_rows(values_only=True))
-        self.assertEqual(grade[0][0], 'Margens por veículo')
-        margens = {row[0]: row for row in grade[2:] if row[0] == 'Truck'}
-        self.assertEqual(margens['Truck'][3], 'Sim')
-        self.assertTrue(any(row[0] == 'KM de' for row in grade))
+        self.assertNotIn('Tabela de frete', workbook.sheetnames)
+        self.assertNotIn('Grade de cálculo', workbook.sheetnames)
 
     def test_planilha_retroportuaria_mostra_retirada_e_desova(self):
         from openpyxl import load_workbook
@@ -736,8 +729,11 @@ class ClienteComercialTests(TestCase):
         excel, _nome = build_proposta_excel(PropostaComercial.objects.get(pk=criada.json()['id']))
         workbook = load_workbook(BytesIO(excel))
         self.assertNotIn('Trechos', workbook.sheetnames)
-        grade = list(workbook['Grade de cálculo'].iter_rows(values_only=True))
+        self.assertIn('Tabela de frete', workbook.sheetnames)
+        grade = list(workbook['Tabela de frete'].iter_rows(values_only=True))
+        self.assertFalse(any(row[0] and 'margem' in str(row[0]).lower() for row in grade))
         inicio = next(i for i, row in enumerate(grade) if row[0] == 'KM de')
+        self.assertEqual(inicio, 1)
         self.assertGreater(len(grade), inicio + 1)
 
     def test_recusa_transferencia_sem_destinos_preenchidos(self):
