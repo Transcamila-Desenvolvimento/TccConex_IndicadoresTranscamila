@@ -85,6 +85,7 @@ ABAS_POR_AMBIENTE = {
         'auditorias-normas',
         'auditorias-tipos-resposta',
         'auditorias-categorias',
+        'sipoc',
     }),
     'Marketing': frozenset({'home', 'campanhas'}),
     'Logística': frozenset({'home', 'configuracoes'}),

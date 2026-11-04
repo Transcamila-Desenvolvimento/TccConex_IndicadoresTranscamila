@@ -52,6 +52,7 @@ import type {
   SgqCategoria, SgqCategoriaPayload, SgqCategoriaQueryParams, SgqCategoriaResumo, SgqCategoriaSugestoes,
   SgqNormaItensImportParams, SgqNormaItensImportResumo, SgqNormaTipoResposta,
   SgqTipoResposta, SgqTipoRespostaPayload, SgqTipoRespostaQueryParams, SgqTipoRespostaResumo,
+  SgqSipocEsquema, SgqSipocProcedimento, SgqSipocSetor,
   OlhoVivoResposta, OlhoVivoSalvarPayload, OlhoVivoAno,
   ClienteComercial, ClienteComercialPayload, ClienteComercialQueryParams,
   ClienteComercialHistorico, ClienteComercialProdutosSugestoes, ClienteComercialValidacaoResumo,
@@ -129,6 +130,7 @@ function normalizeUser(raw: any): User {
     abas: raw.abas && typeof raw.abas === 'object' ? raw.abas : {},
     abaFiliais: raw.abaFiliais && typeof raw.abaFiliais === 'object' ? raw.abaFiliais : {},
     sgqAuditoriasLiberadas: raw.sgqAuditoriasLiberadas === true,
+    sgqSipocLiberado: raw.sgqSipocLiberado === true,
     googleEmail: raw.googleEmail ?? null,
     googleLinkedAt: raw.googleLinkedAt ?? null,
     googlePicture: raw.googlePicture ?? null,
@@ -3182,6 +3184,51 @@ export const apiService = {
 
   async removeCampanhaMidia(campanhaId: string, driveFileId: string): Promise<void> {
     await api.post(`/api/marketing/campanhas/${campanhaId}/midias/remover/`, { driveFileId });
+  },
+
+  async getSgqSipocSetores(): Promise<{ count: number; results: SgqSipocSetor[] }> {
+    const { data } = await api.get('/api/sgq/sipoc-setores/');
+    return data as { count: number; results: SgqSipocSetor[] };
+  },
+
+  async criarSgqSipocSetor(nome: string): Promise<SgqSipocSetor> {
+    const { data } = await api.post('/api/sgq/sipoc-setores/', { nome });
+    return data as SgqSipocSetor;
+  },
+
+  async atualizarSgqSipocSetor(id: number, nome: string): Promise<SgqSipocSetor> {
+    const { data } = await api.patch(`/api/sgq/sipoc-setores/${id}/`, { nome });
+    return data as SgqSipocSetor;
+  },
+
+  async excluirSgqSipocSetor(id: number): Promise<void> {
+    await api.delete(`/api/sgq/sipoc-setores/${id}/`);
+  },
+
+  async getSgqSipocProcedimentos(params: { setor?: number | ''; search?: string } = {}): Promise<{ count: number; results: SgqSipocProcedimento[] }> {
+    const { data } = await api.get('/api/sgq/sipoc-procedimentos/', {
+      params: { setor: params.setor || undefined, search: params.search || undefined },
+    });
+    return data as { count: number; results: SgqSipocProcedimento[] };
+  },
+
+  async getSgqSipocProcedimento(id: number): Promise<SgqSipocProcedimento> {
+    const { data } = await api.get(`/api/sgq/sipoc-procedimentos/${id}/`);
+    return data as SgqSipocProcedimento;
+  },
+
+  async criarSgqSipocProcedimento(payload: { nome: string; setorId: number; descricao?: string }): Promise<SgqSipocProcedimento> {
+    const { data } = await api.post('/api/sgq/sipoc-procedimentos/', payload);
+    return data as SgqSipocProcedimento;
+  },
+
+  async atualizarSgqSipocProcedimento(id: number, payload: Partial<SgqSipocProcedimento> & { esquema?: SgqSipocEsquema }): Promise<SgqSipocProcedimento> {
+    const { data } = await api.patch(`/api/sgq/sipoc-procedimentos/${id}/`, payload);
+    return data as SgqSipocProcedimento;
+  },
+
+  async excluirSgqSipocProcedimento(id: number): Promise<void> {
+    await api.delete(`/api/sgq/sipoc-procedimentos/${id}/`);
   },
 
   // ─── Frota ──────────────────────────────────────────────────────────────────

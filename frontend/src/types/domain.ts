@@ -29,6 +29,8 @@ export interface User {
   abaFiliais: Record<string, Record<string, string[]>>;
   /** True libera as rotinas de auditorias para quem já tem o SGQ. No Azure, false: só administrador e quem teve a rotina gravada. */
   sgqAuditoriasLiberadas?: boolean;
+  /** True libera o SIPOC para quem já tem o SGQ. No Azure, false: só quem teve a rotina gravada. */
+  sgqSipocLiberado?: boolean;
   googleEmail: string | null;
   googleLinkedAt: string | null;
   googlePicture: string | null;
@@ -4160,6 +4162,45 @@ export interface ArquivoAmbiente {
 export interface ArquivoAmbienteLista {
   configurado: boolean;
   arquivos: ArquivoAmbiente[];
+}
+
+export type SgqSipocTipoNo = 'fornecedor' | 'entrada' | 'inicio' | 'etapa' | 'fim' | 'saida' | 'cliente' | 'base';
+
+export interface SgqSipocNo {
+  id: string;
+  tipo: SgqSipocTipoNo;
+  texto: string;
+  x: number;
+  y: number;
+}
+
+export interface SgqSipocLigacao {
+  id: string;
+  de: string;
+  para: string;
+}
+
+export interface SgqSipocEsquema {
+  nos: SgqSipocNo[];
+  ligacoes: SgqSipocLigacao[];
+}
+
+export interface SgqSipocSetor {
+  id: number;
+  nome: string;
+  totalProcedimentos: number;
+}
+
+export interface SgqSipocProcedimento {
+  id: number;
+  nome: string;
+  descricao: string;
+  setorId: number;
+  setorNome: string;
+  criadoPor: string;
+  criadoPorFoto: string;
+  atualizadoEm: string;
+  esquema?: SgqSipocEsquema;
 }
 
 

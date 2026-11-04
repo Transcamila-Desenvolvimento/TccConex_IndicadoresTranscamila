@@ -15,6 +15,8 @@ import SGQAuditoriasNormas from './SGQAuditoriasNormas';
 import SGQAuditoriasNormaItens from './SGQAuditoriasNormaItens';
 import SGQAuditoriasCategorias from './SGQAuditoriasCategorias';
 import SGQAuditoriasTiposResposta from './SGQAuditoriasTiposResposta';
+import SGQSipoc from './SGQSipoc';
+import SGQSipocProcedimento from './SGQSipocProcedimento';
 
 const ABAS_AUDITORIAS_PRONTAS = new Set([
   'auditorias-visao-geral', 'auditorias-normas', 'auditorias-categorias', 'auditorias-tipos-resposta',
@@ -34,6 +36,8 @@ const SGQWorkspace: React.FC = () => {
     <Routes>
       <Route index element={<AbaRoute module="SGQ" aba="home" fallback={fallback}><SGQHome /></AbaRoute>} />
       <Route path="pesquisa-satisfacao" element={<AbaRoute module="SGQ" aba="pesquisa-satisfacao" fallback={fallback}><SGQPesquisaSatisfacao /></AbaRoute>} />
+      <Route path="sipoc" element={<AbaRoute module="SGQ" aba="sipoc" fallback={fallback}><SGQSipoc /></AbaRoute>} />
+      <Route path="sipoc/:procedimentoId" element={<AbaRoute module="SGQ" aba="sipoc" fallback={fallback}><SGQSipocProcedimento /></AbaRoute>} />
       <Route path="matriz" element={<Navigate to="documentos" replace />} />
       <Route path="matriz/documentos" element={<AbaRoute module="SGQ" aba="matriz" fallback={fallback}><SGQMatriz /></AbaRoute>} />
       <Route path="matriz/ecossistema" element={<AbaRoute module="SGQ" aba="matriz-ecossistema" fallback={fallback}><SGQEcossistema /></AbaRoute>} />

@@ -532,6 +532,13 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'SGQ' && canAba('SGQ', 'pesquisa-satisfacao')
       },
       {
+        title: "SIPOC",
+        path: "Gestão da Qualidade (SGQ) / SIPOC",
+        icon: <i className="bi bi-diagram-2 search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/sgq/sipoc'),
+        show: selectedEnvironment === 'SGQ' && canAba('SGQ', 'sipoc')
+      },
+      {
         title: "Documentos",
         path: "Gestão da Qualidade (SGQ) / Matriz de conhecimento / Documentos",
         icon: <i className="bi bi-file-earmark-text search-item-icon" aria-hidden="true" />,
@@ -761,6 +768,8 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/sgq/matriz/ecossistema')) return `${env} / Matriz de conhecimento / Ecossistema SGQ`;
     if (path.startsWith('/sgq/matriz')) return `${env} / Matriz de conhecimento / Documentos`;
     if (path.startsWith('/sgq/pesquisa-satisfacao')) return `${env} / Pesquisa de Satisfação`;
+    if (path.startsWith('/sgq/sipoc/')) return `${env} / SIPOC / Lousa`;
+    if (path.startsWith('/sgq/sipoc')) return `${env} / SIPOC`;
     const auditoriaAtual = SGQ_AUDITORIAS_MENU.find((item) => path.startsWith(item.path));
     if (auditoriaAtual) return `${env} / Auditorias / ${auditoriaAtual.label}`;
     if (path.startsWith('/sgq')) return env;
@@ -1561,6 +1570,18 @@ const DashboardLayout: React.FC = () => {
                     ))}
                   </div>
                 </div>
+                )}
+                {canAba('SGQ', 'sipoc') && (
+                <Link
+                  to="/sgq/sipoc"
+                  className={`nav-btn ${isRouteActive('/sgq/sipoc') ? 'active' : ''}`}
+                  data-tooltip="SIPOC"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="diagram-2" />
+                    <span className="nav-text">SIPOC</span>
+                  </div>
+                </Link>
                 )}
               </div>
             )}

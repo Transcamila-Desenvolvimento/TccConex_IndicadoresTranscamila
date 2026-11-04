@@ -31,23 +31,28 @@ function chavesDoModulo(module: string): string[] {
   return abasDoModulo(module).map((item) => item.key as string);
 }
 
-/** No Azure, lista vazia continua significando as rotinas antigas — Auditorias fica de fora até ser gravada. */
-function rotinasMarcadas(module: string, saved: string[], auditoriasOptIn: boolean): string[] {
+function rotinaNovaBloqueada(key: string, auditoriasOptIn: boolean, sipocOptIn: boolean) {
+  if (auditoriasOptIn && key.startsWith('auditorias')) return true;
+  return sipocOptIn && key === 'sipoc';
+}
+
+/** No Azure, lista vazia continua significando as rotinas antigas. Auditorias e SIPOC ficam de fora até serem gravados. */
+function rotinasMarcadas(module: string, saved: string[], auditoriasOptIn: boolean, sipocOptIn: boolean): string[] {
   const catalog = chavesDoModulo(module);
   if (saved.length === 0) {
-    if (!(auditoriasOptIn && module === 'SGQ')) return catalog;
-    return catalog.filter((key) => !key.startsWith('auditorias'));
+    return catalog.filter((key) => !rotinaNovaBloqueada(key, auditoriasOptIn, sipocOptIn));
   }
   return catalog.filter((key) => saved.includes(key));
 }
 
-function gravacaoDasRotinas(module: string, marcadas: string[], auditoriasOptIn: boolean): string[] {
+function gravacaoDasRotinas(module: string, marcadas: string[], auditoriasOptIn: boolean, sipocOptIn: boolean): string[] {
   const catalog = chavesDoModulo(module);
   const unique = catalog.filter((key) => marcadas.includes(key));
-  const classicas = catalog.filter((key) => !(auditoriasOptIn && module === 'SGQ' && key.startsWith('auditorias')));
+  const classicas = catalog.filter((key) => !rotinaNovaBloqueada(key, auditoriasOptIn, sipocOptIn));
   const soClassicas = unique.length === classicas.length && classicas.every((key) => unique.includes(key));
   if (soClassicas) return [];
-  if (unique.length === catalog.length && !(auditoriasOptIn && module === 'SGQ')) return [];
+  const temNovidade = catalog.some((key) => rotinaNovaBloqueada(key, auditoriasOptIn, sipocOptIn));
+  if (unique.length === catalog.length && !temNovidade) return [];
   return unique;
 }
 
@@ -151,6 +156,7 @@ const AdminUsersPanel: React.FC = () => {
 
   const isSelectedAdmin = roleId === '1';
   const auditoriasOptIn = currentUser?.sgqAuditoriasLiberadas !== true;
+  const sipocOptIn = currentUser?.sgqSipocLiberado !== true;
   const { data: indicadorFiliaisOpcoes = {} } = useIndicadorFiliaisOpcoes(isModalOpen);
   const isEditingSelf = !!editingUserId && editingUserId === currentUser?.id;
 
@@ -310,8 +316,9 @@ const AdminUsersPanel: React.FC = () => {
       const catalog = chavesDoModulo(group.module);
       const keys = gravacaoDasRotinas(
         group.module,
-        rotinasMarcadas(group.module, selectedAbas[group.module] ?? [], auditoriasOptIn),
+        rotinasMarcadas(group.module, selectedAbas[group.module] ?? [], auditoriasOptIn, sipocOptIn),
         auditoriasOptIn,
+        sipocOptIn,
       );
       if (keys.length > 0) {
         abas[group.module] = catalog.includes(HOME_ABA_KEY) && !keys.includes(HOME_ABA_KEY)
@@ -511,14 +518,14 @@ const AdminUsersPanel: React.FC = () => {
   const handleToggleAba = (module: string, key: string) => {
     if (key === HOME_ABA_KEY) return;
     const catalog = chavesDoModulo(module);
-    const current = rotinasMarcadas(module, selectedAbas[module] ?? [], auditoriasOptIn);
+    const current = rotinasMarcadas(module, selectedAbas[module] ?? [], auditoriasOptIn, sipocOptIn);
     const turningOff = current.includes(key);
     if (turningOff && current.length <= 1) return;
     const next = turningOff ? current.filter((k) => k !== key) : [...current, key];
     if (!next.includes(HOME_ABA_KEY) && catalog.includes(HOME_ABA_KEY)) {
       next.unshift(HOME_ABA_KEY);
     }
-    setSelectedAbas((prev) => ({ ...prev, [module]: gravacaoDasRotinas(module, next, auditoriasOptIn) }));
+    setSelectedAbas((prev) => ({ ...prev, [module]: gravacaoDasRotinas(module, next, auditoriasOptIn, sipocOptIn) }));
     if (turningOff) {
       const keysDaAba = funcoesDaAba(module, key).map((item) => item.key);
       setFuncoes((prev) => ({
@@ -535,7 +542,7 @@ const AdminUsersPanel: React.FC = () => {
 
   const definirRotinaNaFilial = (module: string, key: string, filial: string, sessionBranches: string[]) => {
     if (key === HOME_ABA_KEY) return;
-    const marcadas = rotinasMarcadas(module, selectedAbas[module] ?? [], auditoriasOptIn);
+    const marcadas = rotinasMarcadas(module, selectedAbas[module] ?? [], auditoriasOptIn, sipocOptIn);
     const noMenu = marcadas.includes(key);
     const salvas = (abaFiliais[module]?.[key] ?? []).filter((item) => sessionBranches.includes(item));
     const efetivas = !noMenu ? [] : (salvas.length === 0 ? [...sessionBranches] : salvas);
@@ -615,7 +622,9 @@ const AdminUsersPanel: React.FC = () => {
     if (preset === 'todas-rotinas') {
       setSelectedAbas((prev) => ({
         ...prev,
-        [module]: auditoriasOptIn && module === 'SGQ' ? chavesDoModulo(module) : [],
+        [module]: auditoriasOptIn && module === 'SGQ'
+          ? chavesDoModulo(module).filter((key) => !(sipocOptIn && key === 'sipoc'))
+          : [],
       }));
       return;
     }
@@ -1117,7 +1126,7 @@ const AdminUsersPanel: React.FC = () => {
                             ? (selectedIndicadores.length === 0 ? INDICADOR_ITEMS.length : selectedIndicadores.length)
                             : (() => {
                               const configuraveis = rotinasConfiguraveisDoModulo(item.module);
-                              const marcadas = rotinasMarcadas(item.module, selectedAbas[item.module] ?? [], auditoriasOptIn);
+                              const marcadas = rotinasMarcadas(item.module, selectedAbas[item.module] ?? [], auditoriasOptIn, sipocOptIn);
                               return configuraveis.filter((aba) => marcadas.includes(aba.key)).length;
                             })();
                           const itemAbaTotal = item.module === 'Indicadores'
@@ -1327,6 +1336,7 @@ const AdminUsersPanel: React.FC = () => {
                                       group.module,
                                       selectedAbas[group.module] ?? [],
                                       auditoriasOptIn,
+                                      sipocOptIn,
                                     ).includes(key);
                                     const porFilial = requiresFilial && branches.length > 1 && !isSelectedAdmin;
                                     const filialAtiva = porFilial

@@ -45,6 +45,7 @@ export const ABA_ITEMS = [
   { module: 'SGQ', key: 'auditorias-normas', label: 'Normas', path: '/sgq/auditorias/normas' },
   { module: 'SGQ', key: 'auditorias-tipos-resposta', label: 'Tipos de respostas', path: '/sgq/auditorias/tipos-resposta' },
   { module: 'SGQ', key: 'auditorias-categorias', label: 'Categorias', path: '/sgq/auditorias/categorias' },
+  { module: 'SGQ', key: 'sipoc', label: 'SIPOC', path: '/sgq/sipoc' },
 
   { module: 'Marketing', key: 'home', label: 'Home Marketing', path: '/marketing' },
   { module: 'Marketing', key: 'campanhas', label: 'Calendário Transcamila', path: '/marketing/campanhas' },
@@ -91,6 +92,7 @@ const GRUPOS_DE_ROTINA: Record<string, { titulo: string; keys: string[] }[]> = {
     { titulo: '', keys: ['pesquisa-satisfacao'] },
     { titulo: 'Matriz de conhecimento', keys: ['matriz', 'matriz-ecossistema'] },
     { titulo: 'Auditorias', keys: ['auditorias-visao-geral', 'auditorias', 'auditorias-minhas-acoes', 'auditorias-normas', 'auditorias-tipos-resposta', 'auditorias-categorias'] },
+    { titulo: 'SIPOC', keys: ['sipoc'] },
   ],
   Frota: [
     { titulo: 'Questionários', keys: ['olho-vivo'] },
@@ -138,19 +140,28 @@ function semAuditoriasBloqueadas(user: User | null, module: string, allowed: Set
   return new Set([...allowed].filter((key) => !key.startsWith('auditorias') || explicitas.has(key)));
 }
 
+function semSipocBloqueado(user: User | null, module: string, allowed: Set<string>): Set<string> {
+  if (module !== 'SGQ' || user?.sgqSipocLiberado === true) return allowed;
+  const explicitas = new Set(user?.abas?.SGQ ?? []);
+  if (explicitas.has('sipoc')) return allowed;
+  return new Set([...allowed].filter((key) => key !== 'sipoc'));
+}
+
 export function getAllowedAbas(user: User | null, module: string): Set<string> {
   if (module === 'Indicadores') {
     return getAllowedIndicadores(user) as Set<string>;
   }
   const catalog = abasDoModulo(module).map((item) => item.key as string);
   if (user?.roleId === '1' || catalog.length === 0) {
-    return semAuditoriasBloqueadas(user, module, new Set(catalog));
+    return semSipocBloqueado(user, module, semAuditoriasBloqueadas(user, module, new Set(catalog)));
   }
   const selected = (user?.abas?.[module] ?? []).filter((key) => catalog.includes(key));
-  if (selected.length === 0) return semAuditoriasBloqueadas(user, module, new Set(catalog));
+  if (selected.length === 0) {
+    return semSipocBloqueado(user, module, semAuditoriasBloqueadas(user, module, new Set(catalog)));
+  }
   const allowed = new Set(selected);
   if (catalog.includes(HOME_ABA_KEY)) allowed.add(HOME_ABA_KEY);
-  return semAuditoriasBloqueadas(user, module, allowed);
+  return semSipocBloqueado(user, module, semAuditoriasBloqueadas(user, module, allowed));
 }
 
 export function userCanSeeAba(user: User | null, module: string, key: string, filial?: string | null): boolean {

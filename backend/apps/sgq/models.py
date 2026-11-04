@@ -529,6 +529,46 @@ class AnexoRespostaAuditoriaSGQ(models.Model):
         return self.nome_original
 
 
+class SetorSipocSGQ(models.Model):
+    filial = models.CharField(max_length=100, verbose_name='Filial')
+    nome = models.CharField(max_length=80, verbose_name='Nome')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['nome', 'pk']
+        verbose_name = 'Setor do SIPOC'
+        verbose_name_plural = 'Setores do SIPOC'
+
+    def __str__(self):
+        return self.nome
+
+
+class ProcedimentoSipocSGQ(models.Model):
+    filial = models.CharField(max_length=100, verbose_name='Filial')
+    setor = models.ForeignKey(SetorSipocSGQ, on_delete=models.PROTECT, related_name='procedimentos')
+    nome = models.CharField(max_length=140, verbose_name='Nome')
+    descricao = models.CharField(max_length=300, blank=True, verbose_name='Descrição')
+    esquema = models.JSONField(default=dict, blank=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='procedimentos_sipoc_sgq',
+        verbose_name='Criado por',
+    )
+    atualizado_em = models.DateTimeField(auto_now=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['setor__nome', 'nome', 'pk']
+        verbose_name = 'Procedimento SIPOC'
+        verbose_name_plural = 'Procedimentos SIPOC'
+
+    def __str__(self):
+        return self.nome
+
+
 class PastaMatrizSGQ(models.Model):
     """Pasta da matriz de conhecimento do SGQ."""
 

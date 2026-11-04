@@ -10,6 +10,7 @@ from .auditoria_views import (
 )
 from .drive_views import SGQDriveBrowseView, SGQDriveStatusView
 from .matriz_views import DocumentoSGQViewSet, PastaMatrizSGQViewSet
+from .sipoc_views import ProcedimentoSipocSGQViewSet, SetorSipocSGQViewSet
 from .views import EscopoAnaliseOpcaoViewSet, EscopoAnaliseViewSet, PesquisaSatisfacaoViewSet
 
 router = DefaultRouter()
@@ -23,6 +24,8 @@ router.register('normas', NormaSGQViewSet, basename='sgq-normas')
 router.register('normas-itens', ItemNormaSGQViewSet, basename='sgq-normas-itens')
 router.register('auditorias-categorias', CategoriaAuditoriaSGQViewSet, basename='sgq-auditorias-categorias')
 router.register('auditorias-tipos-resposta', TipoRespostaSGQViewSet, basename='sgq-auditorias-tipos-resposta')
+router.register('sipoc-setores', SetorSipocSGQViewSet, basename='sgq-sipoc-setores')
+router.register('sipoc-procedimentos', ProcedimentoSipocSGQViewSet, basename='sgq-sipoc-procedimentos')
 
 urlpatterns = [
     path('drive/status/', SGQDriveStatusView.as_view(), name='sgq-drive-status'),

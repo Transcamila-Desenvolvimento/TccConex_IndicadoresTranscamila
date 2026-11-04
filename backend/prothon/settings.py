@@ -18,6 +18,10 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 # SGQ_AUDITORIAS_LIBERADAS=True libera para quem já tem o SGQ, como no dev.
 _auditorias_padrao = 'False' if os.environ.get('WEBSITE_SITE_NAME') else 'True'
 SGQ_AUDITORIAS_LIBERADAS = os.environ.get('SGQ_AUDITORIAS_LIBERADAS', _auditorias_padrao) == 'True'
+# No App Service o SIPOC não entra no "todas as rotinas". Só quem tiver a rotina
+# gravada no cadastro acessa. SGQ_SIPOC_LIBERADO=True libera para quem já tem o SGQ.
+_sipoc_padrao = 'False' if os.environ.get('WEBSITE_SITE_NAME') else 'True'
+SGQ_SIPOC_LIBERADO = os.environ.get('SGQ_SIPOC_LIBERADO', _sipoc_padrao) == 'True'
 
 # Produção: definir DJANGO_ALLOWED_HOSTS com os domínios reais (separados por vírgula).
 # Sem a variável, cai no fallback permissivo (uso só em dev).

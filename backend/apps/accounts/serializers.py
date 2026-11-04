@@ -101,6 +101,7 @@ class UserSerializer(serializers.ModelSerializer):
         data['abaFiliais'] = sanitize_aba_filiais(data.get('abaFiliais'))
         from django.conf import settings
         data['sgqAuditoriasLiberadas'] = bool(getattr(settings, 'SGQ_AUDITORIAS_LIBERADAS', False))
+        data['sgqSipocLiberado'] = bool(getattr(settings, 'SGQ_SIPOC_LIBERADO', False))
         return _cpf_na_resposta(data)
 
 
