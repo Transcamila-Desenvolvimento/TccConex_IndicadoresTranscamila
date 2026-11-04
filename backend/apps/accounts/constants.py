@@ -35,7 +35,6 @@ INDICADORES_KEYS = frozenset({
     'meta-faturamento',
     'movimentacao-rh',
     'satisfacao-clientes',
-    'custos-frota',
     'olho-vivo',
 })
 
@@ -89,7 +88,7 @@ ABAS_POR_AMBIENTE = {
     }),
     'Marketing': frozenset({'home', 'campanhas'}),
     'Logística': frozenset({'home', 'configuracoes'}),
-    'Frota': frozenset({'home', 'cadastro-veiculos', 'cadastro-condutores', 'custos-frota', 'olho-vivo'}),
+    'Frota': frozenset({'home', 'olho-vivo'}),
     'Comercial': frozenset({
         'home',
         'cadastro-clientes',
@@ -131,9 +130,6 @@ FUNCOES_POR_AMBIENTE = {
         'excluir-campanhas',
     }),
     'Frota': frozenset({
-        'gerenciar-veiculos',
-        'gerenciar-condutores',
-        'gerenciar-custos-frota',
         'responder-olho-vivo',
     }),
     'Comercial': frozenset({

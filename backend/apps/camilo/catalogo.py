@@ -28,9 +28,6 @@ PARTES = (
     {'ambiente': 'SGQ', 'parte': 'auditorias', 'rotulo': 'Auditorias'},
     {'ambiente': 'Marketing', 'parte': 'campanhas', 'rotulo': 'Calendário Transcamila'},
     {'ambiente': 'Logística', 'parte': 'configuracoes', 'rotulo': 'Configurações gerais'},
-    {'ambiente': 'Frota', 'parte': 'custos-frota', 'rotulo': 'Custos de frota'},
-    {'ambiente': 'Frota', 'parte': 'cadastro-condutores', 'rotulo': 'Condutores'},
-    {'ambiente': 'Frota', 'parte': 'cadastro-veiculos', 'rotulo': 'Veículos frota'},
     {'ambiente': 'Comercial', 'parte': 'cadastro-clientes', 'rotulo': 'Clientes'},
     {'ambiente': 'Comercial', 'parte': 'cadastro-tabela-frete', 'rotulo': 'Tabela frete'},
     {'ambiente': 'Comercial', 'parte': 'cadastro-generalidades', 'rotulo': 'Generalidades'},
@@ -43,7 +40,6 @@ PARTES = (
     {'ambiente': 'Indicadores', 'parte': 'meta-faturamento', 'rotulo': 'Meta de Faturamento'},
     {'ambiente': 'Indicadores', 'parte': 'movimentacao-rh', 'rotulo': 'Movimentação de RH'},
     {'ambiente': 'Indicadores', 'parte': 'satisfacao-clientes', 'rotulo': 'Satisfação dos Clientes'},
-    {'ambiente': 'Indicadores', 'parte': 'custos-frota', 'rotulo': 'Custos de frota'},
 )
 
 PARTE_POR_CHAVE = {(item['ambiente'], item['parte']): item for item in PARTES}

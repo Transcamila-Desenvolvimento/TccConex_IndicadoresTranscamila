@@ -53,9 +53,6 @@ export const ABA_ITEMS = [
   { module: 'Logística', key: 'configuracoes', label: 'Configurações gerais', path: '/logistica/configuracoes' },
 
   { module: 'Frota', key: 'home', label: 'Home Frota', path: '/frota' },
-  { module: 'Frota', key: 'custos-frota', label: 'Custos de frota', path: '/frota/custos' },
-  { module: 'Frota', key: 'cadastro-condutores', label: 'Condutores', path: '/frota/cadastros/condutores' },
-  { module: 'Frota', key: 'cadastro-veiculos', label: 'Veículos frota', path: '/frota/cadastros/veiculos' },
   { module: 'Frota', key: 'olho-vivo', label: 'Olho vivo na estrada', path: '/frota/questionarios/olho-vivo' },
 
   { module: 'Comercial', key: 'home', label: 'Home Comercial', path: '/comercial' },
@@ -96,8 +93,6 @@ const GRUPOS_DE_ROTINA: Record<string, { titulo: string; keys: string[] }[]> = {
     { titulo: 'Auditorias', keys: ['auditorias-visao-geral', 'auditorias', 'auditorias-minhas-acoes', 'auditorias-normas', 'auditorias-tipos-resposta', 'auditorias-categorias'] },
   ],
   Frota: [
-    { titulo: 'Cadastros', keys: ['cadastro-condutores', 'cadastro-veiculos'] },
-    { titulo: 'Custos', keys: ['custos-frota'] },
     { titulo: 'Questionários', keys: ['olho-vivo'] },
   ],
   Faturamento: [

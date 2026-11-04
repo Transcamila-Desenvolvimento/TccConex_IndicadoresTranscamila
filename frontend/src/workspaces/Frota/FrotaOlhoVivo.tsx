@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
-import { getFrotaErrorMessage } from '../../hooks/useFrotaVeiculos';
+import { getFrotaErrorMessage } from '../../hooks/useFrotaOlhoVivo';
 import { useOlhoVivo, useOlhoVivoAno, useSalvarOlhoVivo } from '../../hooks/useFrotaOlhoVivo';
 import type { OlhoVivoMesResumo } from '../../types/domain';
 

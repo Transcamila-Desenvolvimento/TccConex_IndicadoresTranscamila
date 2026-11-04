@@ -532,23 +532,6 @@ def resumo_metas(user) -> str:
     return _texto(MetaFaturamentoMensal.objects.count(), 'meta de faturamento cadastrada', 'metas de faturamento cadastradas')
 
 
-def resumo_veiculos(user) -> str:
-    from apps.frota.models import VeiculoFrota
-    total = _filtra_filial(VeiculoFrota.objects.all(), user, 'Frota', 'filial').count()
-    return _texto(total, 'veículo da frota', 'veículos da frota')
-
-
-def resumo_condutores(user) -> str:
-    from apps.frota.models import CondutorFrota
-    total = _filtra_filial(CondutorFrota.objects.all(), user, 'Frota', 'filial').count()
-    return _texto(total, 'condutor', 'condutores')
-
-
-def resumo_custos_frota(user) -> str:
-    from apps.frota.models import CustoFrotaLote
-    return _texto(CustoFrotaLote.objects.count(), 'lote de custos da frota', 'lotes de custos da frota')
-
-
 def resumo_clientes_comercial(user) -> str:
     from apps.comercial.models import ClienteComercial
     return _texto(ClienteComercial.objects.count(), 'cliente comercial', 'clientes comerciais')
@@ -609,10 +592,6 @@ def resumo_satisfacao_indicador(user) -> str:
     return resumo_pesquisas(user)
 
 
-def resumo_frota_indicador(user) -> str:
-    return resumo_custos_frota(user)
-
-
 LEITORES = {
     ('Financeiro', 'calendario'): resumo_calendario,
     ('Financeiro', 'inclusao-relatorios'): resumo_relatorios,
@@ -629,9 +608,6 @@ LEITORES = {
     ('SGQ', 'auditorias'): resumo_auditorias,
     ('Marketing', 'campanhas'): resumo_campanhas,
     ('Logística', 'configuracoes'): resumo_metas,
-    ('Frota', 'custos-frota'): resumo_custos_frota,
-    ('Frota', 'cadastro-condutores'): resumo_condutores,
-    ('Frota', 'cadastro-veiculos'): resumo_veiculos,
     ('Comercial', 'cadastro-clientes'): resumo_clientes_comercial,
     ('Comercial', 'cadastro-tabela-frete'): resumo_tabela_frete,
     ('Comercial', 'cadastro-generalidades'): resumo_generalidades,
@@ -644,7 +620,6 @@ LEITORES = {
     ('Indicadores', 'meta-faturamento'): resumo_meta_indicador,
     ('Indicadores', 'movimentacao-rh'): resumo_rh_indicador,
     ('Indicadores', 'satisfacao-clientes'): resumo_satisfacao_indicador,
-    ('Indicadores', 'custos-frota'): resumo_frota_indicador,
 }
 
 
@@ -664,9 +639,6 @@ _SINAIS = {
     ('SGQ', 'auditorias'): ('questionario', 'andamento', 'auditoria em aberto'),
     ('Marketing', 'campanhas'): ('campanha', 'marketing'),
     ('Logística', 'configuracoes'): ('logistica',),
-    ('Frota', 'custos-frota'): ('abastecimento', 'manutencao', 'custo da frota'),
-    ('Frota', 'cadastro-condutores'): ('condutor', 'motorista'),
-    ('Frota', 'cadastro-veiculos'): ('placa', 'veiculo da frota'),
     ('Comercial', 'cadastro-clientes'): ('cliente comercial', 'razao'),
     ('Comercial', 'cadastro-tabela-frete'): ('tabela de frete', 'tarifa'),
     ('Comercial', 'cadastro-generalidades'): ('generalidade',),
@@ -679,7 +651,6 @@ _SINAIS = {
     ('Indicadores', 'meta-faturamento'): ('meta de faturamento',),
     ('Indicadores', 'movimentacao-rh'): ('movimentacao de rh',),
     ('Indicadores', 'satisfacao-clientes'): ('satisfacao dos clientes',),
-    ('Indicadores', 'custos-frota'): ('custo de frota',),
 }
 
 _LIMITE_RESUMO = 2800
@@ -946,22 +917,6 @@ def _detalhe_protocolos(user, pergunta: str) -> str:
     return _linhas_casadas(qs, ('nota_fiscal', 'cliente__nome'), pergunta, linha)
 
 
-def _detalhe_veiculos(user, pergunta: str) -> str:
-    from apps.frota.models import VeiculoFrota
-    qs = _filtra_filial(VeiculoFrota.objects.all(), user, 'Frota', 'filial').order_by('placa')
-
-    def linha(item):
-        return f'{item.placa} {item.marca} {item.modelo}, filial {item.filial}'
-
-    return _linhas_casadas(qs, ('placa', 'modelo', 'marca'), pergunta, linha)
-
-
-def _detalhe_condutores(user, pergunta: str) -> str:
-    from apps.frota.models import CondutorFrota
-    qs = _filtra_filial(CondutorFrota.objects.all(), user, 'Frota', 'filial').order_by('nome')
-    return _linhas_casadas(qs, ('nome',), pergunta, lambda item: item.nome)
-
-
 def _detalhe_campanhas(user, pergunta: str) -> str:
     from apps.marketing.models import CampanhaMarketing
     qs = CampanhaMarketing.objects.order_by('-data_inicio')
@@ -1002,8 +957,6 @@ _DETALHE = {
     ('SGQ', 'pesquisa-satisfacao'): _detalhe_pesquisas,
     ('Marketing', 'campanhas'): _detalhe_campanhas,
     ('Logística', 'configuracoes'): _detalhe_metas,
-    ('Frota', 'cadastro-veiculos'): _detalhe_veiculos,
-    ('Frota', 'cadastro-condutores'): _detalhe_condutores,
     ('Comercial', 'cadastro-clientes'): _detalhe_clientes,
     ('Comercial', 'cadastro-tabela-frete'): _detalhe_tabela_frete,
     ('Comercial', 'cadastro-generalidades'): _detalhe_generalidades,

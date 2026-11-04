@@ -126,27 +126,6 @@ export const FUNCAO_ITEMS = [
   },
   {
     module: 'Frota',
-    aba: 'cadastro-veiculos',
-    key: 'gerenciar-veiculos',
-    label: 'Cadastrar e editar',
-    description: 'Permite cadastrar, editar e excluir veículos da frota.',
-  },
-  {
-    module: 'Frota',
-    aba: 'cadastro-condutores',
-    key: 'gerenciar-condutores',
-    label: 'Cadastrar e editar',
-    description: 'Permite cadastrar, editar e excluir condutores da frota.',
-  },
-  {
-    module: 'Frota',
-    aba: 'custos-frota',
-    key: 'gerenciar-custos-frota',
-    label: 'Importar relatórios',
-    description: 'Permite importar planilhas de manutenção e abastecimento para o indicador de custos da frota.',
-  },
-  {
-    module: 'Frota',
     aba: 'olho-vivo',
     key: 'responder-olho-vivo',
     label: 'Responder',

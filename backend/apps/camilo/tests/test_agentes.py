@@ -43,7 +43,7 @@ class CamiloAgenteTests(TestCase):
         response = self.client.post('/api/camilo/agentes/', {
             'nome': 'Frota indevida',
             'instrucao': '',
-            'escopos': [{'ambiente': 'Frota', 'parte': 'cadastro-veiculos'}],
+            'escopos': [{'ambiente': 'RH', 'parte': 'movimentacoes'}],
         }, format='json')
         self.assertEqual(response.status_code, 400)
 
@@ -86,7 +86,7 @@ class CamiloAgenteTests(TestCase):
         self.assertEqual(editado.json()['escopos'][0]['parte'], 'propostas-comerciais')
 
         recusado = self.client.patch(f'/api/camilo/agentes/{agente_id}/', {
-            'escopos': [{'ambiente': 'Frota', 'parte': 'cadastro-veiculos'}],
+            'escopos': [{'ambiente': 'RH', 'parte': 'movimentacoes'}],
         }, format='json')
         self.assertEqual(recusado.status_code, 400)
 
