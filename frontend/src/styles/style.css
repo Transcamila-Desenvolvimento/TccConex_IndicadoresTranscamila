@@ -4044,6 +4044,12 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   background: transparent;
 }
 
+.sgq-aud-registros {
+  width: 100%;
+  table-layout: auto;
+}
+
+
 .sgq-lista-card .reports-table {
   border-spacing: 0 3px;
   margin-top: -3px;
@@ -4093,6 +4099,16 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sgq-aud-registros td.sgq-lista-texto-longo,
+.sgq-aud-registros td.sgq-lista-texto-longo .sgq-lista-nome {
+  max-width: 320px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  overflow-wrap: break-word;
+  line-height: 1.35;
 }
 
 .sgq-lista-pagina {

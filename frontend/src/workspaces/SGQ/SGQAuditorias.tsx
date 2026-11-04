@@ -776,8 +776,20 @@ const SGQAuditorias: React.FC = () => {
         errorMessage="Não foi possível carregar as auditorias. Tente novamente."
       >
         <div className="erp-card reports-table-card sgq-lista-card">
-          <div className="table-container sgq-lista-scroll">
-            <table className="erp-table reports-table sgq-lista-tabela">
+          <div className="table-container sgq-lista-scroll sgq-aud-registros-scroll">
+            <table className="erp-table reports-table sgq-lista-tabela sgq-aud-registros">
+              <colgroup>
+                <col className="sgq-aud-col-check" />
+                <col className="sgq-aud-col-categoria" />
+                <col className="sgq-aud-col-filial" />
+                <col className="sgq-aud-col-codigo" />
+                <col className="sgq-aud-col-titulo" />
+                <col className="sgq-aud-col-data" />
+                <col className="sgq-aud-col-data" />
+                <col className="sgq-aud-col-normas" />
+                <col className="sgq-aud-col-lider" />
+                <col className="sgq-aud-col-status" />
+              </colgroup>
               <thead>
                 <tr>
                   <th className="checkbox-cell">
@@ -790,6 +802,7 @@ const SGQAuditorias: React.FC = () => {
                     />
                   </th>
                   <th>Categoria</th>
+                  <th>Filial</th>
                   <th>
                     <button type="button" className="sgq-aud-sort" onClick={() => alternarOrdenacao('codigo')}>
                       Código <i className={`bi ${iconeOrdenacao('codigo')}`} aria-hidden="true" />
@@ -818,7 +831,7 @@ const SGQAuditorias: React.FC = () => {
               <tbody>
                 {canShowEmpty && linhas.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="comercial-browse-empty">
+                    <td colSpan={10} className="comercial-browse-empty">
                       {filtrando ? 'Nenhuma auditoria encontrada para os filtros aplicados.' : 'Não há registros a serem exibidos.'}
                     </td>
                   </tr>
@@ -836,15 +849,16 @@ const SGQAuditorias: React.FC = () => {
                             onChange={() => alternarSelecao(auditoria.id)}
                           />
                         </td>
-                        <td><span className="sgq-lista-categoria">{auditoria.categoria}</span></td>
+                        <td title={auditoria.categoria}><span className="sgq-lista-categoria">{auditoria.categoria}</span></td>
+                        <td title={auditoria.filial}>{auditoria.filial}</td>
                         <td><span className="sgq-aud-codigo">{auditoria.codigo}</span></td>
                         <td className="sgq-lista-texto-longo" title={auditoria.titulo}>
                           <button type="button" className="sgq-lista-nome" onClick={() => abrirEdicao(auditoria)}>
                             {auditoria.titulo}
                           </button>
                         </td>
-                        <td>{formatarData(auditoria.dataInicio)}</td>
-                        <td>
+                        <td title={formatarData(auditoria.dataInicio)}>{formatarData(auditoria.dataInicio)}</td>
+                        <td title={formatarData(auditoria.dataTermino)}>
                           <span className={auditoria.atrasada ? 'sgq-aud-atrasada' : undefined}>
                             {auditoria.atrasada && <i className="bi bi-exclamation-circle-fill" aria-hidden="true" />}
                             {formatarData(auditoria.dataTermino)}
@@ -852,8 +866,8 @@ const SGQAuditorias: React.FC = () => {
                         </td>
                         <td>
                           {normas.length ? (
-                            <div className="sgq-aud-normas">
-                              {normas.slice(0, 2).map((norma) => <span key={norma} className="sgq-aud-chip">{norma}</span>)}
+                            <div className="sgq-aud-normas" title={normas.join(', ')}>
+                              {normas.slice(0, 2).map((norma) => <span key={norma} className="sgq-aud-chip" title={norma}>{norma}</span>)}
                               {normas.length > 2 && (
                                 <span className="sgq-aud-chip is-more" title={normas.slice(2).join(', ')}>+{normas.length - 2}</span>
                               )}

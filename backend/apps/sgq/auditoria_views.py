@@ -339,7 +339,10 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         # A auditoria existente segue só por PATCH. PUT fica reservado ao rascunho.
-        return self.http_method_not_allowed(request)
+        # O DRF entrega o PATCH neste método, com partial=True.
+        if not kwargs.get('partial'):
+            return self.http_method_not_allowed(request)
+        return super().update(request, *args, **kwargs)
 
     @action(detail=False, methods=['get', 'put', 'delete'], url_path='form-draft')
     def form_draft(self, request):
