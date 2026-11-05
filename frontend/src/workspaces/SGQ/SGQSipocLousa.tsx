@@ -193,7 +193,8 @@ function paresDePorta(origem: SgqSipocNo, destino: SgqSipocNo) {
   if (!saidas.length) {
     const dx = (b.l + b.r) / 2 - (a.l + a.r) / 2;
     const dy = (b.t + b.b) / 2 - (a.t + a.b) / 2;
-    saidas.push(Math.abs(dy) >= Math.abs(dx) ? (dy >= 0 ? 's' : 'n') : (dx >= 0 ? 'e' : 'w'));
+    const lado: LadoPorta = Math.abs(dy) >= Math.abs(dx) ? (dy >= 0 ? 's' : 'n') : (dx >= 0 ? 'e' : 'w');
+    saidas.push(lado);
   }
   const meioOrigem = { x: (a.l + a.r) / 2, y: (a.t + a.b) / 2 };
   const pares: { saida: LadoPorta; entrada: LadoPorta }[] = [];
@@ -203,7 +204,7 @@ function paresDePorta(origem: SgqSipocNo, destino: SgqSipocNo) {
     if (meioOrigem.x >= b.r - 4) entradas.push('e');
     if (meioOrigem.y <= b.t + 4) entradas.push('n');
     if (meioOrigem.y >= b.b - 4) entradas.push('s');
-    const oposto: LadoPorta = { n: 's', s: 'n', e: 'w', w: 'e' }[saida];
+    const oposto: LadoPorta = ({ n: 's', s: 'n', e: 'w', w: 'e' } as const)[saida];
     entradas.push(oposto);
     [...new Set(entradas)].forEach((entrada) => pares.push({ saida, entrada }));
   });
@@ -441,8 +442,8 @@ function rotaEvitando(
     return rotaEscolhida(origem, destino, escolha.saida, escolha.entrada, outros);
   }
   if (escolha?.saida || escolha?.entrada) {
-    const saidas: LadoPorta[] = escolha.saida ? [escolha.saida] : ['n', 'e', 's', 'w'];
-    const entradas: LadoPorta[] = escolha.entrada ? [escolha.entrada] : ['n', 'e', 's', 'w'];
+    const saidas: LadoPorta[] = escolha.saida ? [escolha.saida] : ['n', 'e', 's', 'w'] as LadoPorta[];
+    const entradas: LadoPorta[] = escolha.entrada ? [escolha.entrada] : ['n', 'e', 's', 'w'] as LadoPorta[];
     const noCaminho = obstaculosDe(outros).map((ret) => ({
       ...ret,
       x: arredondar(ret.x),
