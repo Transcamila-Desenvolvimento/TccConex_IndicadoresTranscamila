@@ -6,6 +6,7 @@ import { userHasFuncao } from '../../constants/funcoes';
 import {
   useSgqPesquisas,
   useSgqMotoristas,
+  useSgqMotoristasFiltro,
   useSgqLancadores,
   useSgqClientes,
   useSgqFormDraft,
@@ -230,10 +231,12 @@ const SGQPesquisaSatisfacao: React.FC = () => {
 
   const listQuery = useSgqPesquisas(selectedFilial, listParams);
   const motoristasQuery = useSgqMotoristas(selectedFilial);
+  const motoristasFiltroQuery = useSgqMotoristasFiltro(selectedFilial);
   const lancadoresQuery = useSgqLancadores(selectedFilial);
   const clientesFiltroQuery = useSgqClientes(true);
   const clientesLancamentoQuery = useSgqClientes(false);
   const motoristasSugeridos = motoristasQuery.data ?? [];
+  const motoristasFiltro = motoristasFiltroQuery.data ?? [];
   const lancadoresSugeridos = lancadoresQuery.data ?? [];
   const clientesFiltro = clientesFiltroQuery.data ?? clientesLancamentoQuery.data ?? [];
   const listState = useAsyncQueryState(listQuery);
@@ -666,7 +669,7 @@ const SGQPesquisaSatisfacao: React.FC = () => {
           <div className="reports-select-wrapper">
             <select value={filterMotorista} onChange={(e) => { setFilterMotorista(e.target.value); setCurrentPage(1); setSelectedIds([]); }}>
               <option value="">Motorista</option>
-              {motoristasSugeridos.map((nome) => (
+              {motoristasFiltro.map((nome) => (
                 <option key={nome} value={nome}>{nome}</option>
               ))}
             </select>

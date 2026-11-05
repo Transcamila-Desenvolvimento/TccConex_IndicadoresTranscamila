@@ -425,6 +425,26 @@ class PesquisaSatisfacaoTests(APITestCase):
         )
         self.assertEqual(response_rondonopolis.data, ['Motorista Ibiporã', 'Motorista Rondonópolis'])
 
+    def test_filtro_motoristas_so_da_filial_da_sessao(self):
+        self.client.force_authenticate(self.operador)
+        self._create(filial=IBIPORA, motorista='Motorista Ibiporã')
+        self._create(filial=RONDONOPOLIS, motorista='Motorista Rondonópolis')
+
+        response = self.client.get(
+            '/api/sgq/pesquisas-satisfacao/motoristas/',
+            {'escopo': 'filial'},
+            **_headers(IBIPORA),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, ['Motorista Ibiporã'])
+
+        response_rondonopolis = self.client.get(
+            '/api/sgq/pesquisas-satisfacao/motoristas/',
+            {'escopo': 'filial'},
+            **_headers(RONDONOPOLIS),
+        )
+        self.assertEqual(response_rondonopolis.data, ['Motorista Rondonópolis'])
+
     def test_filial_gravada_pela_sessao_e_nao_pelo_payload(self):
         """O cliente não pode escolher a filial via payload — só a sessão define."""
         response = self.client.post(

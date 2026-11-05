@@ -99,6 +99,21 @@ _IMPORTAR_PESQUISAS_DETAIL = (
 )
 
 
+def _sugestoes_motorista(nomes) -> list[str]:
+    """Grafia mais frequente de cada nome, sem repetir variação de caixa ou espaço."""
+    variacoes_por_chave: dict[str, Counter] = {}
+    for nome in nomes:
+        nome = (nome or '').strip()
+        if not nome:
+            continue
+        chave = nome.upper()
+        variacoes_por_chave.setdefault(chave, Counter())[nome] += 1
+    return sorted(
+        (contador.most_common(1)[0][0] for contador in variacoes_por_chave.values()),
+        key=str.upper,
+    )
+
+
 def _negar_rotina_na_filial(view, aba: str, mensagem: str) -> None:
     _, filial = get_request_context(view.request)
     if not user_has_aba_na_filial(view.request.user, 'SGQ', aba, filial):
@@ -219,27 +234,17 @@ class PesquisaSatisfacaoViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def motoristas(self, request):
-        """Nomes de motoristas já usados em qualquer filial — alimenta a sugestão
-        (autocomplete) do formulário para reduzir o mesmo motorista sendo
-        digitado de formas diferentes, sem exigir um cadastro formal deles."""
+        """Nomes de motoristas já lançados.
+
+        Sem escopo, a lista é global e alimenta a sugestão do cadastro.
+        Com escopo=filial, entra só quem já tem lançamento no ambiente atual,
+        para o filtro da listagem.
+        """
         qs = PesquisaSatisfacao.objects.all()
+        if (request.query_params.get('escopo') or '').strip().lower() == 'filial':
+            qs = self.scope_queryset(qs, filial_field='filial', admin_bypass=False)
         nomes = qs.exclude(motorista='').values_list('motorista', flat=True)
-
-        # Agrupa variações de escrita (case/espaços) e usa a grafia mais
-        # frequente de cada uma como sugestão canônica.
-        variacoes_por_chave: dict[str, Counter] = {}
-        for nome in nomes:
-            nome = nome.strip()
-            if not nome:
-                continue
-            chave = nome.upper()
-            variacoes_por_chave.setdefault(chave, Counter())[nome] += 1
-
-        sugestoes = sorted(
-            (contador.most_common(1)[0][0] for contador in variacoes_por_chave.values()),
-            key=str.upper,
-        )
-        return Response(sugestoes)
+        return Response(_sugestoes_motorista(nomes))
 
     @action(detail=False, methods=['get'])
     def clientes(self, request):

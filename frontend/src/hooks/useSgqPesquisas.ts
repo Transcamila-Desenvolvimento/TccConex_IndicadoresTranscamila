@@ -23,6 +23,7 @@ export const SGQ_KEYS = {
   stats: (filial: string | null, params: SgqPesquisaQueryParams) =>
     ['sgq', 'pesquisas-stats', filial, params] as const,
   motoristas: ['sgq', 'motoristas'] as const,
+  motoristasFilial: (filial: string | null) => ['sgq', 'motoristas', 'filial', filial] as const,
   lancadores: (filial: string | null) => ['sgq', 'lancadores', filial] as const,
   clientes: (incluirHistorico: boolean) => ['sgq', 'clientes', incluirHistorico] as const,
   loteDraft: (filial: string | null) => ['sgq', 'lote-draft', filial] as const,
@@ -59,6 +60,16 @@ export function useSgqMotoristas(filial: string | null) {
   return useQuery({
     queryKey: SGQ_KEYS.motoristas,
     queryFn: () => apiService.getSgqMotoristas(),
+    enabled: Boolean(filial),
+    staleTime: 60_000,
+  });
+}
+
+/** Motoristas que já têm lançamento na filial da sessão — filtro da listagem. */
+export function useSgqMotoristasFiltro(filial: string | null) {
+  return useQuery({
+    queryKey: SGQ_KEYS.motoristasFilial(filial),
+    queryFn: () => apiService.getSgqMotoristas('filial'),
     enabled: Boolean(filial),
     staleTime: 60_000,
   });

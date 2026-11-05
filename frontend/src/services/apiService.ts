@@ -2943,8 +2943,10 @@ export const apiService = {
   /** Nomes de motoristas já usados em qualquer filial — alimenta a sugestão do
    * formulário (evita o mesmo motorista sendo digitado de formas diferentes)
    * sem exigir um cadastro formal deles. */
-  async getSgqMotoristas(): Promise<string[]> {
-    const { data } = await api.get('/api/sgq/pesquisas-satisfacao/motoristas/');
+  async getSgqMotoristas(escopo?: 'filial'): Promise<string[]> {
+    const { data } = await api.get('/api/sgq/pesquisas-satisfacao/motoristas/', {
+      params: escopo ? { escopo } : undefined,
+    });
     return data as string[];
   },
 
