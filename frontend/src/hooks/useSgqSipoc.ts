@@ -90,9 +90,11 @@ export function useAtualizarSgqSipocProcedimento(id: number) {
 
 export function useSalvarEsquemaSipoc(id: number) {
   const queryClient = useQueryClient();
+  const { selectedFilial } = useAuth();
   return useMutation({
     mutationFn: (esquema: SgqSipocEsquema) => apiService.atualizarSgqSipocProcedimento(id, { esquema }),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      queryClient.setQueryData([...chave, 'procedimento', selectedFilial, id], data);
       queryClient.invalidateQueries({ queryKey: [...chave, 'procedimentos'] });
     },
   });

@@ -128,6 +128,24 @@ function noNoPonto(lista: SgqSipocNo[], ponto: { x: number; y: number }, ignorar
   return null;
 }
 
+function portaMaisProxima(no: SgqSipocNo, ponto: { x: number; y: number }): LadoPorta {
+  const medida = caixa(no);
+  let melhor: LadoPorta = 'e';
+  let distancia = Infinity;
+  PORTAS.forEach((porta) => {
+    const atual = Math.hypot(ponto.x - (no.x + porta.x(medida.w, medida.h)), ponto.y - (no.y + porta.y(medida.w, medida.h)));
+    if (atual < distancia) {
+      distancia = atual;
+      melhor = porta.lado;
+    }
+  });
+  return melhor;
+}
+
+function ladoValido(valor: unknown): valor is LadoPorta {
+  return valor === 'n' || valor === 'e' || valor === 's' || valor === 'w';
+}
+
 function pontoPorta(no: SgqSipocNo, lado: LadoPorta) {
   const medida = caixa(no);
   const porta = PORTAS.find((item) => item.lado === lado) ?? PORTAS[1];
@@ -139,17 +157,57 @@ function centro(no: SgqSipocNo) {
   return { x: no.x + medida.w / 2, y: no.y + medida.h / 2 };
 }
 
-function lados(origem: SgqSipocNo, destino: SgqSipocNo) {
-  const dx = centro(destino).x - centro(origem).x;
-  const dy = centro(destino).y - centro(origem).y;
-  if (Math.abs(dx) >= Math.abs(dy) * 0.55) {
-    return dx >= 0
-      ? { saida: 'e' as LadoPorta, entrada: 'w' as LadoPorta }
-      : { saida: 'w' as LadoPorta, entrada: 'e' as LadoPorta };
+function limites(no: SgqSipocNo) {
+  const medida = caixa(no);
+  return { l: no.x, r: no.x + medida.w, t: no.y, b: no.y + medida.h };
+}
+
+function desceNaLateral(pontos: { x: number; y: number }[], no: SgqSipocNo) {
+  const box = limites(no);
+  for (let indice = 1; indice < pontos.length; indice += 1) {
+    const anterior = pontos[indice - 1];
+    const atual = pontos[indice];
+    if (Math.abs(anterior.x - atual.x) > 1) continue;
+    const x = anterior.x;
+    const aoLado = (x > box.r && x <= box.r + 36) || (x < box.l && x >= box.l - 36);
+    if (!aoLado) continue;
+    const y1 = Math.min(anterior.y, atual.y);
+    const y2 = Math.max(anterior.y, atual.y);
+    if (Math.min(y2, box.b) - Math.max(y1, box.t) > 12) return true;
   }
-  return dy >= 0
-    ? { saida: 's' as LadoPorta, entrada: 'n' as LadoPorta }
-    : { saida: 'n' as LadoPorta, entrada: 's' as LadoPorta };
+  return false;
+}
+
+function paresDePorta(origem: SgqSipocNo, destino: SgqSipocNo) {
+  const a = limites(origem);
+  const b = limites(destino);
+  const folga: Record<LadoPorta, number> = {
+    s: b.t - a.b,
+    n: a.t - b.b,
+    e: b.l - a.r,
+    w: a.l - b.r,
+  };
+  const saidas = (['s', 'n', 'e', 'w'] as LadoPorta[])
+    .filter((lado) => folga[lado] > -4)
+    .sort((um, outro) => folga[outro] - folga[um]);
+  if (!saidas.length) {
+    const dx = (b.l + b.r) / 2 - (a.l + a.r) / 2;
+    const dy = (b.t + b.b) / 2 - (a.t + a.b) / 2;
+    saidas.push(Math.abs(dy) >= Math.abs(dx) ? (dy >= 0 ? 's' : 'n') : (dx >= 0 ? 'e' : 'w'));
+  }
+  const meioOrigem = { x: (a.l + a.r) / 2, y: (a.t + a.b) / 2 };
+  const pares: { saida: LadoPorta; entrada: LadoPorta }[] = [];
+  saidas.forEach((saida) => {
+    const entradas: LadoPorta[] = [];
+    if (meioOrigem.x <= b.l + 4) entradas.push('w');
+    if (meioOrigem.x >= b.r - 4) entradas.push('e');
+    if (meioOrigem.y <= b.t + 4) entradas.push('n');
+    if (meioOrigem.y >= b.b - 4) entradas.push('s');
+    const oposto: LadoPorta = { n: 's', s: 'n', e: 'w', w: 'e' }[saida];
+    entradas.push(oposto);
+    [...new Set(entradas)].forEach((entrada) => pares.push({ saida, entrada }));
+  });
+  return pares;
 }
 
 function enxugar(pontos: { x: number; y: number }[]) {
@@ -295,8 +353,7 @@ function buscaOrtogonal(
   return [];
 }
 
-function rotaEvitando(origem: SgqSipocNo, destino: SgqSipocNo, outros: SgqSipocNo[]) {
-  const { saida, entrada } = lados(origem, destino);
+function pontasDaRota(origem: SgqSipocNo, destino: SgqSipocNo, saida: LadoPorta, entrada: LadoPorta) {
   const a = pontoArredondado(pontoPorta(origem, saida));
   const b = pontoArredondado(pontoPorta(destino, entrada));
   const pontaA = pontoArredondado({
@@ -307,20 +364,38 @@ function rotaEvitando(origem: SgqSipocNo, destino: SgqSipocNo, outros: SgqSipocN
     x: b.x + vetorPorta(entrada).x * 24,
     y: b.y + vetorPorta(entrada).y * 24,
   });
-  const noCaminho = obstaculosDe(outros).map((ret) => ({
-    ...ret,
-    x: arredondar(ret.x),
-    y: arredondar(ret.y),
-    w: arredondar(ret.w),
-    h: arredondar(ret.h),
-  }));
-  const direto = [
+  return { a, b, pontaA, pontaB };
+}
+
+function rotaLimpa(pontos: { x: number; y: number }[], origem: SgqSipocNo, destino: SgqSipocNo) {
+  return !desceNaLateral(pontos, origem) && !desceNaLateral(pontos, destino);
+}
+
+function rotaDireta(
+  origem: SgqSipocNo,
+  destino: SgqSipocNo,
+  saida: LadoPorta,
+  entrada: LadoPorta,
+  obstaculos: { x: number; y: number; w: number; h: number }[],
+  solta = false,
+) {
+  const { a, b, pontaA, pontaB } = pontasDaRota(origem, destino, saida, entrada);
+  return [
     enxugar([a, b]),
     enxugar([a, pontaA, { x: pontaB.x, y: pontaA.y }, pontaB, b]),
     enxugar([a, pontaA, { x: pontaA.x, y: pontaB.y }, pontaB, b]),
-  ].find((pontos) => livre(pontos, noCaminho));
-  if (direto) return direto;
+  ].find((pontos) => livre(pontos, obstaculos) && (solta || rotaLimpa(pontos, origem, destino)));
+}
 
+function rotaEntrePortas(
+  origem: SgqSipocNo,
+  destino: SgqSipocNo,
+  saida: LadoPorta,
+  entrada: LadoPorta,
+  outros: SgqSipocNo[],
+  solta = false,
+) {
+  const { a, b, pontaA, pontaB } = pontasDaRota(origem, destino, saida, entrada);
   const corpos = obstaculosDe([origem, destino, ...outros]).map((ret) => ({
     ...ret,
     x: arredondar(ret.x),
@@ -329,18 +404,96 @@ function rotaEvitando(origem: SgqSipocNo, destino: SgqSipocNo, outros: SgqSipocN
     h: arredondar(ret.h),
   }));
   const meio = buscaOrtogonal(pontaA, pontaB, corpos);
-  if (meio.length) return enxugar([a, ...meio, b]);
+  if (!meio.length) return null;
+  const rota = enxugar([a, ...meio, b]);
+  return solta || rotaLimpa(rota, origem, destino) ? rota : null;
+}
+
+function rotaEscolhida(
+  origem: SgqSipocNo,
+  destino: SgqSipocNo,
+  saida: LadoPorta,
+  entrada: LadoPorta,
+  outros: SgqSipocNo[],
+) {
+  const noCaminho = obstaculosDe(outros).map((ret) => ({
+    ...ret,
+    x: arredondar(ret.x),
+    y: arredondar(ret.y),
+    w: arredondar(ret.w),
+    h: arredondar(ret.h),
+  }));
+  const direta = rotaDireta(origem, destino, saida, entrada, noCaminho, true);
+  if (direta) return direta;
+  const busca = rotaEntrePortas(origem, destino, saida, entrada, outros, true);
+  if (busca) return busca;
+  const { a, b, pontaA, pontaB } = pontasDaRota(origem, destino, saida, entrada);
   return enxugar([a, pontaA, { x: pontaB.x, y: pontaA.y }, pontaB, b]);
 }
 
-function montarRotas(ligacoes: { id: string; de: string; para: string }[], porId: Map<string, SgqSipocNo>) {
+function rotaEvitando(
+  origem: SgqSipocNo,
+  destino: SgqSipocNo,
+  outros: SgqSipocNo[],
+  escolha?: { saida?: LadoPorta; entrada?: LadoPorta },
+) {
+  if (escolha?.saida && escolha.entrada) {
+    return rotaEscolhida(origem, destino, escolha.saida, escolha.entrada, outros);
+  }
+  if (escolha?.saida || escolha?.entrada) {
+    const saidas: LadoPorta[] = escolha.saida ? [escolha.saida] : ['n', 'e', 's', 'w'];
+    const entradas: LadoPorta[] = escolha.entrada ? [escolha.entrada] : ['n', 'e', 's', 'w'];
+    const noCaminho = obstaculosDe(outros).map((ret) => ({
+      ...ret,
+      x: arredondar(ret.x),
+      y: arredondar(ret.y),
+      w: arredondar(ret.w),
+      h: arredondar(ret.h),
+    }));
+    const direta = saidas
+      .flatMap((saida) => entradas.map((entrada) => rotaDireta(origem, destino, saida, entrada, noCaminho, true)))
+      .find((pontos) => pontos?.length);
+    if (direta) return direta;
+    return rotaEscolhida(origem, destino, saidas[0], entradas[0], outros);
+  }
+  const pares = paresDePorta(origem, destino);
+  const noCaminho = obstaculosDe(outros).map((ret) => ({
+    ...ret,
+    x: arredondar(ret.x),
+    y: arredondar(ret.y),
+    w: arredondar(ret.w),
+    h: arredondar(ret.h),
+  }));
+  const direta = pares
+    .map((par) => rotaDireta(origem, destino, par.saida, par.entrada, noCaminho))
+    .find((pontos) => pontos?.length);
+  if (direta) return direta;
+  const desviada = pares
+    .slice(0, 4)
+    .map((par) => rotaEntrePortas(origem, destino, par.saida, par.entrada, outros))
+    .find((pontos) => pontos?.length);
+  if (desviada) return desviada;
+  const reserva = pares[0];
+  const { a, b, pontaA, pontaB } = pontasDaRota(origem, destino, reserva.saida, reserva.entrada);
+  return enxugar([a, pontaA, { x: pontaB.x, y: pontaA.y }, pontaB, b]);
+}
+
+function montarRotas(ligacoes: { id: string; de: string; para: string; saida?: string; entrada?: string }[], porId: Map<string, SgqSipocNo>) {
   const nos = [...porId.values()];
   const rotas = new Map<string, { x: number; y: number }[]>();
   ligacoes.forEach((ligacao) => {
     const origem = porId.get(ligacao.de);
     const destino = porId.get(ligacao.para);
     if (!origem || !destino) return;
-    rotas.set(ligacao.id, rotaEvitando(origem, destino, nos.filter((no) => no.id !== origem.id && no.id !== destino.id)));
+    rotas.set(ligacao.id, rotaEvitando(
+      origem,
+      destino,
+      nos.filter((no) => no.id !== origem.id && no.id !== destino.id),
+      {
+        saida: ladoValido(ligacao.saida) ? ligacao.saida : undefined,
+        entrada: ladoValido(ligacao.entrada) ? ligacao.entrada : undefined,
+      },
+    ));
   });
   return rotas;
 }
@@ -576,7 +729,7 @@ const SGQSipocLousa: React.FC<{
   const [menu, setMenu] = useState<{ id: string | null; x: number; y: number } | null>(null);
   const [ligacaoAtiva, setLigacaoAtiva] = useState<string | null>(null);
   const [linkHover, setLinkHover] = useState<string | null>(null);
-  const [fio, setFio] = useState<{ de: string; x: number; y: number; alvo: string | null; lado?: LadoPorta } | null>(null);
+  const [fio, setFio] = useState<{ de: string; x: number; y: number; alvo: string | null; lado?: LadoPorta; entrada?: LadoPorta } | null>(null);
   const [fantasma, setFantasma] = useState<{ tipo: SgqSipocTipoNo; x: number; y: number; mx: number; my: number; sobre: boolean } | null>(null);
   const [chegando, setChegando] = useState<string | null>(null);
   const editandoRef = useRef<string | null>(null);
@@ -585,8 +738,8 @@ const SGQSipocLousa: React.FC<{
   const arraste = useRef<
     | { id: string; dx: number; dy: number; x: number; y: number; moved: boolean }
     | { pan: true; x: number; y: number; ox: number; oy: number }
-    | { liga: true; de: string; alvo: string | null; lado: LadoPorta }
-    | { religa: true; id: string; fixa: string; alvo: string | null; moved: boolean; x: number; y: number }
+    | { liga: true; de: string; alvo: string | null; lado: LadoPorta; entrada?: LadoPorta }
+    | { religa: true; id: string; fixa: string; alvo: string | null; saida?: LadoPorta; entrada?: LadoPorta; moved: boolean; x: number; y: number }
     | null
   >(null);
   const cena = useRef({ esquema, pan, zoom, onChange, selecionado, ligacaoAtiva });
@@ -733,7 +886,16 @@ const SGQSipocLousa: React.FC<{
         if ('religa' in atual) atual.moved = true;
         const origemId = 'liga' in atual ? atual.de : atual.fixa;
         atual.alvo = noNoPonto(atualCena.esquema.nos, ponto, origemId);
-        setFio({ de: origemId, x: ponto.x, y: ponto.y, alvo: atual.alvo, lado: 'liga' in atual ? atual.lado : undefined });
+        const alvoNo = atual.alvo ? atualCena.esquema.nos.find((no) => no.id === atual.alvo) : undefined;
+        atual.entrada = alvoNo ? portaMaisProxima(alvoNo, ponto) : undefined;
+        setFio({
+          de: origemId,
+          x: ponto.x,
+          y: ponto.y,
+          alvo: atual.alvo,
+          lado: 'liga' in atual ? atual.lado : atual.saida,
+          entrada: atual.entrada,
+        });
         return;
       }
       if (!atual.moved && Math.hypot(event.clientX - atual.x, event.clientY - atual.y) < 5) return;
@@ -788,22 +950,32 @@ const SGQSipocLousa: React.FC<{
       arraste.current = null;
       if (!atual || !('liga' in atual || 'religa' in atual)) return;
       const esquemaAtual = cena.current.esquema;
-      if ('liga' in atual && atual.alvo) {
-        const repetida = esquemaAtual.ligacoes.some((item) => item.de === atual.de && item.para === atual.alvo);
-        if (!repetida) {
-          cena.current.onChange({
-            ...esquemaAtual,
-            ligacoes: [...esquemaAtual.ligacoes, { id: `l-${Date.now()}`, de: atual.de, para: atual.alvo }],
-          });
-        }
+      if ('liga' in atual && atual.alvo && atual.entrada) {
+        const repetida = esquemaAtual.ligacoes.find((item) => item.de === atual.de && item.para === atual.alvo);
+        cena.current.onChange({
+          ...esquemaAtual,
+          ligacoes: repetida
+            ? esquemaAtual.ligacoes.map((item) => (
+              item.id === repetida.id ? { ...item, saida: atual.lado, entrada: atual.entrada } : item
+            ))
+            : [...esquemaAtual.ligacoes, {
+              id: `l-${Date.now()}`,
+              de: atual.de,
+              para: atual.alvo,
+              saida: atual.lado,
+              entrada: atual.entrada,
+            }],
+        });
       }
-      if ('religa' in atual && atual.moved && atual.alvo && atual.alvo !== atual.fixa) {
+      if ('religa' in atual && atual.moved && atual.alvo && atual.entrada && atual.alvo !== atual.fixa) {
         const repetida = esquemaAtual.ligacoes.some((item) => item.id !== atual.id && item.de === atual.fixa && item.para === atual.alvo);
         cena.current.onChange({
           ...esquemaAtual,
           ligacoes: repetida
             ? esquemaAtual.ligacoes.filter((item) => item.id !== atual.id)
-            : esquemaAtual.ligacoes.map((item) => (item.id === atual.id ? { ...item, para: atual.alvo as string } : item)),
+            : esquemaAtual.ligacoes.map((item) => (
+              item.id === atual.id ? { ...item, para: atual.alvo as string, entrada: atual.entrada, saida: atual.saida ?? item.saida } : item
+            )),
         });
       }
       setFio(null);
@@ -910,6 +1082,14 @@ const SGQSipocLousa: React.FC<{
     const origemFio = porId.get(fio.de);
     if (!origemFio) return null;
     const destinoFio = fio.alvo ? porId.get(fio.alvo) : undefined;
+    if (destinoFio && (fio.lado || fio.entrada)) {
+      return rotaEvitando(
+        origemFio,
+        destinoFio,
+        nos.filter((no) => no.id !== origemFio.id && no.id !== destinoFio.id),
+        { saida: fio.lado, entrada: fio.entrada },
+      );
+    }
     if (destinoFio) {
       return rotaEvitando(origemFio, destinoFio, nos.filter((no) => no.id !== origemFio.id && no.id !== destinoFio.id));
     }
@@ -952,7 +1132,7 @@ const SGQSipocLousa: React.FC<{
         </div>
         <h3>Elementos</h3>
         <p className="sipoc-dica">
-          {fio ? 'Solte em cima do outro bloco.' : 'Passe o mouse no bloco e puxe um ponto até o outro.'}
+          {fio ? 'Solte no ponto do outro bloco.' : 'Passe o mouse no bloco e puxe um ponto até o outro.'}
         </p>
         <ul className="sipoc-escolha">
           {lista.map((no) => (
@@ -1119,7 +1299,7 @@ const SGQSipocLousa: React.FC<{
                   return (
                     <g
                       key={porta.lado}
-                      className="sipoc-porta"
+                      className={`sipoc-porta${fio?.alvo === no.id && fio.entrada === porta.lado ? ' is-escolhida' : ''}`}
                       onPointerDown={(event) => {
                         event.stopPropagation();
                         event.preventDefault();
@@ -1160,7 +1340,7 @@ const SGQSipocLousa: React.FC<{
                     onPointerDown={(event) => {
                       event.stopPropagation();
                       if (event.button === 2) return;
-                      arraste.current = { religa: true, id: ligacao.id, fixa: ligacao.de, alvo: ligacao.para, moved: false, x: event.clientX, y: event.clientY };
+                      arraste.current = { religa: true, id: ligacao.id, fixa: ligacao.de, alvo: ligacao.para, saida: ligacao.saida, moved: false, x: event.clientX, y: event.clientY };
                       setLigacaoAtiva(ligacao.id);
                       setSelecionado(null);
                       setMenu(null);

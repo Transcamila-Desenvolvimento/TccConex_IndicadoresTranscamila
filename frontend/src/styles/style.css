@@ -27383,9 +27383,15 @@ g.is-ativa .sipoc-ligacao {
 }
 
 .sipoc-no:hover .sipoc-porta,
-.sipoc-no.is-selecionado .sipoc-porta {
+.sipoc-no.is-selecionado .sipoc-porta,
+.sipoc-no.is-alvo .sipoc-porta {
   opacity: 1;
   pointer-events: auto;
+}
+
+.sipoc-porta.is-escolhida circle {
+  fill: #1d4ed8;
+  stroke: #1d4ed8;
 }
 
 .sipoc-porta circle {

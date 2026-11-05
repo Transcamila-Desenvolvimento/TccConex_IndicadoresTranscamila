@@ -78,7 +78,12 @@ def validar_esquema(valor):
         if not identificador or identificador in vistos or origem not in ids or destino not in ids or origem == destino:
             return None, Response({'esquema': 'Há uma ligação inválida na lousa.'}, status=status.HTTP_400_BAD_REQUEST)
         vistos.add(identificador)
-        saida.append({'id': identificador, 'de': origem, 'para': destino})
+        ligacao = {'id': identificador, 'de': origem, 'para': destino}
+        if item.get('saida') in ('n', 'e', 's', 'w'):
+            ligacao['saida'] = item.get('saida')
+        if item.get('entrada') in ('n', 'e', 's', 'w'):
+            ligacao['entrada'] = item.get('entrada')
+        saida.append(ligacao)
     return {'nos': limpos, 'ligacoes': saida}, None
 
 

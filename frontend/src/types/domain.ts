@@ -4178,6 +4178,8 @@ export interface SgqSipocLigacao {
   id: string;
   de: string;
   para: string;
+  saida?: 'n' | 'e' | 's' | 'w';
+  entrada?: 'n' | 'e' | 's' | 'w';
 }
 
 export interface SgqSipocEsquema {

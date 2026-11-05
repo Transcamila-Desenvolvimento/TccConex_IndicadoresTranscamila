@@ -25,16 +25,26 @@ const SGQSipocProcedimento: React.FC = () => {
   const origem = useRef('');
   const fila = useRef<SgqSipocEsquema | null>(null);
   const enviando = useRef(false);
+  const esquemaRef = useRef<SgqSipocEsquema | null>(null);
+  const salvarRef = useRef(salvar.mutate);
+  esquemaRef.current = esquema;
+  salvarRef.current = salvar.mutate;
 
   useEffect(() => {
-    if (!consulta.data) return;
+    if (!consulta.data?.esquema) return;
     if (!nomeEmEdicao.current) setNome(consulta.data.nome);
-    if (consulta.data.esquema && !pronto) {
-      origem.current = JSON.stringify(consulta.data.esquema);
+    const servidor = JSON.stringify(consulta.data.esquema);
+    if (!pronto) {
+      origem.current = servidor;
       setEsquema(consulta.data.esquema);
       setPronto(true);
+      return;
     }
-  }, [consulta.data, pronto]);
+    if (esquema && JSON.stringify(esquema) === origem.current && servidor !== origem.current) {
+      origem.current = servidor;
+      setEsquema(consulta.data.esquema);
+    }
+  }, [consulta.data, pronto, esquema]);
 
   async function exportarPdf() {
     if (!consulta.data || !esquema || gerandoPdf) return;
@@ -107,6 +117,16 @@ const SGQSipocProcedimento: React.FC = () => {
     const timer = window.setTimeout(() => enviar(esquema), 700);
     return () => window.clearTimeout(timer);
   }, [esquema, pronto]);
+
+  useEffect(() => () => {
+    const atual = esquemaRef.current;
+    if (!atual || JSON.stringify(atual) === origem.current) return;
+    if (enviando.current) {
+      fila.current = atual;
+      return;
+    }
+    salvarRef.current(atual);
+  }, []);
 
   return (
     <section className="view active sipoc-pagina">
