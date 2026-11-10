@@ -81,8 +81,9 @@ const HistoricoUniformesTab: React.FC<{ buscaInicial?: string }> = ({ buscaInici
         refreshingMessage="Atualizando histórico..."
         errorMessage="Não foi possível carregar o histórico. Tente novamente."
       >
-        <div className="table-container">
-            <table className="reports-table uniforme-listagem">
+        <div className="reports-table-card">
+          <div className="table-container">
+            <table className="reports-table uniforme-listagem uniforme-historico">
               <thead>
                 <tr>
                   <th>Data</th>
@@ -105,9 +106,9 @@ const HistoricoUniformesTab: React.FC<{ buscaInicial?: string }> = ({ buscaInici
                       </td>
                       <td><TipoMovimentacaoBadge tipo={m.tipo} label={m.tipoLabel} /></td>
                       <td>
-                        <div style={{ fontWeight: 600 }}>{m.uniformeNome} — {m.uniformeTamanho}</div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                          {m.condicao === 'novo' ? 'Peça nova' : 'Peça usada'}
+                        <div className="uniforme-hist-item">
+                          <span>{m.uniformeNome} — {m.uniformeTamanho}</span>
+                          <small>{m.condicao === 'novo' ? 'Peça nova' : 'Peça usada'}</small>
                         </div>
                       </td>
                       <td
@@ -122,9 +123,7 @@ const HistoricoUniformesTab: React.FC<{ buscaInicial?: string }> = ({ buscaInici
                       </td>
                       <td>{m.colaboradorNome || '—'}</td>
                       {!ocultarSensivel && (
-                        <td style={{ color: '#475569', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
-                          {m.observacao || '—'}
-                        </td>
+                        <td className="uniforme-hist-obs">{m.observacao || '—'}</td>
                       )}
                       <td style={{ color: '#475569' }}>{m.usuarioNome || '—'}</td>
                     </tr>
@@ -133,6 +132,7 @@ const HistoricoUniformesTab: React.FC<{ buscaInicial?: string }> = ({ buscaInici
               </tbody>
             </table>
           </div>
+        </div>
         <BarraPaginacaoServidor
           id="uniformes-historico-page-size"
           page={filtros.page}

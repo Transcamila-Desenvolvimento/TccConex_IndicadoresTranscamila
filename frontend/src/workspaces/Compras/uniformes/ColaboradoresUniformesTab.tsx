@@ -47,7 +47,8 @@ const ColaboradoresUniformesTab: React.FC<{ onAbrir: (colaborador: ColaboradorUn
         refreshingMessage="Atualizando colaboradores..."
         errorMessage="Não foi possível carregar os colaboradores. Tente novamente."
       >
-        <div className="table-container">
+        <div className="reports-table-card">
+          <div className="table-container">
             <table className="reports-table uniforme-listagem">
               <thead>
                 <tr>
@@ -90,6 +91,7 @@ const ColaboradoresUniformesTab: React.FC<{ onAbrir: (colaborador: ColaboradorUn
               </tbody>
             </table>
           </div>
+        </div>
         <BarraPaginacaoServidor
           id="uniformes-colaboradores-page-size"
           page={page}

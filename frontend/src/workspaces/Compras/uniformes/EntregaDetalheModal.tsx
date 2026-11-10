@@ -52,6 +52,7 @@ const EntregaDetalheModal: React.FC<{
     )}
 
     <SecaoTitulo>Itens</SecaoTitulo>
+    <div className="uniformes-itens-tabela">
     <table className="reports-table">
       <thead>
         <tr>
@@ -81,6 +82,7 @@ const EntregaDetalheModal: React.FC<{
         ))}
       </tbody>
     </table>
+    </div>
 
     <SecaoTitulo>Devoluções</SecaoTitulo>
     {entrega.devolucoes.length === 0 ? (

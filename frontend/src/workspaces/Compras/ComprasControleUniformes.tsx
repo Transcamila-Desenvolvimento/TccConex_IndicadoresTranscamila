@@ -99,10 +99,10 @@ const ComprasControleUniformes: React.FC = () => {
 
   return (
     <div className={`uniforme-erp${aba === 'estoque' ? '' : ' uniforme-erp--lista'}`}>
-      <header className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '16px', flexShrink: 0 }}>
-        <div>
+      <header className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: '6px', height: '22px', backgroundColor: '#118CC4', flexShrink: 0 }} />
           <h1 className="view-page-title">Controle Uniformes</h1>
-          <p className="uniforme-erp-sub">Almoxarifado · estoque, entregas e devoluções</p>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {pode('exportar-uniformes') && (
@@ -131,7 +131,7 @@ const ComprasControleUniformes: React.FC = () => {
         </div>
       </header>
 
-      {aba === 'estoque' && <div className="dashboard-stats-grid" style={{ marginBottom: '16px', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', flexShrink: 0 }}>
+      {aba === 'estoque' && <div className="dashboard-stats-grid" style={{ flexShrink: 0 }}>
         <div className="stat-card card-positive uniforme-kpi uniforme-kpi--novo">
           <div className="uniforme-kpi-topo">
             <span className="uniforme-kpi-icone" aria-hidden="true"><i className="bi bi-box-seam" /></span>
@@ -179,8 +179,8 @@ const ComprasControleUniformes: React.FC = () => {
                   key={item.id}
                   className="uniforme-selo uniforme-selo--alerta"
                   style={{
-                    fontSize: '12px', fontWeight: 700, color: '#e11d48',
-                    background: '#fff1f2', border: '1px solid #fecdd3',
+                    fontSize: '12px', fontWeight: 700, color: '#ef4444',
+                    background: 'rgba(239, 68, 68, 0.08)', border: 'none',
                     borderRadius: '6px', padding: '2px 8px', lineHeight: 1.4,
                   }}
                 >
