@@ -17,6 +17,8 @@ from apps.rh.models import (
     LoteMovimentacaoRH,
     MovimentacaoColaborador,
     InconsistenciaColaborador,
+    Colaborador,
+    FuncionarioQuadro,
     ColaboradorPJ,
     ColaboradorPJHistorico,
 )
@@ -985,3 +987,220 @@ class DocumentoRHTests(TestCase):
         self.client.delete(f"/api/rh/documentos/{criado.json()['id']}/", **headers)
         vazia = self.client.delete(f"/api/rh/pastas/{sub.json()['id']}/", **headers)
         self.assertEqual(vazia.status_code, 204, getattr(vazia, 'data', vazia.content))
+
+
+class QuadroFuncionariosTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='rh_quadro',
+            password='rh123',
+            role_id='2',
+            name='RH Quadro',
+            environments=['RH'],
+        )
+        self.sem_aba = User.objects.create_user(
+            username='rh_sem_quadro',
+            password='rh123',
+            role_id='2',
+            name='Sem quadro',
+            environments=['RH'],
+            abas={'RH': ['home', 'movimentacoes']},
+        )
+        Colaborador.objects.create(
+            cpf='99988877766',
+            matricula='99988877',
+            nome_completo='Colaborador da movimentação',
+            filial='Ibiporã (Matriz)',
+            cargo='Analista',
+            situacao='SITUACAO NORMAL',
+        )
+
+    def test_quadro_comeca_vazio_e_nao_le_a_movimentacao(self):
+        response = self.client.get('/api/rh/quadro/', **auth_headers(self.user, 'RH'))
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['count'], 0)
+        self.assertEqual(response.data['results'], [])
+
+    def test_cadastra_edita_ativa_e_inativa(self):
+        headers = auth_headers(self.user, 'RH')
+        criado = self.client.post(
+            '/api/rh/quadro/',
+            {
+                'nomeCompleto': 'Ana Lima',
+                'cpf': '111.222.333-44',
+                'filial': 'Ibiporã (Matriz)',
+                'cargo': 'Analista',
+                'situacao': 'Ativo',
+                'dataAdmissao': '2020-03-01',
+                'dataDemissao': None,
+            },
+            format='json',
+            **headers,
+        )
+        self.assertEqual(criado.status_code, 201, criado.data)
+        self.assertEqual(criado.data['nomeCompleto'], 'Ana Lima')
+        self.assertEqual(criado.data['cpf'], '11122233344')
+        self.assertTrue(criado.data['ativo'])
+        self.assertEqual(FuncionarioQuadro.objects.count(), 1)
+        self.assertEqual(Colaborador.objects.filter(cpf='11122233344').count(), 0)
+
+        lista = self.client.get('/api/rh/quadro/?search=Ana', **headers)
+        self.assertEqual(lista.data['count'], 1)
+
+        funcionario_id = criado.data['id']
+        editado = self.client.patch(
+            f'/api/rh/quadro/{funcionario_id}/',
+            {
+                'nomeCompleto': 'Ana Lima Souza',
+                'cpf': '111.222.333-44',
+                'filial': 'Paranaguá',
+                'cargo': 'Coordenadora',
+                'situacao': 'Ativo',
+                'dataAdmissao': '2020-03-01',
+                'dataDemissao': None,
+            },
+            format='json',
+            **headers,
+        )
+        self.assertEqual(editado.status_code, 200, editado.data)
+        self.assertEqual(editado.data['filial'], 'Paranaguá')
+        self.assertEqual(editado.data['departamento'], '')
+        self.assertEqual(editado.data['dataDemissao'], None)
+
+        com_departamento = self.client.patch(
+            f'/api/rh/quadro/{funcionario_id}/',
+            {'departamento': 'Logística'},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(com_departamento.status_code, 200, com_departamento.data)
+        self.assertEqual(com_departamento.data['departamento'], 'Logística')
+
+        departamento_invalido = self.client.patch(
+            f'/api/rh/quadro/{funcionario_id}/',
+            {'departamento': 'Comercial'},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(departamento_invalido.status_code, 400)
+
+        com_demissao = self.client.patch(
+            f'/api/rh/quadro/{funcionario_id}/',
+            {'dataDemissao': '2024-06-01'},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(com_demissao.status_code, 200, com_demissao.data)
+        self.assertEqual(com_demissao.data['dataDemissao'], '2024-06-01')
+        self.assertTrue(com_demissao.data['ativo'])
+
+        inativo_sem_data = self.client.patch(
+            f'/api/rh/quadro/{funcionario_id}/',
+            {'ativo': False},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(inativo_sem_data.status_code, 200, inativo_sem_data.data)
+        self.assertFalse(inativo_sem_data.data['ativo'])
+        self.assertEqual(inativo_sem_data.data['dataAdmissao'], '2020-03-01')
+        self.assertEqual(inativo_sem_data.data['dataDemissao'], '2024-06-01')
+
+        ativo_com_demissao = self.client.patch(
+            f'/api/rh/quadro/{funcionario_id}/',
+            {'ativo': True, 'dataDemissao': None},
+            format='json',
+            **headers,
+        )
+        self.assertEqual(ativo_com_demissao.status_code, 200, ativo_com_demissao.data)
+        self.assertTrue(ativo_com_demissao.data['ativo'])
+        self.assertEqual(ativo_com_demissao.data['dataDemissao'], None)
+
+        porto = self.client.post(
+            '/api/rh/quadro/',
+            {
+                'nomeCompleto': 'Carlos Porto',
+                'cpf': '222.333.444-55',
+                'filial': 'Porto Alegre',
+                'cargo': 'Assistente',
+                'situacao': 'Ativo',
+                'dataAdmissao': '2024-01-15',
+                'dataDemissao': None,
+            },
+            format='json',
+            **headers,
+        )
+        self.assertEqual(porto.status_code, 201, porto.data)
+
+        invalida = self.client.post(
+            '/api/rh/quadro/',
+            {
+                'nomeCompleto': 'Fora da lista',
+                'cpf': '333.444.555-66',
+                'filial': 'Curitiba',
+                'cargo': '',
+                'situacao': '',
+                'dataAdmissao': None,
+                'dataDemissao': None,
+            },
+            format='json',
+            **headers,
+        )
+        self.assertEqual(invalida.status_code, 400)
+
+        inativo = self.client.post(f'/api/rh/quadro/{funcionario_id}/inativar/', **headers)
+        self.assertEqual(inativo.status_code, 200, inativo.data)
+        self.assertFalse(inativo.data['ativo'])
+        self.assertEqual(inativo.data['dataDemissao'], None)
+        self.assertEqual(
+            Colaborador.objects.get(cpf='99988877766').situacao,
+            'SITUACAO NORMAL',
+        )
+
+        ativo = self.client.post(f'/api/rh/quadro/{funcionario_id}/ativar/', **headers)
+        self.assertEqual(ativo.status_code, 200, ativo.data)
+        self.assertTrue(ativo.data['ativo'])
+
+    def test_filtra_por_status_sem_usar_as_datas(self):
+        headers = auth_headers(self.user, 'RH')
+        ativo = self.client.post(
+            '/api/rh/quadro/',
+            {
+                'nomeCompleto': 'Ativo Sem Data',
+                'cpf': '444.555.666-77',
+                'filial': 'Ibiporã (Matriz)',
+                'cargo': 'Analista',
+                'dataAdmissao': None,
+                'dataDemissao': '2024-01-01',
+                'ativo': True,
+            },
+            format='json',
+            **headers,
+        )
+        self.assertEqual(ativo.status_code, 201, ativo.data)
+        inativo = self.client.post(
+            '/api/rh/quadro/',
+            {
+                'nomeCompleto': 'Inativo Com Admissão',
+                'cpf': '555.666.777-88',
+                'filial': 'Ibiporã (Matriz)',
+                'cargo': 'Analista',
+                'dataAdmissao': '2020-01-01',
+                'dataDemissao': None,
+                'ativo': False,
+            },
+            format='json',
+            **headers,
+        )
+        self.assertEqual(inativo.status_code, 201, inativo.data)
+
+        so_ativos = self.client.get('/api/rh/quadro/?ativo=true', **headers)
+        self.assertEqual(so_ativos.status_code, 200, so_ativos.data)
+        self.assertEqual([item['nomeCompleto'] for item in so_ativos.data['results']], ['Ativo Sem Data'])
+
+        so_inativos = self.client.get('/api/rh/quadro/?ativo=false', **headers)
+        self.assertEqual([item['nomeCompleto'] for item in so_inativos.data['results']], ['Inativo Com Admissão'])
+
+    def test_sem_a_aba_nao_lista_o_quadro(self):
+        response = self.client.get('/api/rh/quadro/', **auth_headers(self.sem_aba, 'RH'))
+        self.assertEqual(response.status_code, 403)

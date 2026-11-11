@@ -8,6 +8,7 @@ from .views import (
     ColaboradorPJViewSet,
     CargoMappingViewSet,
     ColaboradorViewSet,
+    FuncionarioQuadroViewSet,
     HistoricoSalarialViewSet,
     InconsistenciaColaboradorViewSet,
     DocumentoRHViewSet,
@@ -20,6 +21,7 @@ router.register('movimentacoes', MovimentacaoColaboradorViewSet, basename='movim
 router.register('pjs', ColaboradorPJViewSet, basename='pjs')
 router.register('cargos', CargoMappingViewSet, basename='cargos')
 router.register('colaboradores', ColaboradorViewSet, basename='colaboradores')
+router.register('quadro', FuncionarioQuadroViewSet, basename='quadro-funcionarios')
 router.register('historico-salarial', HistoricoSalarialViewSet, basename='historico-salarial')
 router.register('alteracoes', InconsistenciaColaboradorViewSet, basename='alteracoes')
 router.register('documentos', DocumentoRHViewSet, basename='documentos')

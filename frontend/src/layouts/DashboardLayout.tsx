@@ -74,6 +74,8 @@ const DashboardLayout: React.FC = () => {
   const [isCadastrosFaturamentoSubmenuOpen, setIsCadastrosFaturamentoSubmenuOpen] = useState(false);
   const [isCadastrosComprasSubmenuOpen, setIsCadastrosComprasSubmenuOpen] = useState(false);
   const [isQuestionariosFrotaSubmenuOpen, setIsQuestionariosFrotaSubmenuOpen] = useState(false);
+  const [isMotoristasFrotaSubmenuOpen, setIsMotoristasFrotaSubmenuOpen] = useState(false);
+  const [isDesempenhoFrotaSubmenuOpen, setIsDesempenhoFrotaSubmenuOpen] = useState(false);
   const [isCadastrosComercialSubmenuOpen, setIsCadastrosComercialSubmenuOpen] = useState(false);
   const [isAuditoriasSgqSubmenuOpen, setIsAuditoriasSgqSubmenuOpen] = useState(false);
   const [isMatrizSgqSubmenuOpen, setIsMatrizSgqSubmenuOpen] = useState(false);
@@ -126,6 +128,12 @@ const DashboardLayout: React.FC = () => {
     }
     if (location.pathname.startsWith('/frota/questionarios')) {
       setIsQuestionariosFrotaSubmenuOpen(true);
+    }
+    if (location.pathname.startsWith('/frota/tccconex-motoristas')) {
+      setIsMotoristasFrotaSubmenuOpen(true);
+    }
+    if (location.pathname.startsWith('/frota/gestao-desempenho')) {
+      setIsDesempenhoFrotaSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/comercial/cadastros') || location.pathname.startsWith('/comercial/parametros/prazos')) {
       setIsCadastrosComercialSubmenuOpen(true);
@@ -499,6 +507,13 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'RH' && canAba('RH', 'movimentacoes')
       },
       {
+        title: "Quadro de Funcionários",
+        path: "RH / Quadro de Funcionários",
+        icon: <i className="bi bi-people search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/rh/quadro-funcionarios'),
+        show: selectedEnvironment === 'RH' && canAba('RH', 'quadro-funcionarios')
+      },
+      {
         title: "Matriz",
         path: "RH / Matriz",
         icon: (
@@ -610,6 +625,34 @@ const DashboardLayout: React.FC = () => {
         icon: <i className="bi bi-eye search-item-icon" aria-hidden="true" />,
         action: () => navigate('/frota/questionarios/olho-vivo'),
         show: selectedEnvironment === 'Frota' && canAba('Frota', 'olho-vivo')
+      },
+      {
+        title: "Ocorrências",
+        path: "Frota / Gestão de desempenho / Ocorrências",
+        icon: <i className="bi bi-exclamation-triangle search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/frota/gestao-desempenho/ocorrencias'),
+        show: selectedEnvironment === 'Frota' && canAba('Frota', 'gestao-desempenho-ocorrencias')
+      },
+      {
+        title: "Critérios",
+        path: "Frota / Gestão de desempenho / Critérios",
+        icon: <i className="bi bi-list-check search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/frota/gestao-desempenho/criterios'),
+        show: selectedEnvironment === 'Frota' && canAba('Frota', 'gestao-desempenho-criterios')
+      },
+      {
+        title: "Parâmetros",
+        path: "Frota / Gestão de desempenho / Parâmetros",
+        icon: <i className="bi bi-sliders search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/frota/gestao-desempenho/parametros'),
+        show: selectedEnvironment === 'Frota' && canAba('Frota', 'gestao-desempenho-parametros')
+      },
+      {
+        title: "Usuários",
+        path: "Frota / TccConex motoristas / Usuários",
+        icon: <i className="bi bi-people search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/frota/tccconex-motoristas/usuarios'),
+        show: selectedEnvironment === 'Frota' && canAba('Frota', 'tccconex-motoristas-usuarios')
       },
       {
         title: "Home Comercial",
@@ -735,6 +778,12 @@ const DashboardLayout: React.FC = () => {
   const FATURAMENTO_CADASTROS_PATHS = ['/faturamento/cadastros/clientes'];
   const COMPRAS_CADASTROS_PATHS = ['/compras/cadastros/consumidores', '/compras/cadastros/medidas', '/compras/cadastros/fornecedores'];
   const FROTA_QUESTIONARIOS_PATHS = ['/frota/questionarios/olho-vivo'];
+  const FROTA_MOTORISTAS_PATHS = ['/frota/tccconex-motoristas/usuarios'];
+  const FROTA_DESEMPENHO_PATHS = [
+    '/frota/gestao-desempenho/ocorrencias',
+    '/frota/gestao-desempenho/criterios',
+    '/frota/gestao-desempenho/parametros',
+  ];
   const COMERCIAL_CADASTROS_PATHS = [
     '/comercial/cadastros/clientes',
     '/comercial/cadastros/tabela-frete',
@@ -763,6 +812,7 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/compras/cadastros/fornecedores')) return `${env} / Cadastros / Cadastro fornecedores`;
     if (path.startsWith('/compras')) return `${env} / Home Compras`;
     if (path.startsWith('/rh/documentos')) return `${env} / Matriz`;
+    if (path.startsWith('/rh/quadro-funcionarios')) return `${env} / Quadro de Funcionários`;
     if (path.startsWith('/rh/movimentacoes')) return `${env} / Movimentações`;
     if (path.startsWith('/rh')) return env;
     if (path.startsWith('/sgq/matriz/ecossistema')) return `${env} / Matriz de conhecimento / Ecossistema SGQ`;
@@ -776,6 +826,10 @@ const DashboardLayout: React.FC = () => {
     if (path.startsWith('/logistica/configuracoes')) return `${env} / Configurações gerais`;
     if (path.startsWith('/logistica')) return env;
     if (path.startsWith('/frota/questionarios/olho-vivo')) return `${env} / Questionários / Olho vivo na estrada`;
+    if (path.startsWith('/frota/tccconex-motoristas/usuarios')) return `${env} / TccConex motoristas / Usuários`;
+    if (path.startsWith('/frota/gestao-desempenho/ocorrencias')) return `${env} / Gestão de desempenho / Ocorrências`;
+    if (path.startsWith('/frota/gestao-desempenho/criterios')) return `${env} / Gestão de desempenho / Critérios`;
+    if (path.startsWith('/frota/gestao-desempenho/parametros')) return `${env} / Gestão de desempenho / Parâmetros`;
     if (path.startsWith('/frota')) return env;
     if (path.startsWith('/comercial/cadastros/clientes')) return `${env} / Cadastros / Clientes`;
     if (path.startsWith('/comercial/cadastros/tabela-frete')) return `${env} / Cadastros / Tabela frete`;
@@ -887,6 +941,7 @@ const DashboardLayout: React.FC = () => {
                   <span className="nav-text">Camilo IA</span>
                 </div>
               </Link>
+
             </div>
           )}
 
@@ -1441,6 +1496,18 @@ const DashboardLayout: React.FC = () => {
                   </div>
                 </Link>
                 )}
+                {canAba('RH', 'quadro-funcionarios') && (
+                <Link
+                  to="/rh/quadro-funcionarios"
+                  className={`nav-btn ${isRouteActive('/rh/quadro-funcionarios') ? 'active' : ''}`}
+                  data-tooltip="Quadro de Funcionários"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="people" />
+                    <span className="nav-text">Quadro de Funcionários</span>
+                  </div>
+                </Link>
+                )}
                 {canAba('RH', 'documentos') && (
                 <Link
                   to="/rh/documentos"
@@ -1690,6 +1757,106 @@ const DashboardLayout: React.FC = () => {
                       <div className="nav-btn-left">
                         <NavIcon name="eye" sub />
                         <span className="nav-text">Olho vivo na estrada</span>
+                      </div>
+                    </Link>
+                  </div>
+                </div>
+                )}
+                {(canAba('Frota', 'gestao-desempenho-ocorrencias') || canAba('Frota', 'gestao-desempenho-criterios') || canAba('Frota', 'gestao-desempenho-parametros')) && (
+                <div className={`nav-group-wrapper${isDesempenhoFrotaSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-frota-desempenho">
+                  <button
+                    type="button"
+                    className={`nav-btn ${isParentNavActive(FROTA_DESEMPENHO_PATHS, isDesempenhoFrotaSubmenuOpen) ? 'active-parent' : ''}`}
+                    onClick={() => setIsDesempenhoFrotaSubmenuOpen(!isDesempenhoFrotaSubmenuOpen)}
+                    data-tooltip="Gestão de desempenho"
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="speedometer2" />
+                      <span className="nav-text">Gestão de desempenho</span>
+                    </div>
+                    <ChevronSubmenu open={isDesempenhoFrotaSubmenuOpen} />
+                  </button>
+
+                  <div
+                    className="submenu-container"
+                    style={{
+                      display: isSidebarCollapsed ? undefined : 'block',
+                      maxHeight: isSidebarCollapsed ? undefined : (isDesempenhoFrotaSubmenuOpen ? '200px' : '0px'),
+                      overflow: 'hidden',
+                      transition: 'max-height 0.25s ease',
+                    }}
+                  >
+                    {canAba('Frota', 'gestao-desempenho-ocorrencias') && (
+                    <Link
+                      to="/frota/gestao-desempenho/ocorrencias"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/frota/gestao-desempenho/ocorrencias') ? 'active' : ''}`}
+                      data-tooltip="Ocorrências"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="exclamation-triangle" sub />
+                        <span className="nav-text">Ocorrências</span>
+                      </div>
+                    </Link>
+                    )}
+                    {canAba('Frota', 'gestao-desempenho-criterios') && (
+                    <Link
+                      to="/frota/gestao-desempenho/criterios"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/frota/gestao-desempenho/criterios') ? 'active' : ''}`}
+                      data-tooltip="Critérios"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="list-check" sub />
+                        <span className="nav-text">Critérios</span>
+                      </div>
+                    </Link>
+                    )}
+                    {canAba('Frota', 'gestao-desempenho-parametros') && (
+                    <Link
+                      to="/frota/gestao-desempenho/parametros"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/frota/gestao-desempenho/parametros') ? 'active' : ''}`}
+                      data-tooltip="Parâmetros"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="sliders" sub />
+                        <span className="nav-text">Parâmetros</span>
+                      </div>
+                    </Link>
+                    )}
+                  </div>
+                </div>
+                )}
+                {canAba('Frota', 'tccconex-motoristas-usuarios') && (
+                <div className={`nav-group-wrapper${isMotoristasFrotaSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-frota-motoristas">
+                  <button
+                    type="button"
+                    className={`nav-btn ${isParentNavActive(FROTA_MOTORISTAS_PATHS, isMotoristasFrotaSubmenuOpen) ? 'active-parent' : ''}`}
+                    onClick={() => setIsMotoristasFrotaSubmenuOpen(!isMotoristasFrotaSubmenuOpen)}
+                    data-tooltip="TccConex motoristas"
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="truck" />
+                      <span className="nav-text">TccConex motoristas</span>
+                    </div>
+                    <ChevronSubmenu open={isMotoristasFrotaSubmenuOpen} />
+                  </button>
+
+                  <div
+                    className="submenu-container"
+                    style={{
+                      display: isSidebarCollapsed ? undefined : 'block',
+                      maxHeight: isSidebarCollapsed ? undefined : (isMotoristasFrotaSubmenuOpen ? '80px' : '0px'),
+                      overflow: 'hidden',
+                      transition: 'max-height 0.25s ease',
+                    }}
+                  >
+                    <Link
+                      to="/frota/tccconex-motoristas/usuarios"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/frota/tccconex-motoristas/usuarios') ? 'active' : ''}`}
+                      data-tooltip="Usuários"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="people" sub />
+                        <span className="nav-text">Usuários</span>
                       </div>
                     </Link>
                   </div>

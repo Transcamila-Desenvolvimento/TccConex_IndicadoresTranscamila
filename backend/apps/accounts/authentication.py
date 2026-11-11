@@ -29,6 +29,9 @@ class JWTAuthentication(authentication.BaseAuthentication):
         except jwt.InvalidTokenError:
             raise AuthenticationFailed('Token inválido ou corrompido.')
 
+        if payload.get('tipo') == 'motorista':
+            return None
+
         user_id = payload.get('user_id')
         if not user_id:
             raise AuthenticationFailed('Token não contém identificador do usuário.')

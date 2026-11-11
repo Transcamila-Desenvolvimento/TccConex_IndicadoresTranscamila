@@ -14,3 +14,8 @@ export const MODULE_BRANCHES: Record<string, readonly string[]> = {
 export function branchesForModule(module: string): readonly string[] {
   return MODULE_BRANCHES[module] ?? ALL_BRANCHES;
 }
+
+/** Filiais do cadastro do quadro de funcionários. Porto Alegre entra só aqui. */
+export const FILIAIS_QUADRO = ['Ibiporã (Matriz)', 'Rondonópolis', 'Paranaguá', 'Porto Alegre'] as const;
+
+export const DEPARTAMENTOS_QUADRO = ['Administrativo', 'Logística', 'Frota', 'Gerencia', 'Motoristas'] as const;

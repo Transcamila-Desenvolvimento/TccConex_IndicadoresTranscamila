@@ -3,6 +3,7 @@ from rest_framework import serializers
 from decimal import Decimal
 from .models import (
     Colaborador,
+    FuncionarioQuadro,
     LoteMovimentacaoRH,
     MovimentacaoColaborador,
     InconsistenciaColaborador,
@@ -12,6 +13,8 @@ from .models import (
     DocumentoRH,
     PastaMatrizRH,
 )
+from apps.accounts.constants import DEPARTAMENTOS_QUADRO, FILIAIS_QUADRO
+from .import_service import clean_cpf
 from .pj_sync_service import (
     pj_ativo_na_competencia,
     salario_e_overrides_para_competencia,
@@ -33,8 +36,46 @@ class ColaboradorSerializer(serializers.ModelSerializer):
             'id', 'cpf', 'matricula', 'nomeCompleto', 'empresa', 'filial', 
             'departamento', 'cargo', 'situacao', 'dataAdmissao', 'dataDemissao', 
             'telefone', 'nomeLider', 'dataNascimento', 'escolaridade', 'sexo', 
-            'regime', 'categoria', 'dataAtualizacao', 'desconsiderado'
+            'regime', 'categoria', 'dataAtualizacao', 'desconsiderado',
         ]
+
+
+class FuncionarioQuadroSerializer(serializers.ModelSerializer):
+    nomeCompleto = serializers.CharField(source='nome', max_length=255)
+    dataAdmissao = serializers.DateField(source='data_admissao', required=False, allow_null=True)
+    dataDemissao = serializers.DateField(source='data_demissao', required=False, allow_null=True)
+    filial = serializers.ChoiceField(choices=FILIAIS_QUADRO)
+    cargo = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    departamento = serializers.ChoiceField(choices=DEPARTAMENTOS_QUADRO, required=False, allow_blank=True)
+
+    class Meta:
+        model = FuncionarioQuadro
+        fields = ['id', 'nomeCompleto', 'cpf', 'filial', 'cargo', 'departamento', 'dataAdmissao', 'dataDemissao', 'ativo']
+        read_only_fields = ['id']
+
+    def validate_nomeCompleto(self, value):
+        nome = (value or '').strip()
+        if not nome:
+            raise serializers.ValidationError('Informe o nome.')
+        return nome
+
+    def validate_cpf(self, value):
+        cpf = clean_cpf(value)
+        if not cpf:
+            raise serializers.ValidationError('Informe um CPF com 11 dígitos.')
+        duplicado = FuncionarioQuadro.objects.filter(cpf=cpf)
+        if self.instance is not None:
+            duplicado = duplicado.exclude(pk=self.instance.pk)
+        if duplicado.exists():
+            raise serializers.ValidationError('Já existe um funcionário com este CPF.')
+        return cpf
+
+    def validate(self, attrs):
+        admissao = attrs.get('data_admissao', getattr(self.instance, 'data_admissao', None))
+        demissao = attrs.get('data_demissao', getattr(self.instance, 'data_demissao', None))
+        if admissao and demissao and demissao < admissao:
+            raise serializers.ValidationError({'dataDemissao': 'A demissão não pode ser anterior à admissão.'})
+        return attrs
 
 
 class LoteMovimentacaoRHSerializer(serializers.ModelSerializer):

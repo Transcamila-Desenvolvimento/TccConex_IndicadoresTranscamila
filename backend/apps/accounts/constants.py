@@ -27,6 +27,15 @@ MODULE_BRANCHES: dict[str, list[str]] = {
 def branches_for_module(module: str) -> list[str]:
     return list(MODULE_BRANCHES.get(module, ALL_BRANCHES))
 
+
+# Filiais do cadastro do quadro de funcionários. Porto Alegre entra só aqui.
+# Mantém paridade com frontend/src/constants/filiais.ts (FILIAIS_QUADRO).
+FILIAIS_QUADRO = ['Ibiporã (Matriz)', 'Rondonópolis', 'Paranaguá', 'Porto Alegre']
+
+# Departamentos escolhidos no quadro de funcionários.
+# Mantém paridade com frontend/src/constants/filiais.ts (DEPARTAMENTOS_QUADRO).
+DEPARTAMENTOS_QUADRO = ['Administrativo', 'Logística', 'Frota', 'Gerencia', 'Motoristas']
+
 # Indicadores/abas liberáveis individualmente no ambiente Indicadores.
 # Mantém paridade com frontend/src/constants/indicadores.ts.
 # Lista vazia em CustomUser.indicadores = acesso a todos os indicadores.
@@ -73,7 +82,7 @@ ABAS_POR_AMBIENTE = {
         'cadastro-medidas',
         'cadastro-fornecedores',
     }),
-    'RH': frozenset({'home', 'movimentacoes', 'documentos'}),
+    'RH': frozenset({'home', 'movimentacoes', 'quadro-funcionarios', 'documentos'}),
     'SGQ': frozenset({
         'home',
         'pesquisa-satisfacao',
@@ -89,7 +98,14 @@ ABAS_POR_AMBIENTE = {
     }),
     'Marketing': frozenset({'home', 'campanhas'}),
     'Logística': frozenset({'home', 'configuracoes'}),
-    'Frota': frozenset({'home', 'olho-vivo'}),
+    'Frota': frozenset({
+        'home',
+        'olho-vivo',
+        'tccconex-motoristas-usuarios',
+        'gestao-desempenho-ocorrencias',
+        'gestao-desempenho-criterios',
+        'gestao-desempenho-parametros',
+    }),
     'Comercial': frozenset({
         'home',
         'cadastro-clientes',
@@ -132,6 +148,12 @@ FUNCOES_POR_AMBIENTE = {
     }),
     'Frota': frozenset({
         'responder-olho-vivo',
+        'criar-usuarios-motorista',
+        'excluir-usuarios-motorista',
+        'registrar-ocorrencias-desempenho',
+        'excluir-ocorrencias-desempenho',
+        'gerenciar-criterios-desempenho',
+        'alterar-parametros-desempenho',
     }),
     'Comercial': frozenset({
         'gerenciar-clientes',

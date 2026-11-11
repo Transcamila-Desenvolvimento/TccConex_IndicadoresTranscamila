@@ -22,8 +22,11 @@ import type {
   AuditLogQueryParams,
   AuditLogFacets,
   ReciclarLogsPayload,
+  CteRecebido,
+  CteRecebidoQueryParams,
+  CteImportacaoResultado,
   UserQueryParams,
-  Colaborador, DocumentoRH, PastaMatrizRH, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
+  Colaborador, FuncionarioQuadro, DocumentoRH, PastaMatrizRH, LoteMovimentacaoRH, MovimentacaoColaborador, InconsistenciaColaborador, CargoMapping, ColaboradorPJ, ColaboradorPJHistorico, RHDashboardSummaryResponse, RHComparisonResponse, RHMovimentacaoOrdering,
   ConsultaCaepiResultado,
   Uniforme, UniformePayload, UniformeLotePayload, ResumoUniformes, MovimentoEstoqueUniformeTipo, MovimentoEstoqueUniformePayload,
   EntregaUniforme, EntregaUniformeFiltros, RegistrarEntregaUniformePayload, RegistrarDevolucaoUniformePayload,
@@ -54,6 +57,8 @@ import type {
   SgqTipoResposta, SgqTipoRespostaPayload, SgqTipoRespostaQueryParams, SgqTipoRespostaResumo,
   SgqSipocEsquema, SgqSipocProcedimento, SgqSipocSetor,
   OlhoVivoResposta, OlhoVivoSalvarPayload, OlhoVivoAno,
+  MotoristaElegivel, UsuarioMotorista,
+  ApuracaoDesempenho, CriterioDesempenho, GrupoCriterioDesempenho, OcorrenciaDesempenho, ParametroBonificacao,
   ClienteComercial, ClienteComercialPayload, ClienteComercialQueryParams,
   ClienteComercialHistorico, ClienteComercialProdutosSugestoes, ClienteComercialValidacaoResumo,
   PropostaComercial, PropostaComercialDashboard, PropostaComercialFormDraft, PropostaComercialPayload, PropostaComercialQueryParams, PropostaComercialStatus, PropostaComercialTipo, PropostaFreteLinha,
@@ -1228,6 +1233,72 @@ function normalizarCamiloAta(raw: unknown): CamiloAta | undefined {
   };
 }
 
+function numeroOuNulo(valor: unknown): number | null {
+  if (valor === null || valor === undefined || valor === '') return null;
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? numero : null;
+}
+
+function cteRecebidoFromApi(raw: any): CteRecebido {
+  const componentes = Array.isArray(raw?.componentesFrete) ? raw.componentesFrete : [];
+  const notas = Array.isArray(raw?.notasFiscais) ? raw.notasFiscais : [];
+  return {
+    id: Number(raw.id),
+    numero: String(raw.numero ?? ''),
+    serie: String(raw.serie ?? ''),
+    emissao: String(raw.emissao ?? ''),
+    cfop: String(raw.cfop ?? ''),
+    naturezaOperacao: String(raw.naturezaOperacao ?? ''),
+    protocolo: String(raw.protocolo ?? ''),
+    situacao: String(raw.situacao ?? ''),
+    autorizadoEm: raw.autorizadoEm ? String(raw.autorizadoEm) : null,
+    modal: String(raw.modal ?? ''),
+    tipoCte: String(raw.tipoCte ?? ''),
+    tipoServico: String(raw.tipoServico ?? ''),
+    emitente: String(raw.emitente ?? ''),
+    emitenteDocumento: String(raw.emitenteDocumento ?? ''),
+    emitenteIe: String(raw.emitenteIe ?? ''),
+    emitenteFantasia: String(raw.emitenteFantasia ?? ''),
+    emitenteEndereco: String(raw.emitenteEndereco ?? ''),
+    emitenteFone: String(raw.emitenteFone ?? ''),
+    remetente: String(raw.remetente ?? ''),
+    remetenteDocumento: String(raw.remetenteDocumento ?? ''),
+    remetenteIe: String(raw.remetenteIe ?? ''),
+    remetenteEndereco: String(raw.remetenteEndereco ?? ''),
+    remetenteFone: String(raw.remetenteFone ?? ''),
+    remetenteEmail: String(raw.remetenteEmail ?? ''),
+    destinatario: String(raw.destinatario ?? ''),
+    destinatarioDocumento: String(raw.destinatarioDocumento ?? ''),
+    destinatarioIe: String(raw.destinatarioIe ?? ''),
+    destinatarioEndereco: String(raw.destinatarioEndereco ?? ''),
+    destinatarioFone: String(raw.destinatarioFone ?? ''),
+    destinatarioEmail: String(raw.destinatarioEmail ?? ''),
+    tomador: String(raw.tomador ?? ''),
+    origem: String(raw.origem ?? ''),
+    destino: String(raw.destino ?? ''),
+    produto: String(raw.produto ?? ''),
+    embalagem: String(raw.embalagem ?? ''),
+    pesoKg: Number(raw.pesoKg ?? 0),
+    volumes: numeroOuNulo(raw.volumes),
+    valorCarga: Number(raw.valorCarga ?? 0),
+    previsaoEntrega: raw.previsaoEntrega ? String(raw.previsaoEntrega) : null,
+    notasFiscais: notas.map((item: unknown) => String(item ?? '')).filter(Boolean),
+    observacao: String(raw.observacao ?? ''),
+    frete: Number(raw.frete ?? 0),
+    valorReceber: numeroOuNulo(raw.valorReceber),
+    componentesFrete: componentes.map((item: { nome?: unknown; valor?: unknown }) => ({
+      nome: String(item?.nome ?? ''),
+      valor: Number(item?.valor ?? 0),
+    })).filter((item: { nome: string }) => item.nome),
+    icmsCst: String(raw.icmsCst ?? ''),
+    icmsBase: numeroOuNulo(raw.icmsBase),
+    icmsAliquota: numeroOuNulo(raw.icmsAliquota),
+    icmsValor: numeroOuNulo(raw.icmsValor),
+    totalTributos: numeroOuNulo(raw.totalTributos),
+    chave: String(raw.chave ?? ''),
+  };
+}
+
 function normalizarMeuTermo(data: any): CamiloMeuTermo {
   return {
     ...normalizarTermoVersao(data),
@@ -1386,6 +1457,26 @@ export const apiService = {
       description: raw.description ?? '',
       permissions: raw.permissions ?? [],
     }));
+  },
+
+  async getCtesRecebidos(params: CteRecebidoQueryParams = {}): Promise<PaginatedResponse<CteRecebido>> {
+    const query: Record<string, string | number> = {};
+    if (params.page) query.page = params.page;
+    if (params.pageSize) query.page_size = params.pageSize;
+    if (params.search) query.search = params.search;
+    const { data } = await api.get('/api/integracoes/ctes/', { params: query });
+    return paginatedFromResponse(data, cteRecebidoFromApi);
+  },
+
+  async importarCteXml(arquivos: File[]): Promise<CteImportacaoResultado> {
+    const form = new FormData();
+    arquivos.forEach((arquivo) => form.append('files', arquivo));
+    const { data } = await api.post('/api/integracoes/ctes/importar/', form);
+    return {
+      importados: Array.isArray(data?.importados) ? data.importados.map(cteRecebidoFromApi) : [],
+      duplicados: Array.isArray(data?.duplicados) ? data.duplicados : [],
+      erros: Array.isArray(data?.erros) ? data.erros : [],
+    };
   },
 
   async getAuditLogs(params: AuditLogQueryParams = {}): Promise<PaginatedResponse<SystemLog>> {
@@ -2441,6 +2532,68 @@ export const apiService = {
     await api.delete(`/api/rh/cargos/${id}/`);
   },
 
+  async getQuadroFuncionariosRH(params: {
+    search?: string;
+    filial?: string;
+    ativo?: boolean;
+    page?: number;
+    pageSize?: number;
+  } = {}): Promise<PaginatedResponse<FuncionarioQuadro>> {
+    const { data } = await api.get('/api/rh/quadro/', {
+      params: {
+        search: params.search || undefined,
+        filial: params.filial || undefined,
+        ativo: params.ativo == null ? undefined : params.ativo ? 'true' : 'false',
+        page: params.page,
+        page_size: params.pageSize,
+      },
+    });
+    return paginatedFromResponse(data, (raw) => raw as FuncionarioQuadro);
+  },
+
+  async getFiliaisQuadroRH(): Promise<string[]> {
+    const { data } = await api.get<string[]>('/api/rh/quadro/filiais/');
+    return data;
+  },
+
+  async cadastrarQuadroFuncionarioRH(payload: {
+    nomeCompleto: string;
+    cpf: string;
+    filial: string;
+    cargo: string;
+    departamento?: string;
+    dataAdmissao: string | null;
+    dataDemissao: string | null;
+    ativo: boolean;
+  }): Promise<FuncionarioQuadro> {
+    const { data } = await api.post('/api/rh/quadro/', payload);
+    return data;
+  },
+
+  async atualizarQuadroFuncionarioRH(id: string, payload: {
+    nomeCompleto: string;
+    cpf: string;
+    filial: string;
+    cargo: string;
+    departamento?: string;
+    dataAdmissao: string | null;
+    dataDemissao: string | null;
+    ativo: boolean;
+  }): Promise<FuncionarioQuadro> {
+    const { data } = await api.patch(`/api/rh/quadro/${id}/`, payload);
+    return data;
+  },
+
+  async ativarQuadroFuncionarioRH(id: string): Promise<FuncionarioQuadro> {
+    const { data } = await api.post(`/api/rh/quadro/${id}/ativar/`);
+    return data;
+  },
+
+  async inativarQuadroFuncionarioRH(id: string): Promise<FuncionarioQuadro> {
+    const { data } = await api.post(`/api/rh/quadro/${id}/inativar/`);
+    return data;
+  },
+
   async getColaboradoresRH(params: { search?: string; desconsiderados?: boolean } = {}): Promise<Colaborador[]> {
     const { data } = await api.get('/api/rh/colaboradores/', {
       params: {
@@ -3248,6 +3401,122 @@ export const apiService = {
   async salvarOlhoVivo(payload: OlhoVivoSalvarPayload): Promise<OlhoVivoResposta> {
     const { data } = await api.put('/api/frota/olho-vivo/', payload);
     return data as OlhoVivoResposta;
+  },
+
+  async getUsuariosMotorista(params: {
+    search?: string;
+    page?: number;
+    pageSize?: number;
+    status?: 'ativo' | 'inativo';
+  } = {}): Promise<PaginatedResponse<UsuarioMotorista>> {
+    const { data } = await api.get('/api/frota/motoristas/usuarios/', {
+      params: {
+        search: params.search || undefined,
+        page: params.page,
+        page_size: params.pageSize,
+        status: params.status || undefined,
+      },
+    });
+    return paginatedFromResponse(data, (raw) => raw as UsuarioMotorista);
+  },
+
+  async getMotoristasElegiveis(): Promise<MotoristaElegivel[]> {
+    const { data } = await api.get<MotoristaElegivel[]>('/api/frota/motoristas/elegiveis/');
+    return data;
+  },
+
+  async cadastrarUsuarioMotorista(payload: { funcionarioId: string; password: string }): Promise<UsuarioMotorista> {
+    const { data } = await api.post('/api/frota/motoristas/usuarios/', payload);
+    return data;
+  },
+
+  async definirSenhaUsuarioMotorista(id: string, password: string): Promise<UsuarioMotorista> {
+    const { data } = await api.patch(`/api/frota/motoristas/usuarios/${id}/senha/`, { password });
+    return data;
+  },
+
+  async excluirUsuarioMotorista(id: string): Promise<void> {
+    await api.delete(`/api/frota/motoristas/usuarios/${id}/`);
+  },
+
+  async getParametrosDesempenho(): Promise<ParametroBonificacao> {
+    const { data } = await api.get('/api/frota/desempenho/parametros/');
+    return data as ParametroBonificacao;
+  },
+
+  async salvarParametrosDesempenho(payload: ParametroBonificacao): Promise<ParametroBonificacao> {
+    const { data } = await api.put('/api/frota/desempenho/parametros/', payload);
+    return data as ParametroBonificacao;
+  },
+
+  async getCriteriosDesempenho(): Promise<{ grupos: GrupoCriterioDesempenho[] }> {
+    const { data } = await api.get('/api/frota/desempenho/criterios/');
+    return data as { grupos: GrupoCriterioDesempenho[] };
+  },
+
+  async criarGrupoDesempenho(payload: { nome: string }): Promise<void> {
+    await api.post('/api/frota/desempenho/grupos/', payload);
+  },
+
+  async salvarGrupoDesempenho(id: string, payload: { nome: string; ativo: boolean }): Promise<void> {
+    await api.patch(`/api/frota/desempenho/grupos/${id}/`, payload);
+  },
+
+  async excluirGrupoDesempenho(id: string): Promise<void> {
+    await api.delete(`/api/frota/desempenho/grupos/${id}/`);
+  },
+
+  async criarCriterioDesempenho(payload: {
+    grupoId: string;
+    nome: string;
+    descricao: string;
+    pontos: string;
+    zeraBonus: boolean;
+  }): Promise<CriterioDesempenho> {
+    const { data } = await api.post('/api/frota/desempenho/criterios/itens/', payload);
+    return data as CriterioDesempenho;
+  },
+
+  async salvarCriterioDesempenho(id: string, payload: Partial<CriterioDesempenho>): Promise<CriterioDesempenho> {
+    const { data } = await api.patch(`/api/frota/desempenho/criterios/itens/${id}/`, payload);
+    return data as CriterioDesempenho;
+  },
+
+  async excluirCriterioDesempenho(id: string): Promise<void> {
+    await api.delete(`/api/frota/desempenho/criterios/itens/${id}/`);
+  },
+
+  async getApuracaoDesempenho(params: { ano: number; mes: number; search?: string; page?: number; pageSize?: number }): Promise<ApuracaoDesempenho> {
+    const { data } = await api.get('/api/frota/desempenho/apuracao/', {
+      params: {
+        ano: params.ano,
+        mes: params.mes,
+        search: params.search || undefined,
+        page: params.page,
+        page_size: params.pageSize,
+      },
+    });
+    return data as ApuracaoDesempenho;
+  },
+
+  async getOcorrenciasDesempenho(params: { ano: number; mes: number; funcionarioId?: string }): Promise<OcorrenciaDesempenho[]> {
+    const { data } = await api.get<OcorrenciaDesempenho[]>('/api/frota/desempenho/ocorrencias/', { params });
+    return data;
+  },
+
+  async criarOcorrenciaDesempenho(payload: {
+    funcionarioId: string;
+    criterioId: string;
+    data: string;
+    quantidade: number;
+    observacao?: string;
+  }): Promise<OcorrenciaDesempenho> {
+    const { data } = await api.post('/api/frota/desempenho/ocorrencias/', payload);
+    return data as OcorrenciaDesempenho;
+  },
+
+  async excluirOcorrenciaDesempenho(id: string): Promise<void> {
+    await api.delete(`/api/frota/desempenho/ocorrencias/${id}/`);
   },
 
   // ─── Comercial ──────────────────────────────────────────────────────────────

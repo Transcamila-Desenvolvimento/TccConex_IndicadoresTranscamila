@@ -12,12 +12,14 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
+from apps.accounts.constants import FILIAIS_QUADRO
 from apps.accounts.mixins import ModuleScopedViewMixin
 from apps.audit.services import record_audit
 
 from .pagination import RHPagination
 from .models import (
     Colaborador,
+    FuncionarioQuadro,
     LoteMovimentacaoRH,
     MovimentacaoColaborador,
     InconsistenciaColaborador,
@@ -29,6 +31,7 @@ from .models import (
 )
 from .serializers import (
     ColaboradorSerializer,
+    FuncionarioQuadroSerializer,
     LoteMovimentacaoRHSerializer,
     MovimentacaoColaboradorSerializer,
     InconsistenciaColaboradorSerializer,
@@ -1000,6 +1003,98 @@ class CargoMappingViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             mapping = serializer.save()
             cargo_nome = str(mapping.cargo or '').strip().upper()
             _aplicar_categoria_cargo(cargo_nome, mapping.categoria)
+
+
+class FuncionarioQuadroViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
+    permission_module = 'RH'
+    serializer_class = FuncionarioQuadroSerializer
+    queryset = FuncionarioQuadro.objects.all()
+    pagination_class = RHPagination
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        user = request.user
+        if getattr(user, 'is_admin', False):
+            return
+        abas = (getattr(user, 'abas', None) or {}).get('RH') or []
+        if abas and 'quadro-funcionarios' not in abas:
+            self.permission_denied(request, message='Sem acesso ao Quadro de Funcionários.')
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        search = (self.request.query_params.get('search') or '').strip()
+        filial = (self.request.query_params.get('filial') or '').strip()
+        ativo = (self.request.query_params.get('ativo') or '').strip().lower()
+        if search:
+            digitos = re.sub(r'\D', '', search)
+            filtro = (
+                Q(nome__icontains=search)
+                | Q(cargo__icontains=search)
+                | Q(departamento__icontains=search)
+                | Q(filial__icontains=search)
+                | Q(cpf__icontains=search)
+            )
+            if digitos and digitos != search:
+                filtro |= Q(cpf__icontains=digitos)
+            qs = qs.filter(filtro)
+        if filial:
+            qs = qs.filter(filial__iexact=filial)
+        if ativo in ('true', '1', 'ativo'):
+            qs = qs.filter(ativo=True)
+        elif ativo in ('false', '0', 'inativo'):
+            qs = qs.filter(ativo=False)
+        return qs.order_by('filial', 'nome')
+
+    def perform_create(self, serializer):
+        funcionario = serializer.save()
+        record_audit(
+            self.request.user,
+            'rh.quadro.cadastrado',
+            f'Funcionário {funcionario.nome} (CPF: {funcionario.cpf}) cadastrado no quadro.',
+        )
+
+    def perform_update(self, serializer):
+        funcionario = serializer.save()
+        record_audit(
+            self.request.user,
+            'rh.quadro.editado',
+            f'Funcionário {funcionario.nome} (CPF: {funcionario.cpf}) atualizado no quadro.',
+        )
+
+    def perform_destroy(self, instance):
+        nome = instance.nome
+        cpf = instance.cpf
+        instance.delete()
+        record_audit(
+            self.request.user,
+            'rh.quadro.excluido',
+            f'Funcionário {nome} (CPF: {cpf}) excluído do quadro.',
+        )
+
+    @action(detail=False, methods=['get'])
+    def filiais(self, request):
+        return Response(list(FILIAIS_QUADRO))
+
+    def _definir_ativo(self, request, ativo):
+        funcionario = self.get_object()
+        if funcionario.ativo != ativo:
+            funcionario.ativo = ativo
+            funcionario.save(update_fields=['ativo'])
+            record_audit(
+                request.user,
+                'rh.quadro.ativado' if ativo else 'rh.quadro.inativado',
+                f'Funcionário {funcionario.nome} (CPF: {funcionario.cpf}) {"ativado" if ativo else "inativado"} no quadro.',
+            )
+        return Response(self.get_serializer(funcionario).data)
+
+    @action(detail=True, methods=['post'])
+    def ativar(self, request, pk=None):
+        return self._definir_ativo(request, True)
+
+    @action(detail=True, methods=['post'])
+    def inativar(self, request, pk=None):
+        return self._definir_ativo(request, False)
 
 
 class ColaboradorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):

@@ -206,6 +206,84 @@ export interface ListQueryParams {
   search?: string;
 }
 
+export interface CteComponenteFrete {
+  nome: string;
+  valor: number;
+}
+
+export interface CteRecebido {
+  id: number;
+  numero: string;
+  serie: string;
+  emissao: string;
+  cfop: string;
+  naturezaOperacao: string;
+  protocolo: string;
+  situacao: string;
+  autorizadoEm: string | null;
+  modal: string;
+  tipoCte: string;
+  tipoServico: string;
+  emitente: string;
+  emitenteDocumento: string;
+  emitenteIe: string;
+  emitenteFantasia: string;
+  emitenteEndereco: string;
+  emitenteFone: string;
+  remetente: string;
+  remetenteDocumento: string;
+  remetenteIe: string;
+  remetenteEndereco: string;
+  remetenteFone: string;
+  remetenteEmail: string;
+  destinatario: string;
+  destinatarioDocumento: string;
+  destinatarioIe: string;
+  destinatarioEndereco: string;
+  destinatarioFone: string;
+  destinatarioEmail: string;
+  tomador: string;
+  origem: string;
+  destino: string;
+  produto: string;
+  embalagem: string;
+  pesoKg: number;
+  volumes: number | null;
+  valorCarga: number;
+  previsaoEntrega: string | null;
+  notasFiscais: string[];
+  observacao: string;
+  frete: number;
+  valorReceber: number | null;
+  componentesFrete: CteComponenteFrete[];
+  icmsCst: string;
+  icmsBase: number | null;
+  icmsAliquota: number | null;
+  icmsValor: number | null;
+  totalTributos: number | null;
+  chave: string;
+}
+
+export interface CteRecebidoQueryParams extends ListQueryParams {}
+
+export interface CteImportacaoDuplicada {
+  arquivo: string;
+  chave: string;
+  numero: string;
+  serie: string;
+}
+
+export interface CteImportacaoErro {
+  arquivo: string;
+  detail: string;
+}
+
+export interface CteImportacaoResultado {
+  importados: CteRecebido[];
+  duplicados: CteImportacaoDuplicada[];
+  erros: CteImportacaoErro[];
+}
+
 export interface ReportQueryParams extends ListQueryParams {
   filial?: string;
   party?: string;
@@ -960,6 +1038,18 @@ export interface Colaborador {
   categoria?: 'ADMINISTRATIVO' | 'OPERACIONAL' | 'MOTORISTA';
   dataAtualizacao: string;
   desconsiderado: boolean;
+}
+
+export interface FuncionarioQuadro {
+  id: string;
+  nomeCompleto: string;
+  cpf: string;
+  filial: string;
+  cargo: string;
+  departamento: string;
+  dataAdmissao: string | null;
+  dataDemissao: string | null;
+  ativo: boolean;
 }
 
 export interface DocumentoRH {
@@ -2678,6 +2768,144 @@ export interface OlhoVivoSalvarPayload {
   ano: number;
   mes: number;
   itens: { comportamento: string; recorrencia: number }[];
+}
+
+export interface MotoristaElegivel {
+  id: string;
+  nomeCompleto: string;
+  cpf: string;
+  cargo: string;
+  username: string;
+}
+
+export interface UsuarioMotorista {
+  id: string;
+  funcionarioId: string;
+  nomeCompleto: string;
+  cpf: string;
+  cargo: string;
+  filial: string;
+  dataAdmissao: string;
+  username: string;
+  ativo: boolean;
+}
+
+export type FaixaBonificacaoModo = 'integral' | 'proporcional' | 'percentual' | 'zero';
+
+export interface FaixaBonificacao {
+  id?: string;
+  notaMin: string;
+  notaMax: string;
+  modo: FaixaBonificacaoModo;
+  percentual: string;
+}
+
+export interface ParametroBonificacao {
+  notaInicial: string;
+  valorBonus: string;
+  limitarPorGrupo: boolean;
+  faixas: FaixaBonificacao[];
+}
+
+export interface CriterioDesempenho {
+  id: string;
+  grupoId: string;
+  nome: string;
+  descricao: string;
+  pontos: string;
+  zeraBonus: boolean;
+  ativo: boolean;
+  ordem: number;
+}
+
+export interface GrupoCriterioDesempenho {
+  id: string;
+  nome: string;
+  pontosMaximos: string;
+  ordem: number;
+  ativo: boolean;
+  criterios: CriterioDesempenho[];
+}
+
+export interface CriterioDesempenhoOpcao {
+  id: string;
+  nome: string;
+  descricao: string;
+  grupoNome: string;
+  pontos: string;
+  zeraBonus: boolean;
+}
+
+export interface ApuracaoGrupo {
+  id: string;
+  nome: string;
+  teto: string;
+  desconto: string;
+  itens: {
+    criterioId: string;
+    nome: string;
+    quantidade: number;
+    pontos: string;
+    desconto: string;
+    zeraBonus: boolean;
+  }[];
+}
+
+export interface ApuracaoResumo {
+  motoristas: number;
+  comBonificacao: number;
+  totalPagar: string;
+}
+
+export interface ApuracaoOpcao {
+  funcionarioId: string;
+  nomeCompleto: string;
+  cargo: string;
+}
+
+export interface ApuracaoMotorista {
+  funcionarioId: string;
+  nomeCompleto: string;
+  cpf: string;
+  cargo: string;
+  ativo: boolean;
+  nota: string;
+  percentual: string;
+  valor: string;
+  zerado: boolean;
+  motivoZero: string;
+  emExperiencia: boolean;
+  inicioBonificacao: string;
+  grupos: ApuracaoGrupo[];
+}
+
+export interface ApuracaoDesempenho {
+  ano: number;
+  mes: number;
+  notaInicial: string;
+  valorBonus: string;
+  count: number;
+  page: number;
+  pageSize: number;
+  resumo: ApuracaoResumo;
+  opcoes: ApuracaoOpcao[];
+  motoristas: ApuracaoMotorista[];
+  criterios: CriterioDesempenhoOpcao[];
+}
+
+export interface OcorrenciaDesempenho {
+  id: string;
+  funcionarioId: string;
+  nomeCompleto: string;
+  criterioId: string;
+  criterioNome: string;
+  descricao: string;
+  grupoNome: string;
+  data: string;
+  quantidade: number;
+  observacao: string;
+  pontos: string;
+  zeraBonus: boolean;
 }
 
 export type ClienteComercialTipoPessoa = 'J';

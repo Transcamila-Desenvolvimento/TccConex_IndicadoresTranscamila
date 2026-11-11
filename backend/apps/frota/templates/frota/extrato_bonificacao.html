@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    @page {
+        size: A4 portrait;
+        margin: 1.6cm 1.3cm 1.8cm 1.3cm;
+        @frame footer_frame {
+            -pdf-frame-content: footer_content;
+            bottom: 0.5cm;
+            margin-left: 1.3cm;
+            margin-right: 1.3cm;
+            height: 1.1cm;
+        }
+    }
+    body {
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 9pt;
+        color: #334155;
+        line-height: 1.35;
+    }
+    table.pdf-header {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 14px;
+    }
+    table.pdf-header td {
+        padding: 0 0 8px 0;
+        border-bottom: 2px solid #118CC4;
+        vertical-align: middle;
+    }
+    td.pdf-header-title { text-align: right; }
+    .doc-name {
+        font-size: 16pt;
+        font-weight: bold;
+        color: #0f172a;
+    }
+    .doc-sub {
+        font-size: 8pt;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 2px;
+    }
+    table.doc-info {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 14px;
+    }
+    table.doc-info td {
+        font-size: 8.5pt;
+        color: #64748b;
+        padding: 0;
+    }
+    table.doc-info td.doc-info-right { text-align: right; }
+    table.doc-info strong { color: #0f172a; }
+    table.kpi-table { width: 100%; margin-bottom: 16px; }
+    table.kpi-table td {
+        width: 33%;
+        padding: 10px 12px;
+        background-color: #f8fafc;
+    }
+    .kpi-label {
+        font-size: 7.5pt;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .kpi-value {
+        font-size: 13pt;
+        font-weight: bold;
+        color: #0f172a;
+        margin-top: 2px;
+    }
+    table.report-table { width: 100%; border-collapse: collapse; }
+    table.report-table thead th {
+        background-color: #f8fafc;
+        color: #64748b;
+        font-size: 7.5pt;
+        font-weight: bold;
+        padding: 7px 8px;
+        text-align: left;
+        text-transform: uppercase;
+    }
+    table.report-table thead th.num,
+    table.report-table tbody td.num,
+    table.report-table tfoot td.num { text-align: right; }
+    table.report-table tbody td {
+        font-size: 8.5pt;
+        padding: 7px 8px;
+        vertical-align: top;
+        background-color: #ffffff;
+        color: #1e293b;
+    }
+    table.report-table tbody tr.row-even td { background-color: #f8fafc; }
+    .muted { font-size: 7.5pt; color: #64748b; }
+    table.report-table tfoot td {
+        font-size: 8.5pt;
+        font-weight: bold;
+        padding: 8px;
+        background-color: #eff8ff;
+        color: #0f172a;
+    }
+    .empty-msg {
+        font-size: 8.5pt;
+        color: #94a3b8;
+        font-style: italic;
+        padding: 12px 8px;
+        background-color: #f8fafc;
+    }
+    #footer_content { border-top: 1px solid #e2e8f0; padding-top: 4px; }
+    table.footer-table { width: 100%; border-collapse: collapse; }
+    table.footer-table td {
+        font-size: 7pt;
+        color: #94a3b8;
+        vertical-align: middle;
+    }
+    .footer-page { text-align: right; }
+</style>
+</head>
+<body>
+<div id="footer_content">
+    <table class="footer-table">
+        <tr>
+            <td>Documento gerado automaticamente em {{ gerado_em }}.</td>
+            <td class="footer-page">Powered by <img src="data:image/png;base64,{{ logo_tccconex_base64 }}" width="46" height="11" /> &nbsp;|&nbsp; Página <pdf:pagenumber /> de <pdf:pagecount /></td>
+        </tr>
+    </table>
+</div>
+
+<table class="pdf-header">
+    <tr>
+        <td>
+            {% if logo_base64 %}
+            <img src="data:image/png;base64,{{ logo_base64 }}" width="150" height="31" />
+            {% endif %}
+        </td>
+        <td class="pdf-header-title">
+            <div class="doc-name">Extrato de pagamento</div>
+            <div class="doc-sub">Bonificação de motoristas</div>
+        </td>
+    </tr>
+</table>
+
+<table class="doc-info">
+    <tr>
+        <td><strong>{{ periodo }}</strong> · {{ filial }}</td>
+        <td class="doc-info-right">Nota inicial {{ nota_inicial }} · Bônus cheio {{ valor_bonus }}</td>
+    </tr>
+</table>
+
+<table class="kpi-table">
+    <tr>
+        <td>
+            <div class="kpi-label">Motoristas</div>
+            <div class="kpi-value">{{ quantidade }}</div>
+        </td>
+        <td>
+            <div class="kpi-label">Com bonificação</div>
+            <div class="kpi-value">{{ com_bonus }}</div>
+        </td>
+        <td>
+            <div class="kpi-label">Total a pagar</div>
+            <div class="kpi-value">{{ total }}</div>
+        </td>
+    </tr>
+</table>
+
+{% if motoristas %}
+<table class="report-table">
+    <thead>
+        <tr>
+            <th>Motorista</th>
+            <th>CPF</th>
+            <th class="num">Nota</th>
+            <th>Bonificação</th>
+            <th class="num">Valor</th>
+            <th>Situação</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in motoristas %}
+        <tr class="{% if item.par %}row-even{% endif %}">
+            <td>{{ item.nome }}<br/><span class="muted">{{ item.cargo }}</span></td>
+            <td>{{ item.cpf }}</td>
+            <td class="num">{{ item.nota }}</td>
+            <td>{{ item.percentual }}</td>
+            <td class="num">{{ item.valor }}</td>
+            <td>{{ item.situacao }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr>
+            <td colspan="4">Total a pagar</td>
+            <td class="num">{{ total }}</td>
+            <td></td>
+        </tr>
+    </tfoot>
+</table>
+{% else %}
+<div class="empty-msg">Nenhum motorista nesta filial para o período.</div>
+{% endif %}
+</body>
+</html>

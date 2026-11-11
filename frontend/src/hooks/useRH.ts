@@ -29,6 +29,7 @@ export const RH_KEYS = {
   pjHistorico: ['rh', 'pj-historico'] as const,
   cargos: ['rh', 'cargos'] as const,
   colaboradores: ['rh', 'colaboradores'] as const,
+  quadro: ['rh', 'quadro'] as const,
   historicoSalarial: ['rh', 'historico-salarial'] as const,
   documentos: ['rh', 'documentos'] as const,
   pastas: ['rh', 'matriz-pastas'] as const,
@@ -271,6 +272,84 @@ export function useColaboradoresRH(params: { search?: string; desconsiderados?: 
   return useQuery({
     queryKey: [...RH_KEYS.colaboradores, params],
     queryFn: () => apiService.getColaboradoresRH(params),
+  });
+}
+
+export function useQuadroFuncionariosRH(params: {
+  search?: string;
+  filial?: string;
+  ativo?: boolean;
+  page?: number;
+  pageSize?: number;
+}) {
+  return useQuery({
+    queryKey: [...RH_KEYS.quadro, params],
+    queryFn: () => apiService.getQuadroFuncionariosRH(params),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useFiliaisQuadroRH() {
+  return useQuery({
+    queryKey: [...RH_KEYS.quadro, 'filiais'],
+    queryFn: () => apiService.getFiliaisQuadroRH(),
+  });
+}
+
+function invalidateQuadro(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: RH_KEYS.quadro });
+}
+
+export function useCadastrarQuadroFuncionarioRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      nomeCompleto: string;
+      cpf: string;
+      filial: string;
+      cargo: string;
+      departamento?: string;
+      dataAdmissao: string | null;
+      dataDemissao: string | null;
+      ativo: boolean;
+    }) => apiService.cadastrarQuadroFuncionarioRH(payload),
+    onSuccess: () => invalidateQuadro(queryClient),
+  });
+}
+
+export function useAtualizarQuadroFuncionarioRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: {
+      id: string;
+      payload: {
+        nomeCompleto: string;
+        cpf: string;
+        filial: string;
+        cargo: string;
+        departamento?: string;
+        dataAdmissao: string | null;
+        dataDemissao: string | null;
+        ativo: boolean;
+      };
+    }) => apiService.atualizarQuadroFuncionarioRH(id, payload),
+    onSuccess: () => invalidateQuadro(queryClient),
+  });
+}
+
+export function useAtivarQuadroFuncionarioRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.ativarQuadroFuncionarioRH(id),
+    onSuccess: () => invalidateQuadro(queryClient),
+  });
+}
+
+export function useInativarQuadroFuncionarioRH() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.inativarQuadroFuncionarioRH(id),
+    onSuccess: () => invalidateQuadro(queryClient),
   });
 }
 

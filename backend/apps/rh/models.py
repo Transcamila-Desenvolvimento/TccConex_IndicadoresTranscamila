@@ -45,6 +45,28 @@ class Colaborador(models.Model):
         ordering = ['nome_completo']
 
 
+class FuncionarioQuadro(models.Model):
+    """Cadastro próprio do quadro de funcionários, independente da movimentação mensal."""
+
+    nome = models.CharField(max_length=255, verbose_name="Nome")
+    cpf = models.CharField(max_length=14, unique=True, verbose_name="CPF")
+    filial = models.CharField(max_length=100, blank=True, default="", verbose_name="Filial")
+    cargo = models.CharField(max_length=100, blank=True, default="", verbose_name="Cargo")
+    departamento = models.CharField(max_length=30, blank=True, default="", verbose_name="Departamento")
+    data_admissao = models.DateField(null=True, blank=True, verbose_name="Admissão")
+    data_demissao = models.DateField(null=True, blank=True, verbose_name="Demissão")
+    ativo = models.BooleanField(default=True, verbose_name="Ativo")
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Funcionário do quadro"
+        verbose_name_plural = "Quadro de funcionários"
+        ordering = ['filial', 'nome']
+
+    def __str__(self):
+        return self.nome
+
+
 class LoteMovimentacaoRH(models.Model):
     mes = models.IntegerField(verbose_name="Mês")
     ano = models.IntegerField(verbose_name="Ano")

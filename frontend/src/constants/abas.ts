@@ -33,6 +33,7 @@ export const ABA_ITEMS = [
 
   { module: 'RH', key: 'home', label: 'Home RH', path: '/rh' },
   { module: 'RH', key: 'movimentacoes', label: 'Movimentações', path: '/rh/movimentacoes' },
+  { module: 'RH', key: 'quadro-funcionarios', label: 'Quadro de Funcionários', path: '/rh/quadro-funcionarios' },
   { module: 'RH', key: 'documentos', label: 'Matriz', path: '/rh/documentos' },
 
   { module: 'SGQ', key: 'home', label: 'Home SGQ', path: '/sgq' },
@@ -55,6 +56,10 @@ export const ABA_ITEMS = [
 
   { module: 'Frota', key: 'home', label: 'Home Frota', path: '/frota' },
   { module: 'Frota', key: 'olho-vivo', label: 'Olho vivo na estrada', path: '/frota/questionarios/olho-vivo' },
+  { module: 'Frota', key: 'gestao-desempenho-ocorrencias', label: 'Ocorrências', path: '/frota/gestao-desempenho/ocorrencias' },
+  { module: 'Frota', key: 'gestao-desempenho-criterios', label: 'Critérios', path: '/frota/gestao-desempenho/criterios' },
+  { module: 'Frota', key: 'gestao-desempenho-parametros', label: 'Parâmetros', path: '/frota/gestao-desempenho/parametros' },
+  { module: 'Frota', key: 'tccconex-motoristas-usuarios', label: 'Usuários', path: '/frota/tccconex-motoristas/usuarios' },
 
   { module: 'Comercial', key: 'home', label: 'Home Comercial', path: '/comercial' },
   { module: 'Comercial', key: 'cadastro-clientes', label: 'Clientes', path: '/comercial/cadastros/clientes' },
@@ -96,6 +101,8 @@ const GRUPOS_DE_ROTINA: Record<string, { titulo: string; keys: string[] }[]> = {
   ],
   Frota: [
     { titulo: 'Questionários', keys: ['olho-vivo'] },
+    { titulo: 'Gestão de desempenho', keys: ['gestao-desempenho-ocorrencias', 'gestao-desempenho-criterios', 'gestao-desempenho-parametros'] },
+    { titulo: 'TccConex motoristas', keys: ['tccconex-motoristas-usuarios'] },
   ],
   Faturamento: [
     { titulo: 'Envio', keys: ['envio-nf-cliente', 'controle-nds'] },
