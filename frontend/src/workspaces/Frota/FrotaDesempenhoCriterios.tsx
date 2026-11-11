@@ -20,6 +20,11 @@ type Editor =
   | { tipo: 'grupo'; grupo?: GrupoCriterioDesempenho }
   | { tipo: 'criterio'; grupo?: GrupoCriterioDesempenho; criterio?: CriterioDesempenho };
 
+type LinhaCriterio = {
+  grupo: GrupoCriterioDesempenho;
+  criterio: CriterioDesempenho | null;
+};
+
 const FrotaDesempenhoCriterios: React.FC = () => {
   const { user } = useAuth();
   const podeGerenciar = userHasFuncao(user, 'Frota', 'gerenciar-criterios-desempenho');
@@ -35,7 +40,7 @@ const FrotaDesempenhoCriterios: React.FC = () => {
   const grupos = consulta.data?.grupos ?? [];
   const termo = busca.trim().toLocaleLowerCase('pt-BR');
   const grupoSelecionado = grupos.find((grupo) => grupo.id === grupoId) ?? null;
-  const linhas = grupos.flatMap((grupo) => {
+  const linhas = grupos.flatMap((grupo): LinhaCriterio[] => {
     if (grupoId && grupo.id !== grupoId) return [];
     const criterios = grupo.criterios.filter((criterio) => (
       !termo || `${grupo.nome} ${criterio.nome} ${criterio.descricao}`.toLocaleLowerCase('pt-BR').includes(termo)
