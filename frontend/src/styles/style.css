@@ -13715,6 +13715,58 @@ button.mkt-drive-browser-row:hover {
   flex-shrink: 0;
 }
 
+.estoque-page .view-page-title {
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.estoque-page .view-header .reports-action-btn {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+  gap: 6px;
+}
+
+.estoque-page > .dashboard-stats-grid {
+  gap: 12px;
+}
+
+.estoque-page .stat-card {
+  padding: 12px 14px;
+  border-radius: 10px;
+}
+
+.estoque-page .stat-card-label {
+  margin-bottom: 4px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.estoque-page .stat-card-value {
+  font-size: 20px;
+  line-height: 1.2;
+  margin-bottom: 2px;
+}
+
+.estoque-page .stat-card-desc {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.estoque-page > .reports-tabs-bar {
+  margin-bottom: 10px;
+}
+
+.estoque-page .reports-tab-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.estoque-page > .reports-filters-bar {
+  margin-bottom: 10px;
+  gap: 10px;
+}
+
 .estoque-table-card {
   flex: 1;
   min-height: 0;

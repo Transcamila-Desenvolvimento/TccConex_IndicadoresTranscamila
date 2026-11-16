@@ -190,9 +190,9 @@ const ComprasControleEstoque: React.FC = () => {
     <div className="estoque-page">
 
       {/* Header e Toolbar */}
-      <header className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+      <header className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '6px', height: '22px', backgroundColor: '#118CC4' }} />
+          <div style={{ width: '5px', height: '18px', backgroundColor: '#118CC4' }} />
           <h1 className="view-page-title">Controle de estoque</h1>
         </div>
 
@@ -239,7 +239,7 @@ const ComprasControleEstoque: React.FC = () => {
         </div>
       </header>
 
-      <div className="dashboard-stats-grid" style={{ marginBottom: '24px' }}>
+      <div className="dashboard-stats-grid" style={{ marginBottom: '12px' }}>
         <div className="stat-card card-positive">
           <div className="stat-card-label">Total de Itens Cadastrados</div>
           <div className="stat-card-value">{stats.totalItens}</div>
