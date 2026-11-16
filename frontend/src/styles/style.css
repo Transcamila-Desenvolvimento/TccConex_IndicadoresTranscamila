@@ -122,8 +122,8 @@ body {
 }
 
 .sidebar-brand .logo-expanded.logo-indicadores {
-  max-width: 92%;
-  max-height: 28px;
+  max-width: 200px;
+  max-height: 36px;
 }
 
 .sidebar-brand .logo-collapsed {

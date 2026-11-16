@@ -9,7 +9,7 @@ import { getAllowedIndicadores } from '../constants/indicadores';
 import { abasDoModulo, userCanSeeAba } from '../constants/abas';
 import logoExpanded from '../assets/Logo_TccConex_Branca.png';
 import logoCollapsed from '../assets/Logo_TccConex_Fechado.png';
-import logoIndicadoresExpanded from '../assets/Logo_Indicadores.png';
+import logoIndicadoresExpanded from '../assets/Logo_Transcamila_Branca.png';
 import logoIndicadoresCollapsed from '../assets/Logo_Indicadores_Fechado.png';
 
 function UniformeIcon({ className }: { className: string }) {
