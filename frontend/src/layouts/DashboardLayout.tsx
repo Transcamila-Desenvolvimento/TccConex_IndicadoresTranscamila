@@ -7,7 +7,7 @@ import { AGENTE_CAMILO_ENVIRONMENT, environmentRequiresFilial, filterActiveEnvir
 import { branchesForModule } from '../constants/filiais';
 import { getAllowedIndicadores } from '../constants/indicadores';
 import { abasDoModulo, userCanSeeAba } from '../constants/abas';
-import logoExpanded from '../assets/Logo_TccConex.png';
+import logoExpanded from '../assets/Logo_TccConex_Branca.png';
 import logoCollapsed from '../assets/Logo_TccConex_Fechado.png';
 import logoIndicadoresExpanded from '../assets/Logo_Indicadores.png';
 import logoIndicadoresCollapsed from '../assets/Logo_Indicadores_Fechado.png';
@@ -63,7 +63,7 @@ const DashboardLayout: React.FC = () => {
   const canAba = (module: string, aba: string) => userCanSeeAba(user, module, aba, selectedFilial);
   const showSessionFilial = environmentRequiresFilial(selectedEnvironment) && !!selectedFilial;
 
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const isSidebarCollapsed = false;
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isAmbienteOpen, setIsAmbienteOpen] = useState(false);
   const [ambienteComFilial, setAmbienteComFilial] = useState<string | null>(null);
@@ -887,6 +887,17 @@ const DashboardLayout: React.FC = () => {
               <img src={logoCollapsed} alt="TccConex Logo Fechado" className="brand-logo logo-collapsed" />
             </>
           )}
+        </div>
+
+        <div className="sidebar-context">
+          <button
+            type="button"
+            className="sidebar-search"
+            onClick={() => { setPaletteQuery(''); setIsPaletteOpen(true); }}
+          >
+            <i className="bi bi-search" aria-hidden="true" />
+            <span>Pesquisar</span>
+          </button>
         </div>
         
         <nav className="sidebar-nav">
@@ -2033,18 +2044,6 @@ const DashboardLayout: React.FC = () => {
               </div>
             )}
           </nav>
-
-        {/* Sidebar Collapse Toggle */}
-        <div className="sidebar-collapse-container" id="btn-collapse-sidebar" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>
-          <i
-            className="bi bi-chevron-left chevron-collapse"
-            aria-hidden="true"
-            style={{
-              transform: isSidebarCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s ease',
-            }}
-          />
-        </div>
       </aside>
 
       {/* Main Wrapper */}
