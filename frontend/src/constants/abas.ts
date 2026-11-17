@@ -25,11 +25,6 @@ export const ABA_ITEMS = [
   { module: 'Faturamento', key: 'controle-nds', label: 'Controle de NDs', path: '/faturamento/controle-nds' },
 
   { module: 'Compras', key: 'home', label: 'Home Compras', path: '/compras' },
-  { module: 'Compras', key: 'controle-estoque', label: 'Controle de estoque', path: '/compras/controle-estoque' },
-  { module: 'Compras', key: 'controle-uniformes', label: 'Controle Uniformes', path: '/compras/controle-uniformes' },
-  { module: 'Compras', key: 'cadastro-consumidores', label: 'Cadastro consumidores', path: '/compras/cadastros/consumidores' },
-  { module: 'Compras', key: 'cadastro-medidas', label: 'Cadastro de medidas', path: '/compras/cadastros/medidas' },
-  { module: 'Compras', key: 'cadastro-fornecedores', label: 'Cadastro fornecedores', path: '/compras/cadastros/fornecedores' },
 
   { module: 'RH', key: 'home', label: 'Home RH', path: '/rh' },
   { module: 'RH', key: 'movimentacoes', label: 'Movimentações', path: '/rh/movimentacoes' },
@@ -71,6 +66,13 @@ export const ABA_ITEMS = [
   { module: 'Comercial', key: 'propostas-comerciais', label: 'Propostas comerciais', path: '/comercial/propostas' },
   { module: 'Comercial', key: 'validacao-clientes', label: 'Validação clientes', path: '/comercial/validacao-clientes' },
 
+  { module: 'Suprimentos', key: 'home', label: 'Home Suprimentos', path: '/suprimentos' },
+  { module: 'Suprimentos', key: 'controle-estoque', label: 'Controle papelaria', path: '/suprimentos/controle-estoque' },
+  { module: 'Suprimentos', key: 'controle-uniformes', label: 'Controle Uniformes', path: '/suprimentos/controle-uniformes' },
+  { module: 'Suprimentos', key: 'cadastro-consumidores', label: 'Cadastro consumidores', path: '/suprimentos/cadastros/consumidores' },
+  { module: 'Suprimentos', key: 'cadastro-medidas', label: 'Cadastro de medidas', path: '/suprimentos/cadastros/medidas' },
+  { module: 'Suprimentos', key: 'cadastro-fornecedores', label: 'Cadastro fornecedores', path: '/suprimentos/cadastros/fornecedores' },
+
   { module: 'CamiloIA', key: 'home', label: 'Chat', path: '/agente-camilo' },
 ] as const;
 
@@ -108,8 +110,8 @@ const GRUPOS_DE_ROTINA: Record<string, { titulo: string; keys: string[] }[]> = {
     { titulo: 'Envio', keys: ['envio-nf-cliente', 'controle-nds'] },
     { titulo: 'Cadastros', keys: ['cadastro-clientes'] },
   ],
-  Compras: [
-    { titulo: 'Controle', keys: ['controle-estoque', 'controle-uniformes'] },
+  Suprimentos: [
+    { titulo: 'Estoques', keys: ['controle-estoque', 'controle-uniformes'] },
     { titulo: 'Cadastros', keys: ['cadastro-consumidores', 'cadastro-medidas', 'cadastro-fornecedores'] },
   ],
   Comercial: [

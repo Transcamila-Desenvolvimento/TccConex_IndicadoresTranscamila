@@ -41,13 +41,13 @@ def _parse_positive_int(value, field_name: str) -> int:
 
 
 class UnidadeMedidaViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
-    permission_module = 'Compras'
+    permission_module = 'Suprimentos'
     serializer_class = UnidadeMedidaSerializer
     queryset = UnidadeMedida.objects.all()
 
 
 class SetorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
-    permission_module = 'Compras'
+    permission_module = 'Suprimentos'
     serializer_class = SetorSerializer
     queryset = Setor.objects.all()
 
@@ -56,7 +56,7 @@ class SetorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
 
 class ColaboradorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
-    permission_module = 'Compras'
+    permission_module = 'Suprimentos'
     serializer_class = ColaboradorSerializer
     queryset = Colaborador.objects.select_related('setor').all()
 
@@ -100,13 +100,13 @@ class ColaboradorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
 
 class FornecedorViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
-    permission_module = 'Compras'
+    permission_module = 'Suprimentos'
     serializer_class = FornecedorSerializer
     queryset = Fornecedor.objects.all()
 
 
 class ItemEstoqueViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
-    permission_module = 'Compras'
+    permission_module = 'Suprimentos'
     serializer_class = ItemEstoqueSerializer
     queryset = ItemEstoque.objects.all()
 
@@ -124,7 +124,7 @@ class ItemEstoqueViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
 
 class EntradaEstoqueViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):
-    permission_module = 'Compras'
+    permission_module = 'Suprimentos'
     serializer_class = EntradaEstoqueSerializer
     queryset = EntradaEstoque.objects.select_related('item', 'fornecedor').all()
 
@@ -189,7 +189,7 @@ class EntradaEstoqueViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet
 
 
 class SaidaEstoqueViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):
-    permission_module = 'Compras'
+    permission_module = 'Suprimentos'
     serializer_class = SaidaEstoqueSerializer
     queryset = SaidaEstoque.objects.select_related('item', 'setor', 'colaborador').all()
 

@@ -6,7 +6,7 @@ LEGACY_ADMIN_ENVIRONMENT = 'Administração'
 AGENTE_CAMILO_ENVIRONMENT = 'CamiloIA'
 LEGACY_AGENTE_CAMILO_ENVIRONMENTS = frozenset({'Agente Camilo AI', 'Só Camilo IA'})
 
-ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial', AGENTE_CAMILO_ENVIRONMENT})
+ACTIVE_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'Indicadores', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial', 'Suprimentos', AGENTE_CAMILO_ENVIRONMENT})
 
 DEPRECATED_ENVIRONMENTS = frozenset()
 
@@ -74,14 +74,7 @@ ABAS_POR_AMBIENTE = {
         'cadastro-clientes',
         'controle-nds',
     }),
-    'Compras': frozenset({
-        'home',
-        'controle-estoque',
-        'controle-uniformes',
-        'cadastro-consumidores',
-        'cadastro-medidas',
-        'cadastro-fornecedores',
-    }),
+    'Compras': frozenset({'home'}),
     'RH': frozenset({'home', 'movimentacoes', 'quadro-funcionarios', 'documentos'}),
     'SGQ': frozenset({
         'home',
@@ -116,6 +109,14 @@ ABAS_POR_AMBIENTE = {
         'cadastro-produtos',
         'propostas-comerciais',
         'validacao-clientes',
+    }),
+    'Suprimentos': frozenset({
+        'home',
+        'controle-estoque',
+        'controle-uniformes',
+        'cadastro-consumidores',
+        'cadastro-medidas',
+        'cadastro-fornecedores',
     }),
     AGENTE_CAMILO_ENVIRONMENT: frozenset({'home'}),
 }
@@ -166,7 +167,7 @@ FUNCOES_POR_AMBIENTE = {
         'validar-clientes',
         'receber-email-homologacao',
     }),
-    'Compras': frozenset({
+    'Suprimentos': frozenset({
         'cadastrar-uniformes',
         'editar-uniformes',
         'movimentar-uniformes',

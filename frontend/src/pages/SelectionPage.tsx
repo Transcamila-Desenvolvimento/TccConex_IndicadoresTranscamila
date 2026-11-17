@@ -37,6 +37,7 @@ const ENV_META: Record<string, { code: string; color: string; text: string }> = 
   Logística: { code: ENVIRONMENT_CODES.Logística, color: ENV_BADGE_COLOR, text: 'Logística' },
   Frota: { code: ENVIRONMENT_CODES.Frota, color: ENV_BADGE_COLOR, text: 'Frota' },
   Comercial: { code: ENVIRONMENT_CODES.Comercial, color: ENV_BADGE_COLOR, text: 'Módulo Comercial' },
+  Suprimentos: { code: ENVIRONMENT_CODES.Suprimentos, color: ENV_BADGE_COLOR, text: 'Módulo de Suprimentos' },
   [AGENTE_CAMILO_ENVIRONMENT]: { code: ENVIRONMENT_CODES[AGENTE_CAMILO_ENVIRONMENT], color: ENV_BADGE_COLOR, text: 'CamiloIA' },
 };
 

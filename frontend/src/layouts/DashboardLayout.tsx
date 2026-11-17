@@ -72,7 +72,8 @@ const DashboardLayout: React.FC = () => {
   const [indOpenGroup, setIndOpenGroup] = useState<IndNavGroup | null>(null);
   const [isEnvioDocumentosSubmenuOpen, setIsEnvioDocumentosSubmenuOpen] = useState(false);
   const [isCadastrosFaturamentoSubmenuOpen, setIsCadastrosFaturamentoSubmenuOpen] = useState(false);
-  const [isCadastrosComprasSubmenuOpen, setIsCadastrosComprasSubmenuOpen] = useState(false);
+  const [isEstoquesSuprimentosSubmenuOpen, setIsEstoquesSuprimentosSubmenuOpen] = useState(false);
+  const [isCadastrosSuprimentosSubmenuOpen, setIsCadastrosSuprimentosSubmenuOpen] = useState(false);
   const [isQuestionariosFrotaSubmenuOpen, setIsQuestionariosFrotaSubmenuOpen] = useState(false);
   const [isMotoristasFrotaSubmenuOpen, setIsMotoristasFrotaSubmenuOpen] = useState(false);
   const [isDesempenhoFrotaSubmenuOpen, setIsDesempenhoFrotaSubmenuOpen] = useState(false);
@@ -123,8 +124,11 @@ const DashboardLayout: React.FC = () => {
     if (location.pathname.startsWith('/faturamento/cadastros')) {
       setIsCadastrosFaturamentoSubmenuOpen(true);
     }
-    if (location.pathname.startsWith('/compras/cadastros')) {
-      setIsCadastrosComprasSubmenuOpen(true);
+    if (location.pathname.startsWith('/suprimentos/controle-estoque') || location.pathname.startsWith('/suprimentos/controle-uniformes')) {
+      setIsEstoquesSuprimentosSubmenuOpen(true);
+    }
+    if (location.pathname.startsWith('/suprimentos/cadastros')) {
+      setIsCadastrosSuprimentosSubmenuOpen(true);
     }
     if (location.pathname.startsWith('/frota/questionarios')) {
       setIsQuestionariosFrotaSubmenuOpen(true);
@@ -215,7 +219,7 @@ const DashboardLayout: React.FC = () => {
           </svg>
         ),
         action: () => navigate('/'),
-        show: selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'Faturamento'
+        show: selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'Faturamento' && selectedEnvironment !== 'Suprimentos'
       },
       {
         title: "Home Admin",
@@ -446,43 +450,43 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Compras' && canAba('Compras', 'home')
       },
       {
-        title: "Controle de estoque",
-        path: "Compras / Controle de estoque",
+        title: "Controle papelaria",
+        path: "Suprimentos / Estoques / Controle papelaria",
         icon: (
           <svg className="search-item-icon" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m8 4v10M4 7v10l8 4" />
           </svg>
         ),
-        action: () => navigate('/compras/controle-estoque'),
-        show: selectedEnvironment === 'Compras' && canAba('Compras', 'controle-estoque')
+        action: () => navigate('/suprimentos/controle-estoque'),
+        show: selectedEnvironment === 'Suprimentos' && canAba('Suprimentos', 'controle-estoque')
       },
       {
         title: "Controle Uniformes",
-        path: "Compras / Controle Uniformes",
+        path: "Suprimentos / Estoques / Controle Uniformes",
         icon: <UniformeIcon className="search-item-icon" />,
-        action: () => navigate('/compras/controle-uniformes'),
-        show: selectedEnvironment === 'Compras' && canAba('Compras', 'controle-uniformes')
+        action: () => navigate('/suprimentos/controle-uniformes'),
+        show: selectedEnvironment === 'Suprimentos' && canAba('Suprimentos', 'controle-uniformes')
       },
       {
         title: "Cadastro consumidores",
-        path: "Compras / Cadastros / Cadastro consumidores",
+        path: "Suprimentos / Cadastros / Cadastro consumidores",
         icon: <i className="bi bi-people search-item-icon" aria-hidden="true" />,
-        action: () => navigate('/compras/cadastros/consumidores'),
-        show: selectedEnvironment === 'Compras' && canAba('Compras', 'cadastro-consumidores')
+        action: () => navigate('/suprimentos/cadastros/consumidores'),
+        show: selectedEnvironment === 'Suprimentos' && canAba('Suprimentos', 'cadastro-consumidores')
       },
       {
         title: "Cadastro de medidas",
-        path: "Compras / Cadastros / Cadastro de medidas",
+        path: "Suprimentos / Cadastros / Cadastro de medidas",
         icon: <i className="bi bi-rulers search-item-icon" aria-hidden="true" />,
-        action: () => navigate('/compras/cadastros/medidas'),
-        show: selectedEnvironment === 'Compras' && canAba('Compras', 'cadastro-medidas')
+        action: () => navigate('/suprimentos/cadastros/medidas'),
+        show: selectedEnvironment === 'Suprimentos' && canAba('Suprimentos', 'cadastro-medidas')
       },
       {
         title: "Cadastro fornecedores",
-        path: "Compras / Cadastros / Cadastro fornecedores",
+        path: "Suprimentos / Cadastros / Cadastro fornecedores",
         icon: <i className="bi bi-shop search-item-icon" aria-hidden="true" />,
-        action: () => navigate('/compras/cadastros/fornecedores'),
-        show: selectedEnvironment === 'Compras' && canAba('Compras', 'cadastro-fornecedores')
+        action: () => navigate('/suprimentos/cadastros/fornecedores'),
+        show: selectedEnvironment === 'Suprimentos' && canAba('Suprimentos', 'cadastro-fornecedores')
       },
       {
         title: "Home RH",
@@ -729,6 +733,13 @@ const DashboardLayout: React.FC = () => {
         show: selectedEnvironment === 'Comercial' && canAba('Comercial', 'validacao-clientes')
       },
       {
+        title: "Home Suprimentos",
+        path: "Suprimentos / Home",
+        icon: <i className="bi bi-box-seam search-item-icon" aria-hidden="true" />,
+        action: () => navigate('/suprimentos'),
+        show: selectedEnvironment === 'Suprimentos' && canAba('Suprimentos', 'home')
+      },
+      {
         title: "Chat",
         path: "CamiloIA / Chat",
         icon: <i className="bi bi-chat-dots search-item-icon" aria-hidden="true" />,
@@ -776,7 +787,8 @@ const DashboardLayout: React.FC = () => {
   const IND_FROTA_PATHS = ['/indicadores/frota/olho-vivo'];
   const FATURAMENTO_ENVIO_PATHS = ['/faturamento/protocolos'];
   const FATURAMENTO_CADASTROS_PATHS = ['/faturamento/cadastros/clientes'];
-  const COMPRAS_CADASTROS_PATHS = ['/compras/cadastros/consumidores', '/compras/cadastros/medidas', '/compras/cadastros/fornecedores'];
+  const SUPRIMENTOS_ESTOQUES_PATHS = ['/suprimentos/controle-estoque', '/suprimentos/controle-uniformes'];
+  const SUPRIMENTOS_CADASTROS_PATHS = ['/suprimentos/cadastros/consumidores', '/suprimentos/cadastros/medidas', '/suprimentos/cadastros/fornecedores'];
   const FROTA_QUESTIONARIOS_PATHS = ['/frota/questionarios/olho-vivo'];
   const FROTA_MOTORISTAS_PATHS = ['/frota/tccconex-motoristas/usuarios'];
   const FROTA_DESEMPENHO_PATHS = [
@@ -805,12 +817,13 @@ const DashboardLayout: React.FC = () => {
     const path = location.pathname;
 
     if (path === '/') return `${env} / Painel Geral`;
-    if (path.startsWith('/compras/controle-estoque')) return `${env} / Controle de estoque`;
-    if (path.startsWith('/compras/controle-uniformes')) return `${env} / Controle Uniformes`;
-    if (path.startsWith('/compras/cadastros/consumidores')) return `${env} / Cadastros / Cadastro consumidores`;
-    if (path.startsWith('/compras/cadastros/medidas')) return `${env} / Cadastros / Cadastro de medidas`;
-    if (path.startsWith('/compras/cadastros/fornecedores')) return `${env} / Cadastros / Cadastro fornecedores`;
     if (path.startsWith('/compras')) return `${env} / Home Compras`;
+    if (path.startsWith('/suprimentos/controle-estoque')) return `${env} / Estoques / Controle papelaria`;
+    if (path.startsWith('/suprimentos/controle-uniformes')) return `${env} / Estoques / Controle Uniformes`;
+    if (path.startsWith('/suprimentos/cadastros/consumidores')) return `${env} / Cadastros / Cadastro consumidores`;
+    if (path.startsWith('/suprimentos/cadastros/medidas')) return `${env} / Cadastros / Cadastro de medidas`;
+    if (path.startsWith('/suprimentos/cadastros/fornecedores')) return `${env} / Cadastros / Cadastro fornecedores`;
+    if (path.startsWith('/suprimentos')) return `${env} / Home`;
     if (path.startsWith('/rh/documentos')) return `${env} / Matriz`;
     if (path.startsWith('/rh/quadro-funcionarios')) return `${env} / Quadro de Funcionários`;
     if (path.startsWith('/rh/movimentacoes')) return `${env} / Movimentações`;
@@ -902,7 +915,7 @@ const DashboardLayout: React.FC = () => {
         
         <nav className="sidebar-nav">
           {/* General Home/Dashboard — oculto nos ambientes com home própria */}
-          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && selectedEnvironment !== 'Faturamento' && selectedEnvironment !== 'SGQ' && selectedEnvironment !== 'Marketing' && selectedEnvironment !== 'Logística' && selectedEnvironment !== 'Frota' && selectedEnvironment !== 'Comercial' && selectedEnvironment !== AGENTE_CAMILO_ENVIRONMENT && !isAdminEnvironment(selectedEnvironment) && (
+          {selectedEnvironment !== 'Financeiro' && selectedEnvironment !== 'Indicadores' && selectedEnvironment !== 'Compras' && selectedEnvironment !== 'RH' && selectedEnvironment !== 'Faturamento' && selectedEnvironment !== 'SGQ' && selectedEnvironment !== 'Marketing' && selectedEnvironment !== 'Logística' && selectedEnvironment !== 'Frota' && selectedEnvironment !== 'Comercial' && selectedEnvironment !== 'Suprimentos' && selectedEnvironment !== AGENTE_CAMILO_ENVIRONMENT && !isAdminEnvironment(selectedEnvironment) && (
             <Link 
               to="/" 
               className={`nav-btn ${isRouteActive('/') ? 'active' : ''}`} 
@@ -1390,93 +1403,6 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Home Compras</span>
                   </div>
                 </Link>
-                )}
-                {canAba('Compras', 'controle-estoque') && (
-                <Link 
-                  to="/compras/controle-estoque" 
-                  className={`nav-btn ${isRouteActive('/compras/controle-estoque') ? 'active' : ''}`} 
-                  data-tooltip="Controle de estoque"
-                >
-                  <div className="nav-btn-left">
-                    <NavIcon name="box" />
-                    <span className="nav-text">Controle de estoque</span>
-                  </div>
-                </Link>
-                )}
-                {canAba('Compras', 'controle-uniformes') && (
-                <Link
-                  to="/compras/controle-uniformes"
-                  className={`nav-btn ${isRouteActive('/compras/controle-uniformes') ? 'active' : ''}`}
-                  data-tooltip="Controle Uniformes"
-                >
-                  <div className="nav-btn-left">
-                    <UniformeIcon className="nav-icon" />
-                    <span className="nav-text">Controle Uniformes</span>
-                  </div>
-                </Link>
-                )}
-                {(canAba('Compras', 'cadastro-consumidores') || canAba('Compras', 'cadastro-medidas') || canAba('Compras', 'cadastro-fornecedores')) && (
-                <div className={`nav-group-wrapper${isCadastrosComprasSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-compras-cadastros">
-                  <button
-                    type="button"
-                    className={`nav-btn ${isParentNavActive(COMPRAS_CADASTROS_PATHS, isCadastrosComprasSubmenuOpen) ? 'active-parent' : ''}`}
-                    onClick={() => setIsCadastrosComprasSubmenuOpen(!isCadastrosComprasSubmenuOpen)}
-                    data-tooltip="Cadastros"
-                  >
-                    <div className="nav-btn-left">
-                      <NavIcon name="journal-text" />
-                      <span className="nav-text">Cadastros</span>
-                    </div>
-                    <ChevronSubmenu open={isCadastrosComprasSubmenuOpen} />
-                  </button>
-
-                  <div
-                    className="submenu-container"
-                    style={{
-                      display: isSidebarCollapsed ? undefined : 'block',
-                      maxHeight: isSidebarCollapsed ? undefined : (isCadastrosComprasSubmenuOpen ? '200px' : '0px'),
-                      overflow: 'hidden',
-                      transition: 'max-height 0.25s ease',
-                    }}
-                  >
-                    {canAba('Compras', 'cadastro-consumidores') && (
-                    <Link
-                      to="/compras/cadastros/consumidores"
-                      className={`nav-btn sub-nav-btn ${isRouteActive('/compras/cadastros/consumidores') ? 'active' : ''}`}
-                      data-tooltip="Cadastro consumidores"
-                    >
-                      <div className="nav-btn-left">
-                        <NavIcon name="people" sub />
-                        <span className="nav-text">Cadastro consumidores</span>
-                      </div>
-                    </Link>
-                    )}
-                    {canAba('Compras', 'cadastro-medidas') && (
-                    <Link
-                      to="/compras/cadastros/medidas"
-                      className={`nav-btn sub-nav-btn ${isRouteActive('/compras/cadastros/medidas') ? 'active' : ''}`}
-                      data-tooltip="Cadastro de medidas"
-                    >
-                      <div className="nav-btn-left">
-                        <NavIcon name="rulers" sub />
-                        <span className="nav-text">Cadastro de medidas</span>
-                      </div>
-                    </Link>
-                    )}
-                    {canAba('Compras', 'cadastro-fornecedores') && (
-                    <Link
-                      to="/compras/cadastros/fornecedores"
-                      className={`nav-btn sub-nav-btn ${isRouteActive('/compras/cadastros/fornecedores') ? 'active' : ''}`}
-                      data-tooltip="Cadastro fornecedores"
-                    >
-                      <div className="nav-btn-left">
-                        <NavIcon name="shop" sub />
-                        <span className="nav-text">Cadastro fornecedores</span>
-                      </div>
-                    </Link>
-                    )}
-                  </div>
-                </div>
                 )}
               </div>
             )}
@@ -2023,6 +1949,135 @@ const DashboardLayout: React.FC = () => {
                     <span className="nav-text">Personalizar</span>
                   </div>
                 </Link>
+                )}
+              </div>
+            )}
+
+            {selectedEnvironment === 'Suprimentos' && (
+              <div id="sidebar-suprimentos-group" style={{ width: '100%' }}>
+                {canAba('Suprimentos', 'home') && (
+                <Link
+                  to="/suprimentos"
+                  className={`nav-btn ${location.pathname === '/suprimentos' || location.pathname === '/suprimentos/' ? 'active' : ''}`}
+                  data-tooltip="Home Suprimentos"
+                >
+                  <div className="nav-btn-left">
+                    <NavIcon name="house" />
+                    <span className="nav-text">Home Suprimentos</span>
+                  </div>
+                </Link>
+                )}
+                {(canAba('Suprimentos', 'controle-estoque') || canAba('Suprimentos', 'controle-uniformes')) && (
+                <div className={`nav-group-wrapper${isEstoquesSuprimentosSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-suprimentos-estoques">
+                  <button
+                    type="button"
+                    className={`nav-btn ${isParentNavActive(SUPRIMENTOS_ESTOQUES_PATHS, isEstoquesSuprimentosSubmenuOpen) ? 'active-parent' : ''}`}
+                    onClick={() => setIsEstoquesSuprimentosSubmenuOpen(!isEstoquesSuprimentosSubmenuOpen)}
+                    data-tooltip="Estoques"
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="box-seam" />
+                      <span className="nav-text">Estoques</span>
+                    </div>
+                    <ChevronSubmenu open={isEstoquesSuprimentosSubmenuOpen} />
+                  </button>
+                  <div
+                    className="submenu-container"
+                    style={{
+                      display: isSidebarCollapsed ? undefined : 'block',
+                      maxHeight: isSidebarCollapsed ? undefined : (isEstoquesSuprimentosSubmenuOpen ? '160px' : '0px'),
+                      overflow: 'hidden',
+                      transition: 'max-height 0.25s ease',
+                    }}
+                  >
+                    {canAba('Suprimentos', 'controle-estoque') && (
+                    <Link
+                      to="/suprimentos/controle-estoque"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/suprimentos/controle-estoque') ? 'active' : ''}`}
+                      data-tooltip="Controle papelaria"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="box" sub />
+                        <span className="nav-text">Controle papelaria</span>
+                      </div>
+                    </Link>
+                    )}
+                    {canAba('Suprimentos', 'controle-uniformes') && (
+                    <Link
+                      to="/suprimentos/controle-uniformes"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/suprimentos/controle-uniformes') ? 'active' : ''}`}
+                      data-tooltip="Controle Uniformes"
+                    >
+                      <div className="nav-btn-left">
+                        <UniformeIcon className="nav-icon nav-icon-sub" />
+                        <span className="nav-text">Controle Uniformes</span>
+                      </div>
+                    </Link>
+                    )}
+                  </div>
+                </div>
+                )}
+                {(canAba('Suprimentos', 'cadastro-consumidores') || canAba('Suprimentos', 'cadastro-medidas') || canAba('Suprimentos', 'cadastro-fornecedores')) && (
+                <div className={`nav-group-wrapper${isCadastrosSuprimentosSubmenuOpen ? ' submenu-open' : ''}`} id="btn-menu-suprimentos-cadastros">
+                  <button
+                    type="button"
+                    className={`nav-btn ${isParentNavActive(SUPRIMENTOS_CADASTROS_PATHS, isCadastrosSuprimentosSubmenuOpen) ? 'active-parent' : ''}`}
+                    onClick={() => setIsCadastrosSuprimentosSubmenuOpen(!isCadastrosSuprimentosSubmenuOpen)}
+                    data-tooltip="Cadastros"
+                  >
+                    <div className="nav-btn-left">
+                      <NavIcon name="journal-text" />
+                      <span className="nav-text">Cadastros</span>
+                    </div>
+                    <ChevronSubmenu open={isCadastrosSuprimentosSubmenuOpen} />
+                  </button>
+                  <div
+                    className="submenu-container"
+                    style={{
+                      display: isSidebarCollapsed ? undefined : 'block',
+                      maxHeight: isSidebarCollapsed ? undefined : (isCadastrosSuprimentosSubmenuOpen ? '200px' : '0px'),
+                      overflow: 'hidden',
+                      transition: 'max-height 0.25s ease',
+                    }}
+                  >
+                    {canAba('Suprimentos', 'cadastro-consumidores') && (
+                    <Link
+                      to="/suprimentos/cadastros/consumidores"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/suprimentos/cadastros/consumidores') ? 'active' : ''}`}
+                      data-tooltip="Cadastro consumidores"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="people" sub />
+                        <span className="nav-text">Cadastro consumidores</span>
+                      </div>
+                    </Link>
+                    )}
+                    {canAba('Suprimentos', 'cadastro-medidas') && (
+                    <Link
+                      to="/suprimentos/cadastros/medidas"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/suprimentos/cadastros/medidas') ? 'active' : ''}`}
+                      data-tooltip="Cadastro de medidas"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="rulers" sub />
+                        <span className="nav-text">Cadastro de medidas</span>
+                      </div>
+                    </Link>
+                    )}
+                    {canAba('Suprimentos', 'cadastro-fornecedores') && (
+                    <Link
+                      to="/suprimentos/cadastros/fornecedores"
+                      className={`nav-btn sub-nav-btn ${isRouteActive('/suprimentos/cadastros/fornecedores') ? 'active' : ''}`}
+                      data-tooltip="Cadastro fornecedores"
+                    >
+                      <div className="nav-btn-left">
+                        <NavIcon name="shop" sub />
+                        <span className="nav-text">Cadastro fornecedores</span>
+                      </div>
+                    </Link>
+                    )}
+                  </div>
+                </div>
                 )}
               </div>
             )}

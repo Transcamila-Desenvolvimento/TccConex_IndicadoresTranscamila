@@ -30,6 +30,7 @@ const MarketingWorkspace = lazyWithMinDuration(() => import('../workspaces/Marke
 const LogisticaWorkspace = lazyWithMinDuration(() => import('../workspaces/Logistica/LogisticaWorkspace'));
 const FrotaWorkspace = lazyWithMinDuration(() => import('../workspaces/Frota/FrotaWorkspace'));
 const ComercialWorkspace = lazyWithMinDuration(() => import('../workspaces/Comercial/ComercialWorkspace'));
+const SuprimentosWorkspace = lazyWithMinDuration(() => import('../workspaces/Suprimentos/SuprimentosWorkspace'));
 const AgenteCamiloWorkspace = lazyWithMinDuration(() => import('../workspaces/AgenteCamilo/AgenteCamiloWorkspace'));
 const SGQWorkspace = lazyWithMinDuration(() => import('../workspaces/SGQ/SGQWorkspace'));
 const ConsultaCaPage = lazyWithMinDuration(() => import('../pages/ConsultaCaPage'));
@@ -112,6 +113,9 @@ const DashboardIndexRedirect: React.FC = () => {
   }
   if (selectedEnvironment === 'Comercial') {
     return <Navigate to="/comercial" replace />;
+  }
+  if (selectedEnvironment === 'Suprimentos') {
+    return <Navigate to="/suprimentos" replace />;
   }
   if (selectedEnvironment === AGENTE_CAMILO_ENVIRONMENT) {
     return <Navigate to="/agente-camilo" replace />;
@@ -257,6 +261,12 @@ const AppRoutes: React.FC = () => {
           <Route path="comercial/*" element={
             <Suspense fallback={<PageLoader />}>
               <ComercialWorkspace />
+            </Suspense>
+          } />
+
+          <Route path="suprimentos/*" element={
+            <Suspense fallback={<PageLoader />}>
+              <SuprimentosWorkspace />
             </Suspense>
           } />
 

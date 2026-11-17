@@ -38,7 +38,7 @@ def _erro(mensagem: str) -> Response:
 
 
 def _exige_funcao(request, funcao: str, detail: str):
-    if request.user.has_funcao('Compras', funcao):
+    if request.user.has_funcao('Suprimentos', funcao):
         return None
     return Response({'detail': detail}, status=status.HTTP_403_FORBIDDEN)
 
@@ -63,7 +63,7 @@ def _filtrar_periodo(qs, request, campo: str):
 
 
 class UniformeViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
-    permission_module = 'Compras'
+    permission_module = 'Suprimentos'
     serializer_class = UniformeSerializer
     queryset = Uniforme.objects.all()
 
@@ -259,7 +259,7 @@ class UniformeViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
 
 
 class EntregaUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):
-    permission_module = 'Compras'
+    permission_module = 'Suprimentos'
     serializer_class = EntregaUniformeSerializer
     pagination_class = ComprasPagination
 
@@ -430,7 +430,7 @@ class EntregaUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSe
 
 
 class MovimentacaoUniformeViewSet(ModuleScopedViewMixin, viewsets.ReadOnlyModelViewSet):
-    permission_module = 'Compras'
+    permission_module = 'Suprimentos'
     serializer_class = MovimentacaoUniformeSerializer
     pagination_class = ComprasPagination
 

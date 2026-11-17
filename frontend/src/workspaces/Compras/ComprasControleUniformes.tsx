@@ -44,7 +44,7 @@ const precisaRepor = (uniforme: Uniforme) => {
 const ComprasControleUniformes: React.FC = () => {
   const { user } = useAuth();
   const pode = (acao: 'cadastrar-uniformes' | 'editar-uniformes' | 'movimentar-uniformes' | 'entregar-uniformes' | 'devolver-uniformes' | 'exportar-uniformes') =>
-    userHasFuncao(user, 'Compras', acao);
+    userHasFuncao(user, 'Suprimentos', acao);
   const [aba, setAba] = useState<Aba>('estoque');
   const [modal, setModal] = useState<ModalState>(null);
   const [colaboradorAberto, setColaboradorAberto] = useState<ColaboradorUniformes | null>(null);

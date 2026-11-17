@@ -193,7 +193,7 @@ const ComprasControleEstoque: React.FC = () => {
       <header className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '5px', height: '18px', backgroundColor: '#118CC4' }} />
-          <h1 className="view-page-title">Controle de estoque</h1>
+          <h1 className="view-page-title">Controle papelaria</h1>
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>

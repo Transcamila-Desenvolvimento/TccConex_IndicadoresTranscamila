@@ -34,35 +34,35 @@ class CadastrosSimplesCRUDTests(TestCase):
         self.client = APIClient()
         self.user = User.objects.create_user(
             username='compras_crud_tests', password='compras123', role_id='2',
-            environments=['Compras'], filiais={},
+            environments=['Suprimentos'], filiais={},
         )
 
     def test_unidade_medida_crud(self):
         response = self.client.post(
             '/api/compras/unidades/', data={'nome': 'Galão'}, format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 201, response.data)
         unidade_id = response.data['id']
 
-        response = self.client.get('/api/compras/unidades/', **auth_headers(self.user, 'Compras'))
+        response = self.client.get('/api/compras/unidades/', **auth_headers(self.user, 'Suprimentos'))
         self.assertEqual(response.status_code, 200)
         self.assertTrue(any(u['nome'] == 'Galão' for u in response.data))
 
         response = self.client.patch(
             f'/api/compras/unidades/{unidade_id}/', data={'nome': 'Galão 20L'}, format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 200, response.data)
 
-        response = self.client.delete(f'/api/compras/unidades/{unidade_id}/', **auth_headers(self.user, 'Compras'))
+        response = self.client.delete(f'/api/compras/unidades/{unidade_id}/', **auth_headers(self.user, 'Suprimentos'))
         self.assertEqual(response.status_code, 204)
         self.assertFalse(UnidadeMedida.objects.filter(pk=unidade_id).exists())
 
     def test_setor_colaborador_fornecedor_crud(self):
         setor_resp = self.client.post(
             '/api/compras/setores/', data={'nome': 'Manutenção'}, format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(setor_resp.status_code, 201, setor_resp.data)
         setor_id = setor_resp.data['id']
@@ -71,24 +71,24 @@ class CadastrosSimplesCRUDTests(TestCase):
             '/api/compras/colaboradores/',
             data={'nome': 'João da Silva', 'setorId': setor_id},
             format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(str(response.data['setorId']), str(setor_id))
 
         response = self.client.post(
             '/api/compras/fornecedores/', data={'nome': 'Distribuidora ABC'}, format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 201, response.data)
 
-        response = self.client.get(f'/api/compras/colaboradores/?setorId={setor_id}', **auth_headers(self.user, 'Compras'))
+        response = self.client.get(f'/api/compras/colaboradores/?setorId={setor_id}', **auth_headers(self.user, 'Suprimentos'))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
 
     def test_colaborador_cargo_e_cpf_opcionais(self):
         setor = Setor.objects.create(nome='Logística')
-        headers = auth_headers(self.user, 'Compras')
+        headers = auth_headers(self.user, 'Suprimentos')
 
         response = self.client.post(
             '/api/compras/colaboradores/', data={'nome': 'Sem Dados', 'setorId': setor.pk}, format='json', **headers,
@@ -130,7 +130,7 @@ class CadastrosSimplesCRUDTests(TestCase):
         ColaboradorRH.objects.create(cpf='444.444.444-44', matricula='4', nome_completo='CARLOTA JA CADASTRADA')
         Colaborador.objects.create(nome='Carlota', setor=Setor.objects.create(nome='RH'), cpf='44444444444')
 
-        headers = auth_headers(self.user, 'Compras')
+        headers = auth_headers(self.user, 'Suprimentos')
         response = self.client.get('/api/compras/colaboradores/sugestoes-rh/?q=car', **headers)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, [
@@ -144,7 +144,7 @@ class CadastrosSimplesCRUDTests(TestCase):
         Setor.objects.create(nome='Almoxarifado')
         response = self.client.post(
             '/api/compras/setores/', data={'nome': 'Almoxarifado'}, format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 400)
 
@@ -153,7 +153,7 @@ class CadastrosSimplesCRUDTests(TestCase):
             '/api/compras/itens/',
             data={'nome': 'Papel A4', 'unidade': 'Resma', 'qtdAtual': 10, 'qtdMinima': 5},
             format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data['qtdAtual'], 10)
@@ -161,12 +161,12 @@ class CadastrosSimplesCRUDTests(TestCase):
         item_id = response.data['id']
         response = self.client.patch(
             f'/api/compras/itens/{item_id}/', data={'qtdMinima': 8}, format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['qtdMinima'], 8)
 
-        response = self.client.delete(f'/api/compras/itens/{item_id}/', **auth_headers(self.user, 'Compras'))
+        response = self.client.delete(f'/api/compras/itens/{item_id}/', **auth_headers(self.user, 'Suprimentos'))
         self.assertEqual(response.status_code, 204)
 
 
@@ -175,7 +175,7 @@ class RegistrarCompraTests(TestCase):
         self.client = APIClient()
         self.user = User.objects.create_user(
             username='compras_entrada_tests', password='compras123', role_id='2',
-            environments=['Compras'], filiais={},
+            environments=['Suprimentos'], filiais={},
         )
         self.fornecedor = Fornecedor.objects.create(nome='Distribuidora ABC')
         self.item = ItemEstoque.objects.create(nome='Papel A4', unidade='Resma', qtd_atual=5, qtd_minima=2)
@@ -189,7 +189,7 @@ class RegistrarCompraTests(TestCase):
                 'linhas': [{'itemId': self.item.id, 'quantidade': 20, 'valorUnitario': '15.90'}],
             },
             format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 201, response.data)
 
@@ -205,7 +205,7 @@ class RegistrarCompraTests(TestCase):
             '/api/compras/entradas/registrar_compra/',
             data={'data': '2026-07-01', 'linhas': [{'itemId': self.item.id, 'quantidade': 1, 'valorUnitario': '1'}]},
             format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 400)
         self.item.refresh_from_db()
@@ -220,7 +220,7 @@ class RegistrarCompraTests(TestCase):
                 'linhas': [{'itemId': 99999, 'quantidade': 1, 'valorUnitario': '1'}],
             },
             format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(EntradaEstoque.objects.count(), 0)
@@ -231,7 +231,7 @@ class RegistrarSaidaTests(TestCase):
         self.client = APIClient()
         self.user = User.objects.create_user(
             username='compras_saida_tests', password='compras123', role_id='2',
-            environments=['Compras'], filiais={},
+            environments=['Suprimentos'], filiais={},
         )
         self.setor = Setor.objects.create(nome='Administrativo')
         self.colaborador = Colaborador.objects.create(nome='Maria Souza', setor=self.setor)
@@ -247,7 +247,7 @@ class RegistrarSaidaTests(TestCase):
                 'linhas': [{'itemId': self.item.id, 'quantidade': 4}],
             },
             format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 201, response.data)
 
@@ -268,7 +268,7 @@ class RegistrarSaidaTests(TestCase):
                 'linhas': [{'itemId': self.item.id, 'quantidade': 999}],
             },
             format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn('error', response.data)
@@ -282,7 +282,7 @@ class RegistrarSaidaTests(TestCase):
             '/api/compras/saidas/registrar_saida/',
             data={'data': '2026-07-01', 'linhas': [{'itemId': self.item.id, 'quantidade': 1}]},
             format='json',
-            **auth_headers(self.user, 'Compras'),
+            **auth_headers(self.user, 'Suprimentos'),
         )
         self.assertEqual(response.status_code, 400)
 
@@ -299,7 +299,7 @@ class PermissaoModuloComprasTests(TestCase):
         )
 
     def test_usuario_sem_ambiente_compras_recebe_403(self):
-        response = self.client.get('/api/compras/itens/', **auth_headers(self.user_sem_acesso, 'Compras'))
+        response = self.client.get('/api/compras/itens/', **auth_headers(self.user_sem_acesso, 'Suprimentos'))
         self.assertEqual(response.status_code, 403)
 
     def test_sem_header_de_ambiente_correto_recebe_403(self):
@@ -307,7 +307,7 @@ class PermissaoModuloComprasTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_usuario_sem_ambiente_compras_nao_acessa_uniformes(self):
-        response = self.client.get('/api/compras/uniformes/', **auth_headers(self.user_sem_acesso, 'Compras'))
+        response = self.client.get('/api/compras/uniformes/', **auth_headers(self.user_sem_acesso, 'Suprimentos'))
         self.assertEqual(response.status_code, 403)
 
 
@@ -316,13 +316,13 @@ class ControleUniformesTests(TestCase):
         self.client = APIClient()
         self.user = User.objects.create_user(
             username='uniformes_tests', password='teste123', role_id='2',
-            environments=['Compras'], filiais={}, name='Almoxarife Teste',
-            funcoes={'Compras': [
+            environments=['Suprimentos'], filiais={}, name='Almoxarife Teste',
+            funcoes={'Suprimentos': [
                 'cadastrar-uniformes', 'editar-uniformes', 'movimentar-uniformes',
                 'entregar-uniformes', 'devolver-uniformes', 'exportar-uniformes',
             ]},
         )
-        self.headers = auth_headers(self.user, 'Compras')
+        self.headers = auth_headers(self.user, 'Suprimentos')
         setor = Setor.objects.create(nome='Operação')
         self.colaborador = Colaborador.objects.create(
             nome='Pedro Motorista', setor=setor, cargo='Motorista', cpf='12345678901',
@@ -541,10 +541,10 @@ class ControleUniformesTests(TestCase):
 
         restrito = User.objects.create_user(
             username='uniformes_sem_ajuste', password='teste123', role_id='2',
-            environments=['Compras'], filiais={},
-            funcoes={'Compras': ['ocultar-observacoes-ajustes']},
+            environments=['Suprimentos'], filiais={},
+            funcoes={'Suprimentos': ['ocultar-observacoes-ajustes']},
         )
-        headers = auth_headers(restrito, 'Compras')
+        headers = auth_headers(restrito, 'Suprimentos')
         response = self.client.get('/api/compras/uniformes-movimentacoes/', **headers)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data['results'])
@@ -606,9 +606,9 @@ class ControleUniformesTests(TestCase):
     def test_operador_sem_funcao_so_consulta_uniformes(self):
         consulta = User.objects.create_user(
             username='uniformes_so_consulta', password='teste123', role_id='2',
-            environments=['Compras'], filiais={}, funcoes={},
+            environments=['Suprimentos'], filiais={}, funcoes={},
         )
-        headers = auth_headers(consulta, 'Compras')
+        headers = auth_headers(consulta, 'Suprimentos')
         self.assertEqual(self.client.get('/api/compras/uniformes/', **headers).status_code, 200)
         self.assertEqual(
             self.client.post('/api/compras/uniformes/', data={'nome': 'Boné', 'tamanho': 'U'}, format='json', **headers).status_code,
@@ -629,7 +629,7 @@ class ControleUniformesTests(TestCase):
             username='sem_compras_exportar', password='x', role_id='2',
             environments=['Financeiro'], filiais={},
         )
-        resposta = self.client.get('/api/compras/uniformes/exportar/', **auth_headers(outro, 'Compras'))
+        resposta = self.client.get('/api/compras/uniformes/exportar/', **auth_headers(outro, 'Suprimentos'))
         self.assertEqual(resposta.status_code, 403)
 
     def test_por_colaborador_soma_pecas_em_posse(self):
@@ -749,9 +749,9 @@ class ConsultaCaepiTests(TestCase):
         self.client = APIClient()
         self.user = User.objects.create_user(
             username='compras_caepi', password='compras123', role_id='2',
-            environments=['Compras'], filiais={},
+            environments=['Suprimentos'], filiais={},
         )
-        self.headers = auth_headers(self.user, 'Compras')
+        self.headers = auth_headers(self.user, 'Suprimentos')
 
     def test_interpreta_o_certificado_da_pagina_publica(self):
         from apps.compras.caepi import certificado_da_pagina, campos_delta

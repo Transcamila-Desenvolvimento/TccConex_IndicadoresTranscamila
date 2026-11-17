@@ -6,7 +6,7 @@ export const LEGACY_ADMIN_ENVIRONMENT = 'Administração' as const;
 export const AGENTE_CAMILO_ENVIRONMENT = 'CamiloIA' as const;
 const LEGACY_AGENTE_CAMILO_ENVIRONMENTS = ['Agente Camilo AI', 'Só Camilo IA'] as const;
 
-export const ACTIVE_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Indicadores', 'Financeiro', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial', AGENTE_CAMILO_ENVIRONMENT] as const;
+export const ACTIVE_ENVIRONMENTS = [ADMIN_ENVIRONMENT, 'Indicadores', 'Financeiro', 'Compras', 'RH', 'Faturamento', 'SGQ', 'Marketing', 'Logística', 'Frota', 'Comercial', AGENTE_CAMILO_ENVIRONMENT, 'Suprimentos'] as const;
 
 /**
  * Ambientes sem filial obrigatória na sessão (visão consolidada).
@@ -30,6 +30,7 @@ export const ENVIRONMENT_CODES: Record<ActiveEnvironment, string> = {
   Frota: '09',
   Comercial: '10',
   [AGENTE_CAMILO_ENVIRONMENT]: '11',
+  Suprimentos: '12',
 };
 
 export function normalizeEnvironment(env: string): string {
@@ -48,6 +49,7 @@ export const GLOBAL_SESSION_ENVIRONMENTS: readonly string[] = [
   'Marketing',
   'Logística',
   'Comercial',
+  'Suprimentos',
   AGENTE_CAMILO_ENVIRONMENT,
 ];
 

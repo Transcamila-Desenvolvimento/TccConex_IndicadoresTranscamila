@@ -11,7 +11,7 @@ from .constants import ADMIN_ENVIRONMENT, AGENTE_CAMILO_ENVIRONMENT, branches_fo
 
 # Ambientes sem filial obrigatória na sessão (visão consolidada).
 # SGQ e Frota exigem filial na sessão — os registros diferem por unidade.
-GLOBAL_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'RH', 'Compras', 'Faturamento', 'Marketing', 'Logística', 'Comercial', AGENTE_CAMILO_ENVIRONMENT})
+GLOBAL_ENVIRONMENTS = frozenset({ADMIN_ENVIRONMENT, 'Financeiro', 'RH', 'Compras', 'Faturamento', 'Marketing', 'Logística', 'Comercial', 'Suprimentos', AGENTE_CAMILO_ENVIRONMENT})
 
 # Nomes de filial no banco podem ser abreviados (ex.: faturamento usa "Ibiporã").
 # Relatórios financeiros armazenam códigos ERP (01, 03, 05…) e Aging usa origem (1, 5, 9…).

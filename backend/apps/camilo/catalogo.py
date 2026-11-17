@@ -20,7 +20,7 @@ PARTES = (
     {'ambiente': 'Financeiro', 'parte': 'faturamento', 'rotulo': 'Faturamento'},
     {'ambiente': 'Faturamento', 'parte': 'envio-nf-cliente', 'rotulo': 'Envio NF Cliente'},
     {'ambiente': 'Faturamento', 'parte': 'cadastro-clientes', 'rotulo': 'Cadastro cliente'},
-    {'ambiente': 'Compras', 'parte': 'controle-estoque', 'rotulo': 'Controle de estoque'},
+    {'ambiente': 'Suprimentos', 'parte': 'controle-estoque', 'rotulo': 'Controle papelaria'},
     {'ambiente': 'RH', 'parte': 'movimentacoes', 'rotulo': 'Movimentações'},
     {'ambiente': 'RH', 'parte': 'documentos', 'rotulo': 'Matriz de conhecimento'},
     {'ambiente': 'SGQ', 'parte': 'pesquisa-satisfacao', 'rotulo': 'Pesquisa de satisfação'},

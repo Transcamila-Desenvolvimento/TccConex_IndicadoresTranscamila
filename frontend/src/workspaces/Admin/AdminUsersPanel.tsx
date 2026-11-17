@@ -75,6 +75,7 @@ const MODULE_ACCESS_GROUPS = [
   { module: 'Logística', label: 'Logística' },
   { module: 'Frota', label: 'Frota' },
   { module: 'Comercial', label: 'Comercial' },
+  { module: 'Suprimentos', label: 'Suprimentos' },
   { module: 'CamiloIA', label: 'CamiloIA' },
 ] as const;
 
