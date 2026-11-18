@@ -3860,7 +3860,7 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 }
 
 .sgq-aud-col-titulo {
-  width: 24%;
+  width: 18%;
 }
 
 .sgq-aud-table {
@@ -4149,7 +4149,76 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 
 .sgq-aud-registros {
   width: 100%;
-  table-layout: auto;
+  table-layout: fixed;
+}
+
+.sgq-aud-registros col.sgq-aud-col-check { width: 4%; }
+.sgq-aud-registros col.sgq-aud-col-categoria { width: 11%; }
+.sgq-aud-registros col.sgq-aud-col-filial { width: 11%; }
+.sgq-aud-registros col.sgq-aud-col-codigo { width: 8%; }
+.sgq-aud-registros col.sgq-aud-col-titulo { width: 14%; }
+.sgq-aud-registros col.sgq-aud-col-data { width: 11%; }
+.sgq-aud-registros col.sgq-aud-col-normas { width: 8%; }
+.sgq-aud-registros col.sgq-aud-col-lider { width: 9%; }
+.sgq-aud-registros col.sgq-aud-col-status { width: 13%; }
+
+.sgq-lista-card .reports-table.sgq-aud-registros th,
+.sgq-lista-card .reports-table.sgq-aud-registros thead th,
+.sgq-lista-card .reports-table.sgq-aud-registros td {
+  padding: 8px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sgq-lista-card .reports-table.sgq-aud-registros th.checkbox-cell,
+.sgq-lista-card .reports-table.sgq-aud-registros td.checkbox-cell {
+  width: 36px;
+  padding: 8px 4px 8px 8px;
+}
+
+.sgq-lista-card .reports-table.sgq-aud-registros td:nth-child(6),
+.sgq-lista-card .reports-table.sgq-aud-registros td:nth-child(7) {
+  font-size: 12px;
+}
+
+.sgq-aud-registros .sgq-aud-sort {
+  max-width: 100%;
+}
+
+.sgq-aud-registros .sgq-lista-categoria {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sgq-aud-registros .sgq-aud-normas,
+.sgq-aud-registros .sgq-pessoa-resumo {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.sgq-aud-registros .sgq-pessoa-resumo {
+  display: flex;
+  width: 100%;
+}
+
+.sgq-aud-registros .sgq-aud-chip,
+.sgq-aud-registros .sgq-pessoa-nome {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.sgq-aud-registros .sgq-aud-chip {
+  flex: 0 1 auto;
+}
+
+.sgq-aud-registros .sgq-aud-status {
+  max-width: 100%;
+  box-sizing: border-box;
+  gap: 4px;
+  padding: 3px 7px;
+  font-size: 11.5px;
 }
 
 
@@ -4204,14 +4273,27 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   white-space: nowrap;
 }
 
-.sgq-aud-registros td.sgq-lista-texto-longo,
-.sgq-aud-registros td.sgq-lista-texto-longo .sgq-lista-nome {
-  max-width: 320px;
+.sgq-aud-registros td.sgq-lista-texto-longo {
   white-space: normal;
-  overflow: visible;
+}
+
+.sgq-aud-registros td.sgq-lista-texto-longo .sgq-lista-nome {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: normal;
   text-overflow: unset;
-  overflow-wrap: break-word;
+  text-align: left;
+}
+
+.sgq-aud-registros td.sgq-lista-texto-longo .sgq-lista-nome span {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
   line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .sgq-lista-pagina {
@@ -4420,6 +4502,7 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .sgq-import-modelo {
@@ -4596,7 +4679,7 @@ fieldset:disabled .sgq-import-arquivo-limpar {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 16px;
-  padding: 14px 16px;
+  padding: 16px 28px;
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
 }
@@ -4625,9 +4708,9 @@ fieldset:disabled .sgq-import-arquivo-limpar {
 .sgq-aud-ficha-grade {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px 20px;
+  gap: 14px 24px;
   margin: 0;
-  padding: 14px 16px;
+  padding: 16px 28px 18px;
 }
 
 .sgq-aud-ficha-largo {
@@ -4654,7 +4737,7 @@ fieldset:disabled .sgq-import-arquivo-limpar {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 6px 16px;
-  padding: 10px 16px;
+  padding: 12px 28px;
   border-top: 1px solid #e2e8f0;
   color: #64748b;
   font-size: 12px;
@@ -4662,6 +4745,8 @@ fieldset:disabled .sgq-import-arquivo-limpar {
 
 .sgq-aud-visao-texto {
   white-space: pre-wrap;
+  overflow-wrap: break-word;
+  padding-right: 4px;
 }
 
 .sgq-aud-resultados {
@@ -13832,6 +13917,7 @@ button.mkt-drive-browser-row:hover {
   padding: 10px 14px;
   line-height: 1.4;
 }
+
 
 .billing-etl-bar {
   display: flex;

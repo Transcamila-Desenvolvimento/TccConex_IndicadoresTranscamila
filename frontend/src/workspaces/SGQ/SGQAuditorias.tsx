@@ -854,7 +854,7 @@ const SGQAuditorias: React.FC = () => {
                         <td><span className="sgq-aud-codigo">{auditoria.codigo}</span></td>
                         <td className="sgq-lista-texto-longo" title={auditoria.titulo}>
                           <button type="button" className="sgq-lista-nome" onClick={() => abrirEdicao(auditoria)}>
-                            {auditoria.titulo}
+                            <span>{auditoria.titulo}</span>
                           </button>
                         </td>
                         <td title={formatarData(auditoria.dataInicio)}>{formatarData(auditoria.dataInicio)}</td>
