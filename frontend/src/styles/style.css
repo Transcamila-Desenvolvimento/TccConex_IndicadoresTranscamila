@@ -5417,36 +5417,99 @@ fieldset:disabled .sgq-import-arquivo-limpar {
   line-height: 1.4;
 }
 
+.sgq-aud-plano-grade {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
 .sgq-aud-plano-cabecalho,
 .sgq-aud-plano-item {
   display: grid;
-  grid-template-columns: 148px minmax(180px, 220px) minmax(0, 1fr) 32px;
+  grid-template-columns: 28px minmax(146px, 158px) minmax(210px, 236px) minmax(0, 1fr) 32px;
   gap: 8px;
   align-items: center;
+  padding: 8px 10px;
 }
 
 .sgq-aud-plano-cabecalho {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
   color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.sgq-aud-plano-cabecalho span:nth-child(2) {
-  grid-column: 2;
+.sgq-aud-plano-item + .sgq-aud-plano-item {
+  border-top: 1px solid #f1f5f9;
+}
+
+.sgq-aud-plano-indice {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.sgq-aud-plano-item .form-input {
+  margin-top: 0;
+  height: 36px;
+  padding: 6px 8px;
+}
+
+.sgq-aud-plano-data .form-input,
+.sgq-aud-plano-horario .form-input {
+  font-variant-numeric: tabular-nums;
 }
 
 .sgq-aud-plano-horario {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 6px;
+  gap: 4px;
   align-items: center;
-  color: #475569;
-  font-size: 13px;
+  height: 36px;
+  padding: 0 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
 }
 
-.sgq-aud-plano-item > label,
-.sgq-aud-plano-horario label {
+.sgq-aud-plano-horario:focus-within {
+  border-color: #0f85c1;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(15, 133, 193, 0.12);
+}
+
+.sgq-aud-plano-horario .form-input {
+  height: 32px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  box-shadow: none;
+}
+
+.sgq-aud-plano-horario .form-input:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.sgq-aud-form .sgq-aud-plano-item > label,
+.sgq-aud-form .sgq-aud-plano-horario label,
+.sgq-aud-plano-acao {
+  position: relative;
+  gap: 0;
   min-width: 0;
+}
+
+.sgq-aud-plano-acao {
+  display: flex;
+  justify-content: center;
 }
 
 .sgq-aud-plano-rotulo {
@@ -5541,18 +5604,26 @@ fieldset:disabled .sgq-import-arquivo-limpar {
   margin-top: 4px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 860px) {
   .sgq-aud-plano-cabecalho {
     display: none;
   }
 
   .sgq-aud-plano-item {
-    grid-template-columns: minmax(0, 1fr) 32px;
+    grid-template-columns: 24px minmax(0, 1fr) 36px;
+    grid-template-areas:
+      "indice data acao"
+      "indice horario horario"
+      "indice atividade atividade"
+      "erro erro erro";
   }
 
-  .sgq-aud-plano-horario {
-    grid-column: 1 / -1;
-  }
+  .sgq-aud-plano-indice { grid-area: indice; }
+  .sgq-aud-plano-data { grid-area: data; }
+  .sgq-aud-plano-horario { grid-area: horario; }
+  .sgq-aud-plano-atividade { grid-area: atividade; }
+  .sgq-aud-plano-acao { grid-area: acao; }
+  .sgq-aud-plano-rotulo { grid-area: erro; }
 }
 
 .sgq-normas-picker {

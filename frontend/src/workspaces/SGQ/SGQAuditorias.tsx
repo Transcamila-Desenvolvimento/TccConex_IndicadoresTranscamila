@@ -274,6 +274,53 @@ function horaAgenda(valor: string) {
   return valor.slice(0, 5).replace(':', 'h');
 }
 
+function minutosDoHorario(valor: string): number | null {
+  const match = /^(\d{2}):(\d{2})/.exec(valor);
+  if (!match) return null;
+  const horas = Number(match[1]);
+  const minutos = Number(match[2]);
+  if (horas > 23 || minutos > 59) return null;
+  return horas * 60 + minutos;
+}
+
+function horarioDeMinutos(total: number): string {
+  const minutos = ((total % 1440) + 1440) % 1440;
+  return `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`;
+}
+
+function somarDia(data: string, dias: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(data);
+  if (!match || dias === 0) return data;
+  const base = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  base.setDate(base.getDate() + dias);
+  const mes = String(base.getMonth() + 1).padStart(2, '0');
+  const dia = String(base.getDate()).padStart(2, '0');
+  return `${base.getFullYear()}-${mes}-${dia}`;
+}
+
+function proximaAtividade(
+  planejamento: SgqAuditoriaPlanejamento[],
+  dataInicio: string,
+): SgqAuditoriaPlanejamento {
+  const padrao = (data: string): SgqAuditoriaPlanejamento => ({
+    data, horaInicio: '08:00', horaFim: '09:00', atividade: '',
+  });
+  const ultimo = planejamento[planejamento.length - 1];
+  if (!ultimo?.data) return padrao(dataInicio);
+  const fim = minutosDoHorario(ultimo.horaFim);
+  const inicio = minutosDoHorario(ultimo.horaInicio);
+  const base = fim != null && (inicio == null || fim > inicio) ? fim : inicio;
+  if (base == null || base + 60 >= 1440) {
+    return padrao(base != null && base + 60 >= 1440 ? somarDia(ultimo.data, 1) : ultimo.data);
+  }
+  return {
+    data: ultimo.data,
+    horaInicio: horarioDeMinutos(base),
+    horaFim: horarioDeMinutos(base + 60),
+    atividade: '',
+  };
+}
+
 function mesmoNome(a: string, b: string) {
   return a.trim().toLocaleLowerCase('pt-BR') === b.trim().toLocaleLowerCase('pt-BR');
 }
@@ -489,7 +536,7 @@ const SGQAuditorias: React.FC = () => {
       ...atual,
       planejamento: [
         ...atual.planejamento,
-        { data: atual.dataInicio, horaInicio: '08:00', horaFim: '08:30', atividade: '' },
+        proximaAtividade(atual.planejamento, atual.dataInicio),
       ],
     }));
   };
@@ -1288,12 +1335,14 @@ const SGQAuditorias: React.FC = () => {
                     aria-hidden="true"
                   />
                   {form.planejamento.length > 0 && (
+                    <div className="sgq-aud-plano-grade">
                     <div className="sgq-aud-plano-cabecalho" aria-hidden="true">
+                      <span />
                       <span>Data</span>
                       <span>Horário</span>
                       <span>Atividade</span>
+                      <span />
                     </div>
-                  )}
                   {form.planejamento.map((item, indice) => {
                     const foraDoPeriodo = Boolean(
                       item.data && periodoValido && (item.data < form.dataInicio || item.data > form.dataTermino),
@@ -1301,7 +1350,8 @@ const SGQAuditorias: React.FC = () => {
                     const horarioInvalido = Boolean(item.horaInicio && item.horaFim && item.horaFim <= item.horaInicio);
                     return (
                       <div key={indice} className="sgq-aud-plano-item">
-                        <label>
+                        <span className="sgq-aud-plano-indice">{indice + 1}</span>
+                        <label className="sgq-aud-plano-data">
                           <span className="sgq-sr-only">Data</span>
                           <input
                             className="form-input"
@@ -1339,7 +1389,7 @@ const SGQAuditorias: React.FC = () => {
                             />
                           </label>
                         </div>
-                        <label>
+                        <label className="sgq-aud-plano-atividade">
                           <span className="sgq-sr-only">Atividade</span>
                           <input
                             className="form-input"
@@ -1350,19 +1400,21 @@ const SGQAuditorias: React.FC = () => {
                             onChange={(e) => alterarPlanejamento(indice, { atividade: e.target.value })}
                           />
                         </label>
-                        {canManage && (
-                          <button
-                            type="button"
-                            className="btn-icon"
-                            aria-label={`Remover ${item.atividade.trim() || 'atividade'}`}
-                            onClick={() => setForm({
-                              ...form,
-                              planejamento: form.planejamento.filter((_, i) => i !== indice),
-                            })}
-                          >
-                            <i className="bi bi-trash3" aria-hidden="true" />
-                          </button>
-                        )}
+                        <span className="sgq-aud-plano-acao">
+                          {canManage && (
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              aria-label={`Remover ${item.atividade.trim() || 'atividade'}`}
+                              onClick={() => setForm({
+                                ...form,
+                                planejamento: form.planejamento.filter((_, i) => i !== indice),
+                              })}
+                            >
+                              <i className="bi bi-trash3" aria-hidden="true" />
+                            </button>
+                          )}
+                        </span>
                         {(foraDoPeriodo || horarioInvalido) && (
                           <p className="sgq-aud-plano-rotulo is-erro">
                             {foraDoPeriodo
@@ -1373,6 +1425,8 @@ const SGQAuditorias: React.FC = () => {
                       </div>
                     );
                   })}
+                    </div>
+                  )}
                   {canManage && (
                     <button
                       type="button"
