@@ -1,6 +1,6 @@
 """Envio do cronograma da auditoria, em um convite próprio da agenda."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
@@ -162,40 +162,25 @@ def _parte_agenda(linhas: list[str], filename: str) -> MIMEBase:
     return parte
 
 
-def _evento_tema(auditoria, carimbo: str) -> list[str] | None:
-    """Compromisso do dia, com o nome da auditoria, para o cartão não pegar um horário qualquer."""
-    try:
-        inicio = auditoria.data_inicio
-        termino = auditoria.data_termino
-        dia_inicio = inicio if isinstance(inicio, date) else date.fromisoformat(str(inicio)[:10])
-        dia_fim = termino if isinstance(termino, date) else date.fromisoformat(str(termino)[:10])
-    except (TypeError, ValueError):
+def _anexo_agenda(auditoria) -> MIMEBase | None:
+    """Um arquivo só. O cartão leva o nome da auditoria; cada horário entra separado."""
+    eventos = sorted(_eventos_agenda(auditoria), key=lambda evento: evento['inicio'])
+    if not eventos:
         return None
-    if dia_fim < dia_inicio:
-        return None
-    return [
+    carimbo = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    linhas = [
         'BEGIN:VEVENT',
         f'UID:{auditoria.pk}-auditoria@tccconex.local',
         f'DTSTAMP:{carimbo}',
-        f'DTSTART;VALUE=DATE:{dia_inicio:%Y%m%d}',
-        f'DTEND;VALUE=DATE:{(dia_fim + timedelta(days=1)):%Y%m%d}',
+        f'DTSTART:{eventos[0]["inicio"]}',
+        f'DTEND:{eventos[-1]["fim"]}',
         f'SUMMARY:{_ics_texto(_nome_auditoria(auditoria))}',
         f'DESCRIPTION:{_ics_texto(auditoria.codigo)}',
         'TRANSP:TRANSPARENT',
         'END:VEVENT',
     ]
-
-
-def _anexos_agenda(auditoria) -> list[MIMEBase]:
-    """O primeiro arquivo nomeia o cartão. Cada horário seguinte entra separado na agenda."""
-    eventos = sorted(_eventos_agenda(auditoria), key=lambda evento: evento['inicio'])
-    carimbo = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    anexos = []
-    tema = _evento_tema(auditoria, carimbo)
-    if tema:
-        anexos.append(_parte_agenda(tema, f'cronograma-{auditoria.codigo}.ics'))
     for indice, evento in enumerate(eventos):
-        bloco = [
+        linhas.extend([
             'BEGIN:VEVENT',
             f'UID:{auditoria.pk}-{indice}@tccconex.local',
             f'DTSTAMP:{carimbo}',
@@ -209,9 +194,8 @@ def _anexos_agenda(auditoria) -> list[MIMEBase]:
             'TRIGGER:-PT30M',
             'END:VALARM',
             'END:VEVENT',
-        ]
-        anexos.append(_parte_agenda(bloco, f'cronograma-{auditoria.codigo}-{indice + 1:02d}.ics'))
-    return anexos
+        ])
+    return _parte_agenda(linhas, f'cronograma-{auditoria.codigo}.ics')
 
 
 def _texto_simples(context) -> str:
@@ -233,7 +217,7 @@ def _texto_simples(context) -> str:
         linhas.append(f"{item['data']} {item['semana']} {item['horario']} {item['atividade']}")
     linhas.extend([
         '',
-        'O cartão mostra o nome da auditoria. Cada horário segue neste e-mail, em um arquivo próprio, e entra separado na agenda.',
+        'O convite mostra o nome da auditoria. Ao adicionar, cada horário entra separado na agenda.',
     ])
     linhas.extend([
         '',
@@ -295,6 +279,7 @@ def send_cronograma_auditoria_email(user, auditoria, *, to_emails, cc_emails=Non
         imagem.add_header('Content-ID', f'<{LOGO_CID}>')
         imagem.add_header('Content-Disposition', 'inline', filename=f'logo.{subtype if subtype != "jpeg" else "jpg"}')
         email.attach(imagem)
-    for anexo in _anexos_agenda(auditoria):
+    anexo = _anexo_agenda(auditoria)
+    if anexo is not None:
         email.attach(anexo)
     email.send(fail_silently=False)
