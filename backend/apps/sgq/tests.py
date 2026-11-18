@@ -1641,12 +1641,19 @@ class AuditoriaSGQTests(APITestCase):
             parte for parte in message_from_bytes(mensagem.message().as_bytes()).walk()
             if (parte.get_filename() or '').endswith('.ics')
         ]
-        self.assertEqual(len(anexos), 2)
+        self.assertEqual(len(anexos), 3)
+        tema = anexos[0].get_payload(decode=True).decode('utf-8').replace('\r\n ', '').replace('\n ', '')
+        self.assertEqual(anexos[0].get_filename(), 'cronograma-26-00001.ics')
+        self.assertEqual(tema.count('BEGIN:VEVENT'), 1)
+        self.assertIn('SUMMARY:Auditoria Interna SASSMAQ 3ª Edição 2026', tema)
+        self.assertIn('DTSTART;VALUE=DATE:20260307', tema)
+        self.assertIn('DTEND;VALUE=DATE:20260310', tema)
+        self.assertNotIn('TRIGGER:', tema)
         esperados = (
             ('DTSTART:20260307T080000', 'DTEND:20260307T083000', 'SUMMARY:Reunião de Abertura - Auditoria interna Ibiporã (Matriz)'),
             ('DTSTART:20260307T090000', 'DTEND:20260307T100000', 'SUMMARY:Entrevista na operação - Auditoria interna Ibiporã (Matriz)'),
         )
-        for parte, (inicio, fim, titulo) in zip(anexos, esperados):
+        for parte, (inicio, fim, titulo) in zip(anexos[1:], esperados):
             ics = parte.get_payload(decode=True).decode('utf-8').replace('\r\n ', '').replace('\n ', '')
             self.assertIn('METHOD:PUBLISH', ics)
             self.assertNotIn('METHOD:REQUEST', ics)

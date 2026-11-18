@@ -1,6 +1,6 @@
 """Envio do cronograma da auditoria, em um convite próprio da agenda."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
@@ -141,18 +141,61 @@ def _titulo_compromisso(auditoria, atividade: str) -> str:
     return atividade
 
 
+def _nome_auditoria(auditoria) -> str:
+    return str(auditoria.titulo or '').strip() or str(auditoria.codigo or '').strip()
+
+
+def _parte_agenda(linhas: list[str], filename: str) -> MIMEBase:
+    bloco = [
+        'BEGIN:VCALENDAR',
+        'PRODID:-//TccConex//SGQ//PT',
+        'VERSION:2.0',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        *linhas,
+        'END:VCALENDAR',
+    ]
+    parte = MIMEBase('text', 'calendar', charset='UTF-8', method='PUBLISH')
+    parte.set_payload(('\r\n'.join(_ics_linha(linha) for linha in bloco) + '\r\n').encode('utf-8'))
+    encoders.encode_base64(parte)
+    parte.add_header('Content-Disposition', 'attachment', filename=filename)
+    return parte
+
+
+def _evento_tema(auditoria, carimbo: str) -> list[str] | None:
+    """Compromisso do dia, com o nome da auditoria, para o cartão não pegar um horário qualquer."""
+    try:
+        inicio = auditoria.data_inicio
+        termino = auditoria.data_termino
+        dia_inicio = inicio if isinstance(inicio, date) else date.fromisoformat(str(inicio)[:10])
+        dia_fim = termino if isinstance(termino, date) else date.fromisoformat(str(termino)[:10])
+    except (TypeError, ValueError):
+        return None
+    if dia_fim < dia_inicio:
+        return None
+    return [
+        'BEGIN:VEVENT',
+        f'UID:{auditoria.pk}-auditoria@tccconex.local',
+        f'DTSTAMP:{carimbo}',
+        f'DTSTART;VALUE=DATE:{dia_inicio:%Y%m%d}',
+        f'DTEND;VALUE=DATE:{(dia_fim + timedelta(days=1)):%Y%m%d}',
+        f'SUMMARY:{_ics_texto(_nome_auditoria(auditoria))}',
+        f'DESCRIPTION:{_ics_texto(auditoria.codigo)}',
+        'TRANSP:TRANSPARENT',
+        'END:VEVENT',
+    ]
+
+
 def _anexos_agenda(auditoria) -> list[MIMEBase]:
-    """Um arquivo por horário. O cartão do Gmail só abre um compromisso por arquivo."""
+    """O primeiro arquivo nomeia o cartão. Cada horário seguinte entra separado na agenda."""
     eventos = sorted(_eventos_agenda(auditoria), key=lambda evento: evento['inicio'])
     carimbo = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     anexos = []
+    tema = _evento_tema(auditoria, carimbo)
+    if tema:
+        anexos.append(_parte_agenda(tema, f'cronograma-{auditoria.codigo}.ics'))
     for indice, evento in enumerate(eventos):
         bloco = [
-            'BEGIN:VCALENDAR',
-            'PRODID:-//TccConex//SGQ//PT',
-            'VERSION:2.0',
-            'CALSCALE:GREGORIAN',
-            'METHOD:PUBLISH',
             'BEGIN:VEVENT',
             f'UID:{auditoria.pk}-{indice}@tccconex.local',
             f'DTSTAMP:{carimbo}',
@@ -166,17 +209,8 @@ def _anexos_agenda(auditoria) -> list[MIMEBase]:
             'TRIGGER:-PT30M',
             'END:VALARM',
             'END:VEVENT',
-            'END:VCALENDAR',
         ]
-        parte = MIMEBase('text', 'calendar', charset='UTF-8', method='PUBLISH')
-        parte.set_payload(('\r\n'.join(_ics_linha(linha) for linha in bloco) + '\r\n').encode('utf-8'))
-        encoders.encode_base64(parte)
-        parte.add_header(
-            'Content-Disposition',
-            'attachment',
-            filename=f'cronograma-{auditoria.codigo}-{indice + 1:02d}.ics',
-        )
-        anexos.append(parte)
+        anexos.append(_parte_agenda(bloco, f'cronograma-{auditoria.codigo}-{indice + 1:02d}.ics'))
     return anexos
 
 
@@ -199,7 +233,7 @@ def _texto_simples(context) -> str:
         linhas.append(f"{item['data']} {item['semana']} {item['horario']} {item['atividade']}")
     linhas.extend([
         '',
-        'Cada horário segue neste e-mail, em um arquivo próprio, para o cartão da agenda abrir o compromisso.',
+        'O cartão mostra o nome da auditoria. Cada horário segue neste e-mail, em um arquivo próprio, e entra separado na agenda.',
     ])
     linhas.extend([
         '',
