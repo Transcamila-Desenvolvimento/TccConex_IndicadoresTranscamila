@@ -141,18 +141,21 @@ def _titulo_compromisso(auditoria, atividade: str) -> str:
     return atividade
 
 
-def _anexos_agenda(auditoria) -> list[MIMEBase]:
-    """Um arquivo por horário. O Gmail não abre um arquivo com vários compromissos."""
+def _anexo_agenda(auditoria) -> MIMEBase | None:
+    """Um arquivo com todos os horários. A agenda inclui cada compromisso no seu horário."""
     eventos = sorted(_eventos_agenda(auditoria), key=lambda evento: evento['inicio'])
+    if not eventos:
+        return None
     carimbo = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    anexos = []
+    linhas = [
+        'BEGIN:VCALENDAR',
+        'PRODID:-//TccConex//SGQ//PT',
+        'VERSION:2.0',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+    ]
     for indice, evento in enumerate(eventos):
         bloco = [
-            'BEGIN:VCALENDAR',
-            'PRODID:-//TccConex//SGQ//PT',
-            'VERSION:2.0',
-            'CALSCALE:GREGORIAN',
-            'METHOD:PUBLISH',
             'BEGIN:VEVENT',
             f'UID:{auditoria.pk}-{indice}@tccconex.local',
             f'DTSTAMP:{carimbo}',
@@ -166,18 +169,18 @@ def _anexos_agenda(auditoria) -> list[MIMEBase]:
             'TRIGGER:-PT30M',
             'END:VALARM',
             'END:VEVENT',
-            'END:VCALENDAR',
         ]
-        parte = MIMEBase('text', 'calendar', charset='UTF-8', method='PUBLISH')
-        parte.set_payload(('\r\n'.join(_ics_linha(linha) for linha in bloco) + '\r\n').encode('utf-8'))
-        encoders.encode_base64(parte)
-        parte.add_header(
-            'Content-Disposition',
-            'attachment',
-            filename=f'cronograma-{auditoria.codigo}-{indice + 1:02d}.ics',
-        )
-        anexos.append(parte)
-    return anexos
+        linhas.extend(_ics_linha(linha) for linha in bloco)
+    linhas.append('END:VCALENDAR')
+    parte = MIMEBase('text', 'calendar', charset='UTF-8', method='PUBLISH')
+    parte.set_payload(('\r\n'.join(linhas) + '\r\n').encode('utf-8'))
+    encoders.encode_base64(parte)
+    parte.add_header(
+        'Content-Disposition',
+        'attachment',
+        filename=f'cronograma-{auditoria.codigo}.ics',
+    )
+    return parte
 
 
 def _texto_simples(context) -> str:
@@ -199,7 +202,7 @@ def _texto_simples(context) -> str:
         linhas.append(f"{item['data']} {item['semana']} {item['horario']} {item['atividade']}")
     linhas.extend([
         '',
-        'Cada horário segue neste e-mail, em um arquivo próprio, para a agenda abrir o compromisso.',
+        f'O anexo cronograma-{context["codigo"]}.ics traz todos os horários. Cada um entra separado na agenda.',
     ])
     linhas.extend([
         '',
@@ -261,6 +264,7 @@ def send_cronograma_auditoria_email(user, auditoria, *, to_emails, cc_emails=Non
         imagem.add_header('Content-ID', f'<{LOGO_CID}>')
         imagem.add_header('Content-Disposition', 'inline', filename=f'logo.{subtype if subtype != "jpeg" else "jpg"}')
         email.attach(imagem)
-    for anexo in _anexos_agenda(auditoria):
+    anexo = _anexo_agenda(auditoria)
+    if anexo is not None:
         email.attach(anexo)
     email.send(fail_silently=False)
