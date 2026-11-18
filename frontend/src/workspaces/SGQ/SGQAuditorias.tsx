@@ -734,7 +734,7 @@ const SGQAuditorias: React.FC = () => {
                 >
                   <span className="reports-dropdown-item-left">
                     <i className="bi bi-envelope" aria-hidden="true" />
-                    Enviar cronograma
+                    Enviar convite
                   </span>
                 </span>
               )}
@@ -1427,6 +1427,7 @@ const SGQAuditorias: React.FC = () => {
                   })}
                     </div>
                   )}
+                  <div className="sgq-aud-plano-acoes">
                   {canManage && (
                     <button
                       type="button"
@@ -1438,6 +1439,25 @@ const SGQAuditorias: React.FC = () => {
                       Adicionar atividade
                     </button>
                   )}
+                  {editando && (
+                    <button
+                      type="button"
+                      className="sgq-aud-plano-convite"
+                      disabled={(editando.planejamento?.length ?? 0) === 0 || JSON.stringify(editando.planejamento ?? []) !== JSON.stringify(form.planejamento)}
+                      title={
+                        (editando.planejamento?.length ?? 0) === 0
+                          ? 'Inclua e salve o planejamento antes de enviar o convite.'
+                          : JSON.stringify(editando.planejamento ?? []) !== JSON.stringify(form.planejamento)
+                            ? 'Salve a auditoria para enviar o convite deste cronograma.'
+                            : 'Enviar o cronograma como convite de agenda'
+                      }
+                      onClick={() => setCronogramaDe(editando)}
+                    >
+                      <i className="bi bi-calendar-event" aria-hidden="true" />
+                      Enviar convite
+                    </button>
+                  )}
+                  </div>
                   {!periodoValido && (
                     <small className="sgq-aud-plano-ajuda">Informe a data de início e a de término para incluir o planejamento.</small>
                   )}

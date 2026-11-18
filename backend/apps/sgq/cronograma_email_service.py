@@ -1,9 +1,11 @@
 """Envio do cronograma da auditoria, em um convite próprio da agenda."""
 
-from datetime import date
+from datetime import date, datetime, timezone
+from email import encoders
+from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
 
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
 from apps.comercial.proposta_email_service import LOGO_CID, _logo_mime_subtype, _logo_png_bytes
@@ -73,6 +75,143 @@ def itens_cronograma(auditoria) -> list[dict]:
     return itens
 
 
+def _instante_ics(valor, hora: str) -> str | None:
+    try:
+        dia = valor if isinstance(valor, date) else date.fromisoformat(str(valor)[:10])
+        horas, minutos = str(hora or '')[:5].split(':')
+        if int(horas) > 23 or int(minutos) > 59:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return f'{dia:%Y%m%d}T{int(horas):02d}{int(minutos):02d}00'
+
+
+def _ics_texto(valor: str) -> str:
+    texto = str(valor or '').replace('—', '-').replace('–', '-')
+    return (
+        texto
+        .replace('\\', '\\\\')
+        .replace('\r\n', '\\n')
+        .replace('\n', '\\n')
+        .replace(',', '\\,')
+        .replace(';', '\\;')
+    )
+
+
+def _ics_linha(conteudo: str) -> str:
+    if len(conteudo.encode('utf-8')) <= 73:
+        return conteudo
+    partes = []
+    atual = ''
+    for caractere in conteudo:
+        if len((atual + caractere).encode('utf-8')) > 73:
+            partes.append(atual)
+            atual = ' ' + caractere
+        else:
+            atual += caractere
+    partes.append(atual)
+    return '\r\n'.join(partes)
+
+
+def _eventos_agenda(auditoria) -> list[dict]:
+    eventos = []
+    for item in auditoria.planejamento or []:
+        atividade = str(item.get('atividade') or '').strip()
+        inicio = _instante_ics(item.get('data'), item.get('horaInicio'))
+        fim = _instante_ics(item.get('data'), item.get('horaFim'))
+        if not atividade or not inicio or not fim or fim <= inicio:
+            continue
+        eventos.append({
+            'atividade': atividade,
+            'inicio': inicio,
+            'fim': fim,
+            'hora_inicio': str(item.get('horaInicio') or '')[:5],
+            'hora_fim': str(item.get('horaFim') or '')[:5],
+            'data': _data_br(item.get('data')),
+        })
+    return eventos
+
+
+def _titulo_compromisso(auditoria, atividade: str) -> str:
+    tipo = str(auditoria.categoria or '').strip()
+    filial = str(auditoria.filial or '').strip()
+    prefixo = ' '.join(parte for parte in (tipo, filial) if parte)
+    if prefixo:
+        return f'{atividade} - {prefixo}'
+    return atividade
+
+
+def _anexo_agenda(auditoria) -> MIMEBase | None:
+    """Um arquivo só. Vários cartões separados fazem a agenda esperar cada um, e o mapa de cada local."""
+    eventos = sorted(_eventos_agenda(auditoria), key=lambda evento: evento['inicio'])
+    if not eventos:
+        return None
+    carimbo = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    linhas = [
+        'BEGIN:VCALENDAR',
+        'PRODID:-//TccConex//SGQ//PT',
+        'VERSION:2.0',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+    ]
+    for indice, evento in enumerate(eventos):
+        bloco = [
+            'BEGIN:VEVENT',
+            f'UID:{auditoria.pk}-{indice}@tccconex.local',
+            f'DTSTAMP:{carimbo}',
+            f'DTSTART:{evento["inicio"]}',
+            f'DTEND:{evento["fim"]}',
+            f'SUMMARY:{_ics_texto(_titulo_compromisso(auditoria, evento["atividade"]))}',
+            f'DESCRIPTION:{_ics_texto(auditoria.codigo + " - " + auditoria.titulo)}',
+            'BEGIN:VALARM',
+            'ACTION:DISPLAY',
+            'DESCRIPTION:Lembrete',
+            'TRIGGER:-PT30M',
+            'END:VALARM',
+            'END:VEVENT',
+        ]
+        linhas.extend(_ics_linha(linha) for linha in bloco)
+    linhas.append('END:VCALENDAR')
+    parte = MIMEBase('text', 'calendar', charset='UTF-8', method='PUBLISH')
+    parte.set_payload(('\r\n'.join(linhas) + '\r\n').encode('utf-8'))
+    encoders.encode_base64(parte)
+    parte.add_header(
+        'Content-Disposition',
+        'attachment',
+        filename=f'cronograma-{auditoria.codigo}.ics',
+    )
+    return parte
+
+
+def _texto_simples(context) -> str:
+    linhas = [
+        context['saudacao'],
+        '',
+        f"Segue o cronograma da auditoria {context['codigo']}, {context['titulo']}, de {context['periodo']}.",
+        '',
+        f"Status: {context['status']}",
+        f"Filial: {context['filial']}",
+        f"Categoria: {context['categoria']}",
+        f"Auditor líder: {context['auditor_lider']}",
+        f"Auditores: {context['auditores']}",
+        f"Normas: {context['normas']}",
+        '',
+        'Programação',
+    ]
+    for item in context['itens']:
+        linhas.append(f"{item['data']} {item['semana']} {item['horario']} {item['atividade']}")
+    linhas.extend([
+        '',
+        f'O anexo cronograma-{context["codigo"]}.ics traz todos os horários deste e-mail.',
+    ])
+    linhas.extend([
+        '',
+        context['enviado_por'],
+        'Gestão da Qualidade · Transcamila Cargas e Armazéns Gerais Ltda.',
+    ])
+    return '\n'.join(linhas)
+
+
 def _assunto_cronograma(auditoria) -> str:
     nomes = list(auditoria.normas.order_by('nome').values_list('nome', flat=True))
     norma = ', '.join(nomes) or auditoria.titulo
@@ -112,17 +251,20 @@ def send_cronograma_auditoria_email(user, auditoria, *, to_emails, cc_emails=Non
         'logo_cid': LOGO_CID if logo else '',
     }
     html = render_to_string('sgq/emails/cronograma_auditoria.html', context)
-    email = EmailMessage(
+    email = EmailMultiAlternatives(
         subject=context['assunto'],
-        body=html,
+        body=_texto_simples(context),
         to=destinatarios,
         cc=copias,
     )
-    email.content_subtype = 'html'
+    email.attach_alternative(html, 'text/html')
     if logo:
         subtype = _logo_mime_subtype()
         imagem = MIMEImage(logo, _subtype=subtype)
         imagem.add_header('Content-ID', f'<{LOGO_CID}>')
         imagem.add_header('Content-Disposition', 'inline', filename=f'logo.{subtype if subtype != "jpeg" else "jpg"}')
         email.attach(imagem)
+    anexo = _anexo_agenda(auditoria)
+    if anexo is not None:
+        email.attach(anexo)
     email.send(fail_silently=False)

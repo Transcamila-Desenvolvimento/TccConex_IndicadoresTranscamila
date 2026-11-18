@@ -5548,10 +5548,36 @@ fieldset:disabled .sgq-import-arquivo-limpar {
   border-radius: 4px;
 }
 
-.sgq-aud-plano-adicionar:disabled {
+.sgq-aud-plano-adicionar:disabled,
+.sgq-aud-plano-convite:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+.sgq-aud-plano-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.sgq-aud-plano-convite {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sgq-aud-plano-convite:hover:not(:disabled) {
+  color: #118CC4;
+}
+
 
 .sgq-aud-plano-expansivel {
   border: 1px solid #e2e8f0;

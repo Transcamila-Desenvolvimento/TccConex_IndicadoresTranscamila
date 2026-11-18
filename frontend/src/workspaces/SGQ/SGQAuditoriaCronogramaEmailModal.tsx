@@ -51,7 +51,7 @@ const SGQAuditoriaCronogramaEmailModal: React.FC<SGQAuditoriaCronogramaEmailModa
     >
       <div className="search-modal-card search-modal-card--allow-overflow" style={{ width: '500px' }}>
         <div className="search-input-wrapper" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#1e293b' }}>Enviar cronograma</h3>
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#1e293b' }}>Enviar convite</h3>
           <span className="search-close-key" style={{ cursor: 'pointer', fontSize: '12px' }} onClick={onClose}>Fechar (X)</span>
         </div>
 
@@ -72,7 +72,7 @@ const SGQAuditoriaCronogramaEmailModal: React.FC<SGQAuditoriaCronogramaEmailModa
         ) : (
           <form style={{ padding: '20px 24px 24px' }} onSubmit={handleSubmit}>
             <p style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.6, marginTop: 0 }}>
-              O cronograma de <strong>{auditoria.codigo}</strong> — {auditoria.titulo} segue como um convite, com a agenda da auditoria.
+              O convite de <strong>{auditoria.codigo}</strong> — {auditoria.titulo} leva o cronograma e os horários no mesmo e-mail.
             </p>
             {!temCronograma && (
               <p style={{ margin: '0 0 14px', fontSize: '12.5px', color: '#b91c1c' }}>
@@ -109,7 +109,7 @@ const SGQAuditoriaCronogramaEmailModal: React.FC<SGQAuditoriaCronogramaEmailModa
                 Cancelar
               </button>
               <button type="submit" className="reports-action-btn primary" disabled={enviar.isPending || !temCronograma} style={{ fontSize: '12.5px', height: '36px' }}>
-                {enviar.isPending ? 'Enviando...' : 'Enviar cronograma'}
+                {enviar.isPending ? 'Enviando...' : 'Enviar convite'}
               </button>
             </div>
           </form>

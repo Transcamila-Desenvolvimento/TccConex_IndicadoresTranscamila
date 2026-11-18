@@ -1604,10 +1604,12 @@ class AuditoriaSGQTests(APITestCase):
         from django.core import mail
 
         criada = self.client.post(self.URL, _auditoria(
+            titulo='Auditoria Interna SASSMAQ 3ª Edição 2026',
             dataInicio='2026-03-07', dataTermino='2026-03-09',
-            planejamento=[{
-                'data': '2026-03-07', 'horaInicio': '08:00', 'horaFim': '08:30', 'atividade': 'Reunião de Abertura',
-            }],
+            planejamento=[
+                {'data': '2026-03-07', 'horaInicio': '08:00', 'horaFim': '08:30', 'atividade': 'Reunião de Abertura'},
+                {'data': '2026-03-07', 'horaInicio': '09:00', 'horaFim': '10:00', 'atividade': 'Entrevista na operação'},
+            ],
         ), format='json', **_headers()).data
         resposta = self.client.post(
             f"{self.URL}{criada['id']}/enviar-cronograma/",
@@ -1621,7 +1623,7 @@ class AuditoriaSGQTests(APITestCase):
         self.assertEqual(mensagem.cc, ['copia@example.com'])
         self.assertEqual(
             mensagem.subject,
-            'Cronograma Auditoria Auditoria interna - ISO 9001:2015 - 07/03/2026 a 09/03/2026 (26-00001)',
+            'Cronograma Auditoria Auditoria Interna SASSMAQ 3ª Edição 2026 - 07/03/2026 a 09/03/2026 (26-00001)',
         )
         self.assertIn('Reunião de Abertura', mensagem.body)
         self.assertIn('07/03/2026', mensagem.body)
@@ -1631,6 +1633,28 @@ class AuditoriaSGQTests(APITestCase):
         self.assertIn('Em execução', mensagem.body)
         self.assertIn('Auditor líder', mensagem.body)
         self.assertIn('sábado', mensagem.body)
+        html = mensagem.alternatives[0][0]
+        self.assertIn('cronograma-26-00001.ics', html)
+        self.assertNotIn('calendar.google.com', html)
+        from email import message_from_bytes
+        anexos = [
+            parte for parte in message_from_bytes(mensagem.message().as_bytes()).walk()
+            if (parte.get_filename() or '').endswith('.ics')
+        ]
+        self.assertEqual(len(anexos), 1)
+        ics = anexos[0].get_payload(decode=True).decode('utf-8')
+        ics = ics.replace('\r\n ', '').replace('\n ', '')
+        self.assertIn('METHOD:PUBLISH', ics)
+        self.assertNotIn('METHOD:REQUEST', ics)
+        self.assertNotIn('LOCATION:', ics)
+        self.assertEqual(ics.count('BEGIN:VEVENT'), 2)
+        self.assertLess(ics.index('DTSTART:20260307T080000'), ics.index('DTSTART:20260307T090000'))
+        self.assertIn('DTEND:20260307T083000', ics)
+        self.assertIn('DTEND:20260307T100000', ics)
+        self.assertIn('SUMMARY:Reunião de Abertura - Auditoria interna Ibiporã (Matriz)', ics)
+        self.assertIn('SUMMARY:Entrevista na operação - Auditoria interna Ibiporã (Matriz)', ics)
+        self.assertIn('DESCRIPTION:26-00001 - Auditoria Interna SASSMAQ 3ª Edição 2026', ics)
+        self.assertIn('TRIGGER:-PT30M', ics)
 
         sem_agenda = self.client.post(self.URL, _auditoria(titulo='Sem agenda'), format='json', **_headers()).data
         AuditoriaSGQ.objects.filter(pk=sem_agenda['id']).update(planejamento=[])
