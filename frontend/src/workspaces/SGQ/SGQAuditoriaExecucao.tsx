@@ -6,7 +6,7 @@ import SGQAuditoriaDrivePicker from './SGQAuditoriaDrivePicker';
 import UserAvatar from '../../components/UserAvatar';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
-import { useAuditoriaPresenca, type ColegaPergunta, type RascunhoRemoto } from '../../hooks/useAuditoriaPresenca';
+import { useAuditoriaPresenca, type ColegaPergunta } from '../../hooks/useAuditoriaPresenca';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import {
   getSgqAuditoriaErrorMessage,
@@ -563,7 +563,6 @@ const SGQAuditoriaExecucao: React.FC = () => {
               eu={user ? { name: user.name, photo: user.googlePicture } : null}
               publicarRascunho={publicarRascunho}
               publicarDigitando={publicarDigitando}
-              rascunhoRemoto={rascunhoRemoto}
               podeResponder={podeResponder}
               concluida={questionarioConcluido}
               auditoriaConcluida={concluida}
@@ -678,7 +677,6 @@ interface PerguntaPainelProps {
   eu: { name: string; photo: string | null } | null;
   publicarRascunho: (itemId: string, opcaoCodigo: string, destaque?: '' | 'forte' | 'fraco') => void;
   publicarDigitando: (itemId: string | null) => void;
-  rascunhoRemoto: RascunhoRemoto | null;
   podeResponder: boolean;
   concluida: boolean;
   auditoriaConcluida?: boolean;
@@ -697,7 +695,7 @@ const rascunhoIgual = (rascunho: Rascunho, base: SgqAuditoriaResposta | undefine
   && rascunho.destaque === (base?.destaque ?? '');
 
 const PerguntaPainel: React.FC<PerguntaPainelProps> = ({
-  auditoriaId, filial, pergunta, opcoes, resposta, colegas, eu, publicarRascunho, publicarDigitando, rascunhoRemoto,
+  auditoriaId, filial, pergunta, opcoes, resposta, colegas, eu, publicarRascunho, publicarDigitando,
   podeResponder, concluida, auditoriaConcluida = false,
   onAnterior, onProxima, onProximaPendente,
   onConcluir, concluindo,
