@@ -290,6 +290,36 @@ const FormularioPendencias: React.FC<{
   );
 };
 
+function codigoDoTopico(codigo: string) {
+  return codigo.trim().split('.')[0] ?? '';
+}
+
+function perguntaNoTopico(pergunta: Pick<Pergunta, 'item' | 'caminho'>, topico: string) {
+  return [pergunta.item, ...pergunta.caminho].some((item) => {
+    const codigo = item.codigo.trim();
+    return codigo === topico || codigo.startsWith(`${topico}.`);
+  });
+}
+
+function topicosDasPerguntas(perguntas: Pergunta[]) {
+  const titulos = new Map<string, string>();
+  const presentes = new Set<string>();
+  for (const pergunta of perguntas) {
+    for (const item of [...pergunta.caminho, pergunta.item]) {
+      const codigo = item.codigo.trim();
+      if (codigo && !codigo.includes('.') && !titulos.has(codigo)) titulos.set(codigo, item.titulo.trim());
+      const topico = codigoDoTopico(codigo);
+      if (topico) presentes.add(topico);
+    }
+  }
+  return [...presentes]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
+    .map((codigo) => ({
+      valor: codigo,
+      texto: titulos.get(codigo) ? `${codigo} - ${titulos.get(codigo)}` : codigo,
+    }));
+}
+
 function montarPerguntas(dados: SgqAuditoriaExecucao): Pergunta[] {
   const porPai = new Map<string, SgqNormaItem[]>();
   dados.itens.forEach((item) => {
@@ -332,7 +362,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
 
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [filtroClasse, setFiltroClasse] = useState('');
-  const [filtroArea, setFiltroArea] = useState('');
+  const [filtroItem, setFiltroItem] = useState('');
   const [busca, setBusca] = useState('');
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
   const ativoRef = useRef<HTMLButtonElement | null>(null);
@@ -343,10 +373,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
     () => [...new Map((dados?.normas ?? []).flatMap((n) => n.classificacoes).map((c) => [c.sigla, c])).values()],
     [dados],
   );
-  const areas = useMemo(
-    () => [...new Map((dados?.normas ?? []).flatMap((n) => n.areas).map((a) => [a.sigla, a])).values()],
-    [dados],
-  );
+  const topicos = useMemo(() => topicosDasPerguntas(perguntas), [perguntas]);
   const respostas = useMemo(
     () => new Map((dados?.respostas ?? []).map((resposta) => [resposta.itemId, resposta])),
     [dados],
@@ -357,13 +384,14 @@ const SGQAuditoriaExecucao: React.FC = () => {
   );
 
   const termo = normalizar(busca.trim());
-  const lista = perguntas.filter(({ item }) => {
+  const lista = perguntas.filter((pergunta) => {
+    const { item } = pergunta;
     const resposta = respostas.get(item.id);
     if (filtro === 'pendentes' && resposta?.opcaoCodigo) return false;
     if (filtro === 'respondidas' && !resposta?.opcaoCodigo) return false;
     if ((filtro === 'forte' || filtro === 'fraco') && resposta?.destaque !== filtro) return false;
     if (filtroClasse && item.classificacao !== filtroClasse) return false;
-    if (filtroArea && !item.areas.includes(filtroArea)) return false;
+    if (filtroItem && !perguntaNoTopico(pergunta, filtroItem)) return false;
     return !termo || normalizar(`${item.codigo} ${item.titulo}`).includes(termo);
   });
 
@@ -484,7 +512,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
                 >
                   {FILTROS.map((opcao) => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}
                 </select>
-                {(classificacoes.length > 0 || areas.length > 0) && (
+                {(classificacoes.length > 0 || topicos.length > 0) && (
                   <div className="sgq-exec-filtros-linha">
                     {classificacoes.length > 0 && (
                       <FiltroLista
@@ -495,13 +523,13 @@ const SGQAuditoriaExecucao: React.FC = () => {
                         opcoes={classificacoes.map((c) => ({ valor: c.sigla, texto: `${c.sigla} - ${c.nome}` }))}
                       />
                     )}
-                    {areas.length > 0 && (
+                    {topicos.length > 0 && (
                       <FiltroLista
-                        rotulo="Filtrar por área"
-                        placeholder="Área"
-                        valor={filtroArea}
-                        onChange={setFiltroArea}
-                        opcoes={areas.map((a) => ({ valor: a.sigla, texto: `${a.sigla} - ${a.nome}` }))}
+                        rotulo="Filtrar por item"
+                        placeholder="Item"
+                        valor={filtroItem}
+                        onChange={setFiltroItem}
+                        opcoes={topicos}
                       />
                     )}
                   </div>
