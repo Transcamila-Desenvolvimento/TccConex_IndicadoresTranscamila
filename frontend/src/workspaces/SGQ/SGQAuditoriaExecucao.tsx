@@ -621,7 +621,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
             setBusca('');
             setFiltro('todas');
             setFiltroClasse('');
-            setFiltroArea('');
+            setFiltroItem('');
             setSelecionadoId(itemId);
             setFormPendencias(false);
           }}
