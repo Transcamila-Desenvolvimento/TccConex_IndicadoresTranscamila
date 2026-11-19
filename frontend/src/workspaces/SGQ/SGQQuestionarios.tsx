@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
-import { getSgqAuditoriaErrorMessage, useReabrirQuestionarioSgqAuditoria, useSgqAuditorias } from '../../hooks/useSgqAuditorias';
+import { getSgqAuditoriaErrorMessage, useReabrirQuestionarioSgqAuditoria, useSgqAuditorias, useSgqAuditoriasSugestoes } from '../../hooks/useSgqAuditorias';
 import type { SgqAuditoria, SgqAuditoriaQueryParams } from '../../types/domain';
 import { SGQ_QUESTIONARIO_STATUS_LABEL } from '../../types/domain';
 
@@ -19,12 +19,120 @@ function percentual(auditoria: SgqAuditoria) {
   return Math.round((auditoria.perguntasRespondidas / auditoria.totalPerguntas) * 100);
 }
 
+function iniciais(nome: string) {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return '?';
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
+
+const AvatarEquipe: React.FC<{ nome: string; foto?: string; voce?: boolean }> = ({ nome, foto, voce }) => {
+  const [falhou, setFalhou] = useState(false);
+  const url = foto?.trim();
+  useEffect(() => setFalhou(false), [url]);
+  const classe = `sgq-pessoa-avatar${voce ? ' is-voce' : ''}`;
+  if (url && !falhou) {
+    return (
+      <span className={classe} aria-hidden="true">
+        <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setFalhou(true)} />
+      </span>
+    );
+  }
+  return <span className={classe} aria-hidden="true">{iniciais(nome)}</span>;
+};
+
+const EquipeAuditoria: React.FC<{
+  lider: string;
+  auditores: string[];
+  fotos: Map<string, string>;
+  usuario: string;
+}> = ({ lider, auditores, fotos, usuario }) => {
+  const pessoas = [
+    ...(lider ? [{ nome: lider, lider: true }] : []),
+    ...auditores
+      .filter((nome) => nome.trim() && !mesmoNome(nome, lider))
+      .map((nome) => ({ nome, lider: false })),
+  ];
+  const fotosRef = useRef<HTMLDivElement>(null);
+  const [dica, setDica] = useState<{ top: number; left: number } | null>(null);
+  const naEquipe = pessoas.some((pessoa) => mesmoNome(pessoa.nome, usuario));
+  const aviso = naEquipe ? 'Você faz parte desta equipe' : 'Você não faz parte desta equipe';
+  const visiveis = pessoas.slice(0, 3);
+  const resto = pessoas.length - visiveis.length;
+  const fotoDe = (nome: string) => fotos.get(nome.trim().toLocaleLowerCase('pt-BR'));
+  const mostrar = () => {
+    const rect = fotosRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const altura = 52 + pessoas.length * 32;
+    const abaixo = rect.bottom + 8;
+    const top = abaixo + altura < window.innerHeight - 8 ? abaixo : Math.max(8, rect.top - altura - 8);
+    const left = Math.min(Math.max(8, rect.left), window.innerWidth - 252);
+    setDica({ top, left });
+  };
+  useEffect(() => {
+    if (!dica) return;
+    const fechar = () => setDica(null);
+    window.addEventListener('scroll', fechar, true);
+    window.addEventListener('resize', fechar);
+    return () => {
+      window.removeEventListener('scroll', fechar, true);
+      window.removeEventListener('resize', fechar);
+    };
+  }, [dica]);
+  if (!pessoas.length) return <span className="sgq-aud-muted">—</span>;
+  return (
+    <div
+      className={`sgq-quest-equipe${naEquipe ? ' is-dentro' : ' is-fora'}`}
+      tabIndex={0}
+      onMouseEnter={mostrar}
+      onMouseLeave={() => setDica(null)}
+      onFocus={mostrar}
+      onBlur={() => setDica(null)}
+    >
+      <div className="sgq-quest-equipe-fotos" ref={fotosRef} aria-label={aviso}>
+        {visiveis.map((pessoa) => (
+          <AvatarEquipe key={pessoa.nome} nome={pessoa.nome} foto={fotoDe(pessoa.nome)} voce={mesmoNome(pessoa.nome, usuario)} />
+        ))}
+        {resto > 0 && <span className="sgq-quest-equipe-mais">+{resto}</span>}
+      </div>
+      {dica && (
+        <div className="sgq-quest-equipe-dica" role="tooltip" style={{ top: dica.top, left: dica.left }}>
+          <strong>{aviso}</strong>
+          <ul>
+            {pessoas.map((pessoa) => {
+              const etiquetas = [
+                pessoa.lider ? 'Líder' : '',
+                mesmoNome(pessoa.nome, usuario) ? 'Você' : '',
+              ].filter(Boolean);
+              return (
+                <li key={pessoa.nome}>
+                  <AvatarEquipe nome={pessoa.nome} foto={fotoDe(pessoa.nome)} voce={mesmoNome(pessoa.nome, usuario)} />
+                  <span>{pessoa.nome}</span>
+                  {etiquetas.length > 0 && <small>{etiquetas.join(' · ')}</small>}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const SGQQuestionarios: React.FC = () => {
   const { user, selectedFilial } = useAuth();
   const navigate = useNavigate();
   const canAnswer = userHasFuncao(user, 'SGQ', 'executar-auditorias');
   const podeReabrirQuestionario = userHasFuncao(user, 'SGQ', 'reabrir-questionario');
   const reabrirQuestionario = useReabrirQuestionarioSgqAuditoria(selectedFilial);
+  const sugestoesQuery = useSgqAuditoriasSugestoes(selectedFilial, Boolean(selectedFilial));
+  const fotosPorNome = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const pessoa of sugestoesQuery.data?.auditores ?? []) {
+      if (pessoa.foto?.trim()) mapa.set(pessoa.nome.trim().toLocaleLowerCase('pt-BR'), pessoa.foto);
+    }
+    return mapa;
+  }, [sugestoesQuery.data]);
 
   const [busca, setBusca] = useState('');
   const [buscaAplicada, setBuscaAplicada] = useState('');
@@ -109,6 +217,7 @@ const SGQQuestionarios: React.FC = () => {
                 <col className="sgq-quest-col-codigo" />
                 <col className="sgq-quest-col-titulo" />
                 <col className="sgq-quest-col-norma" />
+                <col className="sgq-quest-col-equipe" />
                 <col className="sgq-quest-col-status" />
                 <col className="sgq-quest-col-progresso" />
                 <col className="sgq-quest-col-acao" />
@@ -118,6 +227,7 @@ const SGQQuestionarios: React.FC = () => {
                   <th>Código</th>
                   <th>Auditoria</th>
                   <th>Norma</th>
+                  <th>Equipe</th>
                   <th>Status</th>
                   <th>Progresso</th>
                   <th />
@@ -126,7 +236,7 @@ const SGQQuestionarios: React.FC = () => {
               <tbody>
                 {canShowEmpty && linhas.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="comercial-browse-empty">
+                    <td colSpan={7} className="comercial-browse-empty">
                       {buscaAplicada ? 'Nenhuma auditoria encontrada para a busca.' : 'Não há auditorias registradas.'}
                     </td>
                   </tr>
@@ -155,6 +265,14 @@ const SGQQuestionarios: React.FC = () => {
                               )}
                             </div>
                           ) : <span className="sgq-aud-muted">—</span>}
+                        </td>
+                        <td>
+                          <EquipeAuditoria
+                            lider={auditoria.auditorLider}
+                            auditores={auditoria.auditores}
+                            fotos={fotosPorNome}
+                            usuario={user?.name ?? ''}
+                          />
                         </td>
                         <td>
                           <span className={`sgq-aud-status is-${auditoria.statusQuestionario}`}>

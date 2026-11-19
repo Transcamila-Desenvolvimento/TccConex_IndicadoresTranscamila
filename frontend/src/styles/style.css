@@ -6936,24 +6936,39 @@ fieldset:disabled .sgq-import-arquivo-limpar {
   width: 100%;
 }
 
-.sgq-quest-col-codigo { width: 9%; }
+.sgq-quest-col-codigo { width: 8%; }
 .sgq-quest-col-titulo { width: 24%; }
-.sgq-quest-col-norma { width: 22%; }
-.sgq-quest-col-status { width: 14%; }
-.sgq-quest-col-progresso { width: 18%; }
-.sgq-quest-col-acao { width: 20%; }
+.sgq-quest-col-norma { width: 16%; }
+.sgq-quest-col-equipe { width: 12%; }
+.sgq-quest-col-status { width: 10%; }
+.sgq-quest-col-progresso { width: 14%; }
+.sgq-quest-col-acao { width: 16%; }
+
+.sgq-lista-card .reports-table.sgq-quest-tabela th,
+.sgq-lista-card .reports-table.sgq-quest-tabela td {
+  padding: 10px 12px;
+}
 
 .sgq-quest-linha td {
   vertical-align: middle;
 }
 
-.sgq-quest-linha td:nth-child(2),
+.sgq-quest-linha td:nth-child(2) {
+  white-space: normal;
+}
+
 .sgq-quest-linha td:nth-child(3) {
   overflow: hidden;
 }
 
+.sgq-quest-linha td:nth-child(4) {
+  overflow: visible;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
 .sgq-quest-titulo {
-  display: block;
+  display: -webkit-box;
   width: 100%;
   padding: 0;
   border: none;
@@ -6961,16 +6976,128 @@ fieldset:disabled .sgq-import-arquivo-limpar {
   color: #0f172a;
   font: inherit;
   font-weight: 600;
+  line-height: 1.35;
   text-align: left;
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   cursor: pointer;
 }
 
 .sgq-quest-titulo:hover {
   color: #118CC4;
   text-decoration: underline;
+}
+
+.sgq-quest-equipe {
+  position: relative;
+  display: inline-flex;
+  outline: none;
+}
+
+.sgq-quest-equipe-fotos {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sgq-quest-equipe-fotos .sgq-pessoa-avatar,
+.sgq-quest-equipe-mais {
+  box-sizing: border-box;
+  width: 26px;
+  height: 26px;
+  margin-left: 3px;
+  border: none;
+  box-shadow: none;
+  background: #0076ce;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.sgq-quest-equipe-fotos .sgq-pessoa-avatar:first-child,
+.sgq-quest-equipe-fotos .sgq-quest-equipe-mais:first-child {
+  margin-left: 0;
+}
+
+.sgq-quest-equipe-fotos .sgq-pessoa-avatar.is-voce {
+  z-index: 1;
+}
+
+.sgq-quest-equipe-mais {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #0076ce;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sgq-quest-equipe-dica {
+  position: fixed;
+  z-index: 40;
+  width: 240px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  text-align: left;
+}
+
+.sgq-quest-equipe-dica strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.sgq-quest-equipe.is-dentro .sgq-quest-equipe-dica strong {
+  color: #018F84;
+}
+
+.sgq-quest-equipe.is-fora .sgq-quest-equipe-dica strong {
+  color: #9a3412;
+}
+
+.sgq-quest-equipe-dica ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sgq-quest-equipe-dica li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  color: #334155;
+  font-size: 12px;
+}
+
+.sgq-quest-equipe-dica li span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sgq-quest-equipe-dica .sgq-pessoa-avatar {
+  width: 22px;
+  height: 22px;
+  font-size: 9px;
+}
+
+.sgq-quest-equipe-dica small {
+  margin-left: auto;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .sgq-quest-linha .sgq-aud-normas {
