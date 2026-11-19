@@ -7004,15 +7004,16 @@ fieldset:disabled .sgq-import-arquivo-limpar {
 
 .sgq-quest-equipe-fotos .sgq-pessoa-avatar,
 .sgq-quest-equipe-mais {
+  position: relative;
   box-sizing: border-box;
-  width: 26px;
-  height: 26px;
-  margin-left: 3px;
-  border: none;
+  width: 34px;
+  height: 34px;
+  margin-left: -10px;
+  border: 2px solid #fff;
   box-shadow: none;
-  background: #0076ce;
-  color: #fff;
-  font-size: 10px;
+  background: #e6e6e6;
+  color: #4b5563;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -7021,20 +7022,21 @@ fieldset:disabled .sgq-import-arquivo-limpar {
   margin-left: 0;
 }
 
-.sgq-quest-equipe-fotos .sgq-pessoa-avatar.is-voce {
-  z-index: 1;
-}
+.sgq-quest-equipe-fotos .sgq-pessoa-avatar:nth-child(1) { z-index: 4; }
+.sgq-quest-equipe-fotos .sgq-pessoa-avatar:nth-child(2) { z-index: 3; }
+.sgq-quest-equipe-fotos .sgq-pessoa-avatar:nth-child(3) { z-index: 2; }
 
 .sgq-quest-equipe-mais {
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   border-radius: 50%;
-  background: #0076ce;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  background: #e6e6e6;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .sgq-quest-equipe-dica {
