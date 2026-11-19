@@ -4176,14 +4176,14 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
 }
 
 .sgq-aud-registros col.sgq-aud-col-check { width: 4%; }
-.sgq-aud-registros col.sgq-aud-col-categoria { width: 11%; }
-.sgq-aud-registros col.sgq-aud-col-filial { width: 11%; }
+.sgq-aud-registros col.sgq-aud-col-categoria { width: 14%; }
+.sgq-aud-registros col.sgq-aud-col-filial { width: 10%; }
 .sgq-aud-registros col.sgq-aud-col-codigo { width: 8%; }
 .sgq-aud-registros col.sgq-aud-col-titulo { width: 14%; }
 .sgq-aud-registros col.sgq-aud-col-data { width: 11%; }
 .sgq-aud-registros col.sgq-aud-col-normas { width: 8%; }
 .sgq-aud-registros col.sgq-aud-col-lider { width: 9%; }
-.sgq-aud-registros col.sgq-aud-col-status { width: 13%; }
+.sgq-aud-registros col.sgq-aud-col-status { width: 11%; }
 
 .sgq-lista-card .reports-table.sgq-aud-registros th,
 .sgq-lista-card .reports-table.sgq-aud-registros thead th,
@@ -4208,11 +4208,17 @@ button { border: none; font-family: inherit; cursor: pointer; transition: all 0.
   max-width: 100%;
 }
 
+.sgq-lista-card .reports-table.sgq-aud-registros td:nth-child(2) {
+  white-space: normal;
+}
+
 .sgq-aud-registros .sgq-lista-categoria {
-  display: block;
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .sgq-aud-registros .sgq-aud-normas,
