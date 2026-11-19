@@ -24,7 +24,17 @@ from apps.accounts.permissions import (
     user_has_module_access,
 )
 from apps.audit.services import record_audit
+from apps.camilo.gemini import GeminiErro
+from apps.sgq.auditoria_drive import (
+    abrir_anexo_drive,
+    enviar_copia_auditoria,
+    navegar_drive,
+    referenciar_anexo_drive,
+    situacao_drive,
+)
 from apps.sgq.auditoria_realtime import notify_auditoria_changed
+from apps.sgq.resultado_auditoria import calcular_resultado
+from apps.sgq.evidencia_sugestao import sugerir_evidencia as montar_sugestao_evidencia
 from apps.financeiro.pagination import ReportPagination
 from apps.rh.drive_documento import EXTENSOES
 
@@ -38,6 +48,7 @@ from .models import (
     AnexoRespostaAuditoriaSGQ,
     AuditoriaFormDraft,
     AuditoriaSGQ,
+    status_auditoria_automatico,
     CategoriaAuditoriaSGQ,
     ItemNormaSGQ,
     NormaSGQ,
@@ -59,16 +70,32 @@ from .serializers import (
     ResponderItemAuditoriaSerializer,
     RespostaAuditoriaSGQSerializer,
     TipoRespostaSGQSerializer,
+    nome_exibicao_usuario,
+    limpar_texto_formatado,
     pendencias_questionario,
     usuario_e_auditor_lider,
+    usuario_na_equipe,
 )
 
 _GERENCIAR_DETAIL = 'Acesso negado. Solicite ao administrador a função "Gerenciar auditorias" do SGQ.'
 _EXECUTAR_DETAIL = 'Acesso negado. Solicite ao administrador a função "Responder auditorias" do SGQ.'
-_AUDITORIA_CONCLUIDA_DETAIL = 'A auditoria está concluída; reabra-a para alterar as respostas.'
+_AUDITORIA_CONCLUIDA_DETAIL = 'A auditoria está concluída. As respostas ficam somente para consulta.'
+_AUDITORIA_CONCLUIDA_EDICAO_DETAIL = 'A auditoria está concluída e fica somente para consulta.'
+_REABRIR_AUDITORIA_DETAIL = 'Acesso negado. Solicite ao administrador a função "Reabrir auditoria" do SGQ.'
+_REABRIR_QUESTIONARIO_DETAIL = 'Acesso negado. Solicite ao administrador a função "Reabrir questionário" do SGQ.'
+_EQUIPE_DETAIL = 'Só o auditor líder e os auditores desta auditoria podem responder o questionário.'
+_QUESTIONARIO_CONCLUIDO_DETAIL = 'O questionário está concluído. As respostas ficam somente para consulta.'
+
+
+def _bloqueio_respostas(auditoria):
+    if auditoria.status == 'concluida':
+        return _AUDITORIA_CONCLUIDA_DETAIL
+    if auditoria.questionario_concluido:
+        return _QUESTIONARIO_CONCLUIDO_DETAIL
+    return None
 _ITEM_RESPONDIDO_DETAIL = 'Há respostas de auditorias neste item ou nos subitens; ele não pode ser excluído.'
 _NORMA_RESPONDIDA_DETAIL = 'Há auditorias com respostas nas perguntas desta norma; ela não pode ser excluída.'
-_ACOES_EXECUCAO = {'responder', 'anexar', 'anexo'}
+_ACOES_EXECUCAO = {'responder', 'anexar', 'anexo', 'anexar_drive', 'sugerir_evidencia'}
 ANEXO_MAX_BYTES = 15 * 1024 * 1024
 RESPOSTA_MAX_ANEXOS = 20
 _GERENCIAR_NORMAS_DETAIL = 'Acesso negado. Solicite ao administrador a função "Gerenciar normas" do SGQ.'
@@ -280,7 +307,7 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         sem_auditorias = _sem_aba(request.user, 'auditorias', request)
         sem_questionario = _sem_aba(request.user, 'auditorias-minhas-acoes', request)
         sem_visao = _sem_aba(request.user, 'auditorias-visao-geral', request)
-        if self.action == 'concluir':
+        if self.action in {'concluir', 'reabrir', 'reabrir_questionario'}:
             if sem_auditorias and sem_questionario:
                 self.permission_denied(request, message='Sem acesso às Auditorias.')
             return
@@ -298,6 +325,30 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 self.permission_denied(request, message=_EXECUTAR_DETAIL)
         elif not _tem_funcao_sgq(request, 'gerenciar-auditorias'):
             self.permission_denied(request, message=_GERENCIAR_DETAIL)
+
+    @action(detail=False, methods=['get'], url_path='drive-status')
+    def status_drive(self, request):
+        return Response(situacao_drive(request.user))
+
+    @action(detail=False, methods=['get'], url_path='drive-browse')
+    def navegar_drive_pessoa(self, request):
+        folder_id = (request.query_params.get('folderId') or 'root').strip() or 'root'
+        page_token = (request.query_params.get('pageToken') or '').strip() or None
+        drive_id = (request.query_params.get('driveId') or '').strip() or None
+        try:
+            page_size = int(request.query_params.get('pageSize') or 50)
+        except ValueError:
+            page_size = 50
+        try:
+            return Response(navegar_drive(
+                request.user,
+                folder_id=folder_id,
+                page_token=page_token,
+                page_size=page_size,
+                drive_id=drive_id,
+            ))
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
     def _escopo(self):
         # Auditorias ficam segregadas por filial, sem visão consolidada — nem para admin.
@@ -326,6 +377,11 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 | Q(auditor_lider__icontains=search)
                 | Q(auditores__icontains=search)
             ).distinct()
+        if _flag(params.get('minha_equipe')):
+            nome = nome_exibicao_usuario(self.request.user)
+            qs = qs.filter(
+                Q(auditor_lider__iexact=nome) | Q(auditores__icontains=f'"{nome}"')
+            ) if nome else qs.none()
         situacao = (params.get('status') or '').strip()
         if situacao == 'atrasada':
             qs = qs.exclude(status='concluida').filter(data_termino__lt=timezone.localdate())
@@ -342,6 +398,8 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         # O DRF entrega o PATCH neste método, com partial=True.
         if not kwargs.get('partial'):
             return self.http_method_not_allowed(request)
+        if self.get_object().status == 'concluida':
+            return Response({'detail': _AUDITORIA_CONCLUIDA_EDICAO_DETAIL}, status=status.HTTP_400_BAD_REQUEST)
         return super().update(request, *args, **kwargs)
 
     @action(detail=False, methods=['get', 'put', 'delete'], url_path='form-draft')
@@ -415,6 +473,13 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
     def perform_update(self, serializer):
         auditoria = serializer.save()
         record_audit(self.request.user, 'sgq.auditoria.atualizada', f'Auditoria {auditoria.codigo} ({auditoria.titulo}) atualizada.')
+
+    def destroy(self, request, *args, **kwargs):
+        auditoria = self.get_object()
+        if auditoria.status == 'concluida':
+            return Response({'detail': _AUDITORIA_CONCLUIDA_EDICAO_DETAIL}, status=status.HTTP_400_BAD_REQUEST)
+        self.perform_destroy(auditoria)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def perform_destroy(self, instance):
         record_audit(self.request.user, 'sgq.auditoria.excluida', f'Auditoria {instance.codigo} ({instance.titulo}) excluída.')
@@ -492,6 +557,12 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         codigos = list(alvo.values_list('codigo', flat=True))
         if not codigos:
             return Response({'detail': 'Nenhuma auditoria encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        concluidas = list(alvo.filter(status='concluida').values_list('codigo', flat=True))
+        if concluidas:
+            return Response(
+                {'detail': f'A auditoria {concluidas[0]} está concluída e não pode ser excluída.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         alvo.delete()
         record_audit(request.user, 'sgq.auditoria.excluida', f'Auditorias excluídas: {", ".join(codigos)}.')
         return Response({'excluidas': len(codigos)})
@@ -526,20 +597,69 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         auditoria = self.get_object()
         if not usuario_e_auditor_lider(request.user, auditoria.auditor_lider):
             return Response(
-                {'detail': 'Só o auditor líder pode concluir a auditoria.'},
+                {'detail': 'Só o auditor líder pode concluir o questionário.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if auditoria.status == 'concluida':
             return Response({'detail': 'Esta auditoria já está concluída.'}, status=status.HTTP_400_BAD_REQUEST)
+        if auditoria.questionario_concluido:
+            return Response({'detail': 'Este questionário já está concluído.'}, status=status.HTTP_400_BAD_REQUEST)
         pendencias = pendencias_questionario(auditoria.normas.all(), auditoria.respostas.all())
         if pendencias:
             return Response({'detail': ' '.join(pendencias)}, status=status.HTTP_400_BAD_REQUEST)
-        auditoria.status = 'concluida'
+        auditoria.questionario_concluido = True
+        campos = ['questionario_concluido', 'atualizado_em']
+        novo = status_auditoria_automatico(auditoria)
+        if auditoria.status != novo:
+            auditoria.status = novo
+            campos.append('status')
+        auditoria.save(update_fields=campos)
+        record_audit(
+            request.user,
+            'sgq.auditoria.questionario_concluido',
+            f'Questionário da auditoria {auditoria.codigo} concluído pelo auditor líder.',
+        )
+        return Response(self.get_serializer(auditoria).data)
+
+    @action(detail=True, methods=['post'])
+    def reabrir(self, request, pk=None):
+        if not _tem_funcao_sgq(request, 'reabrir-auditoria'):
+            return Response({'detail': _REABRIR_AUDITORIA_DETAIL}, status=status.HTTP_403_FORBIDDEN)
+        auditoria = self.get_object()
+        if auditoria.status != 'concluida':
+            return Response(
+                {'detail': 'Só uma auditoria concluída pode ser reaberta.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        auditoria.status = 'execucao'
         auditoria.save(update_fields=['status', 'atualizado_em'])
         record_audit(
             request.user,
-            'sgq.auditoria.concluida',
-            f'Auditoria {auditoria.codigo} concluída pelo auditor líder.',
+            'sgq.auditoria.reaberta',
+            f'Auditoria {auditoria.codigo} reaberta para em execução. O questionário continua fechado.',
+        )
+        return Response(self.get_serializer(auditoria).data)
+
+    @action(detail=True, methods=['post'], url_path='reabrir-questionario')
+    def reabrir_questionario(self, request, pk=None):
+        if not _tem_funcao_sgq(request, 'reabrir-questionario'):
+            return Response({'detail': _REABRIR_QUESTIONARIO_DETAIL}, status=status.HTTP_403_FORBIDDEN)
+        auditoria = self.get_object()
+        if not auditoria.questionario_concluido and auditoria.status != 'concluida':
+            return Response(
+                {'detail': 'O questionário desta auditoria não está concluído.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        campos = ['questionario_concluido', 'atualizado_em']
+        auditoria.questionario_concluido = False
+        if auditoria.status == 'concluida':
+            auditoria.status = 'execucao'
+            campos.append('status')
+        auditoria.save(update_fields=campos)
+        record_audit(
+            request.user,
+            'sgq.auditoria.questionario_reaberto',
+            f'Questionário da auditoria {auditoria.codigo} reaberto. A auditoria voltou para em execução.',
         )
         return Response(self.get_serializer(auditoria).data)
 
@@ -563,6 +683,7 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
             'tiposResposta': [{'id': str(t.pk), 'nome': t.nome, 'opcoes': t.opcoes} for t in tipos],
             'itens': ItemNormaSGQSerializer(itens, many=True).data,
             'respostas': RespostaAuditoriaSGQSerializer(respostas, many=True).data,
+            'resultado': calcular_resultado(normas, itens, respostas),
         })
 
     def _resposta_atualizada(self, resposta) -> Response:
@@ -574,20 +695,44 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         return Response(RespostaAuditoriaSGQSerializer(resposta).data)
 
     @staticmethod
-    def _iniciar_execucao(auditoria) -> None:
-        if auditoria.status == 'planejamento':
-            auditoria.status = 'execucao'
+    def _sincronizar_status(auditoria) -> None:
+        novo = status_auditoria_automatico(auditoria)
+        if auditoria.status != novo:
+            auditoria.status = novo
             auditoria.save(update_fields=['status', 'atualizado_em'])
 
     @action(detail=True, methods=['post'])
     def responder(self, request, pk=None):
         auditoria = self.get_object()
-        if auditoria.status == 'concluida':
-            return Response({'detail': _AUDITORIA_CONCLUIDA_DETAIL}, status=status.HTTP_400_BAD_REQUEST)
+        bloqueio = _bloqueio_respostas(auditoria)
+        if bloqueio:
+            return Response({'detail': bloqueio}, status=status.HTTP_400_BAD_REQUEST)
+        if not usuario_na_equipe(request.user, auditoria):
+            return Response({'detail': _EQUIPE_DETAIL}, status=status.HTTP_403_FORBIDDEN)
         entrada = ResponderItemAuditoriaSerializer(data=request.data, context={'auditoria': auditoria})
         entrada.is_valid(raise_exception=True)
         dados = entrada.validated_data
         opcao = dados['opcao']
+        conflito_observacoes = False
+        existente = RespostaAuditoriaSGQ.objects.filter(auditoria=auditoria, item=dados['item']).first()
+        if existente is not None:
+            if dados.get('preservarOpcao') and existente.opcao_codigo:
+                opcao = {
+                    'codigo': existente.opcao_codigo,
+                    'texto': existente.opcao_texto,
+                    'valor': existente.valor,
+                }
+            if dados.get('preservarObservacoes'):
+                dados['observacoes'] = existente.observacoes
+            elif (
+                'observacoesBase' in dados
+                and limpar_texto_formatado(dados.get('observacoesBase') or '') != limpar_texto_formatado(existente.observacoes or '')
+                and limpar_texto_formatado(dados['observacoes']) != limpar_texto_formatado(existente.observacoes or '')
+            ):
+                dados['observacoes'] = existente.observacoes
+                conflito_observacoes = True
+            if dados.get('preservarDestaque'):
+                dados['destaque'] = existente.destaque
         with transaction.atomic():
             resposta, _ = RespostaAuditoriaSGQ.objects.update_or_create(
                 auditoria=auditoria,
@@ -601,7 +746,7 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                     'respondido_por': request.user,
                 },
             )
-            self._iniciar_execucao(auditoria)
+            self._sincronizar_status(auditoria)
         item = dados['item']
         record_audit(
             request.user, 'sgq.auditoria.resposta',
@@ -610,13 +755,46 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         notify_auditoria_changed(
             auditoria_id=auditoria.pk, item_id=item.pk, actor_user_id=request.user.pk, event='resposta',
         )
-        return self._resposta_atualizada(resposta)
+        resposta_http = self._resposta_atualizada(resposta)
+        if conflito_observacoes:
+            resposta_http.data['conflitoObservacoes'] = True
+        return resposta_http
+
+    @action(detail=True, methods=['post'], url_path='sugerir-evidencia')
+    def sugerir_evidencia(self, request, pk=None):
+        auditoria = self.get_object()
+        bloqueio = _bloqueio_respostas(auditoria)
+        if bloqueio:
+            return Response({'detail': bloqueio}, status=status.HTTP_400_BAD_REQUEST)
+        if not usuario_na_equipe(request.user, auditoria):
+            return Response({'detail': _EQUIPE_DETAIL}, status=status.HTTP_403_FORBIDDEN)
+        item_id = str(request.data.get('itemId') or '').strip()
+        item = (
+            ItemNormaSGQ.objects.filter(pk=int(item_id), norma__in=auditoria.normas.all(), tipo='pergunta').first()
+            if item_id.isdigit() else None
+        )
+        if item is None:
+            return Response({'itemId': 'Pergunta não encontrada nas normas desta auditoria.'}, status=status.HTTP_400_BAD_REQUEST)
+        acao = str(request.data.get('acao') or 'escrever').strip()
+        if acao not in ('escrever', 'validar'):
+            return Response({'acao': 'Escolha validar os anexos ou escrever a evidência.'}, status=status.HTTP_400_BAD_REQUEST)
+        resposta = auditoria.respostas.prefetch_related('anexos__incluido_por').filter(item=item).first()
+        try:
+            texto = montar_sugestao_evidencia(item, resposta, acao)
+        except GeminiErro as exc:
+            return Response({'detail': str(exc)}, status=exc.status)
+        if not texto:
+            return Response({'detail': 'O Camilo não devolveu uma evidência.'}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({'texto': texto})
 
     @action(detail=True, methods=['post'], url_path='anexos', parser_classes=[MultiPartParser, FormParser])
     def anexar(self, request, pk=None):
         auditoria = self.get_object()
-        if auditoria.status == 'concluida':
-            return Response({'detail': _AUDITORIA_CONCLUIDA_DETAIL}, status=status.HTTP_400_BAD_REQUEST)
+        bloqueio = _bloqueio_respostas(auditoria)
+        if bloqueio:
+            return Response({'detail': bloqueio}, status=status.HTTP_400_BAD_REQUEST)
+        if not usuario_na_equipe(request.user, auditoria):
+            return Response({'detail': _EQUIPE_DETAIL}, status=status.HTTP_403_FORBIDDEN)
         item_id = str(request.data.get('itemId') or '').strip()
         item = (
             ItemNormaSGQ.objects.filter(pk=int(item_id), norma__in=auditoria.normas.all(), tipo='pergunta').first()
@@ -639,21 +817,81 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 {'arquivo': f'Cada pergunta aceita até {RESPOSTA_MAX_ANEXOS} anexos.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        conteudo = arquivo.read()
+        nome = Path(arquivo.name).name[:180]
+        try:
+            info = enviar_copia_auditoria(request.user, auditoria.codigo, nome, conteudo)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         with transaction.atomic():
             resposta, _ = RespostaAuditoriaSGQ.objects.get_or_create(
                 auditoria=auditoria, item=item, defaults={'respondido_por': request.user},
             )
             AnexoRespostaAuditoriaSGQ.objects.create(
                 resposta=resposta,
-                arquivo=arquivo,
-                nome_original=Path(arquivo.name).name[:180],
-                tamanho=arquivo.size,
+                nome_original=nome,
+                tamanho=len(conteudo),
+                drive_file_id=info['id'],
+                drive_url=info['link'],
                 incluido_por=request.user,
             )
-            self._iniciar_execucao(auditoria)
+            self._sincronizar_status(auditoria)
         record_audit(
             request.user, 'sgq.auditoria.anexo',
             f'Auditoria {auditoria.codigo}: anexo "{arquivo.name}" no item {item.codigo or item.titulo[:60]}.',
+        )
+        notify_auditoria_changed(
+            auditoria_id=auditoria.pk, item_id=item.pk, actor_user_id=request.user.pk, event='anexo',
+        )
+        return self._resposta_atualizada(resposta)
+
+    @action(detail=True, methods=['post'], url_path='anexos-drive')
+    def anexar_drive(self, request, pk=None):
+        auditoria = self.get_object()
+        bloqueio = _bloqueio_respostas(auditoria)
+        if bloqueio:
+            return Response({'detail': bloqueio}, status=status.HTTP_400_BAD_REQUEST)
+        if not usuario_na_equipe(request.user, auditoria):
+            return Response({'detail': _EQUIPE_DETAIL}, status=status.HTTP_403_FORBIDDEN)
+        item_id = str(request.data.get('itemId') or '').strip()
+        item = (
+            ItemNormaSGQ.objects.filter(pk=int(item_id), norma__in=auditoria.normas.all(), tipo='pergunta').first()
+            if item_id.isdigit() else None
+        )
+        if item is None:
+            return Response({'itemId': 'Pergunta não encontrada nas normas desta auditoria.'}, status=status.HTTP_400_BAD_REQUEST)
+        drive_id = str(request.data.get('driveFileId') or '').strip()
+        if not drive_id:
+            return Response({'driveFileId': 'Escolha um arquivo do Google Drive.'}, status=status.HTTP_400_BAD_REQUEST)
+        if AnexoRespostaAuditoriaSGQ.objects.filter(resposta__auditoria=auditoria, resposta__item=item).count() >= RESPOSTA_MAX_ANEXOS:
+            return Response(
+                {'driveFileId': f'Cada pergunta aceita até {RESPOSTA_MAX_ANEXOS} anexos.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if AnexoRespostaAuditoriaSGQ.objects.filter(
+            resposta__auditoria=auditoria, resposta__item=item, drive_file_id=drive_id[:128],
+        ).exists():
+            return Response({'driveFileId': 'Este arquivo do Drive já está anexado nesta pergunta.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            dados = referenciar_anexo_drive(request.user, drive_id)
+        except ValueError as exc:
+            return Response({'driveFileId': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            resposta, _ = RespostaAuditoriaSGQ.objects.get_or_create(
+                auditoria=auditoria, item=item, defaults={'respondido_por': request.user},
+            )
+            AnexoRespostaAuditoriaSGQ.objects.create(
+                resposta=resposta,
+                nome_original=dados['nome'],
+                tamanho=dados['tamanho'],
+                drive_file_id=dados['id'],
+                drive_url=dados['link'],
+                incluido_por=request.user,
+            )
+            self._sincronizar_status(auditoria)
+        record_audit(
+            request.user, 'sgq.auditoria.anexo',
+            f'Auditoria {auditoria.codigo}: anexo do Drive "{dados["nome"]}" no item {item.codigo or item.titulo[:60]}.',
         )
         notify_auditoria_changed(
             auditoria_id=auditoria.pk, item_id=item.pk, actor_user_id=request.user.pk, event='anexo',
@@ -667,14 +905,24 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if anexo is None:
             return Response({'detail': 'Anexo não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         if request.method == 'GET':
-            if not anexo.arquivo:
-                return Response({'detail': 'Arquivo não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
-            return FileResponse(anexo.arquivo.open('rb'), as_attachment=True, filename=anexo.nome_original or 'anexo')
-        if auditoria.status == 'concluida':
-            return Response({'detail': _AUDITORIA_CONCLUIDA_DETAIL}, status=status.HTTP_400_BAD_REQUEST)
+            if anexo.arquivo:
+                return FileResponse(anexo.arquivo.open('rb'), as_attachment=True, filename=anexo.nome_original or 'anexo')
+            if anexo.drive_file_id and anexo.incluido_por_id:
+                try:
+                    fluxo = abrir_anexo_drive(anexo.incluido_por, anexo.drive_file_id)
+                except ValueError as exc:
+                    return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+                return FileResponse(fluxo, as_attachment=True, filename=anexo.nome_original or 'anexo')
+            return Response({'detail': 'Arquivo não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        bloqueio = _bloqueio_respostas(auditoria)
+        if bloqueio:
+            return Response({'detail': bloqueio}, status=status.HTTP_400_BAD_REQUEST)
+        if not usuario_na_equipe(request.user, auditoria):
+            return Response({'detail': _EQUIPE_DETAIL}, status=status.HTTP_403_FORBIDDEN)
         resposta = anexo.resposta
         nome = anexo.nome_original
-        anexo.arquivo.delete(save=False)
+        if anexo.arquivo:
+            anexo.arquivo.delete(save=False)
         anexo.delete()
         record_audit(request.user, 'sgq.auditoria.anexo.excluido', f'Auditoria {auditoria.codigo}: anexo "{nome}" excluído.')
         notify_auditoria_changed(

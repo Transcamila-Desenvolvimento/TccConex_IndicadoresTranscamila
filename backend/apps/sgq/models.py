@@ -246,6 +246,18 @@ AUDITORIA_STATUS_CHOICES = [
     ('concluida', 'Concluída'),
 ]
 
+def auditoria_tem_resposta(auditoria) -> bool:
+    return auditoria.respostas.filter(item__tipo='pergunta').exclude(opcao_codigo='').exists()
+
+
+def status_auditoria_automatico(auditoria) -> str:
+    """Planejamento sem resposta, execução quando o questionário anda, concluída só na finalização."""
+    if auditoria.status == 'concluida':
+        return 'concluida'
+    if auditoria.questionario_concluido or auditoria_tem_resposta(auditoria):
+        return 'execucao'
+    return 'planejamento'
+
 
 class AuditoriaSGQ(models.Model):
     """Auditoria do SGQ. O código segue o padrão AA-NNNNN, sequencial por ano."""
@@ -267,6 +279,8 @@ class AuditoriaSGQ(models.Model):
     processos_areas = models.TextField(blank=True, default='', verbose_name='Processos e áreas a serem auditados')
     responsaveis_processos = models.TextField(blank=True, default='', verbose_name='Responsáveis pelo processo')
     metodologia = models.TextField(blank=True, default='', verbose_name='Metodologia')
+    consideracoes_finais = models.TextField(blank=True, default='', verbose_name='Considerações finais')
+    questionario_concluido = models.BooleanField(default=False, verbose_name='Questionário concluído')
     # [{"data": "YYYY-MM-DD", "horaInicio": "HH:MM", "horaFim": "HH:MM", "atividade": "..."}]
     planejamento = models.JSONField(default=list, blank=True, verbose_name='Planejamento')
     criado_por = models.ForeignKey(
@@ -473,7 +487,7 @@ class RespostaAuditoriaSGQ(models.Model):
     opcao_texto = models.CharField(max_length=60, blank=True, default='', verbose_name='Opção escolhida')
     # % de conformidade da opção no momento da resposta; null = não se aplica (fora do cálculo).
     valor = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name='Conformidade (%)')
-    observacoes = models.TextField(max_length=4000, blank=True, default='', verbose_name='Observações')
+    observacoes = models.TextField(max_length=20000, blank=True, default='', verbose_name='Evidência/justificativa')
     destaque = models.CharField(max_length=10, choices=RESPOSTA_DESTAQUE_CHOICES, blank=True, default='', verbose_name='Destaque')
     respondido_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -507,9 +521,11 @@ class AnexoRespostaAuditoriaSGQ(models.Model):
     """Evidência anexada à resolução de uma pergunta da auditoria."""
 
     resposta = models.ForeignKey(RespostaAuditoriaSGQ, on_delete=models.CASCADE, related_name='anexos', verbose_name='Resposta')
-    arquivo = models.FileField(upload_to=anexo_resposta_upload_path, verbose_name='Arquivo')
+    arquivo = models.FileField(upload_to=anexo_resposta_upload_path, blank=True, verbose_name='Arquivo')
     nome_original = models.CharField(max_length=180, verbose_name='Nome do arquivo')
     tamanho = models.PositiveIntegerField(default=0, verbose_name='Tamanho em bytes')
+    drive_file_id = models.CharField(max_length=128, blank=True, default='', verbose_name='ID no Google Drive')
+    drive_url = models.CharField(max_length=500, blank=True, default='', verbose_name='Link no Google Drive')
     incluido_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

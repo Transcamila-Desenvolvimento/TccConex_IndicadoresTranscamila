@@ -50,7 +50,23 @@ class AuditoriaConversaTests(TestCase):
             titulo='SASSMAQ 2026', data_inicio='2026-10-01', data_termino='2026-10-30',
             auditor_lider='Ana', status='planejamento',
         )
+        self.aberta.escopo = 'Transporte de produto químico perigoso.'
+        self.aberta.metodologia = 'Entrevistas com os responsáveis e leitura de registros.'
+        self.aberta.planejamento = [{
+            'data': '2026-10-02', 'horaInicio': '08:00', 'horaFim': '09:00', 'atividade': 'Reunião de abertura',
+        }]
+        self.aberta.save()
         self.aberta.normas.add(self.norma)
+        self.primeira.descricao = 'A unidade precisa manter a política de segurança publicada.'
+        self.primeira.save(update_fields=['descricao'])
+        RespostaAuditoriaSGQ.objects.create(
+            auditoria=self.aberta,
+            item=self.primeira,
+            opcao_codigo='1',
+            opcao_texto='Sim',
+            observacoes='A política está publicada no mural da unidade.',
+            respondido_por=self.auditor,
+        )
         AuditoriaSGQ.objects.create(
             filial=IBIPORA, ano=2026, sequencia=2, codigo='26-00002', categoria='Interna',
             titulo='ISO da filial', data_inicio='2026-09-01', data_termino='2026-10-30',
@@ -69,7 +85,7 @@ class AuditoriaConversaTests(TestCase):
         self.client.force_authenticate(user=self.auditor)
         criado = self.client.post('/api/camilo/agentes/', {
             'nome': 'Auditor',
-            'instrucao': 'Conduzir o questionário',
+            'instrucao': 'Consultar auditorias',
             'escopos': [{'ambiente': 'SGQ', 'parte': 'auditorias'}],
         }, format='json')
         self.assertEqual(criado.status_code, 201, criado.content)
@@ -115,95 +131,194 @@ class AuditoriaConversaTests(TestCase):
             for item in grupo['partes']
         ]
         self.assertIn('auditorias', chaves)
+        self.assertNotIn('normas', chaves)
 
-    def test_conversa_grava_resposta_ponto_forte_e_segue_o_questionario(self):
-        abertura = self.falar('Quero dar andamento na minha auditoria')
-        self.assertIn('26-00001', abertura)
-        self.assertIn('26-00002', abertura)
-        self.assertNotIn('26-00003', abertura)
-        self.assertNotIn('26-00009', abertura)
-        self.assertIn('Qual delas você quer continuar?', abertura)
-
-        pergunta = self.falar('a primeira')
-        self.assertIn('Há política?', pergunta)
-        self.assertIn('Como você responde?', pergunta)
-        self.assertIn('Sim', pergunta)
-
-        self.falar('Sim')
+    def test_consulta_le_registro_planejamento_resposta_e_observacao(self):
+        texto = self.falar(
+            'Qual a observação, o planejamento e o escopo da auditoria 26-00001?',
+            voz=False,
+        )
+        self.assertIn('publicada no mural', texto)
+        self.assertIn('Reunião de abertura', texto)
+        self.assertIn('produto químico', texto)
+        self.assertIn('Sim', texto)
         self.aberta.refresh_from_db()
-        self.assertEqual(self.aberta.status, 'execucao')
-        salva = RespostaAuditoriaSGQ.objects.get(auditoria=self.aberta, item=self.primeira)
-        self.assertEqual(salva.opcao_texto, 'Sim')
-        self.assertEqual(salva.respondido_por, self.auditor)
+        self.assertEqual(self.aberta.status, 'planejamento')
+        self.assertEqual(RespostaAuditoriaSGQ.objects.count(), 1)
 
-        marcada = self.falar('ponto forte')
-        self.assertIn('Marquei como ponto forte', marcada)
-        salva.refresh_from_db()
-        self.assertEqual(salva.destaque, 'forte')
+    def test_pedido_de_resolver_nao_grava_nem_conclui(self):
+        antes = RespostaAuditoriaSGQ.objects.count()
+        texto = self.falar('Queria resolver minha auditoria e marcar as respostas', voz=False)
+        self.assertNotIn('Como você responde?', texto)
+        self.assertNotIn('Qual delas você quer continuar?', texto)
+        self.aberta.refresh_from_db()
+        self.assertEqual(self.aberta.status, 'planejamento')
+        self.assertEqual(RespostaAuditoriaSGQ.objects.count(), antes)
 
-        seguinte = self.falar('próxima')
-        self.assertIn('Há procedimento?', seguinte)
-
-        pedido = self.falar('Não aplicável')
-        self.assertIn('Pode falar a observação.', pedido)
-        self.assertFalse(
-            RespostaAuditoriaSGQ.objects.filter(auditoria=self.aberta, item=self.segunda).exclude(opcao_codigo='').exists()
+    def test_normas_liberam_a_leitura_do_texto(self):
+        self.auditor.abas = {'SGQ': ['home', 'auditorias', 'auditorias-normas']}
+        self.auditor.save(update_fields=['abas'])
+        partes = self.client.get('/api/camilo/partes/')
+        chaves = [
+            item['parte']
+            for grupo in partes.json()['grupos']
+            for item in grupo['partes']
+        ]
+        self.assertIn('normas', chaves)
+        criado = self.client.post('/api/camilo/agentes/', {
+            'nome': 'Normas',
+            'instrucao': 'Consultar normas',
+            'escopos': [{'ambiente': 'SGQ', 'parte': 'normas'}],
+        }, format='json')
+        self.assertEqual(criado.status_code, 201, criado.content)
+        resposta = self.client.post(
+            f"/api/camilo/agentes/{criado.json()['id']}/consultar/",
+            {'pergunta': 'O que a norma SASSMAQ diz sobre política?'},
+            format='json',
         )
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertIn('Há política?', resposta.json()['resposta'])
+        self.assertIn('publicada', resposta.json()['resposta'])
 
-        self.falar('A unidade não tem essa operação.')
-        segunda = RespostaAuditoriaSGQ.objects.get(auditoria=self.aberta, item=self.segunda)
-        self.assertEqual(segunda.opcao_texto, 'Não aplicável')
-        self.assertEqual(segunda.observacoes, 'A unidade não tem essa operação.')
-        self.assertIsNone(segunda.valor)
+    def _agente_de_normas(self):
+        self.auditor.abas = {'SGQ': ['home', 'auditorias', 'auditorias-normas']}
+        self.auditor.save(update_fields=['abas'])
+        criado = self.client.post('/api/camilo/agentes/', {
+            'nome': 'Normas',
+            'instrucao': 'Consultar normas',
+            'escopos': [{'ambiente': 'SGQ', 'parte': 'normas'}],
+        }, format='json')
+        self.assertEqual(criado.status_code, 201, criado.content)
+        return f"/api/camilo/agentes/{criado.json()['id']}/consultar/"
 
-        anexo = self.falar('quero anexar')
-        self.assertIn('não recebo arquivo', anexo)
-
-        fim = self.falar('próxima')
-        self.assertIn('está completo', fim)
-        self.assertEqual(
-            RespostaAuditoriaSGQ.objects.filter(auditoria=self.aberta).exclude(opcao_codigo='').count(),
-            2,
+    def test_varias_normas_pede_qual_consultar_mesmo_com_uma_ativa(self):
+        NormaSGQ.objects.create(
+            filial=IBIPORA, nome='ISO 9001', data_atualizacao='2026-10-01', emissor='X', ativa=False,
+            descricao='Item secreto da ISO que não deve aparecer antes da escolha.',
         )
+        url = self._agente_de_normas()
+        resposta = self.client.post(url, {
+            'pergunta': 'Quais itens da norma estão relacionados com o meio ambiente?',
+        }, format='json')
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        texto = resposta.json()['resposta']
+        self.assertIn('qual consultar', texto)
+        self.assertIn('SASSMAQ', texto)
+        self.assertIn('ISO 9001', texto)
+        self.assertIn('(ativa)', texto)
+        self.assertIn('(inativa)', texto)
+        self.assertIn('Só uma está ativa.', texto)
+        self.assertNotIn('Há política?', texto)
+        self.assertNotIn('secreto da ISO', texto)
 
-    def test_texto_reconhece_continuidade_da_auditoria(self):
-        abertura = self.falar('Quero dar continuidade na minha auditoria', voz=False)
-        self.assertIn('26-00001', abertura)
-        self.assertIn('Qual delas você quer continuar?', abertura)
-        self.assertNotIn('Matriz', abertura)
+    def test_norma_nomeada_responde_mesmo_com_outras_cadastradas(self):
+        NormaSGQ.objects.create(
+            filial=IBIPORA, nome='ISO 9001', data_atualizacao='2026-10-01', emissor='X', ativa=False,
+            descricao='Segredo da ISO.',
+        )
+        url = self._agente_de_normas()
+        resposta = self.client.post(url, {
+            'pergunta': 'O que a norma SASSMAQ diz sobre política?',
+        }, format='json')
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        texto = resposta.json()['resposta']
+        self.assertIn('Há política?', texto)
+        self.assertNotIn('Segredo da ISO', texto)
+        self.assertNotIn('qual consultar', texto)
 
-    def test_texto_resolver_auditoria_abre_o_questionario(self):
-        abertura = self.falar('Queria resolver minha auditoria', voz=False)
-        self.assertIn('26-00001', abertura)
-        self.assertIn('Qual delas você quer continuar?', abertura)
-        self.assertNotIn('Matriz', abertura)
+    def test_escolha_da_norma_ativa_libera_so_ela(self):
+        NormaSGQ.objects.create(
+            filial=IBIPORA, nome='ISO 9001', data_atualizacao='2026-10-01', emissor='X', ativa=False,
+            descricao='Segredo da ISO.',
+        )
+        url = self._agente_de_normas()
+        primeira = self.client.post(url, {
+            'pergunta': 'O que a norma diz sobre política?',
+        }, format='json')
+        self.assertIn('qual consultar', primeira.json()['resposta'])
+        segunda = self.client.post(url, {
+            'pergunta': 'A norma ativa.',
+            'historico': [
+                {'papel': 'user', 'texto': 'O que a norma diz sobre política?'},
+                {'papel': 'assistant', 'texto': primeira.json()['resposta']},
+            ],
+        }, format='json')
+        self.assertEqual(segunda.status_code, 200, segunda.content)
+        texto = segunda.json()['resposta']
+        self.assertIn('Há política?', texto)
+        self.assertNotIn('Segredo da ISO', texto)
 
-    def test_pergunta_de_documento_nao_abre_o_questionario(self):
-        abertura = self.falar('Tem procedimento de auditoria na matriz?', voz=False)
-        self.assertNotIn('Qual delas você quer continuar?', abertura)
+    def test_edicao_e_area_contam_as_perguntas_de_meio_ambiente(self):
+        areas = [
+            {'sigla': 'MA', 'nome': 'Meio Ambiente'},
+            {'sigla': 'SS', 'nome': 'Saúde e Segurança'},
+        ]
+        terceira = NormaSGQ.objects.create(
+            filial=IBIPORA, nome='SASSMAQ Rodoviário 3ª edição', data_atualizacao='2026-10-01',
+            emissor='X', areas=areas,
+        )
+        quarta = NormaSGQ.objects.create(
+            filial=IBIPORA, nome='SASSMAQ Rodoviário 4ª edição', data_atualizacao='2026-10-01',
+            emissor='X', areas=areas,
+        )
+        for titulo in ('Licença da unidade', 'Resíduos da operação'):
+            ItemNormaSGQ.objects.create(
+                norma=terceira, titulo=titulo, tipo='pergunta', areas=['MA'],
+            )
+        ItemNormaSGQ.objects.create(
+            norma=terceira, titulo='Texto orientativo de meio ambiente', tipo='orientativo', areas=['MA'],
+        )
+        ItemNormaSGQ.objects.create(
+            norma=terceira, titulo='Uso de EPI', tipo='pergunta', areas=['SS'],
+        )
+        ItemNormaSGQ.objects.create(
+            norma=quarta, titulo='Pergunta só da quarta', tipo='pergunta', areas=['MA'],
+        )
+        url = self._agente_de_normas()
+        primeira = self.client.post(url, {
+            'pergunta': 'Quantas perguntas relacionadas ao meio ambiente tem na norma?',
+        }, format='json')
+        self.assertIn('qual consultar', primeira.json()['resposta'])
+        segunda = self.client.post(url, {
+            'pergunta': 'A SASSMAQ 3 edição',
+            'historico': [
+                {'papel': 'user', 'texto': 'Quantas perguntas relacionadas ao meio ambiente tem na norma?'},
+                {'papel': 'assistant', 'texto': primeira.json()['resposta']},
+            ],
+        }, format='json')
+        self.assertEqual(segunda.status_code, 200, segunda.content)
+        texto = segunda.json()['resposta']
+        self.assertIn('SASSMAQ Rodoviário 3ª edição: 2 perguntas da área Meio Ambiente (MA).', texto)
+        self.assertNotIn('Pergunta só da quarta', texto)
+        self.assertNotIn('qual consultar', texto)
+        self.assertNotIn('nenhuma fala sobre isso', texto)
 
-    def test_sim_com_ruido_de_voz_continua_a_auditoria(self):
-        AuditoriaSGQ.objects.filter(codigo='26-00002').update(status='concluida')
-        self.falar('Quero dar andamento na minha auditoria')
-        pergunta = self.falar('sim não passa não direito mano')
-        self.assertIn('Há política?', pergunta)
-        self.assertNotIn('Quando quiser retomar', pergunta)
+    def test_tabela_traz_a_lista_completa_da_area(self):
+        terceira = NormaSGQ.objects.create(
+            filial=IBIPORA, nome='SASSMAQ Rodoviário 3ª edição', data_atualizacao='2026-10-01',
+            emissor='X', areas=[{'sigla': 'MA', 'nome': 'Meio Ambiente'}],
+        )
+        for numero in range(1, 32):
+            ItemNormaSGQ.objects.create(
+                norma=terceira,
+                codigo=f'9.{numero}',
+                titulo=f'Pergunta MA {numero:02d} ' + ('detalhe ' * 40),
+                tipo='pergunta',
+                areas=['MA'],
+            )
+        url = self._agente_de_normas()
+        resposta = self.client.post(url, {
+            'pergunta': 'A SASSMAQ 3 edição. Faça uma tabela com todas as perguntas de meio ambiente.',
+        }, format='json')
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        texto = resposta.json()['resposta']
+        self.assertIn('LISTA COMPLETA', texto)
+        self.assertIn('31 perguntas da área Meio Ambiente (MA).', texto)
+        self.assertIn('Pergunta MA 01', texto)
+        self.assertIn('Pergunta MA 31', texto)
+        self.assertNotIn('não listadas', texto)
 
-    def test_nao_sozinho_interrompe(self):
-        AuditoriaSGQ.objects.filter(codigo='26-00002').update(status='concluida')
-        self.falar('Quero dar andamento na minha auditoria')
-        resposta = self.falar('não')
-        self.assertIn('Quando quiser retomar', resposta)
-
-    def test_sem_permissao_nao_grava(self):
-        self.auditor.funcoes = {'SGQ': []}
-        self.auditor.save(update_fields=['funcoes'])
-        abertura = self.falar('Quero dar andamento na minha auditoria')
-        self.assertIn('permissão de executar auditorias', abertura)
-        self.assertNotIn('Como você responde?', abertura)
-        self.assertEqual(RespostaAuditoriaSGQ.objects.count(), 0)
-
-    def test_agente_sem_a_parte_nao_conduz_o_questionario(self):
+    def test_agente_sem_a_parte_nao_le_a_auditoria(self):
         self.auditor.abas = {'SGQ': ['home', 'pesquisa-satisfacao', 'auditorias']}
         self.auditor.save(update_fields=['abas'])
         criado = self.client.post('/api/camilo/agentes/', {
@@ -219,5 +334,5 @@ class AuditoriaConversaTests(TestCase):
         )
         self.assertEqual(resposta.status_code, 200, resposta.content)
         self.assertNotIn('Como você responde?', resposta.json()['resposta'])
-        self.assertNotIn('Qual delas você quer continuar?', resposta.json()['resposta'])
-        self.assertEqual(RespostaAuditoriaSGQ.objects.count(), 0)
+        self.assertNotIn('publicada no mural', resposta.json()['resposta'])
+        self.assertEqual(RespostaAuditoriaSGQ.objects.count(), 1)

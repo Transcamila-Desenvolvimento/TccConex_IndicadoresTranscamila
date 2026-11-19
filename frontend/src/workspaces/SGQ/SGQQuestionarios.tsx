@@ -4,11 +4,15 @@ import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { userHasFuncao } from '../../constants/funcoes';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
-import { useSgqAuditorias } from '../../hooks/useSgqAuditorias';
+import { getSgqAuditoriaErrorMessage, useReabrirQuestionarioSgqAuditoria, useSgqAuditorias } from '../../hooks/useSgqAuditorias';
 import type { SgqAuditoria, SgqAuditoriaQueryParams } from '../../types/domain';
-import { SGQ_AUDITORIA_STATUS_LABEL } from '../../types/domain';
+import { SGQ_QUESTIONARIO_STATUS_LABEL } from '../../types/domain';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
+
+function mesmoNome(a: string, b: string) {
+  return a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
+}
 
 function percentual(auditoria: SgqAuditoria) {
   if (!auditoria.totalPerguntas) return 0;
@@ -19,6 +23,8 @@ const SGQQuestionarios: React.FC = () => {
   const { user, selectedFilial } = useAuth();
   const navigate = useNavigate();
   const canAnswer = userHasFuncao(user, 'SGQ', 'executar-auditorias');
+  const podeReabrirQuestionario = userHasFuncao(user, 'SGQ', 'reabrir-questionario');
+  const reabrirQuestionario = useReabrirQuestionarioSgqAuditoria(selectedFilial);
 
   const [busca, setBusca] = useState('');
   const [buscaAplicada, setBuscaAplicada] = useState('');
@@ -38,9 +44,20 @@ const SGQQuestionarios: React.FC = () => {
     pageSize,
     search: buscaAplicada,
     ordering: '-data_inicio',
+    minhaEquipe: true,
   };
   const listaQuery = useSgqAuditorias(selectedFilial, params);
   const { canShowEmpty } = useAsyncQueryState(listaQuery);
+  const reabrir = (auditoria: SgqAuditoria) => {
+    const aviso = auditoria.status === 'concluida'
+      ? `Reabrir o questionário de ${auditoria.codigo}? As respostas voltam a poder ser alteradas e a auditoria volta para em execução.`
+      : `Reabrir o questionário de ${auditoria.codigo}? As respostas voltam a poder ser alteradas.`;
+    if (!window.confirm(aviso)) return;
+    reabrirQuestionario.mutate(auditoria.id, {
+      onError: (err) => alert(getSgqAuditoriaErrorMessage(err, 'Não foi possível reabrir o questionário.')),
+    });
+  };
+
   const linhas = listaQuery.data?.results ?? [];
   const total = listaQuery.data?.count ?? 0;
   const totalPaginas = Math.max(1, Math.ceil(total / pageSize));
@@ -117,7 +134,10 @@ const SGQQuestionarios: React.FC = () => {
                   linhas.map((auditoria) => {
                     const normas = auditoria.normas.map((norma) => norma.nome);
                     const pct = percentual(auditoria);
-                    const somenteLeitura = auditoria.status === 'concluida' || !canAnswer;
+                    const naEquipe = mesmoNome(user?.name ?? '', auditoria.auditorLider)
+                      || auditoria.auditores.some((nome) => mesmoNome(user?.name ?? '', nome));
+                    const questionarioFechado = auditoria.status === 'concluida' || auditoria.questionarioConcluido;
+                    const somenteLeitura = questionarioFechado || !canAnswer || !naEquipe;
                     return (
                       <tr key={auditoria.id} className="sgq-quest-linha">
                         <td><span className="sgq-aud-codigo">{auditoria.codigo}</span></td>
@@ -137,8 +157,8 @@ const SGQQuestionarios: React.FC = () => {
                           ) : <span className="sgq-aud-muted">—</span>}
                         </td>
                         <td>
-                          <span className={`sgq-aud-status is-${auditoria.status}`}>
-                            {SGQ_AUDITORIA_STATUS_LABEL[auditoria.status]}
+                          <span className={`sgq-aud-status is-${auditoria.statusQuestionario}`}>
+                            {SGQ_QUESTIONARIO_STATUS_LABEL[auditoria.statusQuestionario]}
                           </span>
                         </td>
                         <td>
@@ -157,13 +177,25 @@ const SGQQuestionarios: React.FC = () => {
                           )}
                         </td>
                         <td className="sgq-quest-acao">
-                          <button
-                            type="button"
-                            className={`reports-action-btn ${somenteLeitura ? 'secondary' : 'primary'} sgq-quest-abrir`}
-                            onClick={() => abrir(auditoria)}
-                          >
-                            {somenteLeitura ? 'Ver respostas' : 'Responder'}
-                          </button>
+                          <div className="sgq-quest-acoes">
+                            {questionarioFechado && podeReabrirQuestionario && (
+                              <button
+                                type="button"
+                                className="reports-action-btn secondary sgq-quest-abrir"
+                                onClick={() => reabrir(auditoria)}
+                                disabled={reabrirQuestionario.isPending}
+                              >
+                                {reabrirQuestionario.isPending ? 'Reabrindo...' : 'Reabrir'}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className={`reports-action-btn ${somenteLeitura ? 'secondary' : 'primary'} sgq-quest-abrir`}
+                              onClick={() => abrir(auditoria)}
+                            >
+                              {somenteLeitura ? 'Ver respostas' : 'Responder'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

@@ -882,7 +882,7 @@ const AgenteCamiloChat: React.FC = () => {
                 </label>
                 <fieldset className="camilo-scope">
                   <legend>Pode consultar</legend>
-                  <p>Só aparecem ambientes e rotinas que você já acessa. A consulta é de leitura. Em Auditorias do SGQ, o agente também grava o questionário, se você puder executá-lo.</p>
+                  <p>Só aparecem ambientes e rotinas que você já acessa. A consulta é só de leitura. Em Auditorias, o agente lê o registro, o planejamento, as respostas e as observações. Em Normas, ele lê o texto da norma e, se houver mais de uma cadastrada, pergunta qual consultar antes de responder. Ele não grava nem conclui auditoria.</p>
                   <QueryDataPanel
                     query={partesQuery}
                     variant="compact"

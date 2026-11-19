@@ -514,13 +514,375 @@ def resumo_pesquisas(user) -> str:
     return _texto(total, 'pesquisa de satisfação', 'pesquisas de satisfação')
 
 
-def resumo_auditorias(user) -> str:
+def _texto_limpo(valor: str) -> str:
+    import re
+    texto = str(valor or '')
+    texto = re.sub(r'<br\s*/?>', '\n', texto, flags=re.I)
+    texto = re.sub(r'</(?:p|div|li|ul|ol|h[1-6])>', '\n', texto, flags=re.I)
+    texto = re.sub(r'<[^>]+>', '', texto)
+    texto = (
+        texto.replace('&nbsp;', ' ')
+        .replace('&amp;', '&')
+        .replace('&lt;', '<')
+        .replace('&gt;', '>')
+    )
+    texto = re.sub(r'[ \t]+\n', '\n', texto)
+    return re.sub(r'\n{3,}', '\n\n', texto).strip()
+
+
+def _pontos_blob(blob: str, termos: list[str]) -> int:
+    base = _sem_acento(blob.lower())
+    nota = 0
+    for termo in termos:
+        chave = _sem_acento(termo)
+        if len(chave) > 4 and chave.endswith('s'):
+            chave = chave[:-1]
+        if len(chave) >= 4:
+            nota += base.count(chave)
+    return nota
+
+
+def _normas_do_acesso(user):
+    from django.db.models import Q
+
+    from apps.accounts.permissions import allowed_filiais_for_module, db_values_for_filiais
+    from apps.sgq.models import NormaSGQ
+    from apps.sgq.serializers import filial_que_compartilha_normas
+
+    if user.is_admin:
+        return NormaSGQ.objects.all()
+    filiais = db_values_for_filiais(allowed_filiais_for_module(user, 'SGQ'))
+    if not filiais:
+        return NormaSGQ.objects.none()
+    origem = filial_que_compartilha_normas()
+    return NormaSGQ.objects.filter(Q(filial__in=filiais) | Q(filial=origem, publica=True)).distinct()
+
+
+def _normalizar_referencia(texto: str) -> str:
+    import re
+
+    base = _sem_acento((texto or '').lower()).replace('ª', '').replace('º', '').replace('°', '')
+    base = re.sub(r'(\d)\s*[ao]\b', r'\1', base)
+    base = re.sub(r'[^a-z0-9]+', ' ', base)
+    return ' '.join(base.split())
+
+
+def _tokens_nome(nome: str) -> list[str]:
+    paradas = {'a', 'o', 'de', 'da', 'do', 'das', 'dos', 'e', 'em', 'na', 'no', 'nbr', 'abnt'}
+    return [token for token in _normalizar_referencia(nome).split() if token not in paradas]
+
+
+def _normas_citadas(normas, pergunta: str) -> list:
+    import re
+
+    base = _normalizar_referencia(pergunta)
+    tokens_base = set(base.split())
+    edicoes = set(re.findall(r'\b(\d{1,2})\s+edicao\b', base))
+    genericos = {'edicao', 'edicoes', 'versao'}
+    pontuadas = []
+    for norma in normas:
+        casados = []
+        for token in _tokens_nome(norma.nome):
+            if token in genericos:
+                continue
+            if token.isdigit() and len(token) <= 2:
+                if token in edicoes:
+                    casados.append(token)
+                continue
+            if token in tokens_base:
+                casados.append(token)
+        if casados:
+            pontuadas.append((len(casados), norma))
+    if not pontuadas:
+        return []
+    melhor = max(nota for nota, _norma in pontuadas)
+    return [norma for nota, norma in pontuadas if nota == melhor]
+
+
+def _escolhe_a_unica_ativa(normas, pergunta: str):
+    base = _sem_acento((pergunta or '').lower())
+    frases = (
+        'a ativa',
+        'norma ativa',
+        'que esta ativa',
+        'somente a ativa',
+        'so a ativa',
+        'apenas a ativa',
+        'a que esta ativa',
+    )
+    if not any(frase in base for frase in frases):
+        return None
+    ativas = [norma for norma in normas if norma.ativa]
+    if len(ativas) == 1:
+        return ativas[0]
+    return None
+
+
+def _pediu_todas_as_normas(pergunta: str) -> bool:
+    base = _sem_acento((pergunta or '').lower())
+    return any(frase in base for frase in (
+        'todas as normas',
+        'em todas as normas',
+        'de todas as normas',
+        'nas normas cadastradas',
+    ))
+
+
+def _pedido_de_norma(normas) -> str:
+    ativas = sum(1 for norma in normas if norma.ativa)
+    if ativas == 1:
+        situacao = ' Só uma está ativa.'
+    elif ativas == 0:
+        situacao = ' Nenhuma está ativa.'
+    else:
+        situacao = f' {ativas} estão ativas.'
+    linhas = [
+        (
+            f'Há {len(normas)} normas cadastradas e a pergunta não diz qual consultar. '
+            'Pergunte qual delas usar antes de responder o conteúdo.'
+            f'{situacao}'
+        )
+    ]
+    for norma in normas:
+        estado = 'ativa' if norma.ativa else 'inativa'
+        linhas.append(f'- {norma.nome} ({estado})')
+    return '\n'.join(linhas)
+
+
+def _mapa_areas(norma) -> dict[str, str]:
+    mapa = {}
+    for area in norma.areas or []:
+        if isinstance(area, dict) and str(area.get('sigla') or '').strip():
+            sigla = str(area['sigla']).strip()
+            mapa[sigla] = str(area.get('nome') or sigla).strip()
+    return mapa
+
+
+def _pediu_lista_completa(pergunta: str) -> bool:
+    base = _normalizar_referencia(pergunta)
+    if any(termo in base.split() for termo in ('tabela', 'listagem', 'liste', 'lista', 'listar')):
+        return True
+    return any(frase in base for frase in (
+        'todas as perguntas',
+        'todos os itens',
+        'com todas',
+        'lista completa',
+    ))
+
+
+def _bloco_area(norma, pergunta: str) -> list[str] | None:
+    import re
+
+    mapa = _mapa_areas(norma)
+    if not mapa:
+        return None
+    base = _normalizar_referencia(pergunta)
+    pedidas = []
+    for sigla, nome in mapa.items():
+        nome_normal = _normalizar_referencia(nome)
+        sigla_normal = _normalizar_referencia(sigla)
+        if nome_normal and nome_normal in base:
+            pedidas.append(sigla)
+        elif len(sigla_normal) >= 2 and re.search(
+            rf'(?<![a-z0-9]){re.escape(sigla_normal)}(?![a-z0-9])', base,
+        ):
+            pedidas.append(sigla)
+    if not pedidas:
+        return None
+    so_perguntas = 'pergunta' in base
+    itens = [
+        item for item in norma.itens.all()
+        if (not so_perguntas or item.tipo == 'pergunta') and set(item.areas or []) & set(pedidas)
+    ]
+    nomes = ', '.join(f'{mapa[sigla]} ({sigla})' for sigla in pedidas)
+    if so_perguntas:
+        rotulo = 'pergunta' if len(itens) == 1 else 'perguntas'
+    else:
+        rotulo = 'item' if len(itens) == 1 else 'itens'
+    if _pediu_lista_completa(pergunta):
+        linhas = [
+            f'LISTA COMPLETA. {norma.nome}: {len(itens)} {rotulo} da área {nomes}.',
+            'Monte a tabela com todas as linhas abaixo, sem omitir nenhuma.',
+            '| Código | Pergunta |',
+            '| --- | --- |',
+        ]
+        for item in itens:
+            titulo = ' '.join(str(item.titulo or '').split()).replace('|', '/')
+            linhas.append(f'| {item.codigo} | {titulo} |')
+        return linhas
+    linhas = [f'{norma.nome}: {len(itens)} {rotulo} da área {nomes}.']
+    for item in itens[:30]:
+        linhas.append(f'- {f"{item.codigo} {item.titulo}".strip()}')
+    if len(itens) > 30:
+        linhas.append(f'Outras {len(itens) - 30} não listadas. O total é {len(itens)}.')
+    return linhas
+
+
+def resumo_normas(user, pergunta: str = '') -> str:
+    normas = list(_normas_do_acesso(user).prefetch_related('itens').order_by('nome', 'pk'))
+    if not normas:
+        return 'Nenhuma norma no seu acesso.'
+    if not (pergunta or '').strip():
+        return _texto(len(normas), 'norma no seu acesso', 'normas no seu acesso')
+
+    citadas = _normas_citadas(normas, pergunta)
+    if len(citadas) == 1:
+        normas = citadas
+    elif len(citadas) > 1:
+        return _pedido_de_norma(citadas)
+    elif not _pediu_todas_as_normas(pergunta):
+        unica_ativa = _escolhe_a_unica_ativa(normas, pergunta)
+        if unica_ativa is not None:
+            normas = [unica_ativa]
+        elif len(normas) > 1:
+            return _pedido_de_norma(normas)
+
+    termos = _termos_pergunta(pergunta)
+    linhas_area = []
+    normas_texto = []
+    for norma in normas:
+        bloco = _bloco_area(norma, pergunta)
+        if bloco is not None:
+            linhas_area.extend(bloco)
+        else:
+            normas_texto.append(norma)
+    if linhas_area and not normas_texto:
+        return '\n'.join(linhas_area)
+
+    blocos = []
+    for norma in normas_texto:
+        itens = list(norma.itens.all())
+        pedacos = [f'{norma.nome} {norma.descricao}']
+        pedacos.extend(f'{item.codigo} {item.titulo} {item.descricao}' for item in itens)
+        blob = ' '.join(pedacos)
+        blocos.append(( _pontos_blob(blob, termos), norma, itens))
+    escolhidas = [bloco for bloco in sorted(blocos, key=lambda item: item[0], reverse=True) if bloco[0] > 0][:2]
+    if not escolhidas:
+        if linhas_area:
+            return '\n'.join(linhas_area)
+        nomes = '; '.join(norma.nome for norma in normas[:8])
+        return f'Li {len(normas)} norma(s) ({nomes}) e nenhuma fala sobre isso.'
+
+    linhas = []
+    for _nota, norma, itens in escolhidas:
+        cabeca = norma.nome
+        if norma.descricao:
+            cabeca += f': {_trecho(_texto_limpo(norma.descricao), termos, limite=500, janelas=1)}'
+        linhas.append(cabeca)
+        casados = []
+        for item in itens:
+            texto_item = f'{item.codigo} {item.titulo} {item.descricao}'
+            if termos and _pontos_blob(texto_item, termos) <= 0 and _pontos_blob(norma.nome, termos) <= 0:
+                continue
+            if termos and _pontos_blob(norma.nome, termos) > 0 and _pontos_blob(texto_item, termos) <= 0:
+                continue
+            linha = f'{item.codigo} {item.titulo}'.strip()
+            descricao = _texto_limpo(item.descricao)
+            if descricao:
+                linha += f': {_trecho(descricao, termos, limite=400, janelas=1)}'
+            casados.append(linha)
+        if not casados and _pontos_blob(f'{norma.nome} {norma.descricao}', termos) > 0:
+            casados = [f'{item.codigo} {item.titulo}'.strip() for item in itens[:20]]
+        linhas.extend(f'- {linha}' for linha in casados[:20])
+    return '\n'.join([*linhas_area, *linhas])
+
+
+def _bloco_auditoria(auditoria, termos: list[str]) -> str:
+    linhas = [
+        (
+            f'{auditoria.codigo} {auditoria.titulo} ({auditoria.get_status_display()}), '
+            f'{auditoria.data_inicio:%d/%m/%Y} a {auditoria.data_termino:%d/%m/%Y}, '
+            f'líder {auditoria.auditor_lider or "—"}, filial {auditoria.filial}'
+        )
+    ]
+    for rotulo, valor in (
+        ('Escopo / objetivo', auditoria.escopo),
+        ('Critérios', auditoria.criterios),
+        ('Processos e áreas', auditoria.processos_areas),
+        ('Responsáveis pelo processo', auditoria.responsaveis_processos),
+        ('Metodologia', auditoria.metodologia),
+    ):
+        limpo = _texto_limpo(valor)
+        if limpo:
+            linhas.append(f'{rotulo}: {_trecho(limpo, termos, limite=700, janelas=2)}')
+    plano = []
+    for item in auditoria.planejamento or []:
+        if not isinstance(item, dict):
+            continue
+        atividade = ' '.join(str(item.get('atividade') or '').split())
+        quando = ' '.join(
+            pedaco for pedaco in (str(item.get('data') or ''), f"{item.get('horaInicio') or ''}–{item.get('horaFim') or ''}")
+            if pedaco and pedaco != '–'
+        )
+        if atividade or quando:
+            plano.append(f'{quando} {atividade}'.strip())
+    if plano:
+        linhas.append('Planejamento: ' + '; '.join(plano[:12]))
+    respostas = []
+    for resposta in auditoria.respostas.all():
+        item = resposta.item
+        rotulo = f'{item.codigo} {item.titulo}'.strip()
+        pedacos = []
+        if resposta.opcao_texto:
+            pedacos.append(resposta.opcao_texto)
+        observacao = _texto_limpo(resposta.observacoes)
+        if observacao:
+            pedacos.append(f'observação: {observacao}')
+        if resposta.destaque == 'forte':
+            pedacos.append('ponto forte')
+        elif resposta.destaque == 'fraco':
+            pedacos.append('ponto fraco')
+        if pedacos:
+            respostas.append(f'{rotulo}: {"; ".join(pedacos)}')
+    if respostas:
+        linhas.append('Questionário:')
+        linhas.extend(f'- {linha}' for linha in respostas[:24])
+    return '\n'.join(linhas)
+
+
+def resumo_auditorias(user, pergunta: str = '') -> str:
+    import re
+
     from apps.sgq.models import AuditoriaSGQ
-    abertas = _filtra_filial(AuditoriaSGQ.objects.all(), user, 'SGQ', 'filial').exclude(status='concluida').count()
-    if abertas == 0:
-        return 'Nenhuma auditoria em aberto.'
-    texto = _texto(abertas, 'auditoria em aberto', 'auditorias em aberto')
-    return f'{texto} Dá para responder o questionário pedindo para dar andamento.'
+
+    auditorias = list(
+        _filtra_filial(
+            AuditoriaSGQ.objects.prefetch_related('respostas__item'),
+            user, 'SGQ', 'filial',
+        ).order_by('-data_inicio', '-sequencia')
+    )
+    if not auditorias:
+        return 'Nenhuma auditoria no seu acesso.'
+    if not (pergunta or '').strip():
+        return _texto(len(auditorias), 'auditoria no seu acesso', 'auditorias no seu acesso')
+
+    termos = _termos_pergunta(pergunta)
+    codigos = re.findall(r'\b\d{2}-\d{5}\b', pergunta or '')
+    if codigos:
+        escolhidas = [auditoria for auditoria in auditorias if auditoria.codigo in codigos][:2]
+    else:
+        pontuadas = []
+        for auditoria in auditorias:
+            respostas = ' '.join(
+                f'{resposta.item.codigo} {resposta.item.titulo} {resposta.opcao_texto} {resposta.observacoes}'
+                for resposta in auditoria.respostas.all()
+            )
+            plano = ' '.join(
+                str(item.get('atividade') or '')
+                for item in (auditoria.planejamento or [])
+                if isinstance(item, dict)
+            )
+            blob = ' '.join((
+                auditoria.codigo, auditoria.titulo, auditoria.categoria, auditoria.escopo,
+                auditoria.criterios, auditoria.processos_areas, auditoria.responsaveis_processos,
+                auditoria.metodologia, plano, respostas,
+            ))
+            pontuadas.append((_pontos_blob(blob, termos), auditoria))
+        escolhidas = [auditoria for nota, auditoria in sorted(pontuadas, key=lambda item: item[0], reverse=True) if nota > 0][:2]
+    if not escolhidas:
+        amostra = '; '.join(f'{auditoria.codigo} {auditoria.titulo}' for auditoria in auditorias[:8])
+        return f'Li {len(auditorias)} auditoria(s) ({amostra}) e nenhuma traz esse assunto.'
+    return '\n\n'.join(_bloco_auditoria(auditoria, termos) for auditoria in escolhidas)
 
 
 def resumo_campanhas(user) -> str:
@@ -607,6 +969,7 @@ LEITORES = {
     ('SGQ', 'matriz'): resumo_matriz_sgq,
     ('SGQ', 'pesquisa-satisfacao'): resumo_pesquisas,
     ('SGQ', 'auditorias'): resumo_auditorias,
+    ('SGQ', 'normas'): resumo_normas,
     ('Marketing', 'campanhas'): resumo_campanhas,
     ('Logística', 'configuracoes'): resumo_metas,
     ('Comercial', 'cadastro-clientes'): resumo_clientes_comercial,
@@ -635,9 +998,13 @@ _SINAIS = {
     ('Suprimentos', 'controle-estoque'): ('estoque', 'quantidade minima'),
     ('RH', 'movimentacoes'): ('salario', 'cargo', 'colaborador', 'funcionario', 'movimentacao', 'admissao'),
     ('RH', 'documentos'): ('documento', 'matriz', 'conhecimento', 'convencao', 'piso', 'diaria', 'sindical', 'acordo'),
-    ('SGQ', 'matriz'): ('matriz', 'conhecimento', 'documento', 'procedimento', 'norma', 'qualidade', 'auditoria'),
+    ('SGQ', 'matriz'): ('matriz', 'conhecimento', 'documento', 'procedimento', 'qualidade'),
     ('SGQ', 'pesquisa-satisfacao'): ('pesquisa', 'satisfacao'),
-    ('SGQ', 'auditorias'): ('questionario', 'andamento', 'auditoria em aberto'),
+    ('SGQ', 'auditorias'): (
+        'auditoria', 'questionario', 'observacao', 'resposta', 'planejamento',
+        'escopo', 'criterio', 'metodologia', 'andamento',
+    ),
+    ('SGQ', 'normas'): ('norma', 'normas', 'requisito', 'checklist', 'item da norma'),
     ('Marketing', 'campanhas'): ('campanha', 'marketing'),
     ('Logística', 'configuracoes'): ('logistica',),
     ('Comercial', 'cadastro-clientes'): ('cliente comercial', 'razao'),
@@ -657,7 +1024,12 @@ _SINAIS = {
 _LIMITE_RESUMO = 2800
 # Sem palavra-sinal na pergunta, agentes com até estas partes leem todas pelo termo da pergunta.
 _MAXIMO_SEM_SINAL = 3
-_PARTES_DOCUMENTO = frozenset({('RH', 'documentos'), ('SGQ', 'matriz')})
+_PARTES_DOCUMENTO = frozenset({
+    ('RH', 'documentos'),
+    ('SGQ', 'matriz'),
+    ('SGQ', 'auditorias'),
+    ('SGQ', 'normas'),
+})
 
 
 def _tem_sinal(texto: str, sinal: str) -> bool:
@@ -979,6 +1351,10 @@ def _ler_parte(user, item: dict, pergunta: str, detalhar: bool) -> str:
             return _contagem_documentos(user)
         if chave == ('SGQ', 'matriz'):
             return _contagem_matriz_sgq(user)
+        if chave == ('SGQ', 'auditorias'):
+            return resumo_auditorias(user)
+        if chave == ('SGQ', 'normas'):
+            return resumo_normas(user)
         if chave in {('RH', 'movimentacoes'), ('Indicadores', 'movimentacao-rh')}:
             return _contagem_movimentacoes(user)
         leitor = LEITORES.get(chave)
@@ -988,6 +1364,10 @@ def _ler_parte(user, item: dict, pergunta: str, detalhar: bool) -> str:
         texto = resumo_documentos(user, pergunta)
     elif chave == ('SGQ', 'matriz'):
         texto = resumo_matriz_sgq(user, pergunta)
+    elif chave == ('SGQ', 'auditorias'):
+        texto = resumo_auditorias(user, pergunta)
+    elif chave == ('SGQ', 'normas'):
+        texto = resumo_normas(user, pergunta)
     elif chave in {('RH', 'movimentacoes'), ('Indicadores', 'movimentacao-rh')}:
         texto = resumo_movimentacoes(user, pergunta)
     else:
@@ -1002,7 +1382,7 @@ def _ler_parte(user, item: dict, pergunta: str, detalhar: bool) -> str:
     if detalhar and chave in {('RH', 'movimentacoes'), ('Indicadores', 'movimentacao-rh')}:
         limite = 9000
     elif detalhar and chave in _PARTES_DOCUMENTO:
-        limite = 7000
+        limite = 20000 if texto.startswith('LISTA COMPLETA') else 7000
     if len(texto) > limite:
         texto = texto[:limite].rstrip() + '…'
     return texto

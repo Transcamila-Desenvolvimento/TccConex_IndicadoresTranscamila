@@ -3,7 +3,7 @@
 from .serializers import limpar_texto_formatado
 
 _STATUS = {'planejamento', 'execucao', 'concluida'}
-_HTML = ('escopo', 'criterios', 'processosAreas', 'responsaveisProcessos', 'metodologia')
+_HTML = ('escopo', 'criterios', 'processosAreas', 'responsaveisProcessos', 'metodologia', 'consideracoesFinais')
 _HTML_MAX = 20_000
 
 EMPTY_FORM = {
@@ -19,6 +19,7 @@ EMPTY_FORM = {
     'processosAreas': '',
     'responsaveisProcessos': '',
     'metodologia': '',
+    'consideracoesFinais': '',
     'planejamento': [],
 }
 

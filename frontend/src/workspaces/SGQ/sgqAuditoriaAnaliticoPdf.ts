@@ -13,7 +13,7 @@ import {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import logoTranscamila from '../../assets/logo-transcamila-30-anos.png';
-import type { SgqAuditoriaExecucao, SgqNormaItem } from '../../types/domain';
+import type { SgqAuditoriaExecucao, SgqNormaItem, SgqResultadoAuditoria, SgqResultadoSituacao } from '../../types/domain';
 import { SGQ_AUDITORIA_STATUS_LABEL } from '../../types/domain';
 import { textoPlanoFormatado } from './SGQEditorTexto';
 import { agregarRespostasAuditoria } from './SGQAuditoriaResultados';
@@ -27,6 +27,42 @@ const MUTED: Rgb = [100, 116, 139];
 const LINE: Rgb = [203, 213, 225];
 const RULE: Rgb = [15, 118, 196];
 const HEAD_BG: Rgb = [232, 239, 244];
+
+const RESULTADO_ROTULO: Record<SgqResultadoSituacao, string> = {
+  aprovada: 'Aprovada',
+  reprovada: 'Reprovada',
+  incompleta: 'Incompleta',
+};
+
+const RESULTADO_COR: Record<SgqResultadoSituacao, { fundo: Rgb; tinta: Rgb }> = {
+  aprovada: { fundo: [231, 247, 246], tinta: [1, 143, 132] },
+  reprovada: { fundo: [253, 236, 236], tinta: [224, 69, 65] },
+  incompleta: { fundo: [241, 245, 249], tinta: [71, 85, 105] },
+};
+
+function desenharVeredito(doc: jsPDF, resultado: SgqResultadoAuditoria, x: number, y: number, largura: number): number {
+  const ciclos: Array<[string, SgqResultadoSituacao]> = [
+    ['1ª avaliação', resultado.primeira],
+    ['Reavaliação', resultado.reavaliacao],
+  ];
+  const espaco = 3;
+  const larguraCaixa = (largura - espaco) / 2;
+  const altura = 10;
+  ciclos.forEach(([rotulo, situacao], indice) => {
+    const cor = RESULTADO_COR[situacao];
+    const esquerda = x + indice * (larguraCaixa + espaco);
+    doc.setFillColor(cor.fundo[0], cor.fundo[1], cor.fundo[2]);
+    doc.roundedRect(esquerda, y, larguraCaixa, altura, 1.2, 1.2, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    textColor(doc, cor.tinta);
+    doc.text(rotulo.toUpperCase(), esquerda + larguraCaixa / 2, y + 3.6, { align: 'center' });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(RESULTADO_ROTULO[situacao], esquerda + larguraCaixa / 2, y + 7.6, { align: 'center' });
+  });
+  return altura + 4;
+}
 
 const textColor = (doc: jsPDF, color: Rgb) => doc.setTextColor(color[0], color[1], color[2]);
 const drawColor = (doc: jsPDF, color: Rgb) => doc.setDrawColor(color[0], color[1], color[2]);
@@ -175,10 +211,8 @@ function resumir(dados: SgqAuditoriaExecucao) {
   const perguntas = dados.itens.filter((item) => item.tipo === 'pergunta');
   const geral = faixaVazia('Geral');
   const classes = new Map<string, Faixa>();
-  const areas = new Map<string, Faixa>();
   const nomesClasse = new Map<string, string>();
   const metas = new Map<string, { primeira: number; reavaliacao: number }>();
-  const nomesArea = new Map<string, string>();
 
   dados.normas.forEach((norma) => {
     norma.classificacoes.forEach((classe) => {
@@ -186,9 +220,6 @@ function resumir(dados: SgqAuditoriaExecucao) {
       if (!metas.has(classe.sigla)) {
         metas.set(classe.sigla, { primeira: classe.metaPrimeira, reavaliacao: classe.metaReavaliacao });
       }
-    });
-    norma.areas.forEach((area) => {
-      if (!nomesArea.has(area.sigla)) nomesArea.set(area.sigla, area.nome || area.sigla);
     });
   });
 
@@ -201,17 +232,10 @@ function resumir(dados: SgqAuditoriaExecucao) {
     const classe = classes.get(sigla) ?? faixaVazia(nomesClasse.get(sigla) || (sigla === '—' ? 'Sem classificação' : sigla));
     acumular(classe, valor, respondeu);
     classes.set(sigla, classe);
-    item.areas.forEach((area) => {
-      const chave = area.trim();
-      if (!chave) return;
-      const faixa = areas.get(chave) ?? faixaVazia(nomesArea.get(chave) || chave);
-      acumular(faixa, valor, respondeu);
-      areas.set(chave, faixa);
-    });
   };
   perguntas.forEach(marcar);
 
-  return { geral, classes, areas, metas, fortes: dados.respostas.filter((item) => item.destaque === 'forte').length, fracos: dados.respostas.filter((item) => item.destaque === 'fraco').length };
+  return { geral, classes, metas, fortes: dados.respostas.filter((item) => item.destaque === 'forte').length, fracos: dados.respostas.filter((item) => item.destaque === 'fraco').length };
 }
 
 export async function downloadSgqAuditoriaAnaliticoPdf(dados: SgqAuditoriaExecucao): Promise<void> {
@@ -241,6 +265,8 @@ export async function downloadSgqAuditoriaAnaliticoPdf(dados: SgqAuditoriaExecuc
   doc.setLineWidth(0.5);
   doc.line(margin, linhaCabecalho, right, linhaCabecalho);
 
+  let y = linhaCabecalho + 7;
+
   const status = SGQ_AUDITORIA_STATUS_LABEL[auditoria.status];
   const pares: Array<[string, string]> = [
     ['Código', auditoria.codigo],
@@ -259,7 +285,6 @@ export async function downloadSgqAuditoriaAnaliticoPdf(dados: SgqAuditoriaExecuc
   ];
 
   const colW = (contentWidth - 8) / 2;
-  let y = linhaCabecalho + 7;
   for (let i = 0; i < pares.length; i += 2) {
     const esquerda = desenharCampo(doc, pares[i][0], pares[i][1], margin, y, colW);
     const direita = pares[i + 1]
@@ -278,6 +303,20 @@ export async function downloadSgqAuditoriaAnaliticoPdf(dados: SgqAuditoriaExecuc
   textColor(doc, INK);
   doc.text(escopo, margin, y + 4);
   y += 4 + escopo.length * 4.1 + 4;
+
+  const encerrada = auditoria.status === 'concluida' && auditoria.questionarioConcluido;
+  if (encerrada) {
+    const consideracoes = doc.splitTextToSize(textoPlanoFormatado(auditoria.consideracoesFinais) || '—', contentWidth) as string[];
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    textColor(doc, MUTED);
+    doc.text('CONSIDERAÇÕES FINAIS', margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    textColor(doc, INK);
+    doc.text(consideracoes, margin, y + 4);
+    y += 4 + consideracoes.length * 4.1 + 4;
+  }
 
   const linhasClasse = [...numeros.classes.entries()].map(([sigla, faixa]) => {
     const meta = numeros.metas.get(sigla);
@@ -304,21 +343,34 @@ export async function downloadSgqAuditoriaAnaliticoPdf(dados: SgqAuditoriaExecuc
   y = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y;
   y += 6;
 
-  if (numeros.areas.size) {
+  if (agregado.categorias.length && agregado.series.length) {
+    const colunasNumero = Object.fromEntries(
+      agregado.series.map((_, indice) => [indice + 1, { halign: 'center' as const }]),
+    );
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
       tableWidth: contentWidth,
       theme: 'grid',
-      head: [['Área', 'Perguntas', 'Respondidas', 'Conformidade']],
-      body: [...numeros.areas.values()].map((faixa) => [
-        faixa.rotulo, String(faixa.perguntas), String(faixa.respondidas), pct(faixa),
+      head: [['Classificação', ...agregado.series.map((serie) => serie.rotulo)]],
+      body: agregado.categorias.map((categoria) => [
+        categoria.rotulo,
+        ...agregado.series.map((serie) => String(categoria.contagens.get(serie.chave) ?? 0)),
       ]),
       styles: { font: 'helvetica', fontSize: 8, cellPadding: 1.6, textColor: INK, lineColor: LINE, lineWidth: 0.15 },
-      headStyles: { fillColor: HEAD_BG, textColor: INK, fontStyle: 'bold', fontSize: 8 },
+      headStyles: { fillColor: HEAD_BG, textColor: INK, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+      columnStyles: { 0: { halign: 'left' }, ...colunasNumero },
     });
     y = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y;
     y += 8;
+  }
+
+  if (encerrada && dados.resultado) {
+    if (y + 16 > pageHeight - 18) {
+      doc.addPage();
+      y = 18;
+    }
+    y += desenharVeredito(doc, dados.resultado, margin, y, contentWidth) + 6;
   }
 
   if (agregado.total > 0 && agregado.series.length) {
@@ -378,10 +430,17 @@ export async function downloadSgqAuditoriaAnaliticoPdf(dados: SgqAuditoriaExecuc
       },
     }, 900, 760, [rotuloPizzaPdf as unknown as Plugin]);
 
-    const alturaBarra = Math.max(52, agregado.categorias.length * 14 + 28);
-    if (y + alturaBarra > pageHeight - 18) {
-      doc.addPage();
-      y = 18;
+    const idealBarra = Math.max(46, agregado.categorias.length * 12 + 20);
+    const rodape = pageHeight - 14;
+    const titulo = 6;
+    let alturaBarra = idealBarra;
+    if (y + titulo + alturaBarra > rodape) {
+      const cabe = rodape - y - titulo;
+      if (cabe >= 40) alturaBarra = cabe;
+      else {
+        doc.addPage();
+        y = 18;
+      }
     }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);

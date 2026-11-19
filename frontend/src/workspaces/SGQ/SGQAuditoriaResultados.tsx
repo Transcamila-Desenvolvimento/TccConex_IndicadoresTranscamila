@@ -13,7 +13,7 @@ import QueryDataPanel from '../../components/QueryDataPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAsyncQueryState } from '../../hooks/useAsyncQueryState';
 import { useSgqAuditoriaExecucao } from '../../hooks/useSgqAuditorias';
-import type { SgqAuditoriaExecucao, SgqNormaItem } from '../../types/domain';
+import type { SgqAuditoriaExecucao, SgqNormaItem, SgqResultadoAuditoria, SgqResultadoSituacao } from '../../types/domain';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
@@ -27,10 +27,17 @@ function encurtar(texto: string, limite: number) {
   return texto.length > limite ? `${texto.slice(0, limite).trimEnd()}…` : texto;
 }
 
+const CORES_RESPOSTA: Record<string, string[]> = {
+  conforme: ['#01B8AA', '#4DCFC4', '#018F84'],
+  parcial: ['#F2C80F', '#F7DC6F', '#C9A40C'],
+  nao: ['#FD625E', '#FF8A87', '#E04541'],
+  na: ['#374649', '#5F6B6D', '#8A9698'],
+};
+
 function corDaOpcao(valor: number | null, repeticao: number) {
-  const matiz = valor == null ? 215 : valor >= 100 ? 152 : valor > 0 ? 40 : 4;
-  const luz = 38 + (repeticao % 3) * 10;
-  return `hsl(${matiz} 52% ${luz}%)`;
+  const faixa = valor == null ? 'na' : valor >= 100 ? 'conforme' : valor > 0 ? 'parcial' : 'nao';
+  const lista = CORES_RESPOSTA[faixa];
+  return lista[repeticao % lista.length];
 }
 
 /** Nome da classificação (ex.: M → Mandatória), na ordem cadastrada na norma. */
@@ -139,6 +146,68 @@ const tooltip = {
   bodyFont: { size: 12 },
 };
 
+const RESULTADO_ROTULO: Record<SgqResultadoSituacao, string> = {
+  aprovada: 'Aprovada',
+  reprovada: 'Reprovada',
+  incompleta: 'Incompleta',
+};
+
+function fraseResultado(situacao: SgqResultadoSituacao, ciclo: string): string {
+  if (situacao === 'aprovada') return `Aprovada na ${ciclo}`;
+  if (situacao === 'reprovada') return `Reprovada na ${ciclo}`;
+  return `Incompleta na ${ciclo}`;
+}
+
+function PainelResultado({ resultado }: { resultado: SgqResultadoAuditoria }) {
+  const pior: SgqResultadoSituacao = [resultado.primeira, resultado.reavaliacao].includes('reprovada')
+    ? 'reprovada'
+    : [resultado.primeira, resultado.reavaliacao].includes('incompleta')
+      ? 'incompleta'
+      : 'aprovada';
+  return (
+    <section className={`sgq-aud-veredito is-${pior}`} aria-label="Resultado da norma">
+      <header className="sgq-aud-resultados-topo">
+        <h4>
+          {fraseResultado(resultado.primeira, '1ª avaliação')}. {fraseResultado(resultado.reavaliacao, 'reavaliação')}.
+        </h4>
+        <p>A empresa é aprovada quando cada classificação atinge a meta da norma. Não aplicável fica fora do cálculo.</p>
+      </header>
+      <div className="sgq-aud-veredito-ciclos">
+        <span className={`is-${resultado.primeira}`}>1ª avaliação · {RESULTADO_ROTULO[resultado.primeira]}</span>
+        <span className={`is-${resultado.reavaliacao}`}>Reavaliação · {RESULTADO_ROTULO[resultado.reavaliacao]}</span>
+      </div>
+      {resultado.normas.map((norma) => (
+        <div key={norma.id} className="sgq-aud-veredito-norma">
+          {resultado.normas.length > 1 && <h5>{norma.nome}</h5>}
+          <table>
+            <thead>
+              <tr>
+                <th>Classificação</th>
+                <th>Conformidade</th>
+                <th>Meta 1ª</th>
+                <th>Meta reavaliação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {norma.classes.map((classe) => {
+                const incompleta = classe.respondidas < classe.perguntas;
+                return (
+                  <tr key={classe.sigla}>
+                    <td>{classe.nome}</td>
+                    <td>{classe.conformidade == null ? '—' : `${classe.conformidade}%`}</td>
+                    <td className={incompleta ? '' : classe.atingePrimeira ? 'is-ok' : 'is-falha'}>{classe.metaPrimeira}%</td>
+                    <td className={incompleta ? '' : classe.atingeReavaliacao ? 'is-ok' : 'is-falha'}>{classe.metaReavaliacao}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 interface Props {
   auditoriaId: string;
 }
@@ -162,7 +231,7 @@ const SGQAuditoriaResultados: React.FC<Props> = ({ auditoriaId }) => {
         data: resumo.series.map((serie) => resumo.porResposta.get(serie.chave) ?? 0),
         backgroundColor: resumo.series.map((serie) => serie.cor),
         borderColor: '#ffffff',
-        borderWidth: 0,
+        borderWidth: 2,
         hoverOffset: 4,
       }],
     };
@@ -201,6 +270,7 @@ const SGQAuditoriaResultados: React.FC<Props> = ({ auditoriaId }) => {
           </div>
         ) : resumo && pizza && barras && resumo.total > 0 ? (
           <>
+            {execucaoQuery.data?.resultado && <PainelResultado resultado={execucaoQuery.data.resultado} />}
             <header className="sgq-aud-resultados-topo">
               <h4>Respostas da norma</h4>
               <p>{resumo.respondidas} de {resumo.total} perguntas respondidas</p>

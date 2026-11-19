@@ -8,7 +8,10 @@ import { SGQ_AUDITORIA_EXECUCAO_KEY } from './useSgqAuditorias';
 
 export type AuditoriaPresencaStatus = 'connecting' | 'connected' | 'disconnected';
 
-export type ColegaPergunta = UserDirectoryEntry & { itemId: string | null };
+export type ColegaPergunta = UserDirectoryEntry & {
+  itemId: string | null;
+  digitandoItemId?: string | null;
+};
 
 function presencaWsUrl(auditoriaId: string, token: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -196,6 +199,12 @@ export function useAuditoriaPresenca(auditoriaId: string, itemId: string | null)
     return mapa;
   }, [online, meuId]);
 
+  const publicarDigitando = useCallback((perguntaId: string | null) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'digitando', itemId: perguntaId ?? '' }));
+  }, []);
+
   const publicarRascunho = useCallback((perguntaId: string, opcaoCodigo: string, destaque: RascunhoRemoto['destaque'] = '') => {
     if (!opcaoCodigo) return;
     setRascunhoLocal({ itemId: perguntaId, opcaoCodigo, destaque, actorName: '' });
@@ -206,5 +215,5 @@ export function useAuditoriaPresenca(auditoriaId: string, itemId: string | null)
 
   const rascunhoRemoto = itemId ? rascunhos.get(itemId) ?? null : null;
 
-  return { colegasNaPergunta, colegasPorPergunta, status, publicarRascunho, rascunhoRemoto, rascunhoLocal };
+  return { colegasNaPergunta, colegasPorPergunta, status, publicarRascunho, publicarDigitando, rascunhoRemoto, rascunhoLocal };
 }

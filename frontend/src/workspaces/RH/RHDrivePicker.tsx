@@ -20,7 +20,11 @@ const RHDrivePicker: React.FC<{
   onSelect: (item: GoogleDriveItem) => void;
   useStatus?: typeof useRHDriveStatus;
   useBrowse?: typeof useRHDriveBrowse;
-}> = ({ open, onClose, onSelect, useStatus = useRHDriveStatus, useBrowse = useRHDriveBrowse }) => {
+  dica?: string;
+}> = ({
+  open, onClose, onSelect, useStatus = useRHDriveStatus, useBrowse = useRHDriveBrowse,
+  dica = 'O arquivo permanece no Drive. O servidor guarda só o texto usado na consulta do agente.',
+}) => {
   const { linkGoogle, isLinking } = useGoogleAccount();
   const statusQuery = useStatus(open);
   const canBrowse = Boolean(statusQuery.data && !statusQuery.data.needsGoogleLink);
@@ -60,9 +64,7 @@ const RHDrivePicker: React.FC<{
         <header className="mkt-drive-modal-header">
           <div>
             <h2 id="rh-drive-picker-title" className="mkt-drive-modal-title">Escolher no Google Drive</h2>
-            <p className="mkt-drive-modal-hint">
-              O arquivo permanece no Drive. O servidor guarda só o texto usado na consulta do agente.
-            </p>
+            <p className="mkt-drive-modal-hint">{dica}</p>
           </div>
           <button type="button" className="mkt-drive-modal-close" onClick={onClose} aria-label="Fechar">
             <i className="bi bi-x-lg" aria-hidden="true" />

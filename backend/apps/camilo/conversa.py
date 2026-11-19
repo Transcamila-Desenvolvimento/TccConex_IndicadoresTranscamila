@@ -2,7 +2,6 @@
 
 import re
 
-from apps.camilo.auditoria_conversa import conduzir_auditoria
 from apps.camilo.ata import (
     PERGUNTA_O_QUE_FAZER,
     fala_da_reuniao,
@@ -138,6 +137,14 @@ def historico_valido(bruto, limite: int = 24, tamanho: int = 200000) -> list[dic
     return itens
 
 
+def _complementa_com_perguntas_anteriores(fala: str) -> bool:
+    """Resposta curta (o nome da norma, ou “a ativa”) continua o assunto da pergunta anterior."""
+    texto = ' '.join((fala or '').split())
+    if not texto or '?' in texto:
+        return False
+    return len(texto.split()) <= 6
+
+
 def _pista_documento(texto: str) -> str:
     frases = re.split(r'(?<=[.!?]|\n)\s+', texto or '')
     uteis = [
@@ -224,15 +231,17 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
     anteriores = historico_valido(historico)
     if transcricao_sem_instrucao(pergunta):
         return _transcricao_sem_pedido(pergunta, anteriores)
-    conduzida = conduzir_auditoria(user, agente, pergunta, anteriores)
-    if conduzida is not None:
-        return conduzida
     fala = fala_da_reuniao(pergunta, anteriores) if pedido_de_ata(pergunta) else pergunta
-    contexto = _pista_documento(fala) or perguntas_anteriores(anteriores)
+    anteriores_texto = perguntas_anteriores(anteriores)
+    if _complementa_com_perguntas_anteriores(fala) and anteriores_texto:
+        contexto = f'{anteriores_texto} {fala}'
+    else:
+        contexto = _pista_documento(fala) or anteriores_texto
     resultado = consultar(user, agente, pergunta, contexto=contexto)
     if not anteriores:
         resultado['titulo'] = titulo_local(pergunta)
-    material = (resultado.get('material') or '')[:ORCAMENTO_MATERIAL]
+    bruto = resultado.get('material') or ''
+    material = bruto[:20000 if 'LISTA COMPLETA' in bruto else ORCAMENTO_MATERIAL]
     if pedido_de_ata(pergunta):
         ata = redigir_ata(fala, material, chat_padrao=False)
         resumo = ata.get('resumo') or ''
@@ -258,6 +267,14 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
         f'Partes que você consulta: {partes or "nenhuma"}. '
         f'{sem_material}'
         'Use somente o material enviado com a pergunta. Não invente números nem documentos. '
+        'Auditorias e normas do SGQ são somente consulta: não grave resposta, não conclua e não dê andamento no questionário. '
+        'Se o material pedir para perguntar qual norma consultar, faça só essa pergunta, '
+        'com o nome de cada norma e se está ativa ou inativa. Não responda o conteúdo nessa mensagem. '
+        'Quando for responder o conteúdo, diga o nome da norma consultada. '
+        'Se o material trouxer um total de perguntas ou itens de uma área, responda com esse número. '
+        'Não diga que a informação não está no material quando o total estiver escrito. '
+        'Se o material tiver LISTA COMPLETA, monte a tabela com todas as linhas, uma por pergunta. '
+        'Não resuma e não diga que faltam itens. '
         'Responda só o que foi perguntado. '
         'Não liste outras funções nem acrescente assunto que não foi pedido. '
         'Se pedirem comparação, evolução ou vários registros, entregue a tabela inteira, '
@@ -281,6 +298,7 @@ def responder_agente(user, agente, pergunta: str, historico: list[dict] | None =
         sistema,
         mensagens,
         max_tokens=512 if voz else 8192,
+        limite_texto=20000 if 'LISTA COMPLETA' in pedido else 8000,
         pensar='low',
     )
     return resultado

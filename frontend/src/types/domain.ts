@@ -2195,6 +2195,14 @@ export const SGQ_AUDITORIA_STATUS_LABEL: Record<SgqAuditoriaStatus, string> = {
   concluida: 'Concluída',
 };
 
+export type SgqQuestionarioStatus = 'aberto' | 'execucao' | 'fechado';
+
+export const SGQ_QUESTIONARIO_STATUS_LABEL: Record<SgqQuestionarioStatus, string> = {
+  aberto: 'Em aberto',
+  execucao: 'Em execução',
+  fechado: 'Fechado',
+};
+
 export interface SgqAuditoriaPlanejamento {
   data: string;
   horaInicio: string;
@@ -2218,6 +2226,11 @@ export interface SgqAuditoria {
   processosAreas: string;
   responsaveisProcessos: string;
   metodologia: string;
+  consideracoesFinais: string;
+  /** O questionário foi encerrado pelo auditor líder. A auditoria segue aberta até a conclusão. */
+  questionarioConcluido: boolean;
+  /** Em aberto, em execução ou fechado. Independente do status da auditoria. */
+  statusQuestionario: SgqQuestionarioStatus;
   planejamento: SgqAuditoriaPlanejamento[];
   filial: string;
   atrasada: boolean;
@@ -2240,7 +2253,7 @@ export interface SgqAuditoriaNorma {
 
 export type SgqAuditoriaPayload = Pick<
   SgqAuditoria,
-  'categoria' | 'titulo' | 'dataInicio' | 'dataTermino' | 'auditorLider' | 'auditores' | 'status' | 'escopo' | 'criterios' | 'processosAreas' | 'responsaveisProcessos' | 'metodologia' | 'planejamento'
+  'categoria' | 'titulo' | 'dataInicio' | 'dataTermino' | 'auditorLider' | 'auditores' | 'status' | 'escopo' | 'criterios' | 'processosAreas' | 'responsaveisProcessos' | 'metodologia' | 'consideracoesFinais' | 'planejamento'
 >;
 
 /** Rascunho de nova auditoria — isolado por usuário autenticado + filial da sessão. */
@@ -2264,6 +2277,8 @@ export interface SgqAuditoriaQueryParams {
   search?: string;
   status?: SgqAuditoriaStatus | 'atrasada' | '';
   ordering?: SgqAuditoriaOrdering;
+  /** Só as auditorias em que o usuário é líder ou auditor. */
+  minhaEquipe?: boolean;
 }
 
 export interface SgqAuditoriaResumo {
@@ -2485,6 +2500,7 @@ export interface SgqAuditoriaAnexo {
   tamanho: number;
   incluidoPor: string;
   criadoEm: string;
+  driveUrl?: string;
 }
 
 /** Resolução de uma pergunta na auditoria; a opção é copiada do tipo de resposta no momento da resposta. */
@@ -2499,9 +2515,54 @@ export interface SgqAuditoriaResposta {
   respondidoPor: string;
   atualizadoEm: string;
   anexos: SgqAuditoriaAnexo[];
+  /** A evidência enviada não substituiu a que outra pessoa gravou antes. */
+  conflitoObservacoes?: boolean;
+  /** A cópia no Google Drive não foi feita; o anexo local foi gravado. */
+  driveAviso?: string;
 }
 
-export type SgqAuditoriaRespostaPayload = Pick<SgqAuditoriaResposta, 'itemId' | 'opcaoCodigo' | 'observacoes' | 'destaque'>;
+export type SgqAuditoriaRespostaPayload = Pick<SgqAuditoriaResposta, 'itemId' | 'opcaoCodigo' | 'observacoes' | 'destaque'> & {
+  /** Não troca a opção já gravada por outra pessoa. */
+  preservarOpcao?: boolean;
+  /** Não apaga a evidência já gravada por outra pessoa. */
+  preservarObservacoes?: boolean;
+  /** Não troca o destaque já gravado por outra pessoa. */
+  preservarDestaque?: boolean;
+  /** Evidência que esta tela tinha ao começar a edição. */
+  observacoesBase?: string;
+};
+
+export interface SgqEvidenciaSugestao {
+  texto: string;
+}
+
+export type SgqResultadoSituacao = 'aprovada' | 'reprovada' | 'incompleta';
+
+export interface SgqResultadoClasse {
+  sigla: string;
+  nome: string;
+  conformidade: number | null;
+  perguntas: number;
+  respondidas: number;
+  metaPrimeira: number;
+  metaReavaliacao: number;
+  atingePrimeira: boolean;
+  atingeReavaliacao: boolean;
+}
+
+export interface SgqResultadoNorma {
+  id: string;
+  nome: string;
+  primeira: SgqResultadoSituacao;
+  reavaliacao: SgqResultadoSituacao;
+  classes: SgqResultadoClasse[];
+}
+
+export interface SgqResultadoAuditoria {
+  primeira: SgqResultadoSituacao;
+  reavaliacao: SgqResultadoSituacao;
+  normas: SgqResultadoNorma[];
+}
 
 export interface SgqAuditoriaExecucao {
   auditoria: SgqAuditoria;
@@ -2510,6 +2571,7 @@ export interface SgqAuditoriaExecucao {
   /** Itens de todas as normas da auditoria, na ordem de cada nível. */
   itens: SgqNormaItem[];
   respostas: SgqAuditoriaResposta[];
+  resultado?: SgqResultadoAuditoria;
 }
 
 export interface SgqNormaItensImportParams {

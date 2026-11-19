@@ -1,9 +1,10 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { apiService } from '../services/apiService';
 import { downloadSgqAuditoriaAnaliticoPdf } from '../workspaces/SGQ/sgqAuditoriaAnaliticoPdf';
 import { downloadSgqAuditoriaRegistroPdf } from '../workspaces/SGQ/sgqAuditoriaRegistroPdf';
 import type {
+  SgqAuditoria,
   SgqAuditoriaExecucao,
   SgqAuditoriaFormDraft,
   SgqAuditoriaPayload,
@@ -97,6 +98,29 @@ export function useBaixarRelatorioSgqAuditoria(filial: string | null) {
   });
 }
 
+function aplicarAuditoriaReaberta(queryClient: ReturnType<typeof useQueryClient>, filial: string | null, auditoria: SgqAuditoria) {
+  queryClient.setQueryData<SgqAuditoriaExecucao>(SGQ_AUDITORIA_EXECUCAO_KEY(filial, auditoria.id), (atual) => (
+    atual ? { ...atual, auditoria } : atual
+  ));
+  queryClient.invalidateQueries({ queryKey: SGQ_AUDITORIAS_KEYS.all });
+}
+
+export function useReabrirSgqAuditoria(filial: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.reabrirSgqAuditoria(id),
+    onSuccess: (auditoria) => aplicarAuditoriaReaberta(queryClient, filial, auditoria),
+  });
+}
+
+export function useReabrirQuestionarioSgqAuditoria(filial: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiService.reabrirQuestionarioSgqAuditoria(id),
+    onSuccess: (auditoria) => aplicarAuditoriaReaberta(queryClient, filial, auditoria),
+  });
+}
+
 export function useConcluirSgqAuditoria(filial: string | null, id: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -133,10 +157,49 @@ function useAplicarResposta(filial: string | null, id: string) {
   };
 }
 
+export function useSugerirEvidenciaSgq(_filial: string | null, id: string) {
+  return useMutation({
+    mutationFn: ({ itemId, acao }: { itemId: string; acao: 'escrever' | 'validar' }) =>
+      apiService.sugerirEvidenciaSgqAuditoria(id, itemId, acao),
+  });
+}
+
 export function useResponderSgqAuditoria(filial: string | null, id: string) {
   const aplicar = useAplicarResposta(filial, id);
   return useMutation({
     mutationFn: (payload: SgqAuditoriaRespostaPayload) => apiService.responderSgqAuditoriaItem(id, payload),
+    onSuccess: aplicar,
+  });
+}
+
+export function useSgqAuditoriaDriveStatus(enabled = true) {
+  return useQuery({
+    queryKey: ['sgq', 'auditorias', 'drive', 'status'],
+    queryFn: () => apiService.getSgqAuditoriaDriveStatus(),
+    staleTime: 60_000,
+    enabled,
+  });
+}
+
+export function useSgqAuditoriaDriveBrowse(folderId: string, enabled = true, driveId?: string | null) {
+  return useInfiniteQuery({
+    queryKey: ['sgq', 'auditorias', 'drive', 'browse', folderId, driveId ?? null],
+    queryFn: ({ pageParam }) => apiService.browseSgqAuditoriaDrive({
+      folderId,
+      pageToken: pageParam,
+      driveId: driveId ?? undefined,
+    }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken ?? undefined,
+    enabled: enabled && Boolean(folderId),
+  });
+}
+
+export function useAnexarSgqAuditoriaDoDrive(filial: string | null, id: string) {
+  const aplicar = useAplicarResposta(filial, id);
+  return useMutation({
+    mutationFn: ({ itemId, driveFileId }: { itemId: string; driveFileId: string }) =>
+      apiService.anexarSgqAuditoriaDoDrive(id, itemId, driveFileId),
     onSuccess: aplicar,
   });
 }
@@ -170,6 +233,7 @@ const EMPTY_AUDITORIA_FORM_DRAFT: SgqAuditoriaPayload = {
   processosAreas: '',
   responsaveisProcessos: '',
   metodologia: '',
+  consideracoesFinais: '',
   planejamento: [],
 };
 

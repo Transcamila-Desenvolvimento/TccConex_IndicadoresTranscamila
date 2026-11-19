@@ -137,6 +137,8 @@ FUNCOES_POR_AMBIENTE = {
         'importar-pesquisas',
         'gerenciar-escopos',
         'gerenciar-auditorias',
+        'reabrir-auditoria',
+        'reabrir-questionario',
         'executar-auditorias',
         'gerenciar-normas',
         'gerenciar-categorias',

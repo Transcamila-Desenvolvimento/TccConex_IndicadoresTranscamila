@@ -50,7 +50,7 @@ import type {
   SgqLoteDraft, SgqLoteDraftRow, SgqFormDraft,
   SgqAuditoria, SgqAuditoriaFormDraft, SgqAuditoriaPayload, SgqAuditoriaQueryParams, SgqAuditoriaResumo, SgqAuditoriaSugestoes, SgqAuditoriaVisao,
   SendSgqCronogramaEmailParams,
-  SgqAuditoriaExecucao, SgqAuditoriaResposta, SgqAuditoriaRespostaPayload,
+  SgqAuditoriaExecucao, SgqAuditoriaResposta, SgqAuditoriaRespostaPayload, SgqEvidenciaSugestao,
   SgqNorma, SgqNormaPayload, SgqNormaQueryParams, SgqNormaResumo, SgqNormaItem, SgqNormaItemPayload,
   SgqCategoria, SgqCategoriaPayload, SgqCategoriaQueryParams, SgqCategoriaResumo, SgqCategoriaSugestoes,
   SgqNormaItensImportParams, SgqNormaItensImportResumo, SgqNormaTipoResposta,
@@ -2146,6 +2146,7 @@ export const apiService = {
         search: params.search || undefined,
         status: params.status || undefined,
         ordering: params.ordering,
+        minha_equipe: params.minhaEquipe ? '1' : undefined,
       },
     });
     return paginatedFromResponse(data, (raw) => raw as SgqAuditoria);
@@ -2199,6 +2200,16 @@ export const apiService = {
     return data as SgqAuditoria;
   },
 
+  async reabrirSgqAuditoria(id: string): Promise<SgqAuditoria> {
+    const { data } = await api.post(`/api/sgq/auditorias/${id}/reabrir/`);
+    return data as SgqAuditoria;
+  },
+
+  async reabrirQuestionarioSgqAuditoria(id: string): Promise<SgqAuditoria> {
+    const { data } = await api.post(`/api/sgq/auditorias/${id}/reabrir-questionario/`);
+    return data as SgqAuditoria;
+  },
+
   async enviarCronogramaSgqAuditoria(id: string, payload: SendSgqCronogramaEmailParams): Promise<SendSgqResumoEmailResponse> {
     const { data } = await api.post(`/api/sgq/auditorias/${id}/enviar-cronograma/`, payload);
     return data as SendSgqResumoEmailResponse;
@@ -2209,8 +2220,37 @@ export const apiService = {
     return data as SgqAuditoriaExecucao;
   },
 
+  async sugerirEvidenciaSgqAuditoria(
+    id: string,
+    itemId: string,
+    acao: 'escrever' | 'validar',
+  ): Promise<SgqEvidenciaSugestao> {
+    const { data } = await api.post(`/api/sgq/auditorias/${id}/sugerir-evidencia/`, { itemId, acao });
+    return data as SgqEvidenciaSugestao;
+  },
+
   async responderSgqAuditoriaItem(id: string, payload: SgqAuditoriaRespostaPayload): Promise<SgqAuditoriaResposta> {
     const { data } = await api.post(`/api/sgq/auditorias/${id}/responder/`, payload);
+    return data as SgqAuditoriaResposta;
+  },
+
+  async getSgqAuditoriaDriveStatus(): Promise<GoogleDriveStatus> {
+    const { data } = await api.get('/api/sgq/auditorias/drive-status/');
+    return data as GoogleDriveStatus;
+  },
+
+  async browseSgqAuditoriaDrive(params: {
+    folderId?: string;
+    pageToken?: string;
+    pageSize?: number;
+    driveId?: string;
+  } = {}): Promise<GoogleDriveBrowseResponse> {
+    const { data } = await api.get('/api/sgq/auditorias/drive-browse/', { params });
+    return data as GoogleDriveBrowseResponse;
+  },
+
+  async anexarSgqAuditoriaDoDrive(id: string, itemId: string, driveFileId: string): Promise<SgqAuditoriaResposta> {
+    const { data } = await api.post(`/api/sgq/auditorias/${id}/anexos-drive/`, { itemId, driveFileId });
     return data as SgqAuditoriaResposta;
   },
 

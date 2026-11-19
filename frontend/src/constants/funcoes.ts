@@ -73,7 +73,15 @@ export const FUNCAO_ITEMS = [
     aba: 'auditorias',
     key: 'gerenciar-auditorias',
     label: 'Cadastrar e editar',
-    description: 'Permite criar, editar e excluir auditorias.',
+    description: 'Permite criar, editar e excluir auditorias. Uma auditoria concluída fica somente para consulta.',
+  },
+  {
+    module: 'SGQ',
+    aba: 'auditorias',
+    key: 'reabrir-auditoria',
+    label: 'Reabrir auditoria',
+    description: 'Permite devolver uma auditoria concluída para em execução. O questionário continua fechado.',
+    optIn: true,
   },
   {
     module: 'SGQ',
@@ -81,6 +89,14 @@ export const FUNCAO_ITEMS = [
     key: 'executar-auditorias',
     label: 'Responder',
     description: 'Permite responder o questionário da norma nas auditorias, com observações, anexos e pontos fortes/fracos.',
+  },
+  {
+    module: 'SGQ',
+    aba: 'auditorias-minhas-acoes',
+    key: 'reabrir-questionario',
+    label: 'Reabrir questionário',
+    description: 'Permite reabrir o questionário concluído. Se a auditoria estiver concluída, ela volta para em execução e pode ser editada de novo.',
+    optIn: true,
   },
   {
     module: 'SGQ',

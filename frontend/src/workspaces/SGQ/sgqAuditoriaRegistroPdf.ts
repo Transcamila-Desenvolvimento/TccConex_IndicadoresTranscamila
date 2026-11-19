@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import logoTranscamila from '../../assets/logo-transcamila-30-anos.png';
-import type { SgqAuditoriaExecucao, SgqAuditoriaResposta, SgqNormaItem } from '../../types/domain';
+import type { SgqAuditoriaExecucao, SgqAuditoriaResposta, SgqNormaItem, SgqResultadoAuditoria, SgqResultadoSituacao } from '../../types/domain';
 import { SGQ_AUDITORIA_STATUS_LABEL } from '../../types/domain';
 import { textoPlanoFormatado } from './SGQEditorTexto';
 
@@ -15,6 +15,42 @@ const LINE: Rgb = [203, 213, 225];
 const RULE: Rgb = [15, 118, 196];
 const HEAD_BG: Rgb = [232, 239, 244];
 const SECAO_BG: Rgb = [241, 245, 249];
+
+const RESULTADO_ROTULO: Record<SgqResultadoSituacao, string> = {
+  aprovada: 'Aprovada',
+  reprovada: 'Reprovada',
+  incompleta: 'Incompleta',
+};
+
+const RESULTADO_COR: Record<SgqResultadoSituacao, { fundo: Rgb; tinta: Rgb }> = {
+  aprovada: { fundo: [231, 247, 246], tinta: [1, 143, 132] },
+  reprovada: { fundo: [253, 236, 236], tinta: [224, 69, 65] },
+  incompleta: { fundo: [241, 245, 249], tinta: [71, 85, 105] },
+};
+
+function desenharVeredito(doc: jsPDF, resultado: SgqResultadoAuditoria, x: number, y: number, largura: number): number {
+  const ciclos: Array<[string, SgqResultadoSituacao]> = [
+    ['1ª avaliação', resultado.primeira],
+    ['Reavaliação', resultado.reavaliacao],
+  ];
+  const espaco = 3;
+  const larguraCaixa = (largura - espaco) / 2;
+  const altura = 10;
+  ciclos.forEach(([rotulo, situacao], indice) => {
+    const cor = RESULTADO_COR[situacao];
+    const esquerda = x + indice * (larguraCaixa + espaco);
+    doc.setFillColor(cor.fundo[0], cor.fundo[1], cor.fundo[2]);
+    doc.roundedRect(esquerda, y, larguraCaixa, altura, 1.2, 1.2, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    textColor(doc, cor.tinta);
+    doc.text(rotulo.toUpperCase(), esquerda + larguraCaixa / 2, y + 3.6, { align: 'center' });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(RESULTADO_ROTULO[situacao], esquerda + larguraCaixa / 2, y + 7.6, { align: 'center' });
+  });
+  return altura + 4;
+}
 
 const textColor = (doc: jsPDF, color: Rgb) => doc.setTextColor(color[0], color[1], color[2]);
 const drawColor = (doc: jsPDF, color: Rgb) => doc.setDrawColor(color[0], color[1], color[2]);
@@ -67,7 +103,8 @@ function textoResposta(resposta: SgqAuditoriaResposta | undefined): string {
 function textoObservacoes(resposta: SgqAuditoriaResposta | undefined): string {
   if (!resposta?.opcaoCodigo && !resposta?.observacoes && !resposta?.anexos.length) return '';
   const partes: string[] = [];
-  if (resposta?.observacoes.trim()) partes.push(resposta.observacoes.trim());
+  const evidencia = textoPlanoFormatado(resposta?.observacoes ?? '');
+  if (evidencia) partes.push(evidencia);
   if (resposta?.anexos.length) partes.push(`Anexos: ${resposta.anexos.map((anexo) => anexo.nome).join(', ')}`);
   if (resposta?.opcaoCodigo && resposta.respondidoPor) {
     partes.push(`${resposta.respondidoPor} · ${formatarDataHora(resposta.atualizadoEm)}`);
@@ -245,6 +282,20 @@ export async function downloadSgqAuditoriaRegistroPdf(dados: SgqAuditoriaExecuca
   doc.text(escopo, margin, y + 4);
   y += 4 + escopo.length * 4.1 + 2;
 
+  const encerrada = auditoria.status === 'concluida' && auditoria.questionarioConcluido;
+  if (encerrada) {
+    const consideracoes = doc.splitTextToSize(textoPlanoFormatado(auditoria.consideracoesFinais) || '—', contentWidth) as string[];
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    textColor(doc, MUTED);
+    doc.text('CONSIDERAÇÕES FINAIS', margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    textColor(doc, INK);
+    doc.text(consideracoes, margin, y + 4);
+    y += 4 + consideracoes.length * 4.1 + 2;
+  }
+
   const perguntas = listarPerguntas(dados);
   const respostas = new Map(dados.respostas.map((resposta) => [resposta.itemId, resposta]));
   const respondidas = dados.itens.filter((item) => item.tipo === 'pergunta' && respostas.get(item.id)?.opcaoCodigo).length;
@@ -257,7 +308,15 @@ export async function downloadSgqAuditoriaRegistroPdf(dados: SgqAuditoriaExecuca
     margin,
     y + 2,
   );
-  y += 6;
+  y += 7;
+
+  if (encerrada && dados.resultado) {
+    if (y + 16 > pageHeight - 18) {
+      doc.addPage();
+      y = 18;
+    }
+    y += desenharVeredito(doc, dados.resultado, margin, y, contentWidth) + 4;
+  }
 
   const corpo = linhasDaTabela(perguntas);
   if (corpo.length === 0) {
@@ -271,7 +330,7 @@ export async function downloadSgqAuditoriaRegistroPdf(dados: SgqAuditoriaExecuca
       margin: { top: 18, right: margin, bottom: 14, left: margin },
       tableWidth: contentWidth,
       theme: 'grid',
-      head: [['Código', 'Pergunta', 'Classificação', 'Resposta', 'Observações']],
+      head: [['Código', 'Pergunta', 'Classificação', 'Resposta', 'Evidência/justificativa']],
       body: corpo,
       showHead: 'everyPage',
       styles: {

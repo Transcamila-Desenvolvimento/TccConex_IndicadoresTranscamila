@@ -1,6 +1,6 @@
 """Partes do ERP que um agente pode usar. Só o que o usuário já acessa.
 
-A parte Auditorias do SGQ também grava o questionário, quando a pessoa tem a função de executar auditorias.
+Auditorias e normas do SGQ são só consulta: o agente lê o que está escrito e não grava nem conclui.
 """
 
 from apps.accounts.constants import (
@@ -26,6 +26,7 @@ PARTES = (
     {'ambiente': 'SGQ', 'parte': 'pesquisa-satisfacao', 'rotulo': 'Pesquisa de satisfação'},
     {'ambiente': 'SGQ', 'parte': 'matriz', 'rotulo': 'Matriz de conhecimento'},
     {'ambiente': 'SGQ', 'parte': 'auditorias', 'rotulo': 'Auditorias'},
+    {'ambiente': 'SGQ', 'parte': 'normas', 'rotulo': 'Normas'},
     {'ambiente': 'Marketing', 'parte': 'campanhas', 'rotulo': 'Calendário Transcamila'},
     {'ambiente': 'Logística', 'parte': 'configuracoes', 'rotulo': 'Configurações gerais'},
     {'ambiente': 'Comercial', 'parte': 'cadastro-clientes', 'rotulo': 'Clientes'},
@@ -83,6 +84,10 @@ def partes_do_usuario(user) -> list[dict]:
         abas = _abas_consultaveis(user, ambiente)
         if ambiente == 'SGQ' and item['parte'] == 'auditorias':
             if 'auditorias' in abas or 'auditorias-minhas-acoes' in abas:
+                liberadas.append(dict(item))
+            continue
+        if ambiente == 'SGQ' and item['parte'] == 'normas':
+            if 'auditorias-normas' in abas:
                 liberadas.append(dict(item))
             continue
         if item['parte'] in abas:

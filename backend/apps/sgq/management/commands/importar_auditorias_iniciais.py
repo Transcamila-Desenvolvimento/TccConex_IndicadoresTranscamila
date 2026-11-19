@@ -95,6 +95,8 @@ def exportar(destino: Path) -> dict:
             'processosAreas': auditoria.processos_areas,
             'responsaveisProcessos': auditoria.responsaveis_processos,
             'metodologia': auditoria.metodologia,
+            'consideracoesFinais': auditoria.consideracoes_finais,
+            'questionarioConcluido': auditoria.questionario_concluido,
             'planejamento': auditoria.planejamento or [],
             'normas': list(auditoria.normas.order_by('nome').values_list('nome', flat=True)),
         })
@@ -186,6 +188,10 @@ class Command(BaseCommand):
                     processos_areas=dados.get('processosAreas') or '',
                     responsaveis_processos=dados.get('responsaveisProcessos') or '',
                     metodologia=dados.get('metodologia') or '',
+                    consideracoes_finais=dados.get('consideracoesFinais') or '',
+                    questionario_concluido=bool(
+                        dados.get('questionarioConcluido') or dados.get('status') == 'concluida'
+                    ),
                     planejamento=dados.get('planejamento') or [],
                 )
                 vinculadas = [normas[(dados['filial'], nome)] for nome in dados.get('normas') or [] if (dados['filial'], nome) in normas]

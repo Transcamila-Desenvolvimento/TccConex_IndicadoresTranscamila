@@ -11,6 +11,7 @@ import {
   useBaixarRelatorioSgqAuditoria,
   useDeleteSgqAuditoriaFormDraft,
   useDeleteSgqAuditorias,
+  useReabrirSgqAuditoria,
   useSaveSgqAuditoria,
   useSaveSgqAuditoriaFormDraft,
   useSgqAuditoriaFormDraft,
@@ -27,7 +28,7 @@ import type {
   SgqAuditoriaStatus,
   SgqPessoa,
 } from '../../types/domain';
-import { SGQ_AUDITORIA_STATUS_LABEL, SGQ_AUDITORIA_STATUS_OPTIONS } from '../../types/domain';
+import { SGQ_AUDITORIA_STATUS_LABEL } from '../../types/domain';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
 type FiltroStatus = NonNullable<SgqAuditoriaQueryParams['status']>;
@@ -46,7 +47,7 @@ const STATUS_ICON: Record<SgqAuditoriaStatus, string> = {
   concluida: 'check-circle-fill',
 };
 
-type AbaModal = 'visao' | 'dados' | 'planejamento';
+type AbaModal = 'visao' | 'dados' | 'planejamento' | 'conclusao';
 
 const ABAS_MODAL: Array<{ value: AbaModal; label: string }> = [
   { value: 'visao', label: 'Visão geral' },
@@ -261,6 +262,7 @@ const emptyForm: SgqAuditoriaPayload = {
   processosAreas: '',
   responsaveisProcessos: '',
   metodologia: '',
+  consideracoesFinais: '',
   planejamento: [],
 };
 
@@ -360,6 +362,7 @@ function rotuloPlanejamento(item: SgqAuditoriaPlanejamento) {
 const SGQAuditorias: React.FC = () => {
   const { user, selectedFilial } = useAuth();
   const canManage = userHasFuncao(user, 'SGQ', 'gerenciar-auditorias');
+  const podeReabrirAuditoria = userHasFuncao(user, 'SGQ', 'reabrir-auditoria');
 
   const [busca, setBusca] = useState('');
   const [buscaAplicada, setBuscaAplicada] = useState('');
@@ -372,8 +375,10 @@ const SGQAuditorias: React.FC = () => {
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<SgqAuditoria | null>(null);
   const podeAlterarEquipe = !editando || mesmoNome(user?.name ?? '', editando.auditorLider);
+  const questionarioEncerrado = Boolean(editando && (editando.questionarioConcluido || editando.status === 'concluida'));
   const [form, setForm] = useState<SgqAuditoriaPayload>(emptyForm);
   const [abaModal, setAbaModal] = useState<AbaModal>('dados');
+  const [confirmaConclusao, setConfirmaConclusao] = useState(false);
   const [relatorioDe, setRelatorioDe] = useState<SgqAuditoria | null>(null);
   const [cronogramaDe, setCronogramaDe] = useState<SgqAuditoria | null>(null);
   const [tipoRelatorio, setTipoRelatorio] = useState<'detalhado' | 'analitico'>('detalhado');
@@ -411,7 +416,10 @@ const SGQAuditorias: React.FC = () => {
   const [restoredFormDraft, setRestoredFormDraft] = useState(false);
   const [formDraftUpdatedAt, setFormDraftUpdatedAt] = useState<string | null>(null);
   const [formDraftUnavailable, setFormDraftUnavailable] = useState(false);
-  const formBusy = salvar.isPending || deleteFormDraft.isPending;
+  const reabrirAuditoria = useReabrirSgqAuditoria(selectedFilial);
+  const formBusy = salvar.isPending || deleteFormDraft.isPending || reabrirAuditoria.isPending;
+  const auditoriaConcluida = editando?.status === 'concluida';
+  const podeEditar = canManage && !auditoriaConcluida;
   const hasFormDraft = Boolean(formDraftQuery.data?.hasDraft);
   const excluir = useDeleteSgqAuditorias();
   const baixarRelatorio = useBaixarRelatorioSgqAuditoria(selectedFilial);
@@ -515,8 +523,10 @@ const SGQAuditorias: React.FC = () => {
       processosAreas: auditoria.processosAreas ?? '',
       responsaveisProcessos: auditoria.responsaveisProcessos ?? '',
       metodologia: auditoria.metodologia ?? '',
+      consideracoesFinais: auditoria.consideracoesFinais ?? '',
       planejamento: auditoria.planejamento ?? [],
     });
+    setConfirmaConclusao(false);
     setAbaModal('visao');
     setModalAberto(true);
   };
@@ -549,6 +559,7 @@ const SGQAuditorias: React.FC = () => {
     }
     setModalAberto(false);
     setEditando(null);
+    setConfirmaConclusao(false);
   };
 
   useEffect(() => {
@@ -621,6 +632,20 @@ const SGQAuditorias: React.FC = () => {
     });
   };
 
+  const montarPayload = (status: SgqAuditoriaStatus = form.status): SgqAuditoriaPayload => ({
+    ...form,
+    status,
+    titulo: form.titulo.trim(),
+    categoria: form.categoria.trim(),
+    escopo: normalizarTextoFormatado(form.escopo),
+    criterios: normalizarTextoFormatado(form.criterios),
+    processosAreas: normalizarTextoFormatado(form.processosAreas),
+    responsaveisProcessos: normalizarTextoFormatado(form.responsaveisProcessos),
+    metodologia: normalizarTextoFormatado(form.metodologia),
+    consideracoesFinais: normalizarTextoFormatado(form.consideracoesFinais),
+    planejamento: form.planejamento.map((item) => ({ ...item, atividade: item.atividade.trim() })),
+  });
+
   const enviar = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formEl = e.currentTarget;
@@ -636,20 +661,17 @@ const SGQAuditorias: React.FC = () => {
       alert('O horário de término precisa ser depois do início.');
       return;
     }
+    const concluirAoSalvar = Boolean(
+      editando
+      && confirmaConclusao
+      && editando.status !== 'concluida'
+      && editando.questionarioConcluido
+      && mesmoNome(user?.name ?? '', editando.auditorLider),
+    );
     salvar.mutate(
       {
         id: editando?.id,
-        payload: {
-          ...form,
-          titulo: form.titulo.trim(),
-          categoria: form.categoria.trim(),
-          escopo: normalizarTextoFormatado(form.escopo),
-          criterios: normalizarTextoFormatado(form.criterios),
-          processosAreas: normalizarTextoFormatado(form.processosAreas),
-          responsaveisProcessos: normalizarTextoFormatado(form.responsaveisProcessos),
-          metodologia: normalizarTextoFormatado(form.metodologia),
-          planejamento: form.planejamento.map((item) => ({ ...item, atividade: item.atividade.trim() })),
-        },
+        payload: montarPayload(concluirAoSalvar ? 'concluida' : form.status),
       },
       {
         onSuccess: () => {
@@ -663,10 +685,26 @@ const SGQAuditorias: React.FC = () => {
           }
           setModalAberto(false);
           setEditando(null);
+          setConfirmaConclusao(false);
         },
         onError: (err) => alert(getSgqAuditoriaErrorMessage(err)),
       },
     );
+  };
+
+  const aplicarReabertura = (auditoria: SgqAuditoria) => {
+    setEditando(auditoria);
+    setForm((atual) => ({ ...atual, status: auditoria.status }));
+    setConfirmaConclusao(false);
+  };
+
+  const pedirReabertura = () => {
+    if (!editando) return;
+    if (!window.confirm('Reabrir esta auditoria? Ela volta para em execução e pode ser editada de novo. O questionário continua fechado.')) return;
+    reabrirAuditoria.mutate(editando.id, {
+      onSuccess: aplicarReabertura,
+      onError: (err) => alert(getSgqAuditoriaErrorMessage(err, 'Não foi possível reabrir a auditoria.')),
+    });
   };
 
   const excluirIds = (ids: string[], descricao: string) => {
@@ -704,8 +742,8 @@ const SGQAuditorias: React.FC = () => {
               {auditoriaSelecionada && (
                 <span className="reports-dropdown-item" onClick={() => abrirEdicao(auditoriaSelecionada)}>
                   <span className="reports-dropdown-item-left">
-                    <i className={`bi ${canManage ? 'bi-pencil' : 'bi-eye'}`} aria-hidden="true" />
-                    {canManage ? 'Editar' : 'Visualizar'}
+                    <i className={`bi ${canManage && auditoriaSelecionada.status !== 'concluida' ? 'bi-pencil' : 'bi-eye'}`} aria-hidden="true" />
+                    {canManage && auditoriaSelecionada.status !== 'concluida' ? 'Editar' : 'Visualizar'}
                   </span>
                 </span>
               )}
@@ -1065,7 +1103,7 @@ const SGQAuditorias: React.FC = () => {
             <div className="modal-header">
               <div>
                 <h3 id="sgq-aud-modal-title">
-                  {editando ? (canManage ? 'Editar Auditoria' : 'Auditoria') : 'Nova Auditoria'}
+                  {editando ? (podeEditar ? 'Editar Auditoria' : 'Auditoria') : 'Nova Auditoria'}
                 </h3>
                 <p className="sgq-aud-modal-sub" style={!editando && formDraftUnavailable ? { color: '#b45309' } : undefined}>
                   {editando
@@ -1083,7 +1121,10 @@ const SGQAuditorias: React.FC = () => {
             </div>
 
             <div className="sgq-aud-abas" role="tablist">
-              {ABAS_MODAL.filter((aba) => editando || aba.value !== 'visao').map((aba) => (
+              {[
+                ...ABAS_MODAL.filter((aba) => editando || aba.value !== 'visao'),
+                ...(questionarioEncerrado ? [{ value: 'conclusao' as const, label: 'Conclusão' }] : []),
+              ].map((aba) => (
                 <button
                   key={aba.value}
                   type="button"
@@ -1165,6 +1206,12 @@ const SGQAuditorias: React.FC = () => {
                         </div>
                       );
                     })}
+                    {textoVisivel(editando.consideracoesFinais) && (
+                      <div className="sgq-aud-ficha-largo">
+                        <dt>Considerações finais</dt>
+                        <dd className="sgq-aud-visao-texto"><TextoFormatado valor={editando.consideracoesFinais} /></dd>
+                      </div>
+                    )}
                     {(editando.planejamento?.length ?? 0) > 0 && (
                       <div className="sgq-aud-ficha-largo">
                         <details className="sgq-aud-plano-expansivel">
@@ -1190,10 +1237,36 @@ const SGQAuditorias: React.FC = () => {
                   </footer>
                 </section>
               )}
-              {editando && abaModal === 'visao' && (
+              {editando && abaModal === 'visao' && !questionarioEncerrado && (
                 <SGQAuditoriaResultados auditoriaId={editando.id} />
               )}
-              <fieldset data-aba="dados" hidden={abaModal !== 'dados'} disabled={!canManage || formBusy}>
+              {questionarioEncerrado && editando && abaModal === 'conclusao' && (
+                <SGQAuditoriaResultados auditoriaId={editando.id} />
+              )}
+              {questionarioEncerrado && editando && (
+                <fieldset data-aba="conclusao" hidden={abaModal !== 'conclusao'} disabled={!podeEditar || formBusy}>
+                  <div className="is-wide sgq-aud-campo">
+                    <span>Considerações finais</span>
+                    <EditorTexto
+                      valor={form.consideracoesFinais}
+                      rotulo="Considerações finais"
+                      placeholder="Síntese da auditoria, pontos de atenção e encaminhamentos."
+                      onChange={(valor) => setForm({ ...form, consideracoesFinais: valor })}
+                    />
+                  </div>
+                  {editando.status !== 'concluida' && podeAlterarEquipe && canManage && (
+                    <label className="is-wide sgq-aud-confirma">
+                      <input
+                        type="checkbox"
+                        checked={confirmaConclusao}
+                        onChange={(e) => setConfirmaConclusao(e.target.checked)}
+                      />
+                      <span>Concluir a auditoria ao salvar</span>
+                    </label>
+                  )}
+                </fieldset>
+              )}
+              <fieldset data-aba="dados" hidden={abaModal !== 'dados'} disabled={!podeEditar || formBusy}>
                 <label className="is-wide">
                   <span>Título <em>*</em></span>
                   <input
@@ -1300,7 +1373,7 @@ const SGQAuditorias: React.FC = () => {
                   )}
                 </div>
               </fieldset>
-              <fieldset data-aba="planejamento" hidden={abaModal !== 'planejamento'} disabled={!canManage || formBusy}>
+              <fieldset data-aba="planejamento" hidden={abaModal !== 'planejamento'} disabled={!podeEditar || formBusy}>
                 <label>
                   <span>Data de início <em>*</em></span>
                   <input
@@ -1401,7 +1474,7 @@ const SGQAuditorias: React.FC = () => {
                           />
                         </label>
                         <span className="sgq-aud-plano-acao">
-                          {canManage && (
+                          {podeEditar && (
                             <button
                               type="button"
                               className="btn-icon"
@@ -1428,7 +1501,7 @@ const SGQAuditorias: React.FC = () => {
                     </div>
                   )}
                   <div className="sgq-aud-plano-acoes">
-                  {canManage && (
+                  {podeEditar && (
                     <button
                       type="button"
                       className="sgq-aud-plano-adicionar"
@@ -1492,34 +1565,33 @@ const SGQAuditorias: React.FC = () => {
                     />
                   </div>
                 ))}
-                <div className="is-wide sgq-aud-status-picker" role="radiogroup" aria-label="Status">
+                <div className="is-wide sgq-aud-status-auto">
                   <span>Status</span>
                   <div>
-                    {SGQ_AUDITORIA_STATUS_OPTIONS.map((opcao) => {
-                      const bloqueiaConclusao = opcao.value === 'concluida' && !mesmoNome(user?.name ?? '', form.auditorLider);
-                      return (
-                      <button
-                        key={opcao.value}
-                        type="button"
-                        role="radio"
-                        aria-checked={form.status === opcao.value}
-                        className={`sgq-aud-status is-${opcao.value}${form.status === opcao.value ? ' is-picked' : ''}`}
-                        disabled={bloqueiaConclusao}
-                        title={bloqueiaConclusao ? 'Só o auditor líder pode concluir a auditoria.' : undefined}
-                        onClick={() => setForm({ ...form, status: opcao.value })}
-                      >
-                        <i className={`bi bi-${STATUS_ICON[opcao.value]}`} aria-hidden="true" />
-                        {opcao.label}
-                      </button>
-                      );
-                    })}
+                    <span className={`sgq-aud-status is-${editando?.status ?? form.status}`}>
+                      <i className={`bi bi-${STATUS_ICON[editando?.status ?? form.status]}`} aria-hidden="true" />
+                      {SGQ_AUDITORIA_STATUS_LABEL[editando?.status ?? form.status]}
+                    </span>
+                    <small>Acompanha o questionário. A auditoria é concluída na aba Conclusão.</small>
                   </div>
                 </div>
               </fieldset>
               </div>
 
               <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
-                <div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {editando && auditoriaConcluida && podeReabrirAuditoria && (
+                    <button
+                      type="button"
+                      className="sgq-aud-reabrir"
+                      onClick={pedirReabertura}
+                      disabled={formBusy}
+                      title="Volta o status para em execução. O questionário continua fechado."
+                    >
+                      <i className="bi bi-arrow-counterclockwise" aria-hidden="true" />
+                      {reabrirAuditoria.isPending ? 'Reabrindo...' : 'Reabrir auditoria'}
+                    </button>
+                  )}
                   {!editando && (restoredFormDraft || formDraftUpdatedAt) && (
                     <button
                       type="button"
@@ -1534,9 +1606,9 @@ const SGQAuditorias: React.FC = () => {
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button type="button" className="reports-action-btn secondary" onClick={fecharModal} disabled={formBusy}>
-                    {canManage ? 'Cancelar' : 'Fechar'}
+                    {podeEditar ? 'Cancelar' : 'Fechar'}
                   </button>
-                  {canManage && (
+                  {podeEditar && (
                     <button type="submit" className="reports-action-btn primary" disabled={formBusy}>
                       {salvar.isPending ? 'Salvando...' : editando ? 'Salvar Alterações' : 'Registrar Auditoria'}
                     </button>

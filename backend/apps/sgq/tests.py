@@ -1,6 +1,7 @@
 import tempfile
 from datetime import timedelta
 from io import BytesIO
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -12,6 +13,7 @@ from rest_framework.test import APITestCase
 from apps.faturamento.models import ClienteProtocolo
 
 from .models import (
+    AnexoRespostaAuditoriaSGQ,
     AuditoriaSGQ,
     CategoriaAuditoriaSGQ,
     ItemNormaSGQ,
@@ -1478,12 +1480,14 @@ class AuditoriaSGQTests(APITestCase):
             processosAreas='Expedição',
             responsaveisProcessos='Coordenador de pátio',
             metodologia='Entrevista e amostragem',
+            consideracoesFinais='  A auditoria atendeu aos critérios.  ',
         ), format='json', **_headers())
         self.assertEqual(criada.status_code, 201, criada.data)
         self.assertEqual(criada.data['criterios'], 'ISO e SASSMAQ')
         self.assertEqual(criada.data['processosAreas'], 'Expedição')
         self.assertEqual(criada.data['responsaveisProcessos'], 'Coordenador de pátio')
         self.assertEqual(criada.data['metodologia'], 'Entrevista e amostragem')
+        self.assertEqual(criada.data['consideracoesFinais'], 'A auditoria atendeu aos critérios.')
 
         sem = self.client.post(self.URL, _auditoria(titulo='Sem detalhes'), format='json', **_headers())
         self.assertEqual(sem.status_code, 201, sem.data)
@@ -1491,17 +1495,20 @@ class AuditoriaSGQTests(APITestCase):
         self.assertEqual(sem.data['processosAreas'], '')
         self.assertEqual(sem.data['responsaveisProcessos'], '')
         self.assertEqual(sem.data['metodologia'], '')
+        self.assertEqual(sem.data['consideracoesFinais'], '')
 
         formatada = self.client.post(self.URL, _auditoria(
             titulo='Com formatação',
             escopo='<p>Auditar <b>expedição</b></p><script>alert(1)</script>',
             criterios='<ul><li>ISO</li><li>SASSMAQ</li></ul><script>alert(1)</script>',
             metodologia='<b>Entrevista</b> e amostragem',
+            consideracoesFinais='<p>Sem não conformidades <b>críticas</b>.</p><script>alert(1)</script>',
         ), format='json', **_headers())
         self.assertEqual(formatada.status_code, 201, formatada.data)
         self.assertEqual(formatada.data['escopo'], '<p>Auditar <b>expedição</b></p>')
         self.assertEqual(formatada.data['criterios'], '<ul><li>ISO</li><li>SASSMAQ</li></ul>')
         self.assertEqual(formatada.data['metodologia'], '<b>Entrevista</b> e amostragem')
+        self.assertEqual(formatada.data['consideracoesFinais'], '<p>Sem não conformidades <b>críticas</b>.</p>')
         self.assertNotIn('script', formatada.data['criterios'])
         self.assertNotIn('script', formatada.data['escopo'])
 
@@ -1561,7 +1568,7 @@ class AuditoriaSGQTests(APITestCase):
         self.assertEqual(atrasadas.data['count'], 1)
         self.assertTrue(atrasadas.data['results'][0]['atrasada'])
         resumo = self.client.get(f'{self.URL}resumo/', **_headers())
-        self.assertEqual(resumo.data, {'total': 2, 'planejamento': 0, 'execucao': 1, 'concluida': 1, 'atrasada': 1})
+        self.assertEqual(resumo.data, {'total': 2, 'planejamento': 1, 'execucao': 0, 'concluida': 1, 'atrasada': 1})
 
     def test_planejamento_fica_dentro_do_periodo(self):
         item = {
@@ -1630,7 +1637,7 @@ class AuditoriaSGQTests(APITestCase):
         self.assertIn('08h00 às 08h30', mensagem.body)
         self.assertIn('Transcamila Cargas e Armazéns Gerais Ltda.', mensagem.body)
         self.assertIn('Segue o cronograma da auditoria', mensagem.body)
-        self.assertIn('Em execução', mensagem.body)
+        self.assertIn('Em planejamento', mensagem.body)
         self.assertIn('Auditor líder', mensagem.body)
         self.assertIn('sábado', mensagem.body)
         html = mensagem.alternatives[0][0]
@@ -2606,7 +2613,8 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         )
         self.auditoria = AuditoriaSGQ.objects.create(
             filial=IBIPORA, ano=2026, sequencia=1, codigo='26-00001', categoria='Interna', titulo='SASSMAQ 2026',
-            data_inicio='2026-10-01', data_termino='2026-10-30', auditor_lider='Ana', status='planejamento',
+            data_inicio='2026-10-01', data_termino='2026-10-30', auditor_lider='Ana',
+            auditores=['Auditor Campo'], status='planejamento',
         )
         self.auditoria.normas.add(self.norma)
         self.base = f'{self.URL}{self.auditoria.pk}/'
@@ -2654,6 +2662,8 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         self.assertEqual(lista.status_code, 200)
         item = next(a for a in lista.data['results'] if a['id'] == str(self.auditoria.pk))
         self.assertEqual((item['totalPerguntas'], item['perguntasRespondidas']), (2, 1))
+        self.assertEqual(item['statusQuestionario'], 'execucao')
+        self.assertEqual(item['status'], 'execucao')
 
     def test_execucao_traz_perguntas_tipos_e_respostas(self):
         self._responder(opcaoCodigo='1', destaque='forte')
@@ -2665,6 +2675,39 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         self.assertEqual(r.data['respostas'][0]['opcaoTexto'], 'Sim')
         self.assertEqual(r.data['respostas'][0]['destaque'], 'forte')
 
+    def test_resultado_usa_a_meta_de_cada_classificacao_da_norma(self):
+        self.norma.classificacoes = _CLASSIFICACOES_SASSMAQ
+        self.norma.save(update_fields=['classificacoes'])
+        industria = ItemNormaSGQ.objects.create(
+            norma=self.norma, parent=self.pergunta.parent, codigo='1.2', titulo='Há procedimento?',
+            tipo='pergunta', tipo_resposta=self.pergunta.tipo_resposta, classificacao='I', areas=['SS'],
+        )
+        desejavel = ItemNormaSGQ.objects.create(
+            norma=self.norma, parent=self.pergunta.parent, codigo='1.3', titulo='Há melhoria?',
+            tipo='pergunta', tipo_resposta=self.pergunta.tipo_resposta, classificacao='D', areas=['SS'],
+        )
+        self._responder(opcaoCodigo='1')
+        self.client.post(
+            f'{self.base}responder/',
+            {'itemId': str(industria.pk), 'opcaoCodigo': '1'},
+            format='json', **_headers(),
+        )
+        self.client.post(
+            f'{self.base}responder/',
+            {'itemId': str(desejavel.pk), 'opcaoCodigo': '0'},
+            format='json', **_headers(),
+        )
+        r = self.client.get(f'{self.base}execucao/', **_headers())
+        self.assertEqual(r.status_code, 200, r.data)
+        resultado = r.data['resultado']
+        self.assertEqual((resultado['primeira'], resultado['reavaliacao']), ('aprovada', 'reprovada'))
+        classes = {classe['sigla']: classe for classe in resultado['normas'][0]['classes']}
+        self.assertEqual(classes['M']['conformidade'], 100)
+        self.assertEqual(classes['I']['conformidade'], 100)
+        self.assertEqual(classes['D']['conformidade'], 0)
+        self.assertTrue(classes['D']['atingePrimeira'])
+        self.assertFalse(classes['D']['atingeReavaliacao'])
+
     def test_responde_copia_opcao_inicia_execucao_e_exige_justificativa(self):
         r = self._responder(opcaoCodigo='0', observacoes='Sem política escrita', destaque='fraco')
         self.assertEqual(r.status_code, 200, r.data)
@@ -2674,8 +2717,8 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         self.assertEqual(self.auditoria.status, 'execucao')
 
         sem_justificativa = self._responder(opcaoCodigo='x')
-        self.assertEqual(sem_justificativa.status_code, 400)
-        self.assertIn('observacoes', sem_justificativa.data)
+        self.assertEqual(sem_justificativa.status_code, 200, sem_justificativa.data)
+        self.assertEqual((sem_justificativa.data['opcaoCodigo'], sem_justificativa.data['observacoes']), ('X', ''))
         na = self._responder(opcaoCodigo='x', observacoes='Não transporta a granel')
         self.assertEqual((na.data['opcaoCodigo'], na.data['valor']), ('X', None))
         self.assertEqual(RespostaAuditoriaSGQ.objects.count(), 1)
@@ -2687,7 +2730,13 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         )
         self.assertEqual(orientativo.status_code, 400)
 
-    def test_anexos_incluir_baixar_excluir(self):
+    @patch('apps.sgq.auditoria_views.abrir_anexo_drive')
+    @patch(
+        'apps.sgq.auditoria_views.enviar_copia_auditoria',
+        return_value={'id': 'drive-pdf', 'link': 'https://drive.google.com/file/d/drive-pdf/view'},
+    )
+    def test_anexos_incluir_baixar_excluir(self, _enviar, abrir):
+        abrir.return_value = BytesIO(b'%PDF-1.4 teste')
         envio = self.client.post(
             f'{self.base}anexos/',
             {'itemId': str(self.pergunta.pk), 'arquivo': SimpleUploadedFile('evidencia.pdf', b'%PDF-1.4 teste')},
@@ -2713,7 +2762,153 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         self.assertEqual(excluido.status_code, 200)
         self.assertEqual(excluido.data['anexos'], [])
 
-    def test_concluida_bloqueia_e_permissoes(self):
+    @patch(
+        'apps.sgq.auditoria_views.enviar_copia_auditoria',
+        return_value={'id': 'drive-1', 'link': 'https://drive.google.com/file/d/drive-1/view'},
+    )
+    def test_anexo_do_computador_tambem_sobe_para_o_drive(self, enviar):
+        envio = self.client.post(
+            f'{self.base}anexos/',
+            {'itemId': str(self.pergunta.pk), 'arquivo': SimpleUploadedFile('evidencia.txt', b'Politica revisada')},
+            format='multipart',
+            **_headers(),
+        )
+        self.assertEqual(envio.status_code, 200, envio.data)
+        self.assertEqual(envio.data['anexos'][0]['driveUrl'], 'https://drive.google.com/file/d/drive-1/view')
+        self.assertEqual(enviar.call_args.args[1], self.auditoria.codigo)
+        self.assertIn(b'Politica revisada', enviar.call_args.args[3])
+        registro = AnexoRespostaAuditoriaSGQ.objects.get(drive_file_id='drive-1')
+        self.assertFalse(registro.arquivo)
+
+    @patch('apps.sgq.auditoria_views.enviar_copia_auditoria', side_effect=ValueError('Vincule novamente a conta Google.'))
+    def test_anexo_nao_grava_no_servidor_quando_o_drive_recusa(self, _enviar):
+        envio = self.client.post(
+            f'{self.base}anexos/',
+            {'itemId': str(self.pergunta.pk), 'arquivo': SimpleUploadedFile('evidencia.txt', b'Local')},
+            format='multipart',
+            **_headers(),
+        )
+        self.assertEqual(envio.status_code, 400, envio.data)
+        self.assertIn('Vincule novamente', envio.data['detail'])
+        self.assertEqual(AnexoRespostaAuditoriaSGQ.objects.count(), 0)
+
+    @patch('apps.sgq.auditoria_views.referenciar_anexo_drive')
+    def test_anexa_arquivo_que_ja_esta_no_drive(self, referenciar):
+        referenciar.return_value = {
+            'id': 'drive-2',
+            'nome': 'politica.txt',
+            'tamanho': 11,
+            'link': 'https://drive.google.com/file/d/drive-2/view',
+        }
+        envio = self.client.post(
+            f'{self.base}anexos-drive/',
+            {'itemId': str(self.pergunta.pk), 'driveFileId': 'drive-2'},
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(envio.status_code, 200, envio.data)
+        anexo = envio.data['anexos'][0]
+        self.assertEqual((anexo['nome'], anexo['driveUrl']), ('politica.txt', 'https://drive.google.com/file/d/drive-2/view'))
+        self.assertFalse(AnexoRespostaAuditoriaSGQ.objects.get(drive_file_id='drive-2').arquivo)
+        repetido = self.client.post(
+            f'{self.base}anexos-drive/',
+            {'itemId': str(self.pergunta.pk), 'driveFileId': 'drive-2'},
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(repetido.status_code, 400)
+
+        fora = User.objects.create_user(
+            username='sgq.fora.drive', password='x', name='Fora da Equipe', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['executar-auditorias']},
+        )
+        self.client.force_authenticate(fora)
+        negado = self.client.post(
+            f'{self.base}anexos-drive/',
+            {'itemId': str(self.pergunta.pk), 'driveFileId': 'drive-2'},
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(negado.status_code, 403)
+
+    @patch(
+        'apps.sgq.auditoria_views.enviar_copia_auditoria',
+        return_value={'id': 'drive-pol', 'link': 'https://drive.google.com/file/d/drive-pol/view'},
+    )
+    @patch(
+        'apps.sgq.evidencia_sugestao.baixar_conteudo_drive',
+        return_value={'conteudo': 'A política está revisada em 2026.'.encode()},
+    )
+    def test_sugerir_evidencia_usa_pergunta_guia_e_anexo(self, _baixar, _enviar):
+        self.pergunta.descricao = 'Verifique a política documentada.'
+        self.pergunta.save(update_fields=['descricao'])
+        self._responder(opcaoCodigo='1')
+        envio = self.client.post(
+            f'{self.base}anexos/',
+            {
+                'itemId': str(self.pergunta.pk),
+                'arquivo': SimpleUploadedFile(
+                    'politica.txt',
+                    'A política está revisada em 2026.'.encode(),
+                    content_type='text/plain',
+                ),
+            },
+            format='multipart',
+            **_headers(),
+        )
+        self.assertEqual(envio.status_code, 200, envio.data)
+
+        with patch('apps.sgq.evidencia_sugestao.gerar', return_value='A política revisada em 2026 foi verificada.') as gerar:
+            sugestao = self.client.post(
+                f'{self.base}sugerir-evidencia/',
+                {'itemId': str(self.pergunta.pk)},
+                format='json',
+                **_headers(),
+            )
+        self.assertEqual(sugestao.status_code, 200, sugestao.data)
+        self.assertIn('política', sugestao.data['texto'])
+        sistema, mensagens = gerar.call_args.args[:2]
+        pedido = mensagens[0]['text']
+        self.assertIn('Há política?', pedido)
+        self.assertIn('Verifique a política documentada.', pedido)
+        self.assertIn('politica.txt', pedido)
+        self.assertIn('A política está revisada em 2026.', pedido)
+        self.assertIn('Sim', pedido)
+        self.assertIn('evidência', sistema.lower())
+
+        with patch('apps.sgq.evidencia_sugestao.gerar', return_value='Anexos insuficientes.') as validar:
+            parecer = self.client.post(
+                f'{self.base}sugerir-evidencia/',
+                {'itemId': str(self.pergunta.pk), 'acao': 'validar'},
+                format='json',
+                **_headers(),
+            )
+        self.assertEqual(parecer.status_code, 200, parecer.data)
+        self.assertIn('conform', validar.call_args.args[0].lower())
+
+        with override_settings(GEMINI_API_KEY=''):
+            sem_chave = self.client.post(
+                f'{self.base}sugerir-evidencia/',
+                {'itemId': str(self.pergunta.pk)},
+                format='json',
+                **_headers(),
+            )
+        self.assertEqual(sem_chave.status_code, 503)
+
+        fora = User.objects.create_user(
+            username='sgq.fora.evidencia', password='x', name='Fora da Equipe', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['executar-auditorias']},
+        )
+        self.client.force_authenticate(fora)
+        negado = self.client.post(
+            f'{self.base}sugerir-evidencia/',
+            {'itemId': str(self.pergunta.pk)},
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(negado.status_code, 403)
         AuditoriaSGQ.objects.filter(pk=self.auditoria.pk).update(status='concluida')
         self.assertEqual(self._responder(opcaoCodigo='1').status_code, 400)
 
@@ -2775,15 +2970,14 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
             **_headers(),
         )
         self.assertEqual(respondida.status_code, 200, respondida.data)
-        ok = self.client.post(f'{self.base}concluir/', format='json', **_headers())
-        self.assertEqual(ok.status_code, 200, ok.data)
-        self.assertEqual(ok.data['status'], 'concluida')
+        cedo = self.client.patch(self.base, {'status': 'concluida'}, format='json', **_headers())
+        self.assertEqual(cedo.status_code, 400)
+        self.assertIn('questionário', str(cedo.data))
 
-        AuditoriaSGQ.objects.filter(pk=self.auditoria.pk).update(status='execucao')
         RespostaAuditoriaSGQ.objects.filter(item=self.pergunta).update(opcao_codigo='X', observacoes='', valor=None)
         sem_justificativa = self.client.post(f'{self.base}concluir/', format='json', **_headers())
         self.assertEqual(sem_justificativa.status_code, 400)
-        self.assertIn('Justifique', sem_justificativa.data['detail'])
+        self.assertIn('evidência/justificativa', sem_justificativa.data['detail'])
 
         RespostaAuditoriaSGQ.objects.filter(item=self.pergunta).update(opcao_codigo='Z', observacoes='fora das opções')
         invalida = self.client.post(f'{self.base}concluir/', format='json', **_headers())
@@ -2791,14 +2985,164 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         self.assertIn('não correspondem', invalida.data['detail'])
 
         RespostaAuditoriaSGQ.objects.filter(item=self.pergunta).update(
-            opcao_codigo='1', opcao_texto='Sim', valor=100, observacoes='',
+            opcao_codigo='1', opcao_texto='Sim', valor=100, observacoes='Evidência conferida',
         )
+        ok = self.client.post(f'{self.base}concluir/', format='json', **_headers())
+        self.assertEqual(ok.status_code, 200, ok.data)
+        self.assertEqual(ok.data['status'], 'execucao')
+        self.assertEqual(ok.data['statusQuestionario'], 'fechado')
+        self.assertTrue(ok.data['questionarioConcluido'])
+
         via_edicao = self.client.patch(self.base, {'status': 'concluida'}, format='json', **_headers())
         self.assertEqual(via_edicao.status_code, 200, via_edicao.data)
         self.assertEqual(via_edicao.data['status'], 'concluida')
+        self.assertEqual(via_edicao.data['statusQuestionario'], 'fechado')
+
+        reaberta = self.client.patch(self.base, {'status': 'execucao'}, format='json', **_headers())
+        self.assertEqual(reaberta.status_code, 400, reaberta.data)
+        self.assertIn('somente para consulta', reaberta.data['detail'])
+        self.auditoria.refresh_from_db()
+        self.assertEqual(self.auditoria.status, 'concluida')
+        self.assertTrue(self.auditoria.questionario_concluido)
 
         self.client.force_authenticate(self.auditor)
         self.assertEqual(self.client.post(f'{self.base}concluir/', format='json', **_headers()).status_code, 403)
+
+    def test_fluxo_interno_separa_lider_auditores_e_quem_esta_fora(self):
+        lider = User.objects.create_user(
+            username='sgq.lider.fluxo', password='x', name='Ana Lider', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['gerenciar-auditorias', 'executar-auditorias']},
+        )
+        auditor = User.objects.create_user(
+            username='sgq.auditor.fluxo', password='x', name='Auditor Equipe', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['executar-auditorias']},
+        )
+        fora = User.objects.create_user(
+            username='sgq.fora.fluxo', password='x', name='Fora da Equipe', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['executar-auditorias']},
+        )
+        gestor = User.objects.create_user(
+            username='sgq.gestor.fluxo', password='x', name='Gestor Alheio', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['gerenciar-auditorias']},
+        )
+        auditoria = AuditoriaSGQ.objects.create(
+            filial=IBIPORA, ano=2026, sequencia=9, codigo='26-00009', categoria='Auditoria interna',
+            titulo='Auditoria interna de teste', data_inicio='2026-10-01', data_termino='2026-10-30',
+            auditor_lider='Ana Lider', auditores=['Auditor Equipe'], status='planejamento',
+        )
+        auditoria.normas.add(self.norma)
+        base = f'{self.URL}{auditoria.pk}/'
+        resposta = {'itemId': str(self.pergunta.pk), 'opcaoCodigo': '1'}
+
+        self.client.force_authenticate(fora)
+        negado = self.client.post(f'{base}responder/', resposta, format='json', **_headers())
+        self.assertEqual(negado.status_code, 403)
+        self.assertIn('auditores desta auditoria', negado.data['detail'])
+
+        self.client.force_authenticate(auditor)
+        ok = self.client.post(f'{base}responder/', resposta, format='json', **_headers())
+        self.assertEqual(ok.status_code, 200, ok.data)
+        auditoria.refresh_from_db()
+        self.assertEqual(auditoria.status, 'execucao')
+        self.assertEqual(self.client.post(f'{base}concluir/', format='json', **_headers()).status_code, 403)
+        self.assertEqual(
+            self.client.patch(base, {'status': 'concluida'}, format='json', **_headers()).status_code,
+            403,
+        )
+
+        self.client.force_authenticate(gestor)
+        troca = self.client.patch(base, {'categoria': 'Auditoria externa'}, format='json', **_headers())
+        self.assertEqual(troca.status_code, 400)
+        self.assertIn('categoria', troca.data)
+        cedo = self.client.patch(base, {'status': 'concluida'}, format='json', **_headers())
+        self.assertEqual(cedo.status_code, 400)
+        self.assertIn('auditor líder', str(cedo.data))
+
+        self.client.force_authenticate(lider)
+        fechado = self.client.post(f'{base}concluir/', format='json', **_headers())
+        self.assertEqual(fechado.status_code, 200, fechado.data)
+        self.assertEqual(fechado.data['status'], 'execucao')
+        self.assertEqual(fechado.data['statusQuestionario'], 'fechado')
+        self.assertTrue(fechado.data['questionarioConcluido'])
+
+        self.client.force_authenticate(auditor)
+        travada = self.client.post(f'{base}responder/', resposta, format='json', **_headers())
+        self.assertEqual(travada.status_code, 400)
+        self.assertIn('questionário está concluído', travada.data['detail'])
+
+        self.client.force_authenticate(lider)
+        concluida = self.client.patch(base, {'status': 'concluida'}, format='json', **_headers())
+        self.assertEqual(concluida.status_code, 200, concluida.data)
+        self.assertEqual(concluida.data['status'], 'concluida')
+        mantida = self.client.patch(base, {'status': 'execucao'}, format='json', **_headers())
+        self.assertEqual(mantida.status_code, 400, mantida.data)
+        auditoria.refresh_from_db()
+        self.assertEqual(auditoria.status, 'concluida')
+        self.assertTrue(auditoria.questionario_concluido)
+
+        self.client.force_authenticate(auditor)
+        minhas = self.client.get(self.URL, {'minha_equipe': '1'}, **_headers())
+        self.assertEqual([item['codigo'] for item in minhas.data['results']], ['26-00009'])
+        self.client.force_authenticate(fora)
+        alheias = self.client.get(self.URL, {'minha_equipe': '1'}, **_headers())
+        self.assertEqual(alheias.data['results'], [])
+
+    def test_reabertura_exige_permissao_e_questionario_reabre_a_auditoria(self):
+        self._responder(opcaoCodigo='1', observacoes='Evidência conferida')
+        self.auditoria.auditor_lider = 'Ana Gestora'
+        self.auditoria.questionario_concluido = True
+        self.auditoria.status = 'concluida'
+        self.auditoria.save(update_fields=['auditor_lider', 'questionario_concluido', 'status'])
+        gestor = User.objects.create_user(
+            username='sgq.gestor.reabrir', password='x', name='Ana Gestora', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            funcoes={'SGQ': ['gerenciar-auditorias', 'executar-auditorias']},
+        )
+        self.client.force_authenticate(gestor)
+        sem_permissao = self.client.post(f'{self.base}reabrir/', format='json', **_headers())
+        self.assertEqual(sem_permissao.status_code, 403)
+        sem_questionario = self.client.post(f'{self.base}reabrir-questionario/', format='json', **_headers())
+        self.assertEqual(sem_questionario.status_code, 403)
+        self.auditoria.refresh_from_db()
+        self.assertEqual(self.auditoria.status, 'concluida')
+
+        gestor.funcoes = {'SGQ': ['gerenciar-auditorias', 'reabrir-auditoria']}
+        gestor.save(update_fields=['funcoes'])
+        aberta = self.client.post(f'{self.base}reabrir/', format='json', **_headers())
+        self.assertEqual(aberta.status_code, 200, aberta.data)
+        self.assertEqual((aberta.data['status'], aberta.data['questionarioConcluido']), ('execucao', True))
+        self.client.force_authenticate(self.auditor)
+        travada = self.client.post(
+            f'{self.base}responder/',
+            {'itemId': str(self.pergunta.pk), 'opcaoCodigo': '0'},
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(travada.status_code, 400)
+        self.client.force_authenticate(gestor)
+        editavel = self.client.patch(self.base, {'titulo': 'SASSMAQ revisada'}, format='json', **_headers())
+        self.assertEqual(editavel.status_code, 200, editavel.data)
+
+        self.auditoria.status = 'concluida'
+        self.auditoria.save(update_fields=['status'])
+        gestor.funcoes = {'SGQ': ['reabrir-questionario']}
+        gestor.save(update_fields=['funcoes'])
+        liberada = self.client.post(f'{self.base}reabrir-questionario/', format='json', **_headers())
+        self.assertEqual(liberada.status_code, 200, liberada.data)
+        self.assertEqual(liberada.data['status'], 'execucao')
+        self.assertFalse(liberada.data['questionarioConcluido'])
+        self.client.force_authenticate(self.auditor)
+        resposta = self.client.post(
+            f'{self.base}responder/',
+            {'itemId': str(self.pergunta.pk), 'opcaoCodigo': '0', 'observacoes': 'Ajuste depois da reabertura'},
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(resposta.status_code, 200, resposta.data)
 
     def test_perguntas_respondidas_protegem_norma_e_itens(self):
         self._responder(opcaoCodigo='1')
@@ -2873,11 +3217,75 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
                         marcado = True
                         break
                 self.assertTrue(marcado)
+                await ana.send_json_to({'type': 'digitando', 'itemId': str(self.pergunta.pk)})
+                escrevendo = False
+                for _ in range(6):
+                    quadro = await bia.receive_json_from(timeout=2)
+                    if quadro.get('type') != 'presence':
+                        continue
+                    ana_online = next((p for p in quadro['online'] if p['name'] == 'Auditor Campo'), None)
+                    if ana_online and ana_online.get('digitandoItemId') == str(self.pergunta.pk):
+                        escrevendo = True
+                        break
+                self.assertTrue(escrevendo)
             finally:
                 await ana.disconnect()
                 await bia.disconnect()
 
         async_to_sync(conversar)()
+
+    def test_dois_auditores_nao_apagam_a_resposta_um_do_outro(self):
+        colega = User.objects.create_user(
+            username='sgq.colega.resposta', password='x', name='Colega Ao Vivo', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]}, funcoes={'SGQ': ['executar-auditorias']},
+        )
+        self.auditoria.auditores = ['Auditor Campo', 'Colega Ao Vivo']
+        self.auditoria.save(update_fields=['auditores'])
+
+        marcado = self._responder(opcaoCodigo='1')
+        self.assertEqual(marcado.status_code, 200, marcado.data)
+        self.assertEqual(marcado.data['opcaoCodigo'], '1')
+
+        self.client.force_authenticate(colega)
+        evidencia = self.client.post(
+            f'{self.base}responder/',
+            {
+                'itemId': str(self.pergunta.pk),
+                'opcaoCodigo': '',
+                'observacoes': 'Documento verificado na sala.',
+                'preservarOpcao': True,
+            },
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(evidencia.status_code, 200, evidencia.data)
+        self.assertEqual(evidencia.data['opcaoCodigo'], '1')
+        self.assertIn('Documento verificado', evidencia.data['observacoes'])
+
+        self.client.force_authenticate(self.auditor)
+        troca = self._responder(opcaoCodigo='0', preservarObservacoes=True)
+        self.assertEqual(troca.status_code, 200, troca.data)
+        self.assertEqual((troca.data['opcaoCodigo'], troca.data['opcaoTexto']), ('0', 'Não'))
+        self.assertIn('Documento verificado', troca.data['observacoes'])
+
+        self.client.force_authenticate(self.auditor)
+        self._responder(opcaoCodigo='0', observacoes='Texto da Ana')
+        self.client.force_authenticate(colega)
+        conflito = self.client.post(
+            f'{self.base}responder/',
+            {
+                'itemId': str(self.pergunta.pk),
+                'opcaoCodigo': '0',
+                'observacoes': 'Texto do colega',
+                'observacoesBase': '',
+            },
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(conflito.status_code, 200, conflito.data)
+        self.assertTrue(conflito.data['conflitoObservacoes'])
+        self.assertIn('Texto da Ana', conflito.data['observacoes'])
+        self.assertNotIn('Texto do colega', conflito.data['observacoes'])
 
 
 class AuditoriaFormDraftTests(APITestCase):

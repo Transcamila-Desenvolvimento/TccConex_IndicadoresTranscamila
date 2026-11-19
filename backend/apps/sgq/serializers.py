@@ -14,6 +14,8 @@ from .models import (
     RESPOSTA_DESTAQUE_CHOICES,
     AnexoRespostaAuditoriaSGQ,
     AuditoriaSGQ,
+    auditoria_tem_resposta,
+    status_auditoria_automatico,
     CategoriaAuditoriaSGQ,
     DocumentoSGQ,
     EscopoAnalise,
@@ -298,6 +300,16 @@ def usuario_e_auditor_lider(user, auditor_lider: str) -> bool:
     return bool(lider) and nome.casefold() == lider.casefold()
 
 
+def usuario_na_equipe(user, auditoria) -> bool:
+    """Auditor líder ou um dos auditores designados na auditoria."""
+    nome = nome_exibicao_usuario(user)
+    if not nome:
+        return False
+    if usuario_e_auditor_lider(user, auditoria.auditor_lider):
+        return True
+    return any(str(item).strip().casefold() == nome.casefold() for item in (auditoria.auditores or []))
+
+
 def _amostra_itens(rotulos: list[str]) -> str:
     amostra = ', '.join(rotulos[:6])
     if len(rotulos) > 6:
@@ -330,7 +342,7 @@ def pendencias_questionario(normas, respostas) -> list[str]:
         if opcao is None:
             invalidas.append(rotulo)
             continue
-        if opcao.get('exigeJustificativa') and not (resposta.observacoes or '').strip():
+        if opcao.get('exigeJustificativa') and not limpar_texto_formatado(resposta.observacoes or ''):
             sem_justificativa.append(rotulo)
     mensagens = []
     if faltando:
@@ -341,7 +353,7 @@ def pendencias_questionario(normas, respostas) -> list[str]:
         )
     if sem_justificativa:
         mensagens.append(
-            'Justifique nas observações as respostas que exigem justificativa: '
+            'Informe a evidência/justificativa das respostas que exigem: '
             f'{_amostra_itens(sem_justificativa)}.'
         )
     if invalidas:
@@ -373,6 +385,11 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
         source='responsaveis_processos', required=False, allow_blank=True, default='',
     )
     metodologia = serializers.CharField(required=False, allow_blank=True, default='')
+    consideracoesFinais = serializers.CharField(
+        source='consideracoes_finais', required=False, allow_blank=True, default='',
+    )
+    questionarioConcluido = serializers.BooleanField(source='questionario_concluido', read_only=True)
+    statusQuestionario = serializers.SerializerMethodField()
     planejamento = serializers.ListField(
         child=ItemPlanejamentoAuditoriaSerializer(),
         required=False,
@@ -392,6 +409,7 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
             'id', 'codigo', 'categoria', 'titulo', 'dataInicio', 'dataTermino',
             'normas', 'auditorLider', 'auditores', 'status', 'escopo',
             'criterios', 'processosAreas', 'responsaveisProcessos', 'metodologia',
+            'consideracoesFinais', 'questionarioConcluido', 'statusQuestionario',
             'planejamento', 'filial', 'atrasada',
             'totalPerguntas', 'perguntasRespondidas',
             'criadoPor', 'criadoEm', 'atualizadoEm',
@@ -399,6 +417,11 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
 
     def get_normas(self, obj):
         return [{'id': str(norma.pk), 'nome': norma.nome, 'ativa': norma.ativa} for norma in obj.normas.all()]
+
+    def get_statusQuestionario(self, obj):
+        if obj.questionario_concluido or obj.status == 'concluida':
+            return 'fechado'
+        return 'execucao' if self.get_perguntasRespondidas(obj) else 'aberto'
 
     def get_atrasada(self, obj):
         return obj.status != 'concluida' and obj.data_termino < timezone.localdate()
@@ -461,7 +484,7 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
             if not texto:
                 raise serializers.ValidationError({'escopo': 'Informe o escopo / objetivo.'})
             attrs['escopo'] = texto
-        for campo in ('criterios', 'processos_areas', 'responsaveis_processos', 'metodologia'):
+        for campo in ('criterios', 'processos_areas', 'responsaveis_processos', 'metodologia', 'consideracoes_finais'):
             if campo in attrs:
                 attrs[campo] = limpar_texto_formatado(attrs.get(campo) or '')
         if self.instance is None or 'auditores' in attrs or 'auditor_lider' in attrs:
@@ -499,6 +522,14 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
         filial = self.instance.filial if self.instance is not None else self.context.get('filial')
         categoria = attrs.get('categoria')
         if categoria is not None and (self.instance is None or categoria != self.instance.categoria):
+            if self.instance is not None and (
+                self.instance.status == 'concluida'
+                or self.instance.questionario_concluido
+                or auditoria_tem_resposta(self.instance)
+            ):
+                raise serializers.ValidationError({
+                    'categoria': 'A categoria não pode ser trocada depois que o questionário foi iniciado.',
+                })
             cadastrada = CategoriaAuditoriaSGQ.objects.filter(filial=filial, nome__iexact=categoria, ativa=True).first()
             if cadastrada is None:
                 raise serializers.ValidationError({'categoria': 'Selecione uma categoria ativa cadastrada nesta unidade.'})
@@ -506,11 +537,21 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
             # As normas da auditoria são sempre as normas ativas da categoria.
             attrs['normas'] = list(cadastrada.normas.filter(ativa=True))
         status = attrs.get('status', getattr(self.instance, 'status', 'planejamento'))
-        if status == 'concluida' and getattr(self.instance, 'status', None) != 'concluida':
+        if self.instance is None:
+            attrs['status'] = 'planejamento'
+        elif self.instance.status == 'concluida':
+            attrs['status'] = 'concluida'
+        elif status != 'concluida':
+            attrs['status'] = status_auditoria_automatico(self.instance)
+        if attrs.get('status') == 'concluida' and getattr(self.instance, 'status', None) != 'concluida':
             request = self.context.get('request')
             lider = attrs.get('auditor_lider', getattr(self.instance, 'auditor_lider', ''))
             if not usuario_e_auditor_lider(getattr(request, 'user', None), lider):
                 raise serializers.ValidationError({'status': 'Só o auditor líder pode concluir a auditoria.'})
+            if not getattr(self.instance, 'questionario_concluido', False):
+                raise serializers.ValidationError({
+                    'status': 'Conclua o questionário antes de finalizar a auditoria.',
+                })
             normas = attrs.get('normas')
             if normas is None and self.instance is not None:
                 normas = self.instance.normas.all()
@@ -909,10 +950,11 @@ class AnexoRespostaAuditoriaSerializer(serializers.ModelSerializer):
     nome = serializers.CharField(source='nome_original', read_only=True)
     incluidoPor = serializers.SerializerMethodField()
     criadoEm = serializers.DateTimeField(source='criado_em', read_only=True)
+    driveUrl = serializers.CharField(source='drive_url', read_only=True)
 
     class Meta:
         model = AnexoRespostaAuditoriaSGQ
-        fields = ['id', 'nome', 'tamanho', 'incluidoPor', 'criadoEm']
+        fields = ['id', 'nome', 'tamanho', 'incluidoPor', 'criadoEm', 'driveUrl']
 
     def get_incluidoPor(self, obj):
         return _nome_usuario(obj.incluido_por)
@@ -942,8 +984,12 @@ class ResponderItemAuditoriaSerializer(serializers.Serializer):
 
     itemId = serializers.CharField()
     opcaoCodigo = serializers.CharField(max_length=10, required=False, allow_blank=True, default='')
-    observacoes = serializers.CharField(max_length=4000, required=False, allow_blank=True, default='')
+    observacoes = serializers.CharField(max_length=20000, required=False, allow_blank=True, default='')
     destaque = serializers.ChoiceField(choices=RESPOSTA_DESTAQUE_CHOICES, required=False, default='')
+    preservarOpcao = serializers.BooleanField(required=False, default=False)
+    preservarObservacoes = serializers.BooleanField(required=False, default=False)
+    preservarDestaque = serializers.BooleanField(required=False, default=False)
+    observacoesBase = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     def validate(self, attrs):
         auditoria = self.context['auditoria']
@@ -959,14 +1005,13 @@ class ResponderItemAuditoriaSerializer(serializers.Serializer):
             raise serializers.ValidationError({'itemId': 'Pergunta não encontrada nas normas desta auditoria.'})
         attrs['item'] = item
         attrs['opcao'] = None
+        attrs['observacoes'] = limpar_texto_formatado(attrs.get('observacoes') or '')
         codigo = attrs['opcaoCodigo'].strip()
         if codigo:
             opcoes = item.tipo_resposta.opcoes if item.tipo_resposta else []
             opcao = next((o for o in opcoes if str(o.get('codigo', '')).casefold() == codigo.casefold()), None)
             if opcao is None:
                 raise serializers.ValidationError({'opcaoCodigo': 'Opção de resposta inválida para esta pergunta.'})
-            if opcao.get('exigeJustificativa') and not attrs['observacoes'].strip():
-                raise serializers.ValidationError({'observacoes': f'Justifique a resposta "{opcao.get("texto")}" nas observações.'})
             attrs['opcao'] = opcao
         return attrs
 

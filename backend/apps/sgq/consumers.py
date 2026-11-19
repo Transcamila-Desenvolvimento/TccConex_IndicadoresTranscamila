@@ -73,6 +73,17 @@ class AuditoriaPresencaConsumer(AsyncWebsocketConsumer):
                 },
             )
             return
+        if tipo == 'digitando':
+            item_id = str(data.get('itemId') or '').strip()
+            if not item_id.isdigit() or len(item_id) > 20:
+                item_id = ''
+            self.user_payload = {**self.user_payload, 'digitandoItemId': item_id or None}
+            online = presence_store.add(self.room_name, self.connection_id, self.user_payload)
+            await self.channel_layer.group_send(
+                self.group_name,
+                {'type': 'presence.broadcast', 'online': online},
+            )
+            return
         if tipo != 'foco':
             return
         item_id = str(data.get('itemId') or '').strip()
