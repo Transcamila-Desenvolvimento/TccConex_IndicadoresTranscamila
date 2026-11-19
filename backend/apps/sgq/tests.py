@@ -3091,6 +3091,65 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         alheias = self.client.get(self.URL, {'minha_equipe': '1'}, **_headers())
         self.assertEqual(alheias.data['results'], [])
 
+        admin = User.objects.create_user(
+            username='sgq.admin.fluxo', password='x', name='Admin Aplicacao', role_id='1', status='ativo',
+        )
+        self.client.force_authenticate(admin)
+        visao_admin = self.client.get(self.URL, {'minha_equipe': '1'}, **_headers())
+        self.assertIn('26-00009', [item['codigo'] for item in visao_admin.data['results']])
+
+    @override_settings(SGQ_AUDITORIAS_LIBERADAS=False)
+    def test_questionario_sem_aba_de_auditorias_fica_na_equipe_e_admin_ajusta(self):
+        auditoria = AuditoriaSGQ.objects.create(
+            filial=IBIPORA, ano=2026, sequencia=11, codigo='26-00011', categoria='Auditoria interna',
+            titulo='Questionário da equipe', data_inicio='2026-10-01', data_termino='2026-10-30',
+            auditor_lider='Ana Lider', auditores=['Auditor Equipe'], status='planejamento',
+        )
+        so_questionario = User.objects.create_user(
+            username='sgq.so.questionario', password='x', name='Fora da Equipe', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            abas={'SGQ': ['home', 'auditorias-minhas-acoes']},
+            funcoes={'SGQ': ['executar-auditorias']},
+        )
+        da_equipe = User.objects.create_user(
+            username='sgq.da.equipe.lista', password='x', name='Auditor Equipe', role_id='2', status='ativo',
+            environments=['SGQ'], filiais={'SGQ': [IBIPORA]},
+            abas={'SGQ': ['home', 'auditorias-minhas-acoes']},
+            funcoes={'SGQ': ['executar-auditorias']},
+        )
+        self.client.force_authenticate(so_questionario)
+        vazia = self.client.get(self.URL, **_headers())
+        self.assertEqual(vazia.status_code, 200, vazia.data)
+        self.assertEqual(vazia.data['results'], [])
+        self.assertEqual(self.client.get(f'{self.URL}{auditoria.pk}/execucao/', **_headers()).status_code, 404)
+
+        self.client.force_authenticate(da_equipe)
+        minhas = self.client.get(self.URL, **_headers())
+        self.assertEqual([item['codigo'] for item in minhas.data['results']], ['26-00011'])
+        self.assertEqual(self.client.get(f'{self.URL}{auditoria.pk}/execucao/', **_headers()).status_code, 200)
+
+        admin = User.objects.create_user(
+            username='sgq.admin.lista', password='x', name='Admin Aplicacao', role_id='1', status='ativo',
+        )
+        self.client.force_authenticate(admin)
+        todas = self.client.get(self.URL, {'minha_equipe': '1'}, **_headers())
+        self.assertIn('26-00011', [item['codigo'] for item in todas.data['results']])
+        troca = self.client.patch(
+            f'{self.URL}{auditoria.pk}/', {'auditores': ['Carlos Souza']}, format='json', **_headers(),
+        )
+        self.assertEqual(troca.status_code, 200, troca.data)
+        self.assertEqual(troca.data['auditores'], ['Carlos Souza'])
+        concluir = self.client.patch(f'{self.URL}{auditoria.pk}/', {'status': 'concluida'}, format='json', **_headers())
+        self.assertEqual(concluir.status_code, 400)
+        self.assertIn('auditor líder', str(concluir.data))
+        resposta = self.client.post(
+            f'{self.URL}{auditoria.pk}/responder/',
+            {'itemId': str(self.pergunta.pk), 'opcaoCodigo': '1'},
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(resposta.status_code, 403)
+
     def test_reabertura_exige_permissao_e_questionario_reabre_a_auditoria(self):
         self._responder(opcaoCodigo='1', observacoes='Evidência conferida')
         self.auditoria.auditor_lider = 'Ana Gestora'

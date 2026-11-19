@@ -362,8 +362,20 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         context['filial'] = _filial_da_sessao(self.request)
         return context
 
+    def _da_equipe(self, qs):
+        """Auditor líder ou auditor designado. Sem nome de exibição, não vê nenhuma."""
+        nome = nome_exibicao_usuario(self.request.user)
+        if not nome:
+            return qs.none()
+        return qs.filter(Q(auditor_lider__iexact=nome) | Q(auditores__icontains=f'"{nome}"'))
+
     def get_queryset(self):
         qs = _anotar_progresso_questionario(self._escopo())
+        user = self.request.user
+        # Quem não tem a aba Auditorias (só Questionário) não consulta auditoria
+        # alheia, nem tirando o filtro da requisição. O administrador vê a filial.
+        if not getattr(user, 'is_admin', False) and _sem_aba(user, 'auditorias', self.request):
+            qs = self._da_equipe(qs)
         if self.action != 'list':
             return qs
         params = self.request.query_params
@@ -377,11 +389,10 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 | Q(auditor_lider__icontains=search)
                 | Q(auditores__icontains=search)
             ).distinct()
-        if _flag(params.get('minha_equipe')):
-            nome = nome_exibicao_usuario(self.request.user)
-            qs = qs.filter(
-                Q(auditor_lider__iexact=nome) | Q(auditores__icontains=f'"{nome}"')
-            ) if nome else qs.none()
+        # A aba Questionário pede só a equipe. Quem tem Auditorias continua vendo
+        # todas naquela tela. O administrador da aplicação vê a filial inteira.
+        if _flag(params.get('minha_equipe')) and not getattr(user, 'is_admin', False):
+            qs = self._da_equipe(qs)
         situacao = (params.get('status') or '').strip()
         if situacao == 'atrasada':
             qs = qs.exclude(status='concluida').filter(data_termino__lt=timezone.localdate())

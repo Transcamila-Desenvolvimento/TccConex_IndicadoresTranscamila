@@ -374,7 +374,8 @@ const SGQAuditorias: React.FC = () => {
   const [acoesAbertas, setAcoesAbertas] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<SgqAuditoria | null>(null);
-  const podeAlterarEquipe = !editando || mesmoNome(user?.name ?? '', editando.auditorLider);
+  const ehAuditorLider = Boolean(editando && mesmoNome(user?.name ?? '', editando.auditorLider));
+  const podeAlterarEquipe = !editando || ehAuditorLider || user?.roleId === '1';
   const questionarioEncerrado = Boolean(editando && (editando.questionarioConcluido || editando.status === 'concluida'));
   const [form, setForm] = useState<SgqAuditoriaPayload>(emptyForm);
   const [abaModal, setAbaModal] = useState<AbaModal>('dados');
@@ -1254,7 +1255,7 @@ const SGQAuditorias: React.FC = () => {
                       onChange={(valor) => setForm({ ...form, consideracoesFinais: valor })}
                     />
                   </div>
-                  {editando.status !== 'concluida' && podeAlterarEquipe && canManage && (
+                  {editando.status !== 'concluida' && ehAuditorLider && canManage && (
                     <label className="is-wide sgq-aud-confirma">
                       <input
                         type="checkbox"

@@ -513,8 +513,10 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
                     if str(nome).strip()
                 )
                 request = self.context.get('request')
-                if not (lider_igual and equipe_igual) and not usuario_e_auditor_lider(
-                    getattr(request, 'user', None), self.instance.auditor_lider,
+                usuario = getattr(request, 'user', None)
+                if not (lider_igual and equipe_igual) and not (
+                    usuario_e_auditor_lider(usuario, self.instance.auditor_lider)
+                    or getattr(usuario, 'is_admin', False)
                 ):
                     raise serializers.ValidationError({
                         'auditores': 'Só o auditor líder pode alterar a equipe da auditoria.',
