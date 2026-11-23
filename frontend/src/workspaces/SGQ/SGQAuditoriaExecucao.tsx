@@ -30,6 +30,8 @@ import { SGQ_QUESTIONARIO_STATUS_LABEL } from '../../types/domain';
 
 type Norma = SgqAuditoriaExecucao['normas'][number];
 type Pergunta = { item: SgqNormaItem; caminho: SgqNormaItem[]; norma: Norma; posicao: number };
+type NoExec = { item: SgqNormaItem; numero: string; nivel: number; filhos: NoExec[] };
+type GrupoNorma = { normaId: string; nome: string; nos: NoExec[] };
 type Filtro = 'todas' | 'pendentes' | 'respondidas' | 'forte' | 'fraco';
 
 const FILTROS: Array<{ value: Filtro; label: string }> = [
@@ -290,36 +292,6 @@ const FormularioPendencias: React.FC<{
   );
 };
 
-function codigoDoTopico(codigo: string) {
-  return codigo.trim().split('.')[0] ?? '';
-}
-
-function perguntaNoTopico(pergunta: Pick<Pergunta, 'item' | 'caminho'>, topico: string) {
-  return [pergunta.item, ...pergunta.caminho].some((item) => {
-    const codigo = item.codigo.trim();
-    return codigo === topico || codigo.startsWith(`${topico}.`);
-  });
-}
-
-function topicosDasPerguntas(perguntas: Pergunta[]) {
-  const titulos = new Map<string, string>();
-  const presentes = new Set<string>();
-  for (const pergunta of perguntas) {
-    for (const item of [...pergunta.caminho, pergunta.item]) {
-      const codigo = item.codigo.trim();
-      if (codigo && !codigo.includes('.') && !titulos.has(codigo)) titulos.set(codigo, item.titulo.trim());
-      const topico = codigoDoTopico(codigo);
-      if (topico) presentes.add(topico);
-    }
-  }
-  return [...presentes]
-    .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
-    .map((codigo) => ({
-      valor: codigo,
-      texto: titulos.get(codigo) ? `${codigo} - ${titulos.get(codigo)}` : codigo,
-    }));
-}
-
 function montarPerguntas(dados: SgqAuditoriaExecucao): Pergunta[] {
   const porPai = new Map<string, SgqNormaItem[]>();
   dados.itens.forEach((item) => {
@@ -335,6 +307,42 @@ function montarPerguntas(dados: SgqAuditoriaExecucao): Pergunta[] {
   };
   dados.normas.forEach((norma) => visitar(`norma:${norma.id}`, [], norma));
   return perguntas;
+}
+
+/** Mesma árvore do sumário da norma: seções no topo e perguntas nas folhas. */
+function montarArvoreExec(dados: SgqAuditoriaExecucao): GrupoNorma[] {
+  const porPai = new Map<string, SgqNormaItem[]>();
+  dados.itens.forEach((item) => {
+    const chave = item.parentId ?? `norma:${item.normaId}`;
+    porPai.set(chave, [...(porPai.get(chave) ?? []), item]);
+  });
+  const montar = (chave: string, prefixo: string, nivel: number): NoExec[] => (
+    (porPai.get(chave) ?? []).map((item, indice) => {
+      const numero = item.codigo.trim() || (prefixo ? `${prefixo}.${indice + 1}` : String(indice + 1));
+      return { item, numero, nivel, filhos: montar(item.id, numero, nivel + 1) };
+    })
+  );
+  return dados.normas.map((norma) => ({
+    normaId: norma.id,
+    nome: norma.nome,
+    nos: montar(`norma:${norma.id}`, '', 0),
+  }));
+}
+
+function indexarArvore(grupos: GrupoNorma[]) {
+  const pai = new Map<string, string | null>();
+  const perguntas = new Map<string, string[]>();
+  const secoes: string[] = [];
+  const visitar = (nos: NoExec[], paiId: string | null): string[] => nos.flatMap((no) => {
+    pai.set(no.item.id, paiId);
+    const internas = visitar(no.filhos, no.item.id);
+    const ids = no.item.tipo === 'pergunta' ? [no.item.id, ...internas] : internas;
+    perguntas.set(no.item.id, ids);
+    if (no.item.tipo === 'orientativo' || no.filhos.length > 0) secoes.push(no.item.id);
+    return ids;
+  });
+  grupos.forEach((grupo) => visitar(grupo.nos, null));
+  return { pai, perguntas, secoes };
 }
 
 function formatarTamanho(bytes: number) {
@@ -362,18 +370,20 @@ const SGQAuditoriaExecucao: React.FC = () => {
 
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [filtroClasse, setFiltroClasse] = useState('');
-  const [filtroItem, setFiltroItem] = useState('');
   const [busca, setBusca] = useState('');
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
+  const [secaoId, setSecaoId] = useState<string | null>(null);
+  const [navAbertos, setNavAbertos] = useState<Set<string>>(() => new Set());
   const ativoRef = useRef<HTMLButtonElement | null>(null);
 
   const perguntas = useMemo(() => (dados ? montarPerguntas(dados) : []), [dados]);
+  const arvore = useMemo(() => (dados ? montarArvoreExec(dados) : []), [dados]);
+  const indice = useMemo(() => indexarArvore(arvore), [arvore]);
   // Siglas das normas da auditoria, sem repetir quando mais de uma norma usa a mesma.
   const classificacoes = useMemo(
     () => [...new Map((dados?.normas ?? []).flatMap((n) => n.classificacoes).map((c) => [c.sigla, c])).values()],
     [dados],
   );
-  const topicos = useMemo(() => topicosDasPerguntas(perguntas), [perguntas]);
   const respostas = useMemo(
     () => new Map((dados?.respostas ?? []).map((resposta) => [resposta.itemId, resposta])),
     [dados],
@@ -384,16 +394,34 @@ const SGQAuditoriaExecucao: React.FC = () => {
   );
 
   const termo = normalizar(busca.trim());
-  const lista = perguntas.filter((pergunta) => {
-    const { item } = pergunta;
-    const resposta = respostas.get(item.id);
-    if (filtro === 'pendentes' && resposta?.opcaoCodigo) return false;
-    if (filtro === 'respondidas' && !resposta?.opcaoCodigo) return false;
-    if ((filtro === 'forte' || filtro === 'fraco') && resposta?.destaque !== filtro) return false;
-    if (filtroClasse && item.classificacao !== filtroClasse) return false;
-    if (filtroItem && !perguntaNoTopico(pergunta, filtroItem)) return false;
-    return !termo || normalizar(`${item.codigo} ${item.titulo}`).includes(termo);
-  });
+  const visiveis = useMemo(() => {
+    const ids = new Set<string>();
+    perguntas.forEach((pergunta) => {
+      const { item } = pergunta;
+      const resposta = respostas.get(item.id);
+      if (filtro === 'pendentes' && resposta?.opcaoCodigo) return;
+      if (filtro === 'respondidas' && !resposta?.opcaoCodigo) return;
+      if ((filtro === 'forte' || filtro === 'fraco') && resposta?.destaque !== filtro) return;
+      if (filtroClasse && item.classificacao !== filtroClasse) return;
+      if (termo && !normalizar(`${item.codigo} ${item.titulo}`).includes(termo)) return;
+      ids.add(item.id);
+    });
+    return ids;
+  }, [perguntas, respostas, filtro, filtroClasse, termo]);
+  const abertos = useMemo(() => {
+    if (!termo) return navAbertos;
+    const conjunto = new Set(navAbertos);
+    visiveis.forEach((id) => {
+      let paiId = indice.pai.get(id) ?? null;
+      while (paiId) {
+        conjunto.add(paiId);
+        paiId = indice.pai.get(paiId) ?? null;
+      }
+    });
+    return conjunto;
+  }, [termo, navAbertos, visiveis, indice]);
+  const escopo = secaoId ? new Set(indice.perguntas.get(secaoId) ?? []) : null;
+  const lista = perguntas.filter((pergunta) => visiveis.has(pergunta.item.id) && (!escopo || escopo.has(pergunta.item.id)));
 
   const atual = perguntas.find((p) => p.item.id === selecionadoId) ?? lista[0] ?? perguntas[0];
   const {
@@ -435,6 +463,122 @@ const SGQAuditoriaExecucao: React.FC = () => {
   useEffect(() => {
     ativoRef.current?.scrollIntoView({ block: 'nearest' });
   }, [atual?.item.id]);
+
+  const ehSecao = (no: NoExec) => no.item.tipo === 'orientativo' || no.filhos.length > 0;
+
+  const contagemSecao = (id: string) => (indice.perguntas.get(id) ?? []).filter((itemId) => visiveis.has(itemId)).length;
+
+  const alternarNav = (id: string) => setNavAbertos((atualAberto) => {
+    const proximo = new Set(atualAberto);
+    if (proximo.has(id)) proximo.delete(id);
+    else proximo.add(id);
+    return proximo;
+  });
+
+  const expandirNav = (aberto: boolean) => {
+    setNavAbertos(aberto ? new Set(indice.secoes) : new Set());
+  };
+
+  const abrirSecao = (id: string) => {
+    setSecaoId(id);
+    setNavAbertos((atualAberto) => {
+      const proximo = new Set(atualAberto);
+      let paiId = indice.pai.get(id) ?? null;
+      while (paiId) {
+        proximo.add(paiId);
+        paiId = indice.pai.get(paiId) ?? null;
+      }
+      return proximo;
+    });
+    const ids = new Set(indice.perguntas.get(id) ?? []);
+    if (atual && ids.has(atual.item.id) && visiveis.has(atual.item.id)) return;
+    const primeira = perguntas.find((pergunta) => ids.has(pergunta.item.id) && visiveis.has(pergunta.item.id));
+    if (primeira) setSelecionadoId(primeira.item.id);
+  };
+
+  const renderPerguntaNav = (no: NoExec) => {
+    const { item } = no;
+    const resposta = respostas.get(item.id);
+    const previa = rascunhoLocal?.itemId === item.id ? rascunhoLocal : rascunhoRemoto?.itemId === item.id ? rascunhoRemoto : null;
+    const opcaoRemota = previa
+      ? (item.tipoRespostaId ? opcoesPorTipo.get(item.tipoRespostaId) : undefined)?.find((opcao) => opcao.codigo === previa.opcaoCodigo)
+      : undefined;
+    const marca = opcaoRemota
+      ? { opcaoCodigo: opcaoRemota.codigo, opcaoTexto: opcaoRemota.texto, valor: opcaoRemota.valor }
+      : resposta;
+    const ativo = item.id === atual?.item.id;
+    const colegasItem = colegasPorPergunta.get(item.id) ?? [];
+    return (
+      <div className={`sgq-req-nav-item${ativo ? ' is-active' : ''}`} style={{ paddingLeft: 6 + no.nivel * 14 }}>
+        <span className="sgq-req-nav-toggle is-vazio" />
+        <button
+          type="button"
+          ref={ativo ? ativoRef : undefined}
+          className="sgq-req-nav-label"
+          onClick={() => {
+            setSelecionadoId(item.id);
+            if (secaoId && !(indice.perguntas.get(secaoId) ?? []).includes(item.id)) setSecaoId(null);
+          }}
+          title={item.titulo}
+        >
+          <span className={`sgq-exec-marca ${classeResposta(marca)}`} title={marca?.opcaoTexto || 'Sem resposta'}>
+            {marca?.opcaoCodigo || ''}
+          </span>
+          <span className="sgq-req-nav-codigo">{no.numero}</span>
+          <span className="sgq-req-nav-titulo">{item.titulo}</span>
+          {colegasItem.length > 0 && (
+            <span className="sgq-exec-nav-colegas" title={colegasItem.map((c) => c.name).join(', ')}>
+              {colegasItem.slice(0, 2).map((colega) => (
+                <UserAvatar key={colega.id} name={colega.name} photo={colega.googlePicture} size="sm" title={colega.name} />
+              ))}
+            </span>
+          )}
+          {resposta?.anexos.length ? <i className="bi bi-paperclip sgq-exec-icone" aria-label="Com anexos" /> : null}
+          {resposta?.destaque === 'forte' && <i className="bi bi-hand-thumbs-up-fill sgq-exec-icone is-forte" aria-label="Ponto forte" />}
+          {resposta?.destaque === 'fraco' && <i className="bi bi-exclamation-triangle-fill sgq-exec-icone is-fraco" aria-label="Ponto fraco" />}
+        </button>
+      </div>
+    );
+  };
+
+  const renderNos = (nos: NoExec[]): React.ReactNode => nos.map((no) => {
+    if (ehSecao(no)) {
+      const total = contagemSecao(no.item.id);
+      if (total === 0) return null;
+      const aberto = abertos.has(no.item.id);
+      return (
+        <li key={no.item.id}>
+          <div
+            className={`sgq-req-nav-item${secaoId === no.item.id ? ' is-active' : ''}`}
+            style={{ paddingLeft: 6 + no.nivel * 14 }}
+          >
+            <button
+              type="button"
+              className={`sgq-req-nav-toggle${no.filhos.length ? '' : ' is-vazio'}`}
+              onClick={() => alternarNav(no.item.id)}
+              disabled={!no.filhos.length}
+              aria-label={aberto ? 'Recolher' : 'Expandir'}
+            >
+              <i className={`bi ${aberto ? 'bi-chevron-down' : 'bi-chevron-right'}`} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="sgq-req-nav-label"
+              onClick={() => abrirSecao(no.item.id)}
+              title={`${no.numero} ${no.item.titulo}`}
+            >
+              <span className="sgq-req-nav-codigo">{no.numero}</span>
+              <span className="sgq-req-nav-titulo">{no.item.titulo}</span>
+              <span className="sgq-req-nav-count">{total}</span>
+            </button>
+          </div>
+          {aberto && no.filhos.length > 0 && <ul>{renderNos(no.filhos)}</ul>}
+        </li>
+      );
+    }
+    if (!visiveis.has(no.item.id)) return null;
+    return <li key={no.item.id}>{renderPerguntaNav(no)}</li>;
+  });
 
   return (
     <div className="sgq-aud-page sgq-exec-page">
@@ -512,71 +656,42 @@ const SGQAuditoriaExecucao: React.FC = () => {
                 >
                   {FILTROS.map((opcao) => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}
                 </select>
-                {(classificacoes.length > 0 || topicos.length > 0) && (
-                  <div className="sgq-exec-filtros-linha">
-                    {classificacoes.length > 0 && (
-                      <FiltroLista
-                        rotulo="Filtrar por classificação"
-                        placeholder="Classificação"
-                        valor={filtroClasse}
-                        onChange={setFiltroClasse}
-                        opcoes={classificacoes.map((c) => ({ valor: c.sigla, texto: `${c.sigla} - ${c.nome}` }))}
-                      />
-                    )}
-                    {topicos.length > 0 && (
-                      <FiltroLista
-                        rotulo="Filtrar por item"
-                        placeholder="Item"
-                        valor={filtroItem}
-                        onChange={setFiltroItem}
-                        opcoes={topicos}
-                      />
-                    )}
-                  </div>
+                {classificacoes.length > 0 && (
+                  <FiltroLista
+                    rotulo="Filtrar por classificação"
+                    placeholder="Classificação"
+                    valor={filtroClasse}
+                    onChange={setFiltroClasse}
+                    opcoes={classificacoes.map((c) => ({ valor: c.sigla, texto: `${c.sigla} - ${c.nome}` }))}
+                  />
                 )}
+                <div className="sgq-req-nav-tools">
+                  <span>Sumário</span>
+                  <button type="button" className="btn-icon" title="Expandir tudo" aria-label="Expandir tudo" onClick={() => expandirNav(true)}>
+                    <i className="bi bi-arrows-expand" aria-hidden="true" />
+                  </button>
+                  <button type="button" className="btn-icon" title="Recolher tudo" aria-label="Recolher tudo" onClick={() => expandirNav(false)}>
+                    <i className="bi bi-arrows-collapse" aria-hidden="true" />
+                  </button>
+                </div>
               </div>
               <ul className="sgq-req-nav-lista">
-                {lista.length === 0 && <li className="sgq-exec-lista-vazia">Nenhuma pergunta neste filtro.</li>}
-                {lista.map(({ item }) => {
-                  const resposta = respostas.get(item.id);
-                  const previa = rascunhoLocal?.itemId === item.id ? rascunhoLocal : rascunhoRemoto?.itemId === item.id ? rascunhoRemoto : null;
-                  const opcaoRemota = previa
-                    ? (item.tipoRespostaId ? opcoesPorTipo.get(item.tipoRespostaId) : undefined)?.find((opcao) => opcao.codigo === previa.opcaoCodigo)
-                    : undefined;
-                  const marca = opcaoRemota
-                    ? { opcaoCodigo: opcaoRemota.codigo, opcaoTexto: opcaoRemota.texto, valor: opcaoRemota.valor }
-                    : resposta;
-                  const ativo = item.id === atual.item.id;
-                  const colegasItem = colegasPorPergunta.get(item.id) ?? [];
-                  return (
-                    <li key={item.id}>
-                      <div className={`sgq-req-nav-item${ativo ? ' is-active' : ''}`}>
-                        <button
-                          type="button"
-                          ref={ativo ? ativoRef : undefined}
-                          className="sgq-req-nav-label"
-                          onClick={() => setSelecionadoId(item.id)}
-                          title={item.titulo}
-                        >
-                          <span className={`sgq-exec-marca ${classeResposta(marca)}`} title={marca?.opcaoTexto || 'Sem resposta'}>
-                            {marca?.opcaoCodigo || ''}
-                          </span>
-                          <span className="sgq-req-nav-titulo">{item.codigo} {item.titulo}</span>
-                          {colegasItem.length > 0 && (
-                            <span className="sgq-exec-nav-colegas" title={colegasItem.map((c) => c.name).join(', ')}>
-                              {colegasItem.slice(0, 2).map((colega) => (
-                                <UserAvatar key={colega.id} name={colega.name} photo={colega.googlePicture} size="sm" title={colega.name} />
-                              ))}
-                            </span>
-                          )}
-                          {resposta?.anexos.length ? <i className="bi bi-paperclip sgq-exec-icone" aria-label="Com anexos" /> : null}
-                          {resposta?.destaque === 'forte' && <i className="bi bi-hand-thumbs-up-fill sgq-exec-icone is-forte" aria-label="Ponto forte" />}
-                          {resposta?.destaque === 'fraco' && <i className="bi bi-exclamation-triangle-fill sgq-exec-icone is-fraco" aria-label="Ponto fraco" />}
-                        </button>
-                      </div>
-                    </li>
-                  );
-                })}
+                {visiveis.size === 0 && <li className="sgq-exec-lista-vazia">Nenhuma pergunta neste filtro.</li>}
+                <li>
+                  <div className={`sgq-req-nav-item${secaoId === null ? ' is-active' : ''}`} style={{ paddingLeft: 6 }}>
+                    <span className="sgq-req-nav-toggle is-vazio" />
+                    <button type="button" className="sgq-req-nav-label" onClick={() => setSecaoId(null)}>
+                      <span className="sgq-req-nav-titulo">Todos os itens</span>
+                      <span className="sgq-req-nav-count">{visiveis.size}</span>
+                    </button>
+                  </div>
+                </li>
+                {arvore.map((grupo) => (
+                  <React.Fragment key={grupo.normaId}>
+                    {arvore.length > 1 && <li className="sgq-exec-nav-norma">{grupo.nome}</li>}
+                    {renderNos(grupo.nos)}
+                  </React.Fragment>
+                ))}
               </ul>
             </aside>
 
@@ -621,8 +736,17 @@ const SGQAuditoriaExecucao: React.FC = () => {
             setBusca('');
             setFiltro('todas');
             setFiltroClasse('');
-            setFiltroItem('');
+            setSecaoId(null);
             setSelecionadoId(itemId);
+            setNavAbertos((atualAberto) => {
+              const proximo = new Set(atualAberto);
+              let paiId = indice.pai.get(itemId) ?? null;
+              while (paiId) {
+                proximo.add(paiId);
+                paiId = indice.pai.get(paiId) ?? null;
+              }
+              return proximo;
+            });
             setFormPendencias(false);
           }}
           onConcluir={concluirAuditoria}
