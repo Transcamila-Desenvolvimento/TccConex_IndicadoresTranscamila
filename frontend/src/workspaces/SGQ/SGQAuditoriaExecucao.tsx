@@ -34,6 +34,34 @@ type NoExec = { item: SgqNormaItem; numero: string; nivel: number; filhos: NoExe
 type GrupoNorma = { normaId: string; nome: string; nos: NoExec[] };
 type Filtro = 'todas' | 'pendentes' | 'respondidas' | 'forte' | 'fraco';
 
+const LARGURA_SUMARIO_MIN = 240;
+const LARGURA_SUMARIO_MAX = 720;
+const LARGURA_SUMARIO_PADRAO = 320;
+const CHAVE_LARGURA_SUMARIO = 'sgq-exec-sumario-largura';
+
+function limitarLarguraSumario(px: number, disponivel: number) {
+  const maximo = Math.max(LARGURA_SUMARIO_MIN, Math.min(LARGURA_SUMARIO_MAX, disponivel - 420));
+  return Math.round(Math.min(maximo, Math.max(LARGURA_SUMARIO_MIN, px)));
+}
+
+function lerLarguraSumario() {
+  try {
+    const salva = Number(localStorage.getItem(CHAVE_LARGURA_SUMARIO));
+    if (!Number.isFinite(salva)) return LARGURA_SUMARIO_PADRAO;
+    return Math.min(LARGURA_SUMARIO_MAX, Math.max(LARGURA_SUMARIO_MIN, Math.round(salva)));
+  } catch {
+    return LARGURA_SUMARIO_PADRAO;
+  }
+}
+
+function gravarLarguraSumario(px: number) {
+  try {
+    localStorage.setItem(CHAVE_LARGURA_SUMARIO, String(px));
+  } catch {
+    /* a largura continua valendo nesta visita */
+  }
+}
+
 const FILTROS: Array<{ value: Filtro; label: string }> = [
   { value: 'todas', label: 'Todas' },
   { value: 'pendentes', label: 'Sem resposta' },
@@ -368,13 +396,54 @@ const SGQAuditoriaExecucao: React.FC = () => {
   const { canShowEmpty } = useAsyncQueryState(execucaoQuery);
   const dados = execucaoQuery.data;
 
+  const [menuOculto, setMenuOculto] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [filtroClasse, setFiltroClasse] = useState('');
   const [busca, setBusca] = useState('');
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
   const [secaoId, setSecaoId] = useState<string | null>(null);
   const [navAbertos, setNavAbertos] = useState<Set<string>>(() => new Set());
+  const [larguraNav, setLarguraNav] = useState(lerLarguraSumario);
   const ativoRef = useRef<HTMLButtonElement | null>(null);
+  const layoutRef = useRef<HTMLDivElement | null>(null);
+
+  const arrastarSumario = (evento: React.PointerEvent<HTMLButtonElement>) => {
+    if (evento.button !== 0) return;
+    const layout = layoutRef.current;
+    if (!layout) return;
+    evento.preventDefault();
+    const inicioX = evento.clientX;
+    const inicio = larguraNav;
+    let atual = inicio;
+    const alvo = evento.currentTarget;
+    alvo.setPointerCapture(evento.pointerId);
+    const anteriorCursor = document.body.style.cursor;
+    const anteriorSelecao = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const mover = (e: PointerEvent) => {
+      atual = limitarLarguraSumario(inicio + e.clientX - inicioX, layout.clientWidth);
+      setLarguraNav(atual);
+    };
+    const soltar = () => {
+      document.body.style.cursor = anteriorCursor;
+      document.body.style.userSelect = anteriorSelecao;
+      alvo.removeEventListener('pointermove', mover);
+      alvo.removeEventListener('pointerup', soltar);
+      alvo.removeEventListener('pointercancel', soltar);
+      gravarLarguraSumario(atual);
+    };
+    alvo.addEventListener('pointermove', mover);
+    alvo.addEventListener('pointerup', soltar);
+    alvo.addEventListener('pointercancel', soltar);
+  };
+
+  const ajustarLarguraSumario = (px: number) => {
+    const layout = layoutRef.current;
+    const proxima = limitarLarguraSumario(px, layout?.clientWidth ?? px + 420);
+    setLarguraNav(proxima);
+    gravarLarguraSumario(proxima);
+  };
 
   const perguntas = useMemo(() => (dados ? montarPerguntas(dados) : []), [dados]);
   const arvore = useMemo(() => (dados ? montarArvoreExec(dados) : []), [dados]);
@@ -541,7 +610,9 @@ const SGQAuditoriaExecucao: React.FC = () => {
     );
   };
 
-  const renderNos = (nos: NoExec[]): React.ReactNode => nos.map((no) => {
+  const renderNos = (nos: NoExec[]): React.ReactNode => {
+    let ordemPergunta = 0;
+    return nos.map((no) => {
     if (ehSecao(no)) {
       const total = contagemSecao(no.item.id);
       if (total === 0) return null;
@@ -577,16 +648,32 @@ const SGQAuditoriaExecucao: React.FC = () => {
       );
     }
     if (!visiveis.has(no.item.id)) return null;
-    return <li key={no.item.id}>{renderPerguntaNav(no)}</li>;
+    ordemPergunta += 1;
+    return (
+      <li key={no.item.id} className={ordemPergunta % 2 === 0 ? 'is-zebra' : undefined}>
+        {renderPerguntaNav(no)}
+      </li>
+    );
   });
+  };
 
   return (
-    <div className="sgq-aud-page sgq-exec-page">
+    <div className={`sgq-aud-page sgq-exec-page${menuOculto ? ' is-tela-cheia' : ''}`}>
       <header className="sgq-aud-header sgq-exec-header">
         <div className="sgq-exec-ident">
           <Link to="/sgq/auditorias/minhas-acoes" className="sgq-exec-voltar" aria-label="Voltar ao questionário">
             <i className="bi bi-arrow-left" aria-hidden="true" />
           </Link>
+          <button
+            type="button"
+            className={`sgq-exec-tela-cheia${menuOculto ? ' is-ativo' : ''}`}
+            aria-pressed={menuOculto}
+            aria-label={menuOculto ? 'Mostrar o menu do sistema' : 'Abrir em tela cheia e ocultar o menu do sistema'}
+            title={menuOculto ? 'Mostrar o menu do sistema' : 'Tela cheia'}
+            onClick={() => setMenuOculto((aberto) => !aberto)}
+          >
+            <i className={`bi ${menuOculto ? 'bi-fullscreen-exit' : 'bi-fullscreen'}`} aria-hidden="true" />
+          </button>
           <div className="sgq-exec-ident-texto">
             <h1 className="view-page-title" title={dados?.auditoria.titulo}>
               {dados ? `${dados.auditoria.codigo} · ${dados.auditoria.titulo}` : 'Auditoria'}
@@ -635,7 +722,11 @@ const SGQAuditoriaExecucao: React.FC = () => {
             </div>
           </div>
         ) : dados && atual ? (
-          <div className="sgq-req-layout">
+          <div
+            className="sgq-req-layout"
+            ref={layoutRef}
+            style={{ '--sgq-nav-largura': `${larguraNav}px` } as React.CSSProperties}
+          >
             <aside className="sgq-req-nav" aria-label="Perguntas da auditoria">
               <div className="sgq-req-nav-header">
                 <label className="sgq-req-busca">
@@ -694,6 +785,27 @@ const SGQAuditoriaExecucao: React.FC = () => {
                 ))}
               </ul>
             </aside>
+            <button
+              type="button"
+              className="sgq-exec-nav-resize"
+              role="separator"
+              aria-orientation="vertical"
+              aria-valuemin={LARGURA_SUMARIO_MIN}
+              aria-valuemax={LARGURA_SUMARIO_MAX}
+              aria-valuenow={larguraNav}
+              aria-label="Ajustar a largura do sumário"
+              title="Arraste para ver os itens inteiros"
+              onPointerDown={arrastarSumario}
+              onKeyDown={(evento) => {
+                if (evento.key === 'ArrowLeft') {
+                  evento.preventDefault();
+                  ajustarLarguraSumario(larguraNav - 24);
+                } else if (evento.key === 'ArrowRight') {
+                  evento.preventDefault();
+                  ajustarLarguraSumario(larguraNav + 24);
+                }
+              }}
+            />
 
             <PerguntaPainel
               key={atual.item.id}
