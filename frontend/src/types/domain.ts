@@ -2229,6 +2229,8 @@ export interface SgqAuditoria {
   consideracoesFinais: string;
   /** O questionário foi encerrado pelo auditor líder. A auditoria segue aberta até a conclusão. */
   questionarioConcluido: boolean;
+  /** Dia local em que o questionário foi concluído. */
+  questionarioConcluidoEm: string | null;
   /** Em aberto, em execução ou fechado. Independente do status da auditoria. */
   statusQuestionario: SgqQuestionarioStatus;
   planejamento: SgqAuditoriaPlanejamento[];

@@ -619,7 +619,8 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if pendencias:
             return Response({'detail': ' '.join(pendencias)}, status=status.HTTP_400_BAD_REQUEST)
         auditoria.questionario_concluido = True
-        campos = ['questionario_concluido', 'atualizado_em']
+        auditoria.questionario_concluido_em = timezone.now()
+        campos = ['questionario_concluido', 'questionario_concluido_em', 'atualizado_em']
         novo = status_auditoria_automatico(auditoria)
         if auditoria.status != novo:
             auditoria.status = novo
@@ -661,8 +662,9 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
                 {'detail': 'O questionário desta auditoria não está concluído.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        campos = ['questionario_concluido', 'atualizado_em']
+        campos = ['questionario_concluido', 'questionario_concluido_em', 'atualizado_em']
         auditoria.questionario_concluido = False
+        auditoria.questionario_concluido_em = None
         if auditoria.status == 'concluida':
             auditoria.status = 'execucao'
             campos.append('status')

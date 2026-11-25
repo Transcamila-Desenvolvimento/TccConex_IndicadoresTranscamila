@@ -396,6 +396,7 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
         source='consideracoes_finais', required=False, allow_blank=True, default='',
     )
     questionarioConcluido = serializers.BooleanField(source='questionario_concluido', read_only=True)
+    questionarioConcluidoEm = serializers.SerializerMethodField()
     statusQuestionario = serializers.SerializerMethodField()
     planejamento = serializers.ListField(
         child=ItemPlanejamentoAuditoriaSerializer(),
@@ -416,7 +417,7 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
             'id', 'codigo', 'categoria', 'titulo', 'dataInicio', 'dataTermino',
             'normas', 'auditorLider', 'auditores', 'status', 'escopo',
             'criterios', 'processosAreas', 'responsaveisProcessos', 'metodologia',
-            'consideracoesFinais', 'questionarioConcluido', 'statusQuestionario',
+            'consideracoesFinais', 'questionarioConcluido', 'questionarioConcluidoEm', 'statusQuestionario',
             'planejamento', 'filial', 'atrasada',
             'totalPerguntas', 'perguntasRespondidas',
             'criadoPor', 'criadoEm', 'atualizadoEm',
@@ -424,6 +425,12 @@ class AuditoriaSGQSerializer(serializers.ModelSerializer):
 
     def get_normas(self, obj):
         return [{'id': str(norma.pk), 'nome': norma.nome, 'ativa': norma.ativa} for norma in obj.normas.all()]
+
+    def get_questionarioConcluidoEm(self, obj):
+        momento = obj.questionario_concluido_em
+        if not momento:
+            return None
+        return timezone.localtime(momento).date().isoformat()
 
     def get_statusQuestionario(self, obj):
         if obj.questionario_concluido or obj.status == 'concluida':

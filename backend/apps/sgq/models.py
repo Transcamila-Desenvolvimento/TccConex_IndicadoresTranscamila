@@ -281,6 +281,9 @@ class AuditoriaSGQ(models.Model):
     metodologia = models.TextField(blank=True, default='', verbose_name='Metodologia')
     consideracoes_finais = models.TextField(blank=True, default='', verbose_name='Considerações finais')
     questionario_concluido = models.BooleanField(default=False, verbose_name='Questionário concluído')
+    questionario_concluido_em = models.DateTimeField(
+        null=True, blank=True, verbose_name='Questionário concluído em',
+    )
     # [{"data": "YYYY-MM-DD", "horaInicio": "HH:MM", "horaFim": "HH:MM", "atividade": "..."}]
     planejamento = models.JSONField(default=list, blank=True, verbose_name='Planejamento')
     criado_por = models.ForeignKey(

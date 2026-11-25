@@ -83,6 +83,25 @@ function formatarData(iso: string): string {
   return iso;
 }
 
+function concluidaComAtraso(auditoria: {
+  questionarioConcluido: boolean;
+  questionarioConcluidoEm: string | null;
+  dataTermino: string;
+}): boolean {
+  if (!auditoria.questionarioConcluido || !auditoria.questionarioConcluidoEm) return false;
+  return auditoria.questionarioConcluidoEm.slice(0, 10) > auditoria.dataTermino;
+}
+
+function linhasConclusao(auditoria: {
+  questionarioConcluido: boolean;
+  questionarioConcluidoEm: string | null;
+}): Array<[string, string]> {
+  if (!auditoria.questionarioConcluido || !auditoria.questionarioConcluidoEm) {
+    return [['Data de conclusão', auditoria.questionarioConcluido ? '—' : 'Não concluído']];
+  }
+  return [['Data de conclusão', formatarData(auditoria.questionarioConcluidoEm.slice(0, 10))]];
+}
+
 function formatarDataHora(iso: string): string {
   if (!iso) return '—';
   const data = new Date(iso);
@@ -270,12 +289,13 @@ export async function downloadSgqAuditoriaAnaliticoPdf(dados: SgqAuditoriaExecuc
   const status = SGQ_AUDITORIA_STATUS_LABEL[auditoria.status];
   const pares: Array<[string, string]> = [
     ['Código', auditoria.codigo],
-    ['Status', auditoria.atrasada ? `${status} · atrasada` : status],
+    ['Status', concluidaComAtraso(auditoria) ? `${status} (Com Atraso)` : auditoria.atrasada ? `${status} · atrasada` : status],
     ['Título', auditoria.titulo],
     ['Auditor líder', auditoria.auditorLider || '—'],
     ['Auditores', auditoria.auditores?.join(', ') || '—'],
     ['Categoria', auditoria.categoria || '—'],
     ['Período', `${formatarData(auditoria.dataInicio)} a ${formatarData(auditoria.dataTermino)}`],
+    ...linhasConclusao(auditoria),
     ['Normas', auditoria.normas.map((norma) => norma.nome).join(', ') || '—'],
     ['Filial', auditoria.filial || '—'],
     ['Conformidade', pct(numeros.geral)],

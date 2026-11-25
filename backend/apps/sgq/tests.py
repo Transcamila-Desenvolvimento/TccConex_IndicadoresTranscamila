@@ -3017,6 +3017,7 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         self.assertEqual(ok.data['status'], 'execucao')
         self.assertEqual(ok.data['statusQuestionario'], 'fechado')
         self.assertTrue(ok.data['questionarioConcluido'])
+        self.assertTrue(ok.data['questionarioConcluidoEm'])
 
         via_edicao = self.client.patch(self.base, {'status': 'concluida'}, format='json', **_headers())
         self.assertEqual(via_edicao.status_code, 200, via_edicao.data)
@@ -3219,6 +3220,7 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         self.assertEqual(liberada.status_code, 200, liberada.data)
         self.assertEqual(liberada.data['status'], 'execucao')
         self.assertFalse(liberada.data['questionarioConcluido'])
+        self.assertIsNone(liberada.data['questionarioConcluidoEm'])
         self.client.force_authenticate(self.auditor)
         resposta = self.client.post(
             f'{self.base}responder/',
