@@ -398,17 +398,21 @@ function coletarLinhasSumario(nos: NoExec[], visiveis: Set<string>): LinhaSumari
         return;
       }
       const diretas = no.filhos.filter((filho) => !ehSecao(filho) && visiveis.has(filho.item.id));
-      if (diretas.length > 0) {
-        const topico = {
-          id: no.item.id,
-          numero: no.numero,
-          titulo: no.item.titulo,
-          total: diretas.length,
-          acima: contextoDoPai(pai),
-        };
-        diretas.forEach((filho) => linhas.push({ no: filho, topico }));
-      }
-      visitar(no.filhos.filter(ehSecao), no);
+      const topico = {
+        id: no.item.id,
+        numero: no.numero,
+        titulo: no.item.titulo,
+        total: diretas.length,
+        acima: contextoDoPai(pai),
+      };
+      no.filhos.forEach((filho) => {
+        if (!ehSecao(filho)) {
+          if (!visiveis.has(filho.item.id)) return;
+          linhas.push({ no: filho, topico });
+          return;
+        }
+        visitar([filho], no);
+      });
     });
   };
   visitar(nos, null);
@@ -478,6 +482,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
   const [topicoAncora, setTopicoAncora] = useState<string | null>(null);
   const [seguirSelecao, setSeguirSelecao] = useState(true);
   const [idAlinhado, setIdAlinhado] = useState<string | null>(null);
+  const [encaixe, setEncaixe] = useState(0);
   const rolandoRef = useRef(false);
 
   const arrastarSumario = (evento: React.PointerEvent<HTMLButtonElement>) => {
@@ -653,7 +658,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
     });
     observar.observe(lista);
     return () => observar.disconnect();
-  }, [idAtual, menuOculto, larguraNav]);
+  }, [idAtual, encaixe, menuOculto, larguraNav]);
 
   useEffect(() => {
     const lista = listaRef.current;
@@ -761,7 +766,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
               <div className="sgq-exec-equipe-online" aria-label="Equipe online neste questionário">
                 {equipeOnline.map((pessoa) => {
                   const perguntaAberta = pessoa.itemId
-                    ? perguntas.find((pergunta) => pergunta.item.id === pessoa.itemId)
+                    ? perguntas.find((pergunta) => pergunta.item.id === String(pessoa.itemId))
                     : undefined;
                   const euMesmo = pessoa.id === String(user?.id ?? '');
                   const onde = perguntaAberta?.item.codigo ? ` · ${perguntaAberta.item.codigo}` : '';
@@ -780,8 +785,15 @@ const SGQAuditoriaExecucao: React.FC = () => {
                       title={titulo}
                       aria-label={titulo}
                       onClick={() => {
-                        setSelecionadoId(pessoa.itemId);
-                        if (secaoId && !(indice.perguntas.get(secaoId) ?? []).includes(pessoa.itemId ?? '')) setSecaoId(null);
+                        const itemId = String(pessoa.itemId);
+                        setBusca('');
+                        setFiltro('todas');
+                        setFiltroClasse('');
+                        setFiltroItem('');
+                        setSecaoId(null);
+                        setSeguirSelecao(true);
+                        setSelecionadoId(itemId);
+                        setEncaixe((valor) => valor + 1);
                       }}
                     >
                       {avatar}
