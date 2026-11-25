@@ -7402,6 +7402,33 @@ fieldset:disabled .sgq-import-arquivo-limpar {
   font-weight: 600;
 }
 
+.sgq-exec-filtro-menu {
+  max-height: none;
+  padding: 6px;
+}
+
+.sgq-exec-filtro-menu ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sgq-exec-filtro-menu > div + div {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.sgq-exec-lista-grupo {
+  margin: 0 0 2px;
+  padding: 2px 8px 0;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .sgq-exec-lista-vazia {
   padding: 16px 8px;
   color: #94a3b8;

@@ -32,7 +32,7 @@ type Norma = SgqAuditoriaExecucao['normas'][number];
 type Pergunta = { item: SgqNormaItem; caminho: SgqNormaItem[]; norma: Norma; posicao: number };
 type NoExec = { item: SgqNormaItem; numero: string; nivel: number; filhos: NoExec[] };
 type GrupoNorma = { normaId: string; nome: string; nos: NoExec[] };
-type Filtro = 'todas' | 'pendentes' | 'respondidas' | 'forte' | 'fraco';
+type Filtro = 'todas' | 'pendentes' | 'respondidas' | 'sim' | 'nao' | 'na' | 'forte' | 'fraco';
 
 const LARGURA_SUMARIO_MIN = 240;
 const LARGURA_SUMARIO_MAX = 720;
@@ -62,12 +62,30 @@ function gravarLarguraSumario(px: number) {
   }
 }
 
-const FILTROS: Array<{ value: Filtro; label: string }> = [
-  { value: 'todas', label: 'Todas' },
-  { value: 'pendentes', label: 'Sem resposta' },
-  { value: 'respondidas', label: 'Respondidas' },
-  { value: 'forte', label: 'Pontos fortes' },
-  { value: 'fraco', label: 'Pontos fracos' },
+const GRUPOS_FILTRO: Array<{ titulo: string; opcoes: Array<{ value: Filtro; label: string }> }> = [
+  {
+    titulo: 'Situação',
+    opcoes: [
+      { value: 'todas', label: 'Todas' },
+      { value: 'pendentes', label: 'Sem resposta' },
+      { value: 'respondidas', label: 'Respondidas' },
+    ],
+  },
+  {
+    titulo: 'Resposta',
+    opcoes: [
+      { value: 'sim', label: 'Sim' },
+      { value: 'nao', label: 'Não' },
+      { value: 'na', label: 'Não aplicável' },
+    ],
+  },
+  {
+    titulo: 'Destaque',
+    opcoes: [
+      { value: 'forte', label: 'Pontos fortes' },
+      { value: 'fraco', label: 'Pontos fracos' },
+    ],
+  },
 ];
 
 const ARQUIVOS_ACEITOS = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt,.csv';
@@ -407,6 +425,15 @@ function formatarTamanho(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function marcaResposta(resposta: { opcaoCodigo?: string; opcaoTexto?: string } | undefined): 'sim' | 'nao' | 'na' | null {
+  const texto = normalizar(resposta?.opcaoTexto || '');
+  if (!resposta?.opcaoCodigo || !texto) return null;
+  if (texto === 'nao aplicavel' || texto === 'nao se aplica' || texto === 'n/a' || texto === 'na') return 'na';
+  if (texto === 'sim') return 'sim';
+  if (texto === 'nao') return 'nao';
+  return null;
+}
+
 function classeResposta(resposta: { opcaoCodigo?: string; valor?: number | null } | undefined) {
   if (!resposta?.opcaoCodigo) return 'is-pendente';
   const valor = resposta.valor;
@@ -500,6 +527,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
       const resposta = respostas.get(item.id);
       if (filtro === 'pendentes' && resposta?.opcaoCodigo) return;
       if (filtro === 'respondidas' && !resposta?.opcaoCodigo) return;
+      if ((filtro === 'sim' || filtro === 'nao' || filtro === 'na') && marcaResposta(resposta) !== filtro) return;
       if ((filtro === 'forte' || filtro === 'fraco') && resposta?.destaque !== filtro) return;
       if (filtroClasse && item.classificacao !== filtroClasse) return;
       if (termo && !normalizar(`${item.codigo} ${item.titulo}`).includes(termo)) return;
@@ -708,14 +736,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
                     aria-label="Buscar perguntas"
                   />
                 </label>
-                <select
-                  className="form-input sgq-exec-filtro"
-                  value={filtro}
-                  onChange={(e) => setFiltro(e.target.value as Filtro)}
-                  aria-label="Filtrar perguntas"
-                >
-                  {FILTROS.map((opcao) => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}
-                </select>
+                <FiltroPerguntas valor={filtro} onChange={setFiltro} />
                 {classificacoes.length > 0 && (
                   <FiltroLista
                     rotulo="Filtrar por classificação"
@@ -825,6 +846,65 @@ const SGQAuditoriaExecucao: React.FC = () => {
           }}
           onConcluir={concluirAuditoria}
         />
+      )}
+    </div>
+  );
+};
+
+const FiltroPerguntas: React.FC<{ valor: Filtro; onChange: (valor: Filtro) => void }> = ({ valor, onChange }) => {
+  const [aberta, setAberta] = useState(false);
+  const raizRef = useRef<HTMLDivElement | null>(null);
+  const atual = GRUPOS_FILTRO.flatMap((grupo) => grupo.opcoes).find((opcao) => opcao.value === valor);
+
+  useEffect(() => {
+    if (!aberta) return;
+    const fechar = (e: MouseEvent) => {
+      if (!raizRef.current?.contains(e.target as Node)) setAberta(false);
+    };
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') setAberta(false); };
+    document.addEventListener('mousedown', fechar);
+    document.addEventListener('keydown', tecla);
+    return () => {
+      document.removeEventListener('mousedown', fechar);
+      document.removeEventListener('keydown', tecla);
+    };
+  }, [aberta]);
+
+  return (
+    <div className="sgq-exec-lista-suspensa" ref={raizRef}>
+      <button
+        type="button"
+        className={`sgq-exec-lista-campo${aberta ? ' is-aberta' : ''}`}
+        onClick={() => setAberta((aberto) => !aberto)}
+        aria-haspopup="listbox"
+        aria-expanded={aberta}
+        aria-label="Filtrar perguntas"
+        title={atual?.label ?? 'Todas'}
+      >
+        <span>{atual?.label ?? 'Todas'}</span>
+        <i className="bi bi-chevron-down" aria-hidden="true" />
+      </button>
+      {aberta && (
+        <div className="sgq-exec-lista-menu sgq-exec-filtro-menu" role="listbox" aria-label="Filtrar perguntas">
+          {GRUPOS_FILTRO.map((grupo) => (
+            <div key={grupo.titulo} role="group" aria-label={grupo.titulo}>
+              <p className="sgq-exec-lista-grupo">{grupo.titulo}</p>
+              <ul>
+                {grupo.opcoes.map((opcao) => (
+                  <li
+                    key={opcao.value}
+                    role="option"
+                    aria-selected={opcao.value === valor}
+                    className={opcao.value === valor ? 'is-selecionada' : undefined}
+                    onClick={() => { onChange(opcao.value); setAberta(false); }}
+                  >
+                    {opcao.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
