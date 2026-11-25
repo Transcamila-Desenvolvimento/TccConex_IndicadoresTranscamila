@@ -199,6 +199,12 @@ export function useAuditoriaPresenca(auditoriaId: string, itemId: string | null)
     return mapa;
   }, [online, meuId]);
 
+  const equipeOnline = useMemo(() => {
+    const eu = online.filter((pessoa) => pessoa.id === meuId);
+    const outros = online.filter((pessoa) => pessoa.id !== meuId);
+    return [...eu, ...outros];
+  }, [online, meuId]);
+
   const publicarDigitando = useCallback((perguntaId: string | null) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -215,5 +221,5 @@ export function useAuditoriaPresenca(auditoriaId: string, itemId: string | null)
 
   const rascunhoRemoto = itemId ? rascunhos.get(itemId) ?? null : null;
 
-  return { colegasNaPergunta, colegasPorPergunta, status, publicarRascunho, publicarDigitando, rascunhoRemoto, rascunhoLocal };
+  return { colegasNaPergunta, colegasPorPergunta, equipeOnline, status, publicarRascunho, publicarDigitando, rascunhoRemoto, rascunhoLocal };
 }

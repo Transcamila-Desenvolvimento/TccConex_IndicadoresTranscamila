@@ -67,14 +67,21 @@ class _LimpadorTextoFormatado(HTMLParser):
             self.partes.append(escape(data))
 
 
+_ESPACO_HTML = re.compile(r'&(amp;)*(?:nbsp|#160|#x0*a0);', re.IGNORECASE)
+
+
+def _espacos_normais(valor: str) -> str:
+    return _ESPACO_HTML.sub(' ', str(valor or '')).replace('\xa0', ' ')
+
+
 def limpar_texto_formatado(valor: str) -> str:
-    texto = str(valor or '').replace('\r\n', '\n').strip()
+    texto = _espacos_normais(str(valor or '').replace('\r\n', '\n')).strip()
     if '<' not in texto:
         return texto
     limpador = _LimpadorTextoFormatado()
     limpador.feed(texto)
     limpador.close()
-    html = ''.join(limpador.partes).strip()
+    html = ''.join(limpador.partes).replace('\xa0', ' ').strip()
     visivel = unescape(re.sub(r'<[^>]+>', '', html)).replace('\xa0', ' ').strip()
     return html if visivel else ''
 

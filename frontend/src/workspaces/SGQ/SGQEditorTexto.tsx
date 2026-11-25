@@ -45,10 +45,17 @@ function escapar(texto: string) {
     .replace(/>/g, '&gt;');
 }
 
+/** O editor troca alguns espaços por &nbsp;. Sem isso, o código aparece no campo. */
+function espacosNormais(texto: string) {
+  return texto
+    .replace(/\u00a0/g, ' ')
+    .replace(/&(amp;)*(?:nbsp|#160|#x0*a0);/gi, ' ');
+}
+
 function sanitizarHtml(html: string): string {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const limpar = (node: Node): string => {
-    if (node.nodeType === Node.TEXT_NODE) return escapar(node.textContent ?? '');
+    if (node.nodeType === Node.TEXT_NODE) return escapar(espacosNormais(node.textContent ?? ''));
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
     const el = node as HTMLElement;
     if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return '';
@@ -65,13 +72,13 @@ function temMarcacao(valor: string) {
 }
 
 export function htmlParaExibir(valor: string): string {
-  const texto = (valor ?? '').replace(/\r\n/g, '\n');
+  const texto = espacosNormais((valor ?? '').replace(/\r\n/g, '\n'));
   if (!temMarcacao(texto)) return escapar(texto).replace(/\n/g, '<br>');
   return sanitizarHtml(texto);
 }
 
 export function textoPlanoFormatado(valor: string): string {
-  const texto = (valor ?? '').replace(/\r\n/g, '\n').trim();
+  const texto = espacosNormais((valor ?? '').replace(/\r\n/g, '\n')).trim();
   if (!temMarcacao(texto)) return texto;
   const comQuebras = sanitizarHtml(texto)
     .replace(/<li>/g, '\n• ')
@@ -91,7 +98,7 @@ export function textoVisivel(valor: string): string {
 }
 
 export function normalizarTextoFormatado(valor: string): string {
-  const texto = (valor ?? '').replace(/\r\n/g, '\n').trim();
+  const texto = espacosNormais((valor ?? '').replace(/\r\n/g, '\n')).trim();
   if (!texto) return '';
   if (!temMarcacao(texto)) return texto;
   const html = sanitizarHtml(texto);

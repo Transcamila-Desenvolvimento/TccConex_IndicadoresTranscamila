@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import QueryDataPanel from '../../components/QueryDataPanel';
 import EditorTexto, { normalizarTextoFormatado, textoVisivel } from './SGQEditorTexto';
@@ -375,31 +375,43 @@ function montarArvoreExec(dados: SgqAuditoriaExecucao): GrupoNorma[] {
   }));
 }
 
-type TopicoSumario = { id: string; numero: string; titulo: string; total: number };
+type TopicoAcima = { numero: string; titulo: string };
+type TopicoSumario = { id: string; numero: string; titulo: string; total: number; acima: TopicoAcima | null };
 type LinhaSumario = { no: NoExec; topico: TopicoSumario };
+
+function contextoDoPai(pai: NoExec | null): TopicoAcima | null {
+  if (!pai) return null;
+  return { numero: pai.numero, titulo: pai.item.titulo };
+}
 
 function coletarLinhasSumario(nos: NoExec[], visiveis: Set<string>): LinhaSumario[] {
   const linhas: LinhaSumario[] = [];
   const ehSecao = (no: NoExec) => no.item.tipo === 'orientativo' || no.filhos.length > 0;
-  const visitar = (lista: NoExec[]) => {
+  const visitar = (lista: NoExec[], pai: NoExec | null) => {
     lista.forEach((no) => {
       if (!ehSecao(no)) {
         if (!visiveis.has(no.item.id)) return;
         linhas.push({
           no,
-          topico: { id: no.item.id, numero: no.numero, titulo: no.item.titulo, total: 1 },
+          topico: { id: no.item.id, numero: no.numero, titulo: no.item.titulo, total: 1, acima: contextoDoPai(pai) },
         });
         return;
       }
       const diretas = no.filhos.filter((filho) => !ehSecao(filho) && visiveis.has(filho.item.id));
       if (diretas.length > 0) {
-        const topico = { id: no.item.id, numero: no.numero, titulo: no.item.titulo, total: diretas.length };
+        const topico = {
+          id: no.item.id,
+          numero: no.numero,
+          titulo: no.item.titulo,
+          total: diretas.length,
+          acima: contextoDoPai(pai),
+        };
         diretas.forEach((filho) => linhas.push({ no: filho, topico }));
       }
-      visitar(no.filhos.filter(ehSecao));
+      visitar(no.filhos.filter(ehSecao), no);
     });
   };
-  visitar(nos);
+  visitar(nos, null);
   return linhas;
 }
 
@@ -454,6 +466,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
   const [menuOculto, setMenuOculto] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [filtroClasse, setFiltroClasse] = useState('');
+  const [filtroItem, setFiltroItem] = useState('');
   const [busca, setBusca] = useState('');
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
   const [secaoId, setSecaoId] = useState<string | null>(null);
@@ -463,6 +476,9 @@ const SGQAuditoriaExecucao: React.FC = () => {
   const listaRef = useRef<HTMLUListElement | null>(null);
   const topoRef = useRef<HTMLLIElement | null>(null);
   const [topicoAncora, setTopicoAncora] = useState<string | null>(null);
+  const [seguirSelecao, setSeguirSelecao] = useState(true);
+  const [idAlinhado, setIdAlinhado] = useState<string | null>(null);
+  const rolandoRef = useRef(false);
 
   const arrastarSumario = (evento: React.PointerEvent<HTMLButtonElement>) => {
     if (evento.button !== 0) return;
@@ -510,6 +526,17 @@ const SGQAuditoriaExecucao: React.FC = () => {
     () => [...new Map((dados?.normas ?? []).flatMap((n) => n.classificacoes).map((c) => [c.sigla, c])).values()],
     [dados],
   );
+  const itensSumario = useMemo(() => {
+    const mapa = new Map<string, string>();
+    arvore.forEach((grupo) => {
+      grupo.nos.forEach((no) => {
+        const numero = no.numero.split('.')[0];
+        if (!/^[1-6]$/.test(numero) || mapa.has(numero)) return;
+        mapa.set(numero, no.item.titulo);
+      });
+    });
+    return [...mapa.entries()].sort((a, b) => Number(a[0]) - Number(b[0]));
+  }, [arvore]);
   const respostas = useMemo(
     () => new Map((dados?.respostas ?? []).map((resposta) => [resposta.itemId, resposta])),
     [dados],
@@ -530,17 +557,21 @@ const SGQAuditoriaExecucao: React.FC = () => {
       if ((filtro === 'sim' || filtro === 'nao' || filtro === 'na') && marcaResposta(resposta) !== filtro) return;
       if ((filtro === 'forte' || filtro === 'fraco') && resposta?.destaque !== filtro) return;
       if (filtroClasse && item.classificacao !== filtroClasse) return;
+      if (filtroItem) {
+        const codigo = item.codigo.trim() || pergunta.caminho[0]?.codigo.trim() || '';
+        if (codigo.split('.')[0] !== filtroItem) return;
+      }
       if (termo && !normalizar(`${item.codigo} ${item.titulo}`).includes(termo)) return;
       ids.add(item.id);
     });
     return ids;
-  }, [perguntas, respostas, filtro, filtroClasse, termo]);
+  }, [perguntas, respostas, filtro, filtroClasse, filtroItem, termo]);
   const escopo = secaoId ? new Set(indice.perguntas.get(secaoId) ?? []) : null;
   const lista = perguntas.filter((pergunta) => visiveis.has(pergunta.item.id) && (!escopo || escopo.has(pergunta.item.id)));
 
   const atual = perguntas.find((p) => p.item.id === selecionadoId) ?? lista[0] ?? perguntas[0];
   const {
-    colegasNaPergunta, colegasPorPergunta, publicarRascunho, publicarDigitando, rascunhoRemoto, rascunhoLocal,
+    colegasNaPergunta, colegasPorPergunta, equipeOnline, publicarRascunho, publicarDigitando, rascunhoRemoto, rascunhoLocal,
   } = useAuditoriaPresenca(
     auditoriaId,
     atual?.item.id ?? null,
@@ -575,29 +606,68 @@ const SGQAuditoriaExecucao: React.FC = () => {
     });
   };
 
-  useEffect(() => {
-    ativoRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [atual?.item.id]);
-
   const linhasSumario = useMemo(
     () => arvore.flatMap((grupo) => coletarLinhasSumario(grupo.nos, visiveis)),
     [arvore, visiveis],
   );
-  const topicoFixo = linhasSumario.find((linha) => linha.topico.id === topicoAncora)?.topico ?? linhasSumario[0]?.topico ?? null;
+  const topicoDaPergunta = linhasSumario.find((linha) => linha.no.item.id === atual?.item.id)?.topico ?? null;
+  const idAtual = atual?.item.id ?? null;
+  if (idAtual !== idAlinhado) {
+    setIdAlinhado(idAtual);
+    setSeguirSelecao(true);
+    if (topicoDaPergunta && topicoAncora !== topicoDaPergunta.id) setTopicoAncora(topicoDaPergunta.id);
+  } else if (seguirSelecao && topicoDaPergunta && topicoAncora !== topicoDaPergunta.id) {
+    setTopicoAncora(topicoDaPergunta.id);
+  }
+  const topicoFixo = linhasSumario.find((linha) => linha.topico.id === topicoAncora)?.topico
+    ?? topicoDaPergunta
+    ?? linhasSumario[0]?.topico
+    ?? null;
+
+  const perguntaRolada = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const lista = listaRef.current;
+    const botao = ativoRef.current;
+    const faixa = topoRef.current;
+    if (!lista || !botao || !faixa) return undefined;
+    const item = botao.closest('li');
+    if (!item) return undefined;
+    const suave = perguntaRolada.current !== null && perguntaRolada.current !== idAtual;
+    perguntaRolada.current = idAtual;
+    const alinhar = (animar: boolean) => {
+      const itemTopo = item.getBoundingClientRect().top - lista.getBoundingClientRect().top + lista.scrollTop;
+      const destino = Math.max(0, itemTopo - faixa.offsetHeight - 6);
+      if (Math.abs(destino - lista.scrollTop) < 2) return;
+      rolandoRef.current = true;
+      const liberar = () => { rolandoRef.current = false; };
+      lista.addEventListener('scrollend', liberar, { once: true });
+      window.setTimeout(liberar, animar ? 700 : 50);
+      lista.scrollTo({ top: destino, behavior: animar ? 'smooth' : 'auto' });
+    };
+    alinhar(suave);
+    let largura = lista.clientWidth;
+    const observar = new ResizeObserver(() => {
+      if (lista.clientWidth === largura || rolandoRef.current) return;
+      largura = lista.clientWidth;
+      alinhar(false);
+    });
+    observar.observe(lista);
+    return () => observar.disconnect();
+  }, [idAtual, menuOculto, larguraNav]);
 
   useEffect(() => {
     const lista = listaRef.current;
     if (!lista) return undefined;
     const atualizar = () => {
+      if (rolandoRef.current) return;
       const limite = lista.getBoundingClientRect().top + (topoRef.current?.offsetHeight ?? 0);
-      const itens = lista.querySelectorAll<HTMLElement>('[data-topico-id]');
-      let ancora = itens[0]?.dataset.topicoId ?? '';
-      itens.forEach((item) => {
-        if (item.getBoundingClientRect().top <= limite) ancora = item.dataset.topicoId ?? ancora;
-      });
-      setTopicoAncora((atual) => (atual === ancora ? atual : ancora || null));
+      const itens = [...lista.querySelectorAll<HTMLElement>('[data-topico-id]')];
+      const visivel = itens.find((item) => item.getBoundingClientRect().bottom > limite + 1);
+      const ancora = visivel?.dataset.topicoId ?? '';
+      if (!ancora) return;
+      setSeguirSelecao(false);
+      setTopicoAncora((atualAncora) => (atualAncora === ancora ? atualAncora : ancora));
     };
-    atualizar();
     lista.addEventListener('scroll', atualizar, { passive: true });
     return () => lista.removeEventListener('scroll', atualizar);
   }, [linhasSumario]);
@@ -686,20 +756,55 @@ const SGQAuditoriaExecucao: React.FC = () => {
           </div>
         </div>
         {perguntas.length > 0 && (
-          <div className="sgq-exec-progresso" title={`${respondidas} de ${perguntas.length} perguntas respondidas`}>
-            <div className="sgq-exec-progresso-numeros">
-              <strong>{respondidas}/{perguntas.length}</strong>
-              <span>respondidas ({percentual}%)</span>
-              <span className="sgq-exec-progresso-destaques">
-                <span className="sgq-exec-destaque-count is-forte" title="Pontos fortes">
-                  <i className="bi bi-hand-thumbs-up-fill" aria-hidden="true" /> {fortes}
+          <div className="sgq-exec-progresso-lado">
+            {equipeOnline.length > 0 && (
+              <div className="sgq-exec-equipe-online" aria-label="Equipe online neste questionário">
+                {equipeOnline.map((pessoa) => {
+                  const perguntaAberta = pessoa.itemId
+                    ? perguntas.find((pergunta) => pergunta.item.id === pessoa.itemId)
+                    : undefined;
+                  const euMesmo = pessoa.id === String(user?.id ?? '');
+                  const onde = perguntaAberta?.item.codigo ? ` · ${perguntaAberta.item.codigo}` : '';
+                  const titulo = `${pessoa.name}${euMesmo ? ' (você)' : ''}${onde}`;
+                  const avatar = (
+                    <UserAvatar name={pessoa.name} photo={pessoa.googlePicture} size="sm" online title={titulo} />
+                  );
+                  if (!perguntaAberta || euMesmo) {
+                    return <span key={pessoa.id} className="sgq-exec-equipe-pessoa">{avatar}</span>;
+                  }
+                  return (
+                    <button
+                      key={pessoa.id}
+                      type="button"
+                      className="sgq-exec-equipe-pessoa"
+                      title={titulo}
+                      aria-label={titulo}
+                      onClick={() => {
+                        setSelecionadoId(pessoa.itemId);
+                        if (secaoId && !(indice.perguntas.get(secaoId) ?? []).includes(pessoa.itemId ?? '')) setSecaoId(null);
+                      }}
+                    >
+                      {avatar}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="sgq-exec-progresso" title={`${respondidas} de ${perguntas.length} perguntas respondidas`}>
+              <div className="sgq-exec-progresso-numeros">
+                <strong>{respondidas}/{perguntas.length}</strong>
+                <span>respondidas ({percentual}%)</span>
+                <span className="sgq-exec-progresso-destaques">
+                  <span className="sgq-exec-destaque-count is-forte" title="Pontos fortes">
+                    <i className="bi bi-hand-thumbs-up-fill" aria-hidden="true" /> {fortes}
+                  </span>
+                  <span className="sgq-exec-destaque-count is-fraco" title="Pontos fracos">
+                    <i className="bi bi-exclamation-triangle-fill" aria-hidden="true" /> {fracos}
+                  </span>
                 </span>
-                <span className="sgq-exec-destaque-count is-fraco" title="Pontos fracos">
-                  <i className="bi bi-exclamation-triangle-fill" aria-hidden="true" /> {fracos}
-                </span>
-              </span>
+              </div>
+              <div className="sgq-exec-progresso-barra"><span style={{ width: `${percentual}%` }} /></div>
             </div>
-            <div className="sgq-exec-progresso-barra"><span style={{ width: `${percentual}%` }} /></div>
           </div>
         )}
       </header>
@@ -737,15 +842,26 @@ const SGQAuditoriaExecucao: React.FC = () => {
                   />
                 </label>
                 <FiltroPerguntas valor={filtro} onChange={setFiltro} />
-                {classificacoes.length > 0 && (
-                  <FiltroLista
-                    rotulo="Filtrar por classificação"
-                    placeholder="Classificação"
-                    valor={filtroClasse}
-                    onChange={setFiltroClasse}
-                    opcoes={classificacoes.map((c) => ({ valor: c.sigla, texto: `${c.sigla} - ${c.nome}` }))}
-                  />
-                )}
+                <div className="sgq-exec-filtros-linha">
+                  {itensSumario.length > 0 && (
+                    <FiltroLista
+                      rotulo="Filtrar por item do sumário"
+                      placeholder="Item"
+                      valor={filtroItem}
+                      onChange={setFiltroItem}
+                      opcoes={itensSumario.map(([numero, titulo]) => ({ valor: numero, texto: `${numero} ${titulo}` }))}
+                    />
+                  )}
+                  {classificacoes.length > 0 && (
+                    <FiltroLista
+                      rotulo="Filtrar por classificação"
+                      placeholder="Classificação"
+                      valor={filtroClasse}
+                      onChange={setFiltroClasse}
+                      opcoes={classificacoes.map((c) => ({ valor: c.sigla, texto: `${c.sigla} - ${c.nome}` }))}
+                    />
+                  )}
+                </div>
                 <div className="sgq-req-nav-tools">
                   <span>Sumário</span>
                 </div>
@@ -758,10 +874,15 @@ const SGQAuditoriaExecucao: React.FC = () => {
                       type="button"
                       className={`sgq-exec-topico-titulo${secaoId === topicoFixo.id ? ' is-active' : ''}`}
                       onClick={() => abrirSecao(topicoFixo.id)}
-                      title={`${topicoFixo.numero} ${topicoFixo.titulo}`}
+                      title={[topicoFixo.acima ? `${topicoFixo.acima.numero} ${topicoFixo.acima.titulo}` : '', `${topicoFixo.numero} ${topicoFixo.titulo}`].filter(Boolean).join('\n')}
                     >
                       <span className="sgq-req-nav-codigo">{topicoFixo.numero}</span>
-                      <span className="sgq-req-nav-titulo">{topicoFixo.titulo}</span>
+                      <span className="sgq-exec-topico-textos">
+                        <span className="sgq-exec-topico-acima">
+                          {topicoFixo.acima ? `${topicoFixo.acima.numero} ${topicoFixo.acima.titulo}` : '\u00a0'}
+                        </span>
+                        <span className="sgq-req-nav-titulo">{topicoFixo.titulo}</span>
+                      </span>
                       <span className="sgq-req-nav-count">{topicoFixo.total}</span>
                     </button>
                   </li>
@@ -840,6 +961,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
             setBusca('');
             setFiltro('todas');
             setFiltroClasse('');
+            setFiltroItem('');
             setSecaoId(null);
             setSelecionadoId(itemId);
             setFormPendencias(false);

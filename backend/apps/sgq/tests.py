@@ -6,7 +6,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
@@ -3457,3 +3457,13 @@ class AuditoriaFormDraftTests(APITestCase):
             **_headers(IBIPORA),
         )
         self.assertEqual(response.status_code, 403)
+
+
+class TextoFormatadoTests(SimpleTestCase):
+    def test_nbsp_visivel_vira_espaco(self):
+        from apps.sgq.serializers import limpar_texto_formatado
+
+        self.assertEqual(limpar_texto_formatado('Vi o documento&nbsp;na sala.'), 'Vi o documento na sala.')
+        self.assertEqual(limpar_texto_formatado('A&amp;nbsp;B'), 'A B')
+        self.assertEqual(limpar_texto_formatado('<p>Texto&nbsp;aqui</p>'), '<p>Texto aqui</p>')
+        self.assertEqual(limpar_texto_formatado('fim\u00a0da frase'), 'fim da frase')
