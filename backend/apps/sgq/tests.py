@@ -2887,6 +2887,31 @@ class ExecucaoAuditoriaSGQTests(APITestCase):
         self.assertEqual(parecer.status_code, 200, parecer.data)
         self.assertIn('conform', validar.call_args.args[0].lower())
 
+        with patch('apps.sgq.evidencia_sugestao.gerar', return_value='A política revisada foi verificada em campo.') as melhorar:
+            melhoria = self.client.post(
+                f'{self.base}sugerir-evidencia/',
+                {
+                    'itemId': str(self.pergunta.pk),
+                    'acao': 'melhorar',
+                    'texto': 'Vi a política. Ela foi revisada e está no setor.',
+                },
+                format='json',
+                **_headers(),
+            )
+        self.assertEqual(melhoria.status_code, 200, melhoria.data)
+        pedido_melhoria = melhorar.call_args.args[1][0]['text']
+        self.assertIn('Há política?', pedido_melhoria)
+        self.assertIn('Vi a política. Ela foi revisada e está no setor.', pedido_melhoria)
+        self.assertNotIn('politica.txt', pedido_melhoria)
+        self.assertIn('resumid', melhorar.call_args.args[0].lower())
+        vazia = self.client.post(
+            f'{self.base}sugerir-evidencia/',
+            {'itemId': str(self.pergunta.pk), 'acao': 'melhorar', 'texto': '   '},
+            format='json',
+            **_headers(),
+        )
+        self.assertEqual(vazia.status_code, 400)
+
         with override_settings(GEMINI_API_KEY=''):
             sem_chave = self.client.post(
                 f'{self.base}sugerir-evidencia/',

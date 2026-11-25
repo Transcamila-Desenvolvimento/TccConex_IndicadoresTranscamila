@@ -787,11 +787,14 @@ class AuditoriaSGQViewSet(ModuleScopedViewMixin, viewsets.ModelViewSet):
         if item is None:
             return Response({'itemId': 'Pergunta não encontrada nas normas desta auditoria.'}, status=status.HTTP_400_BAD_REQUEST)
         acao = str(request.data.get('acao') or 'escrever').strip()
-        if acao not in ('escrever', 'validar'):
-            return Response({'acao': 'Escolha validar os anexos ou escrever a evidência.'}, status=status.HTTP_400_BAD_REQUEST)
+        if acao not in ('escrever', 'validar', 'melhorar'):
+            return Response({'acao': 'Escolha validar os anexos, escrever ou melhorar a evidência.'}, status=status.HTTP_400_BAD_REQUEST)
+        escrito = ' '.join(str(request.data.get('texto') or '').split())
+        if acao == 'melhorar' and not escrito:
+            return Response({'texto': 'Escreva a evidência antes de pedir para melhorar.'}, status=status.HTTP_400_BAD_REQUEST)
         resposta = auditoria.respostas.prefetch_related('anexos__incluido_por').filter(item=item).first()
         try:
-            texto = montar_sugestao_evidencia(item, resposta, acao)
+            texto = montar_sugestao_evidencia(item, resposta, acao, escrito)
         except GeminiErro as exc:
             return Response({'detail': str(exc)}, status=exc.status)
         if not texto:

@@ -2223,9 +2223,10 @@ export const apiService = {
   async sugerirEvidenciaSgqAuditoria(
     id: string,
     itemId: string,
-    acao: 'escrever' | 'validar',
+    acao: 'escrever' | 'validar' | 'melhorar',
+    texto = '',
   ): Promise<SgqEvidenciaSugestao> {
-    const { data } = await api.post(`/api/sgq/auditorias/${id}/sugerir-evidencia/`, { itemId, acao });
+    const { data } = await api.post(`/api/sgq/auditorias/${id}/sugerir-evidencia/`, { itemId, acao, texto });
     return data as SgqEvidenciaSugestao;
   },
 

@@ -25,6 +25,14 @@ _SISTEMAS = {
         'Não invente documento que não esteja nesse material. '
         'Devolva só o parecer, sem título e sem markdown.'
     ),
+    'melhorar': (
+        'Você melhora a escrita da evidência de uma auditoria de SGQ. '
+        'Reescreva o texto que o auditor já escreveu, de forma mais clara e resumida, em um parágrafo curto. '
+        'Mantenha somente os fatos que já estão nesse texto. '
+        'Use a pergunta só para organizar o que foi escrito e deixar de fora o que não responde a ela. '
+        'Não invente documento, data, nome ou fato que não esteja no texto. '
+        'Devolva só a evidência reescrita, sem título e sem markdown.'
+    ),
 }
 
 
@@ -77,6 +85,14 @@ def _contexto(item, resposta) -> str:
     )
 
 
-def sugerir_evidencia(item, resposta, acao: str = 'escrever') -> str:
+def _contexto_melhoria(item, texto: str) -> str:
+    return (
+        f'Pergunta: {item.codigo} {item.titulo}'.strip() + '\n'
+        f'Texto escrito:\n{texto.strip()}'
+    )
+
+
+def sugerir_evidencia(item, resposta, acao: str = 'escrever', texto: str = '') -> str:
     sistema = _SISTEMAS.get(acao) or _SISTEMAS['escrever']
-    return _limpar_saida(gerar(sistema, [{'role': 'user', 'text': _contexto(item, resposta)}], max_tokens=512, pensar='low'))
+    pedido = _contexto_melhoria(item, texto) if acao == 'melhorar' else _contexto(item, resposta)
+    return _limpar_saida(gerar(sistema, [{'role': 'user', 'text': pedido}], max_tokens=512, pensar='low'))

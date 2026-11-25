@@ -79,7 +79,7 @@ function filtroMencao(valor: string): string | null {
   return achado ? achado[1] : null;
 }
 
-type AcaoCamilo = 'validar' | 'escrever';
+type AcaoCamilo = 'validar' | 'melhorar';
 
 const FUNCOES_CAMILO: Array<{ acao: AcaoCamilo; titulo: string; detalhe: string; filtro: string }> = [
   {
@@ -89,10 +89,10 @@ const FUNCOES_CAMILO: Array<{ acao: AcaoCamilo; titulo: string; detalhe: string;
     filtro: 'validar anexos conformidade norma',
   },
   {
-    acao: 'escrever',
-    titulo: 'Escrever evidência',
-    detalhe: 'Com o anexo, a pergunta e o guia de orientação',
-    filtro: 'escrever evidencia anexo pergunta guia',
+    acao: 'melhorar',
+    titulo: 'Melhorar escrita',
+    detalhe: 'Resume o que já foi escrito, de acordo com a pergunta',
+    filtro: 'melhorar escrita evidencia pergunta resumo',
   },
 ];
 
@@ -1002,9 +1002,15 @@ const PerguntaPainel: React.FC<PerguntaPainelProps> = ({
     gerandoRef.current = true;
     setEscolhendoDestino(false);
     const base = removerMencao(rascunhoRef.current.observacoes);
+    const escrito = textoVisivel(base);
+    if (acao === 'melhorar' && !escrito) {
+      gerandoRef.current = false;
+      setMensagem({ tipo: 'erro', texto: 'Escreva a evidência antes de pedir para melhorar.' });
+      return;
+    }
     setRascunho({ ...rascunhoRef.current, observacoes: base });
     setRevisaoEvidencia((atual) => atual + 1);
-    sugerir.mutate({ itemId: item.id, acao }, {
+    sugerir.mutate({ itemId: item.id, acao, texto: escrito }, {
       onSuccess: ({ texto }) => setRascunhoCamilo({ acao, texto, base }),
       onError: (err) => {
         gerandoRef.current = false;
@@ -1268,7 +1274,7 @@ const PerguntaPainel: React.FC<PerguntaPainelProps> = ({
                     onClick={() => pedirCamilo(funcao.acao)}
                     disabled={sugerir.isPending}
                   >
-                    <i className={funcao.acao === 'validar' ? 'bi bi-patch-check' : 'bi bi-stars'} aria-hidden="true" />
+                    <i className={funcao.acao === 'validar' ? 'bi bi-patch-check' : 'bi bi-pencil'} aria-hidden="true" />
                     <span>
                       <strong>Camilo IA · {funcao.titulo}</strong>
                       <small>{funcao.detalhe}</small>
@@ -1290,7 +1296,9 @@ const PerguntaPainel: React.FC<PerguntaPainelProps> = ({
                   <i className="bi bi-stars" aria-hidden="true" />
                   <div>
                     <strong>Camilo IA</strong>
-                    <span>{rascunhoCamilo.acao === 'validar' ? 'Validação dos anexos' : 'Evidência sugerida'}</span>
+                    <span>
+                      {rascunhoCamilo.acao === 'validar' ? 'Validação dos anexos' : 'Escrita melhorada'}
+                    </span>
                   </div>
                 </header>
                 <p className="sgq-exec-rascunho-texto">{rascunhoCamilo.texto}</p>

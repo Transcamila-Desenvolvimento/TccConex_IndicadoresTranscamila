@@ -159,8 +159,8 @@ function useAplicarResposta(filial: string | null, id: string) {
 
 export function useSugerirEvidenciaSgq(_filial: string | null, id: string) {
   return useMutation({
-    mutationFn: ({ itemId, acao }: { itemId: string; acao: 'escrever' | 'validar' }) =>
-      apiService.sugerirEvidenciaSgqAuditoria(id, itemId, acao),
+    mutationFn: ({ itemId, acao, texto = '' }: { itemId: string; acao: 'escrever' | 'validar' | 'melhorar'; texto?: string }) =>
+      apiService.sugerirEvidenciaSgqAuditoria(id, itemId, acao, texto),
   });
 }
 
