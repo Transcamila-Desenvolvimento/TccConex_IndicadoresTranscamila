@@ -7409,6 +7409,63 @@ fieldset:disabled .sgq-import-arquivo-limpar {
   text-align: center;
 }
 
+.sgq-exec-topico-titulo {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 8px 2px;
+  border: 0;
+  background: transparent;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sgq-exec-topico-titulo.is-active {
+  color: #0b6e9c;
+}
+
+.sgq-exec-page .sgq-req-nav-lista {
+  padding-top: 0;
+}
+
+.sgq-exec-topico-fixo {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0 -6px;
+  padding: 0 6px;
+  background: #fff;
+  box-shadow: 0 1px 0 #e2e8f0;
+}
+
+.sgq-exec-topico-fixo .sgq-exec-topico-titulo {
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 8px;
+  background: #fff;
+}
+
+.sgq-exec-topico-fixo .sgq-req-nav-titulo {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.sgq-exec-topico-titulo .sgq-req-nav-titulo {
+  font-weight: 600;
+}
+
+.sgq-exec-page .sgq-req-nav-lista > li > .sgq-req-nav-item {
+  padding-left: 8px;
+}
+
 .sgq-exec-nav-norma {
   padding: 8px 8px 2px 12px;
   color: #94a3b8;

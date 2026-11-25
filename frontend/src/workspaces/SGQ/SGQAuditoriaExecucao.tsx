@@ -357,6 +357,34 @@ function montarArvoreExec(dados: SgqAuditoriaExecucao): GrupoNorma[] {
   }));
 }
 
+type TopicoSumario = { id: string; numero: string; titulo: string; total: number };
+type LinhaSumario = { no: NoExec; topico: TopicoSumario };
+
+function coletarLinhasSumario(nos: NoExec[], visiveis: Set<string>): LinhaSumario[] {
+  const linhas: LinhaSumario[] = [];
+  const ehSecao = (no: NoExec) => no.item.tipo === 'orientativo' || no.filhos.length > 0;
+  const visitar = (lista: NoExec[]) => {
+    lista.forEach((no) => {
+      if (!ehSecao(no)) {
+        if (!visiveis.has(no.item.id)) return;
+        linhas.push({
+          no,
+          topico: { id: no.item.id, numero: no.numero, titulo: no.item.titulo, total: 1 },
+        });
+        return;
+      }
+      const diretas = no.filhos.filter((filho) => !ehSecao(filho) && visiveis.has(filho.item.id));
+      if (diretas.length > 0) {
+        const topico = { id: no.item.id, numero: no.numero, titulo: no.item.titulo, total: diretas.length };
+        diretas.forEach((filho) => linhas.push({ no: filho, topico }));
+      }
+      visitar(no.filhos.filter(ehSecao));
+    });
+  };
+  visitar(nos);
+  return linhas;
+}
+
 function indexarArvore(grupos: GrupoNorma[]) {
   const pai = new Map<string, string | null>();
   const perguntas = new Map<string, string[]>();
@@ -402,10 +430,12 @@ const SGQAuditoriaExecucao: React.FC = () => {
   const [busca, setBusca] = useState('');
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
   const [secaoId, setSecaoId] = useState<string | null>(null);
-  const [navAbertos, setNavAbertos] = useState<Set<string>>(() => new Set());
   const [larguraNav, setLarguraNav] = useState(lerLarguraSumario);
   const ativoRef = useRef<HTMLButtonElement | null>(null);
   const layoutRef = useRef<HTMLDivElement | null>(null);
+  const listaRef = useRef<HTMLUListElement | null>(null);
+  const topoRef = useRef<HTMLLIElement | null>(null);
+  const [topicoAncora, setTopicoAncora] = useState<string | null>(null);
 
   const arrastarSumario = (evento: React.PointerEvent<HTMLButtonElement>) => {
     if (evento.button !== 0) return;
@@ -477,18 +507,6 @@ const SGQAuditoriaExecucao: React.FC = () => {
     });
     return ids;
   }, [perguntas, respostas, filtro, filtroClasse, termo]);
-  const abertos = useMemo(() => {
-    if (!termo) return navAbertos;
-    const conjunto = new Set(navAbertos);
-    visiveis.forEach((id) => {
-      let paiId = indice.pai.get(id) ?? null;
-      while (paiId) {
-        conjunto.add(paiId);
-        paiId = indice.pai.get(paiId) ?? null;
-      }
-    });
-    return conjunto;
-  }, [termo, navAbertos, visiveis, indice]);
   const escopo = secaoId ? new Set(indice.perguntas.get(secaoId) ?? []) : null;
   const lista = perguntas.filter((pergunta) => visiveis.has(pergunta.item.id) && (!escopo || escopo.has(pergunta.item.id)));
 
@@ -533,32 +551,31 @@ const SGQAuditoriaExecucao: React.FC = () => {
     ativoRef.current?.scrollIntoView({ block: 'nearest' });
   }, [atual?.item.id]);
 
-  const ehSecao = (no: NoExec) => no.item.tipo === 'orientativo' || no.filhos.length > 0;
+  const linhasSumario = useMemo(
+    () => arvore.flatMap((grupo) => coletarLinhasSumario(grupo.nos, visiveis)),
+    [arvore, visiveis],
+  );
+  const topicoFixo = linhasSumario.find((linha) => linha.topico.id === topicoAncora)?.topico ?? linhasSumario[0]?.topico ?? null;
 
-  const contagemSecao = (id: string) => (indice.perguntas.get(id) ?? []).filter((itemId) => visiveis.has(itemId)).length;
-
-  const alternarNav = (id: string) => setNavAbertos((atualAberto) => {
-    const proximo = new Set(atualAberto);
-    if (proximo.has(id)) proximo.delete(id);
-    else proximo.add(id);
-    return proximo;
-  });
-
-  const expandirNav = (aberto: boolean) => {
-    setNavAbertos(aberto ? new Set(indice.secoes) : new Set());
-  };
+  useEffect(() => {
+    const lista = listaRef.current;
+    if (!lista) return undefined;
+    const atualizar = () => {
+      const limite = lista.getBoundingClientRect().top + (topoRef.current?.offsetHeight ?? 0);
+      const itens = lista.querySelectorAll<HTMLElement>('[data-topico-id]');
+      let ancora = itens[0]?.dataset.topicoId ?? '';
+      itens.forEach((item) => {
+        if (item.getBoundingClientRect().top <= limite) ancora = item.dataset.topicoId ?? ancora;
+      });
+      setTopicoAncora((atual) => (atual === ancora ? atual : ancora || null));
+    };
+    atualizar();
+    lista.addEventListener('scroll', atualizar, { passive: true });
+    return () => lista.removeEventListener('scroll', atualizar);
+  }, [linhasSumario]);
 
   const abrirSecao = (id: string) => {
     setSecaoId(id);
-    setNavAbertos((atualAberto) => {
-      const proximo = new Set(atualAberto);
-      let paiId = indice.pai.get(id) ?? null;
-      while (paiId) {
-        proximo.add(paiId);
-        paiId = indice.pai.get(paiId) ?? null;
-      }
-      return proximo;
-    });
     const ids = new Set(indice.perguntas.get(id) ?? []);
     if (atual && ids.has(atual.item.id) && visiveis.has(atual.item.id)) return;
     const primeira = perguntas.find((pergunta) => ids.has(pergunta.item.id) && visiveis.has(pergunta.item.id));
@@ -578,8 +595,7 @@ const SGQAuditoriaExecucao: React.FC = () => {
     const ativo = item.id === atual?.item.id;
     const colegasItem = colegasPorPergunta.get(item.id) ?? [];
     return (
-      <div className={`sgq-req-nav-item${ativo ? ' is-active' : ''}`} style={{ paddingLeft: 6 + no.nivel * 14 }}>
-        <span className="sgq-req-nav-toggle is-vazio" />
+      <div className={`sgq-req-nav-item${ativo ? ' is-active' : ''}`}>
         <button
           type="button"
           ref={ativo ? ativoRef : undefined}
@@ -608,53 +624,6 @@ const SGQAuditoriaExecucao: React.FC = () => {
         </button>
       </div>
     );
-  };
-
-  const renderNos = (nos: NoExec[]): React.ReactNode => {
-    let ordemPergunta = 0;
-    return nos.map((no) => {
-    if (ehSecao(no)) {
-      const total = contagemSecao(no.item.id);
-      if (total === 0) return null;
-      const aberto = abertos.has(no.item.id);
-      return (
-        <li key={no.item.id}>
-          <div
-            className={`sgq-req-nav-item${secaoId === no.item.id ? ' is-active' : ''}`}
-            style={{ paddingLeft: 6 + no.nivel * 14 }}
-          >
-            <button
-              type="button"
-              className={`sgq-req-nav-toggle${no.filhos.length ? '' : ' is-vazio'}`}
-              onClick={() => alternarNav(no.item.id)}
-              disabled={!no.filhos.length}
-              aria-label={aberto ? 'Recolher' : 'Expandir'}
-            >
-              <i className={`bi ${aberto ? 'bi-chevron-down' : 'bi-chevron-right'}`} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="sgq-req-nav-label"
-              onClick={() => abrirSecao(no.item.id)}
-              title={`${no.numero} ${no.item.titulo}`}
-            >
-              <span className="sgq-req-nav-codigo">{no.numero}</span>
-              <span className="sgq-req-nav-titulo">{no.item.titulo}</span>
-              <span className="sgq-req-nav-count">{total}</span>
-            </button>
-          </div>
-          {aberto && no.filhos.length > 0 && <ul>{renderNos(no.filhos)}</ul>}
-        </li>
-      );
-    }
-    if (!visiveis.has(no.item.id)) return null;
-    ordemPergunta += 1;
-    return (
-      <li key={no.item.id} className={ordemPergunta % 2 === 0 ? 'is-zebra' : undefined}>
-        {renderPerguntaNav(no)}
-      </li>
-    );
-  });
   };
 
   return (
@@ -758,30 +727,32 @@ const SGQAuditoriaExecucao: React.FC = () => {
                 )}
                 <div className="sgq-req-nav-tools">
                   <span>Sumário</span>
-                  <button type="button" className="btn-icon" title="Expandir tudo" aria-label="Expandir tudo" onClick={() => expandirNav(true)}>
-                    <i className="bi bi-arrows-expand" aria-hidden="true" />
-                  </button>
-                  <button type="button" className="btn-icon" title="Recolher tudo" aria-label="Recolher tudo" onClick={() => expandirNav(false)}>
-                    <i className="bi bi-arrows-collapse" aria-hidden="true" />
-                  </button>
                 </div>
               </div>
-              <ul className="sgq-req-nav-lista">
+              <ul className="sgq-req-nav-lista" ref={listaRef}>
                 {visiveis.size === 0 && <li className="sgq-exec-lista-vazia">Nenhuma pergunta neste filtro.</li>}
-                <li>
-                  <div className={`sgq-req-nav-item${secaoId === null ? ' is-active' : ''}`} style={{ paddingLeft: 6 }}>
-                    <span className="sgq-req-nav-toggle is-vazio" />
-                    <button type="button" className="sgq-req-nav-label" onClick={() => setSecaoId(null)}>
-                      <span className="sgq-req-nav-titulo">Todos os itens</span>
-                      <span className="sgq-req-nav-count">{visiveis.size}</span>
+                {topicoFixo && (
+                  <li className="sgq-exec-topico-fixo" ref={topoRef}>
+                    <button
+                      type="button"
+                      className={`sgq-exec-topico-titulo${secaoId === topicoFixo.id ? ' is-active' : ''}`}
+                      onClick={() => abrirSecao(topicoFixo.id)}
+                      title={`${topicoFixo.numero} ${topicoFixo.titulo}`}
+                    >
+                      <span className="sgq-req-nav-codigo">{topicoFixo.numero}</span>
+                      <span className="sgq-req-nav-titulo">{topicoFixo.titulo}</span>
+                      <span className="sgq-req-nav-count">{topicoFixo.total}</span>
                     </button>
-                  </div>
-                </li>
-                {arvore.map((grupo) => (
-                  <React.Fragment key={grupo.normaId}>
-                    {arvore.length > 1 && <li className="sgq-exec-nav-norma">{grupo.nome}</li>}
-                    {renderNos(grupo.nos)}
-                  </React.Fragment>
+                  </li>
+                )}
+                {linhasSumario.map((linha, indicePergunta) => (
+                  <li
+                    key={linha.no.item.id}
+                    className={indicePergunta % 2 === 1 ? 'is-zebra' : undefined}
+                    data-topico-id={linha.topico.id}
+                  >
+                    {renderPerguntaNav(linha.no)}
+                  </li>
                 ))}
               </ul>
             </aside>
@@ -850,15 +821,6 @@ const SGQAuditoriaExecucao: React.FC = () => {
             setFiltroClasse('');
             setSecaoId(null);
             setSelecionadoId(itemId);
-            setNavAbertos((atualAberto) => {
-              const proximo = new Set(atualAberto);
-              let paiId = indice.pai.get(itemId) ?? null;
-              while (paiId) {
-                proximo.add(paiId);
-                paiId = indice.pai.get(paiId) ?? null;
-              }
-              return proximo;
-            });
             setFormPendencias(false);
           }}
           onConcluir={concluirAuditoria}
