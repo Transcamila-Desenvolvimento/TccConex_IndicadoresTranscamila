@@ -1,0 +1,97 @@
+site_name: TCCConex
+site_description: Documentação técnica e funcional do ERP TCCConex
+site_author: Transcamila Desenvolvimento
+docs_dir: docs
+site_dir: site
+repo_url: https://github.com/Transcamila-Desenvolvimento/TccConex_IndicadoresTranscamila
+repo_name: TccConex
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: pt
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Modo escuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Modo claro
+
+plugins:
+  - search:
+      lang: pt
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - tables
+  - toc:
+      permalink: true
+  - attr_list
+
+nav:
+  - Início: index.md
+  - Introdução:
+      - Visão geral: introducao/visao-geral.md
+      - Módulos: introducao/modulos.md
+      - Usuários e perfis: introducao/usuarios-e-perfis.md
+      - Glossário: introducao/glossario.md
+  - Arquitetura:
+      - Visão geral: arquitetura/visao-geral.md
+      - Tecnologias: arquitetura/tecnologias.md
+      - Fluxo de dados: arquitetura/fluxo-de-dados.md
+  - Backend:
+      - Módulos: backend/modulos.md
+      - Autenticação e erros: backend/autenticacao-e-erros.md
+  - Frontend:
+      - Estrutura e rotas: frontend/estrutura-e-rotas.md
+      - Estado e permissões: frontend/estado-e-permissoes.md
+  - APIs:
+      - Convenções: api/convencoes.md
+      - Autenticação e usuários: api/autenticacao.md
+      - Financeiro: api/financeiro.md
+      - Indicadores: api/indicadores.md
+      - RH, Compras e Faturamento: api/rh-compras-faturamento.md
+      - SGQ: api/sgq.md
+      - Comercial, Frota e demais: api/comercial-frota-demais.md
+  - Banco de dados:
+      - Visão geral: banco-de-dados/visao-geral.md
+      - Modelos e tabelas: banco-de-dados/modelos.md
+  - Regras de negócio:
+      - Permissões e filiais: regras-de-negocio/permissoes-e-filiais.md
+      - Regras comprovadas: regras-de-negocio/regras-comprovadas.md
+  - Integrações: integracoes/visao-geral.md
+  - Infraestrutura:
+      - Publicação na Azure: infraestrutura/publicacao-azure.md
+      - Variáveis de ambiente: infraestrutura/variaveis-de-ambiente.md
+      - Recuperação: infraestrutura/recuperacao.md
+      - Guia de implantação existente: DEPLOY_AZURE.md
+  - Desenvolvimento:
+      - Ambiente local: desenvolvimento/ambiente-local.md
+      - Governança Git: desenvolvimento/governanca-git.md
+  - Manutenção: manutencao/documentacao.md
+  - Histórico: historico/versoes.md
