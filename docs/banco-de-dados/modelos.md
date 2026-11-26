@@ -2,7 +2,7 @@
 
 Lista das classes `models.Model` e de `CustomUser` encontradas nos `models.py`. Relacionamentos são os campos `ForeignKey`, `OneToOneField` e `ManyToManyField` de cada classe.
 
-Colunas abaixo foram lidas nos `models.py` de `accounts` e `financeiro`. Chave primária omitida é o `id` automático do Django. Os demais apps continuam listados pelo nome da classe; a coluna de cada um está no `models.py` citado.
+Colunas abaixo foram lidas nos `models.py`. Chave primária omitida é o `id` automático do Django. Onde a lista não cobre o model inteiro, a página diz o arquivo que ainda precisa ser lido.
 
 ## accounts
 
@@ -78,7 +78,13 @@ erDiagram
 
 ## indicadores
 
-`IndicadorKpi`, `IndicadorFilial`, `MetaFaturamentoMensal`, `GerencialSnapshot`.
+`IndicadorKpi`: `label`, `value`, `change`, `up` (padrão verdadeiro), `sort_order`.
+
+`IndicadorFilial`: `filial`, `receita`, `fretes`, `toneladas`, `meta`, `sort_order`.
+
+`MetaFaturamentoMensal`: `ano`, `mes`, `valor` (`Decimal` 15,2). Único por `ano` + `mes`. O realizado do indicador não fica neste model; vem de `BillingRecord`.
+
+`GerencialSnapshot`: `reference_date` único, `batch_label` blank, `fat_dia`, `fat_mes`, `fat_ano`, `saldo_banco`, `duplicatas_a_receber`, `ctas_rec_atrasadas`, `ctes_emitidos`, `a_disponibilizar`, `contas_pagar_ate_corte`, `pagar_cutoff_date` null, `ctas_pag_atrasadas`, `saidas_previstas`, `posicao_gerencial`, `caixa_positivo_ate` blank, `sent_by` blank, `sent_at`. Não há chave estrangeira destes quatro models para o financeiro. O realizado da meta é lido na view.
 
 ## audit
 
@@ -86,21 +92,71 @@ erDiagram
 
 ## rh
 
-`Colaborador`, `FuncionarioQuadro`, `LoteMovimentacaoRH`, `MovimentacaoColaborador`, `InconsistenciaColaborador`, `CargoMapping`, `ColaboradorPJ`, `ColaboradorPJHistorico`, `DocumentoRH`, `PastaMatrizRH`.
+`Colaborador`: `cpf` único, `matricula`, `nome_completo`, `empresa`, `filial`, `departamento`, `cargo`, `situacao`, `data_admissao`, `data_demissao`, `telefone`, `nome_lider`, `data_nascimento`, `escolaridade`, `sexo` (`M` ou `F`), `regime` padrão `CLT`, `categoria`, `data_atualizacao`, `desconsiderado`.
+
+`FuncionarioQuadro`: `nome`, `cpf` único, `filial`, `cargo`, `departamento`, `data_admissao`, `data_demissao`, `ativo` padrão verdadeiro, `criado_em`.
+
+`LoteMovimentacaoRH`: `mes`, `ano`, `data_importacao`, `usuario` (`SET_NULL` para `CustomUser`), `arquivo`. Único por `mes` + `ano`.
+
+`MovimentacaoColaborador`: `lote` (`CASCADE`), `filial`, `nome`, `situacao`, `uf_estado`, `funcao`, `data_admissao`, `data_nascimento`, `cpf`, `pis_pasep`, `rg`, `salario` (`Decimal` 12,2), `categoria`.
+
+`InconsistenciaColaborador`: `lote` (`CASCADE`), `cpf`, `nome`, `tipo` padrão `salario`, `valor_anterior`, `valor_atual`, `justificativa`, `data_criacao`.
+
+`CargoMapping`: `cargo` único, `categoria`, `data_criacao`, `ultima_atualizacao`.
+
+`ColaboradorPJ`: `nome`, `cpf` único, `salario`, `filial`, `cargo`, `data_admissao`, `data_demissao`, `data_nascimento`, `ativo`, `data_criacao`.
+
+`ColaboradorPJHistorico`: `pj` (`ForeignKey`), `ano`, `mes`, `salario`, `cargo`, `filial`, `motivo`, `data_criacao`. Único por `pj` + `ano` + `mes`.
+
+`DocumentoRH`: `titulo`, `arquivo`, `drive_file_id`, `link_externo`, `nome_original`, `tamanho`, `texto`, `texto_extraido`, `incluido_por` e `pasta` (`ForeignKey`), `criado_em`.
+
+`PastaMatrizRH`: `nome`. Demais campos do model estão em `apps/rh/models.py`.
 
 ## compras
 
-`UnidadeMedida`, `Setor`, `Colaborador`, `Fornecedor`, `ItemEstoque`, `EntradaEstoque`, `SaidaEstoque`, `Uniforme`, `EntregaUniforme`, `EntregaUniformeItem`, `DevolucaoUniforme`, `DevolucaoUniformeItem`, `MovimentacaoUniforme`.
+Há duas classes `Colaborador`: `rh.Colaborador` e `compras.Colaborador`. São tabelas diferentes.
 
-Há duas classes chamadas `Colaborador`: uma em `rh` e outra em `compras`. São models diferentes.
+`UnidadeMedida.nome` e `Setor.nome` são únicos. `Fornecedor.nome` é único. `ItemEstoque`: `nome` único, `unidade` padrão `Un`, `qtd_atual`, `qtd_minima`.
+
+`compras.Colaborador`: `setor` (`ForeignKey`), `nome`, `cargo`, `cpf`. Único por `setor` + `nome` (`compras_colaborador_setor_nome_unique`).
+
+`EntradaEstoque`: `item` e `fornecedor` com `SET_NULL`, mais os snapshots `item_nome` e `fornecedor_nome`, `data`, `quantidade`, `valor_unitario`, `data_criacao`.
+
+`SaidaEstoque`: `item`, `setor` e `colaborador` com `SET_NULL`, snapshots de nome, `data`, `quantidade`, `data_criacao`.
+
+`Uniforme`: `nome`, `codigo`, `tamanho`, `qtd_nova`, `qtd_usada`, `estoque_minimo`, `criado_em`. Único por `nome` + `tamanho`.
+
+`EntregaUniforme`: `colaborador` (`ForeignKey` para o colaborador de compras), snapshots de nome, CPF, cargo e setor, `data_entrega`, `observacoes`, `usuario` (`SET_NULL`), `usuario_nome`, `criado_em`.
+
+`EntregaUniformeItem`: `entrega` (`PROTECT`), `uniforme` (`SET_NULL`), snapshots, `condicao`, `quantidade`, `qtd_devolvida`, `qtd_descartada`, `qtd_perdida`.
+
+`DevolucaoUniforme`: `entrega` (`PROTECT`), `data_devolucao`, `observacoes`, `usuario`, `usuario_nome`, `criado_em`.
+
+`DevolucaoUniformeItem`: `devolucao` e `entrega_item` com `PROTECT`, `qtd_boa`, `qtd_danificada`, `qtd_sem_condicoes`, `qtd_perdida`.
+
+`MovimentacaoUniforme`: `tipo`, `uniforme` (`SET_NULL`), snapshots, `condicao`, `quantidade`, `variacao_estoque`, `saldo_novo`, `saldo_usado`, `data`, `colaborador`, `entrega`, `devolucao`, `observacao`, `usuario`, `usuario_nome`, `criado_em`.
 
 ## faturamento
 
-`ClienteProtocolo`, `FilialClienteProtocolo`, `ProtocoloEnvio`, `ProtocoloEnvioDraft`, `PagadorNd`, `TituloNd`.
+`ClienteProtocolo`: `codigo`, `loja` padrão `01`, `tipo_pessoa`, `nome`, `razao_social`, `nome_fantasia`, `nome_interno`, `municipio`, `cnpj`, `padrao_protocolo`, `emitir_protocolo_canhotos`, `considerar_pesquisa_satisfacao`, `requer_expedicao`, `exige_filial`, `ultimo_numero_protocolo`, `emails_envio`, `emails_copia`, `data_criacao`, `data_atualizacao`. `codigo` + `loja` são únicos quando `codigo` não é vazio (`faturamento_cliente_codigo_loja_uniq`).
+
+`FilialClienteProtocolo`: `cliente` (`ForeignKey`), `nome`. Único por `cliente` + `nome`.
+
+`ProtocoloEnvio`: `data`, `cliente` (`ForeignKey`), `nota_fiscal`, `numero_sequencial`, `notas_filiais` (`JSONField`), `expedicao`, `usuario` (`ForeignKey`), `usuario_nome`, `data_criacao`, `data_atualizacao`.
+
+`ProtocoloEnvioDraft`: `usuario` (`OneToOneField`), `version`, `payload`, `updated_at`.
+
+`PagadorNd`: `cod_cliente` único, `nome`, `criado_em`, `criado_por` (`ForeignKey`).
+
+`TituloNd`: `chave` única, `filial`, `cod_cliente`, `cliente`, `titulo`, `natureza`, `emissao`, `vencimento_real`, `saldo` (`Decimal` 14,2), `historico`, `baixado`, `atualizado_em`.
 
 ## sgq
 
-`PesquisaSatisfacao`, `PesquisaSatisfacaoLoteDraft`, `PesquisaSatisfacaoFormDraft`, `AuditoriaFormDraft`, `EscopoAnalise`, `EscopoAnaliseOpcao`, `DocumentoSGQ`, `AuditoriaSGQ`, `NormaSGQ`, `CategoriaAuditoriaSGQ`, `TipoRespostaSGQ`, `ItemNormaSGQ`, `RespostaAuditoriaSGQ`, `AnexoRespostaAuditoriaSGQ`, `SetorSipocSGQ`, `ProcedimentoSipocSGQ`, `PastaMatrizSGQ`.
+`AuditoriaSGQ`: `filial`, `ano`, `sequencia`, `codigo` único, `categoria`, `titulo`, `data_inicio`, `data_termino`, `normas` (`ManyToMany` para `NormaSGQ`), `auditor_lider`, `auditores` (`JSONField`), `status` padrão `planejamento`, `escopo`, `criterios`, `processos_areas`, `responsaveis_processos`, `metodologia`, `consideracoes_finais`, `questionario_concluido`, `questionario_concluido_em` null, `planejamento` (`JSONField`), `criado_por` (`SET_NULL`), `criado_em`, `atualizado_em`. Único também por `ano` + `sequencia`.
+
+`NormaSGQ` é única por `filial` + `nome`. `CategoriaAuditoriaSGQ` também. `TipoRespostaSGQ` é única por `filial` + `sequencia` e por `filial` + `nome`. `RespostaAuditoriaSGQ` liga `auditoria` (`CASCADE`) e `item` (`PROTECT`) e é única nesse par. `EscopoAnaliseOpcao.escopo` é `CASCADE` e a opção é única por `escopo` + `chave`. `ProcedimentoSipocSGQ.setor` é `PROTECT`.
+
+As demais classes (`PesquisaSatisfacao`, rascunhos, `DocumentoSGQ`, `ItemNormaSGQ`, `AnexoRespostaAuditoriaSGQ`, `SetorSipocSGQ`, `PastaMatrizSGQ`) estão em `apps/sgq/models.py`. As colunas que não foram relidas aqui não são repetidas.
 
 ## marketing
 
@@ -108,7 +164,21 @@ Há duas classes chamadas `Colaborador`: uma em `rh` e outra em `compras`. São 
 
 ## frota
 
-`RespostaOlhoVivo`, `UsuarioMotorista`, `ParametroBonificacao`, `FaixaBonificacao`, `GrupoCriterioDesempenho`, `CriterioDesempenho`, `OcorrenciaDesempenho`, `ItemRespostaOlhoVivo`.
+`RespostaOlhoVivo`: `filial`, `periodicidade`, `ano`, `mes` null, `period_key`, `updated_by` (`ForeignKey`), `created_at`, `updated_at`. Único por `filial` + `period_key`.
+
+`ItemRespostaOlhoVivo`: `resposta` (`CASCADE`), `comportamento`, `recorrencia`. Único por `resposta` + `comportamento`.
+
+`UsuarioMotorista`: `funcionario` (`OneToOneField`), `username` único, `password`, `criado_em`, `criado_por` (`ForeignKey`). A senha fica neste model, separada de `CustomUser`.
+
+`ParametroBonificacao`: `nota_inicial` padrão 100, `valor_bonus` padrão 500, `limitar_por_grupo`.
+
+`FaixaBonificacao`: `nota_min`, `nota_max`, `modo`, `percentual`, `ordem`.
+
+`GrupoCriterioDesempenho`: `nome`, `pontos_maximos`, `ordem`, `ativo`.
+
+`CriterioDesempenho`: `grupo` (`ForeignKey`), `nome`, `descricao`, `pontos`, `zera_bonus`, `ativo`, `ordem`.
+
+`OcorrenciaDesempenho`: `funcionario` e `criterio` (`ForeignKey`), `filial`, `data`, `quantidade`, `observacao`, `criado_em`, `criado_por`.
 
 ## comercial
 
