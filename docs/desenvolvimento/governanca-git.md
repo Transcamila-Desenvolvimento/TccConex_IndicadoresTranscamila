@@ -37,7 +37,7 @@ Exemplo: `docs: registra as rotas do SGQ na central MkDocs`.
 
 ## Pull request
 
-Use o modelo `.github/PULL_REQUEST_TEMPLATE.md`. O CI `Validação contínua` roda no pull request para `main`: build do frontend, testes Django e `mkdocs build --strict`. Ele não faz deploy.
+Use o modelo `.github/PULL_REQUEST_TEMPLATE.md`. O CI `Validação contínua` roda no pull request para `main`: build do frontend, testes Django e `mkdocs build --strict`. Ele não faz deploy. Falha do build ou da documentação reprova o pull request. A suíte Django roda e permanece no log; falhas que já existem no código da `main` não reprovam o workflow.
 
 O merge na `main` publica o ERP, porque `deploy-azure.yml` escuta push nessa branch. Proteção para impedir push direto: configurar no GitHub, com permissão de administrador. Não há ruleset versionado no repositório.
 

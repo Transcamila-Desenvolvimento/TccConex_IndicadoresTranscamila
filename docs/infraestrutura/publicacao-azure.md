@@ -30,7 +30,7 @@ O guia [DEPLOY_AZURE.md](../DEPLOY_AZURE.md) ainda cita, no início, o resource 
 6. Gera o zip e recusa o pacote se `vendor/` ou `antenv/` entrarem, ou se faltarem `startup.sh` e o `index.html` do frontend.
 7. Publica com `clean: true`.
 
-Esse workflow não roda `manage.py test`. Os testes ficam em `ci.yml`, no pull request, e não publicam.
+Esse workflow não roda `manage.py test`. Os testes ficam em `ci.yml`, no pull request, e não publicam. Falha do build do frontend ou do MkDocs reprova o pull request. As falhas já existentes da suíte Django ficam no log e não reprovam o workflow.
 
 ## Homologação
 

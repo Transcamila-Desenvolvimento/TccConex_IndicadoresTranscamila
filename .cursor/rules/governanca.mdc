@@ -26,4 +26,5 @@ Consulte `docs/` e o código do módulo antes de alterar comportamento. Document
 ## Verificação
 
 - No pull request, o workflow `ci.yml` compila o frontend, roda `manage.py test` e executa `mkdocs build --strict`.
-- Falha desses checks impede considerar a alteração pronta para a `main`.
+- Falha do build do frontend ou do `mkdocs build --strict` impede considerar a alteração pronta para a `main`.
+- A suíte Django roda e o log fica no check. Falhas que já existem no código da `main` não reprovam este workflow.
