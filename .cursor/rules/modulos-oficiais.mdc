@@ -1,0 +1,18 @@
+---
+description: Módulos Django e ambientes reais do TCCConex
+alwaysApply: true
+---
+
+# Módulos oficiais
+
+Fonte: `INSTALLED_APPS` em `backend/prothon/settings.py` e `ACTIVE_ENVIRONMENTS` em `backend/apps/accounts/constants.py`.
+
+Apps instalados: accounts, financeiro, indicadores, filesystem, audit, rh, compras, faturamento, sgq, marketing, logistica, frota, comercial, notificacoes, camilo.
+
+Ambientes: Administração/Manutenção, Indicadores, Financeiro, Compras, RH, Faturamento, SGQ, Marketing, Logística, Frota, Comercial, CamiloIA, Suprimentos.
+
+Suprimentos é ambiente e permissão. As views de estoque e uniforme usam `permission_module = 'Suprimentos'` dentro do app `compras`. Não existe app Django `suprimentos`.
+
+`apps/arquivos` e `apps/integracoes` não estão em `INSTALLED_APPS`.
+
+Se outra regra listar só accounts, financeiro, indicadores, filesystem e audit, prevalece esta lista e o código.

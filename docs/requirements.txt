@@ -1,0 +1,4 @@
+# Ferramentas só da documentação. Não incluir em backend/requirements.txt:
+# o startup.sh da Azure instala aquele arquivo no App Service.
+mkdocs>=1.6,<2
+mkdocs-material>=9.6,<10

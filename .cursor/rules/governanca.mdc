@@ -1,0 +1,30 @@
+---
+description: Governança de desenvolvimento, documentação e publicação do TCCConex
+alwaysApply: true
+---
+
+# Governança TCCConex
+
+Consulte `docs/` e o código do módulo antes de alterar comportamento. Documente só o que o código ou a configuração comprovam. Não invente endpoint, regra, tela ou integração.
+
+## Escopo
+
+- Altere funcionalidade somente quando o pedido for explícito.
+- Não coloque ferramenta de documentação em `backend/requirements.txt`. O `startup.sh` instala aquele arquivo no App Service.
+- O deploy do ERP é `.github/workflows/deploy-azure.yml`, no push da `main`. Não crie outro workflow publicando o mesmo App Service.
+- Não execute `scripts/azure-ensure-production.ps1`, migração ou restart de produção sem autorização.
+- Não grave segredo em arquivo versionado. `.env`, `client_secret.json` e publish profile ficam fora do Git.
+
+## Git
+
+- `main` é a versão publicada. Push nela dispara o deploy Azure já existente.
+- Trabalho novo usa `feature/`, `fix/` ou `hotfix/`. Não crie `develop` sem pedido.
+- Mensagem de commit: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci` ou `build`. Não reescreva o histórico.
+- Integração por pull request, no modelo `.github/PULL_REQUEST_TEMPLATE.md`.
+- API, model, regra, integração, tela ou publicação alterados exigem atualização da página correspondente em `docs/`.
+
+## Verificação
+
+- No pull request, o workflow `ci.yml` compila o frontend, roda `manage.py test` e executa `mkdocs build --strict`.
+- Falha do build do frontend ou do `mkdocs build --strict` impede considerar a alteração pronta para a `main`.
+- A suíte Django roda e o log fica no check. Falhas que já existem no código da `main` não reprovam este workflow.
