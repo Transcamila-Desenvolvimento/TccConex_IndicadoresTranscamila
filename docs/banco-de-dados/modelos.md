@@ -2,7 +2,7 @@
 
 Lista das classes `models.Model` e de `CustomUser` encontradas nos `models.py`. Relacionamentos são os campos `ForeignKey`, `OneToOneField` e `ManyToManyField` de cada classe.
 
-Colunas abaixo foram lidas nos `models.py`. Chave primária omitida é o `id` automático do Django. Onde a lista não cobre o model inteiro, a página diz o arquivo que ainda precisa ser lido.
+Colunas abaixo foram lidas nos `models.py` dos apps de negócio. Chave primária omitida é o `id` automático do Django, salvo onde o model declara outra. `filesystem` e `logistica` não têm `models.Model`.
 
 ## accounts
 
@@ -152,11 +152,37 @@ Há duas classes `Colaborador`: `rh.Colaborador` e `compras.Colaborador`. São t
 
 ## sgq
 
-`AuditoriaSGQ`: `filial`, `ano`, `sequencia`, `codigo` único, `categoria`, `titulo`, `data_inicio`, `data_termino`, `normas` (`ManyToMany` para `NormaSGQ`), `auditor_lider`, `auditores` (`JSONField`), `status` padrão `planejamento`, `escopo`, `criterios`, `processos_areas`, `responsaveis_processos`, `metodologia`, `consideracoes_finais`, `questionario_concluido`, `questionario_concluido_em` null, `planejamento` (`JSONField`), `criado_por` (`SET_NULL`), `criado_em`, `atualizado_em`. Único também por `ano` + `sequencia`.
+`PesquisaSatisfacao`: `filial` padrão `Ibiporã (Matriz)`, `data_inclusao` null, `motorista`, `cte`, `data_entrega`, `nota_fiscal`, `cliente` padrão `OUTROS`, `cliente_recusou_assinar`, os critérios `prazo_entrega`, `condicoes_mercadoria`, `condicoes_veiculo`, `apresentacao_motorista` e `atendimento_dispensado` (opções `otimo`, `bom`, `regular`, `ruim`, ou vazio), `analise`, `escopo_analise` (`JSONField`), `criado_por`, `data_criacao`, `data_atualizacao`. O comentário do model diz que a obrigatoriedade condicional dos critérios fica no serializer: se o cliente recusou assinar, o model aceita string vazia.
 
-`NormaSGQ` é única por `filial` + `nome`. `CategoriaAuditoriaSGQ` também. `TipoRespostaSGQ` é única por `filial` + `sequencia` e por `filial` + `nome`. `RespostaAuditoriaSGQ` liga `auditoria` (`CASCADE`) e `item` (`PROTECT`) e é única nesse par. `EscopoAnaliseOpcao.escopo` é `CASCADE` e a opção é única por `escopo` + `chave`. `ProcedimentoSipocSGQ.setor` é `PROTECT`.
+`PesquisaSatisfacaoLoteDraft`: `usuario` (`CASCADE`), `filial`, `version`, `rows` (`JSONField`), `updated_at`. Único por `usuario` + `filial`.
 
-As demais classes (`PesquisaSatisfacao`, rascunhos, `DocumentoSGQ`, `ItemNormaSGQ`, `AnexoRespostaAuditoriaSGQ`, `SetorSipocSGQ`, `PastaMatrizSGQ`) estão em `apps/sgq/models.py`. As colunas que não foram relidas aqui não são repetidas.
+`PesquisaSatisfacaoFormDraft` e `AuditoriaFormDraft`: `usuario` (`CASCADE`), `filial`, `version`, `payload` (`JSONField`), `updated_at`. Cada um é único por `usuario` + `filial`.
+
+`EscopoAnalise`: `chave` única, `label`, `ordem`, `ativo` padrão verdadeiro. O comentário diz que o catálogo é global para as filiais do SGQ.
+
+`EscopoAnaliseOpcao`: `escopo` (`CASCADE`), `chave`, `label`, `ordem`, `ativo`. Único por `escopo` + `chave`.
+
+`DocumentoSGQ`: `titulo`, `arquivo`, `drive_file_id`, `link_externo`, `nome_original`, `tamanho`, `texto`, `texto_extraido`, `incluido_por` (`SET_NULL`), `pasta` (`PROTECT` para `PastaMatrizSGQ`, null), `criado_em`.
+
+`AuditoriaSGQ`: `filial`, `ano`, `sequencia`, `codigo` único, `categoria`, `titulo`, `data_inicio`, `data_termino`, `normas` (`ManyToMany` para `NormaSGQ`), `auditor_lider`, `auditores` (`JSONField`), `status` padrão `planejamento` (`planejamento`, `execucao` ou `concluida`), `escopo`, `criterios`, `processos_areas`, `responsaveis_processos`, `metodologia`, `consideracoes_finais`, `questionario_concluido`, `questionario_concluido_em` null, `planejamento` (`JSONField`), `criado_por` (`SET_NULL`), `criado_em`, `atualizado_em`. Único também por `ano` + `sequencia`. A função `status_auditoria_automatico` mantém `concluida` quando já está concluída; passa a `execucao` se o questionário foi concluído ou se existe resposta de pergunta; caso contrário devolve `planejamento`.
+
+`NormaSGQ`: `filial`, `nome`, `descricao`, `data_atualizacao`, `emissor`, `publica`, `ativa`, `classificacoes`, `areas` e `mapeamento_importacao` (`JSONField`), `criado_por` (`SET_NULL`), `criado_em`, `atualizado_em`. Única por `filial` + `nome`.
+
+`CategoriaAuditoriaSGQ`: `filial`, `nome`, `normas` (`ManyToMany`), `ativa`, `emissor`, `atualizado_por`, `criado_por` (`SET_NULL`), `criado_em`, `atualizado_em`. Única por `filial` + `nome`.
+
+`TipoRespostaSGQ`: `filial`, `sequencia`, `nome`, `opcoes` (`JSONField`), `publica`, `emissor`, `criado_por` (`SET_NULL`), `criado_em`, `atualizado_em`. Única por `filial` + `sequencia` e por `filial` + `nome`. A propriedade `codigo` formata a sequência com três dígitos.
+
+`ItemNormaSGQ`: `norma` (`CASCADE`), `parent` (`CASCADE` para o próprio item, null), `ordem`, `codigo`, `titulo`, `descricao`, `tipo` padrão `orientativo` (`orientativo` ou `pergunta`), `tipo_resposta` (`PROTECT`, null), `classificacao`, `areas` (`JSONField`), `peso` padrão 1, `obrigatorio` padrão verdadeiro, `criado_em`, `atualizado_em`.
+
+`RespostaAuditoriaSGQ`: `auditoria` (`CASCADE`), `item` (`PROTECT`), `opcao_codigo`, `opcao_texto`, `valor` null, `observacoes`, `destaque` (`forte`, `fraco` ou vazio), `respondido_por` (`SET_NULL`), `atualizado_em`. Única por `auditoria` + `item`. O comentário diz que `valor` nulo significa "não se aplica".
+
+`AnexoRespostaAuditoriaSGQ`: `resposta` (`CASCADE`), `arquivo`, `nome_original`, `tamanho`, `drive_file_id`, `drive_url`, `incluido_por` (`SET_NULL`), `criado_em`.
+
+`SetorSipocSGQ`: `filial`, `nome`, `criado_em`.
+
+`ProcedimentoSipocSGQ`: `filial`, `setor` (`PROTECT`), `nome`, `descricao`, `esquema` (`JSONField`), `criado_por` (`SET_NULL`), `atualizado_em`, `criado_em`.
+
+`PastaMatrizSGQ`: `nome`, `parent` (`CASCADE` para a própria pasta, null), `criado_em`.
 
 ## marketing
 
