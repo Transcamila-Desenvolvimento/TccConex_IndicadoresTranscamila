@@ -160,7 +160,13 @@ As demais classes (`PesquisaSatisfacao`, rascunhos, `DocumentoSGQ`, `ItemNormaSG
 
 ## marketing
 
-`CampanhaMarketing`, `CampanhaComentario`, `CampanhaMembro`, `CampanhaMidia`.
+`CampanhaMarketing`: `titulo`, `descricao`, `data_inicio`, `data_fim`, `status`, `canais` (`JSONField`), `responsavel`, `responsavel_user` (`ForeignKey` para `CustomUser`), `cor` padrão `azul`, `ordem_kanban`, `criado_por`, `criado_por_user` (`ForeignKey`), `data_criacao`, `data_atualizacao`.
+
+`CampanhaComentario`: `campanha` (`ForeignKey`), `autor_user` (`ForeignKey`), `autor_nome`, `texto`, `mencoes` (`ManyToMany` para usuário), `data_criacao`.
+
+`CampanhaMembro`: `campanha`, `user` e `adicionado_por` (`ForeignKey`), `data_criacao`. Único por `campanha` + `user` (`uniq_campanha_membro`).
+
+`CampanhaMidia`: `campanha` (`ForeignKey`), `drive_file_id` com índice, `adicionado_por` (`ForeignKey`), `ordem`, `data_criacao`. Único por `campanha` + `drive_file_id` (`uniq_campanha_midia`).
 
 ## frota
 
@@ -182,15 +188,57 @@ As demais classes (`PesquisaSatisfacao`, rascunhos, `DocumentoSGQ`, `ItemNormaSG
 
 ## comercial
 
-`ClienteComercial`, `ProdutoComercial`, `ClienteComercialProduto`, `HomologacaoProdutoEvento`, `PropostaComercial`, `PropostaComercialDraft`, `PropostaFreteLinha`, `TabelaFrete`, `TabelaFreteLinha`, `GeneralidadeComercial`, `MatrizIcmsUf`, `ParametrosComercial`, `VeiculoComercial`, `VeiculoRotuloCliente`.
+`ClienteComercial`: `tipo_pessoa`, `cnpj`, `cnpj_digits` com índice, `razao_social`, `nome_fantasia`, `municipio`, `uf`, `logradouro`, `numero`, `complemento`, `bairro`, `cep`, `telefone`, `email`, `inscricao_estadual`, `responsavel`, `observacoes`, `situacao`, `compatibilidade`, `previsao_volumes`, `tipos_embalagens`, `quantidade_volumes`, `posicoes_pallets`, `cliente_desde`, `homologado_por` (`ForeignKey`), `homologado_em`, `homologacao_justificativa`, `homologacao_revisao`, `data_criacao`, `data_atualizacao`. `cnpj_digits` é único quando não está vazio. O `save` grava `tipo_pessoa` como pessoa jurídica e normaliza CNPJ e nomes.
+
+`ProdutoComercial`: `nome`, `classe_risco`, `numero_onu`, `grupo_embalagem`, `fispq_consulta`, `tipo_produto`, `ativo` padrão verdadeiro, `criado_por` e `atualizado_por` (`ForeignKey`), `data_criacao`, `data_atualizacao`. O nome é único sem diferenciar maiúsculas (`comercial_produto_nome_ci_uniq`).
+
+`ClienteComercialProduto`: `cliente` e `produto` (`ForeignKey`), `ordem`, `nome`, `classe_risco`, `numero_onu`, `grupo_embalagem`, `fispq_consulta`. Único por `cliente` + `produto` quando o produto não é nulo.
+
+`HomologacaoProdutoEvento`: `cliente` (`ForeignKey`), `status`, `justificativa`, `produtos_snapshot` (`JSONField`), `usuario` (`ForeignKey`), `data_criacao`.
+
+`PropostaComercial`: `tipo`, `status`, `cliente` (`ForeignKey`), `titulo`, `subtitulo`, `revisao`, `data_proposta`, `proposta_referente`, `responsavel`, `emitido_por` (`ForeignKey`), `reajuste` padrão `Anual com base no índice INCT`, `cliente_nome`, `att`, `validade` padrão `30 dias`, `validade_inicio`, `vencimento_reprogramado`, `vigencia` padrão `12 meses`, `faturamento` padrão `Semanal / 30 DDL`, `local_emissao`, `valor_estimado` (`Decimal`), `observacoes`, os booleanos `inclui_transferencia`, `inclui_distribuicao`, `inclui_armazenagem`, `inclui_op_portuaria`, `inclui_spot` e `inclui_carga_fechada`, `condicoes`, `tabela_armazenagem`, `margens_veiculo`, `tabela_distribuicao`, `historico_revisoes`, `historico_situacoes` e `ajustes_iniciais` (`JSONField`), `aviso_reprogramacao_pendente`, `envio_iniciado_em`, `modo_envio`, `ano` com índice, `numero`, `data_criacao`, `data_atualizacao`. `ano` + `numero` são únicos quando os dois estão preenchidos. A propriedade `numero_identificacao` formata `NNN-AAAA`.
+
+`PropostaComercialDraft`: `usuario` (`OneToOneField`), `version`, `payload`, `updated_at`.
+
+`PropostaFreteLinha`: `proposta` (`ForeignKey`), `ordem`, `origem`, `entrega`, `veiculo`, `veiculo_key`, `modalidade` padrão `transferencia`, `km`, `devolucao_container`, `observacoes`, `peso`, `tarifa_frete`, `pedagio`, `retirada_ctnt`, `desova_ctnt`, `ad_valorem`, `gris`, `icms` padrão `Não incluso`, `prazo_dias`, `outros_valores`, `total_estimado`.
+
+`TabelaFrete`: `nome`, `codigo`, `revisao` padrão 1, `vigencia_inicio`, `vigencia_fim`, `status`, `observacoes`, `clientes` (`ManyToMany` para `ClienteComercial`), `clientes_vinculo_key`, `tipo`, `config` e `faixas` (`JSONField`), `criado_por` e `atualizado_por` (`ForeignKey`), `data_criacao`, `data_atualizacao`.
+
+`TabelaFreteLinha`: `tabela` (`ForeignKey`), `ordem`, `origem`, `entrega`, `veiculo`, `tarifa_frete`, `pedagio`, `ad_valorem`, `gris`, `icms` padrão `Não incluso`, `prazo_dias`, `total_estimado`, `data_criacao`, `data_atualizacao`.
+
+`GeneralidadeComercial`: `cliente` (`ForeignKey`), `tipo_servico`, `ordem`, `rotulo`, `valor`.
+
+`MatrizIcmsUf`: `matriz` (`JSONField`), `atualizado_em`.
+
+`ParametrosComercial`: `logo_pdf` e `logo_email` (`BinaryField`), `logo_pdf_tipo`, `logo_email_tipo`, `validades`, `validade_padrao`, `prazos_faturamento`, `faturamento_padrao`, `vigencias`, `vigencia_padrao`, `atualizado_em`.
+
+`VeiculoComercial`: `nome`, `codigo` único, `antt_fixo`, `antt_por_km`, `capacidade_kg`, `ativo`, `ordem`, `data_criacao`, `data_atualizacao`.
+
+`VeiculoRotuloCliente`: `veiculo` e `cliente` (`CASCADE`), `rotulo`. Único por `veiculo` + `cliente` (`uniq_rotulo_veiculo_cliente`).
+
+## audit
+
+`AuditLog`: `user` (`SET_NULL` para `CustomUser`, null), `username`, `action` com índice, `details`, `created_at`. A ordenação do model é `created_at` decrescente.
 
 ## notificacoes
 
-`Notificacao`, `PushInscricao`.
+`Notificacao`: `usuario` (`ForeignKey`), `ambiente`, `tipo` com índice, `titulo`, `mensagem`, `link`, `lida_em` null, `criada_em`.
+
+`PushInscricao`: `usuario` (`CASCADE`), `endpoint` único, `p256dh`, `auth`, `user_agent`, `criada_em`, `atualizada_em`. `p256dh` e `auth` são chaves da inscrição do navegador. O valor não entra nesta documentação.
 
 ## camilo
 
-`Agente`, `ChatPadrao`, `TermoVersao`, `TermoAceite`, `PastaMatrizEmpresarial`, `DocumentoMatrizEmpresarial`.
+`Agente`: PK `id` (`UUIDField`). `usuario` (`ForeignKey`), `nome`, `instrucao`, `escopos` (`JSONField`), `criado_em`, `atualizado_em`.
+
+`ChatPadrao`: PK `id` (`PositiveSmallIntegerField`, padrão 1, não editável). `nome`, `instrucao`. O model é um registro único.
+
+`TermoVersao`: `numero` único, `titulo`, `introducao`, `assinatura`, `declaracao`, `secoes` (`JSONField`), `vigente` padrão falso, `criado_em`, `criado_por` (`ForeignKey`).
+
+`TermoAceite`: PK `id` (`UUIDField`). `usuario` (`ForeignKey`), `versao`, `nome`, `username`, `cpf`, `texto` (`JSONField`), `ip`, `aceito_em`. Único por `usuario` + `versao` (`camilo_termo_usuario_versao`).
+
+`PastaMatrizEmpresarial`: `nome`, `parent` (`CASCADE` para a própria pasta, null), `criado_em`.
+
+`DocumentoMatrizEmpresarial`: `titulo`, `arquivo`, `drive_file_id`, `link_externo`, `nome_original`, `tamanho`, `texto`, `texto_extraido`, `incluido_por` e `pasta` (`ForeignKey`), `criado_em`.
 
 ## Sem model neste levantamento
 
